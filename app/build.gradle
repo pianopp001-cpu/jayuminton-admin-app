@@ -1,3 +1,5 @@
+import java.net.URLEncoder
+
 plugins {
     id 'com.android.application'
 }
@@ -8,11 +10,17 @@ def escapeBuildConfig = { String value ->
             .replace('"', '\\"')
 }
 
-def configuredPushFunctionUrl = System.getenv('JAYUMINTON_PUSH_FUNCTION_URL')
-def pushFunctionUrl = escapeBuildConfig(
-        configuredPushFunctionUrl ?: 'https://asia-northeast3-jayuminton-push.cloudfunctions.net/publishAssignment'
-)
-def pushSharedSecret = escapeBuildConfig(System.getenv('JAYUMINTON_PUSH_SHARED_SECRET'))
+def rawPushSharedSecret = System.getenv('JAYUMINTON_PUSH_SHARED_SECRET') ?: ''
+def rawAppsScriptUrl = System.getenv('JAYUMINTON_PUSH_APPS_SCRIPT_URL') ?: ''
+def pushEndpoint = rawAppsScriptUrl
+if (!rawAppsScriptUrl.isEmpty() && !rawPushSharedSecret.isEmpty()) {
+    String separator = rawAppsScriptUrl.contains('?') ? '&' : '?'
+    pushEndpoint = rawAppsScriptUrl + separator +
+            'key=' + URLEncoder.encode(rawPushSharedSecret, 'UTF-8')
+}
+
+def pushFunctionUrl = escapeBuildConfig(pushEndpoint)
+def pushSharedSecret = escapeBuildConfig(rawPushSharedSecret)
 
 android {
     namespace 'com.jayuminton.admin'
@@ -25,6 +33,8 @@ android {
         versionCode 19
         versionName '1.5'
 
+        // Keep the existing BuildConfig field names so the tested native bridge remains unchanged.
+        // The endpoint is now a free Google Apps Script web app, not Cloud Functions.
         buildConfigField 'String', 'PUSH_FUNCTION_URL', '"' + pushFunctionUrl + '"'
         buildConfigField 'String', 'PUSH_SHARED_SECRET', '"' + pushSharedSecret + '"'
     }
