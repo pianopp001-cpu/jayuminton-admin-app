@@ -1,4 +1,4 @@
-name: Build v1.5 Browser Push Admin
+name: Build v1.5 Unified Browser Push
 
 on:
   workflow_dispatch:
@@ -44,18 +44,45 @@ jobs:
           test -n "$JAYUMINTON_PUSH_SHARED_SECRET"
           test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
 
+      - name: Validate unified web files
+        run: |
+          node --check web-push/app.js
+          node --check web-push/firebase-messaging-sw.js
+          node --check < apps-script-push/Code.gs
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('apps-script-main/Script.html').read_text(encoding='utf-8')
+          assert source.startswith('<script>') and source.rstrip().endswith('</script>')
+          Path('/tmp/jayuminton-member-script.js').write_text(
+              source[len('<script>'):source.rfind('</script>')],
+              encoding='utf-8'
+          )
+          PY
+          node --check /tmp/jayuminton-member-script.js
+
       - name: Build v1.5 admin app
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Prepare admin APK
+      - name: Prepare deliverables
         run: |
           mkdir -p artifacts
-          cp app/build/outputs/apk/release/app-release.apk artifacts/jayuminton-admin-v1.5-web.apk
+          cp app/build/outputs/apk/release/app-release.apk artifacts/jayuminton-admin-v1.5-unified.apk
+          zip -r artifacts/jayuminton-v1.5-unified-member-setup.zip \
+            apps-script-main apps-script-push web-push firebase.json \
+            deploy-web-push.bat V1_5_UNIFIED_MEMBER_SETUP.md
 
       - name: Upload admin APK
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-admin-v1.5-web
-          path: artifacts/jayuminton-admin-v1.5-web.apk
+          name: jayuminton-admin-v1.5-unified
+          path: artifacts/jayuminton-admin-v1.5-unified.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload unified member setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-v1.5-unified-member-setup
+          path: artifacts/jayuminton-v1.5-unified-member-setup.zip
           if-no-files-found: error
           retention-days: 30
