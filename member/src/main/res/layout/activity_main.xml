@@ -19,7 +19,7 @@
         android:minHeight="68dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="14dp"
+        android:paddingStart="12dp"
         android:paddingTop="10dp"
         android:paddingEnd="10dp"
         android:paddingBottom="10dp"
@@ -30,17 +30,31 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:paddingEnd="10dp"
+            android:paddingEnd="8dp"
             android:text="알림 받을 이름이 선택되지 않았습니다."
             android:textColor="#182033"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/refreshButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:layout_marginEnd="6dp"
+            android:padding="0dp"
+            android:text="↻"
+            android:textAllCaps="false"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:contentDescription="사용자 화면 새로고침" />
 
         <Button
             android:id="@+id/selectMemberButton"
             android:layout_width="wrap_content"
             android:layout_height="48dp"
-            android:minWidth="112dp"
+            android:minWidth="108dp"
             android:text="내 이름 선택"
             android:textAllCaps="false"
             android:textStyle="bold" />
