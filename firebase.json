@@ -6,9 +6,38 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "cleanUrls": true,
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
     "headers": [
       {
         "source": "/firebase-messaging-sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          },
+          {
+            "key": "Service-Worker-Allowed",
+            "value": "/"
+          }
+        ]
+      },
+      {
+        "source": "/config.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/index.html",
         "headers": [
           {
             "key": "Cache-Control",
@@ -17,8 +46,12 @@
         ]
       },
       {
-        "source": "/config.js",
+        "source": "/manifest.webmanifest",
         "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/manifest+json"
+          },
           {
             "key": "Cache-Control",
             "value": "no-cache"
