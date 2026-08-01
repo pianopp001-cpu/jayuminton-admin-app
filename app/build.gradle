@@ -30,11 +30,11 @@ android {
         applicationId 'com.jayuminton.admin'
         minSdk 24
         targetSdk 34
-        versionCode 19
+        versionCode 20
         versionName '1.5'
 
-        // Keep the existing BuildConfig field names so the tested native bridge remains unchanged.
-        // The endpoint is now a free Google Apps Script web app, not Cloud Functions.
+        // Existing native bridge field names are retained for compatibility.
+        // The endpoint is a free Google Apps Script relay.
         buildConfigField 'String', 'PUSH_FUNCTION_URL', '"' + pushFunctionUrl + '"'
         buildConfigField 'String', 'PUSH_SHARED_SECRET', '"' + pushSharedSecret + '"'
     }
