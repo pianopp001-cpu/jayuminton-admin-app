@@ -34,10 +34,10 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
     public void onMessageReceived(RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
         Map<String, String> data = remoteMessage.getData();
+        String type = value(data, "type");
         String assignmentId = value(data, "assignmentId");
         String memberId = value(data, "memberId");
         String memberName = value(data, "memberName");
-        String courtNo = value(data, "courtNo");
 
         String selectedMemberId = MemberStore.getSelectedMemberId(this);
         if (selectedMemberId.isEmpty() || !selectedMemberId.equals(memberId)) {
@@ -50,16 +50,31 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
         if (memberName.isEmpty()) {
             memberName = MemberStore.getSelectedMemberName(this);
         }
-        if (courtNo.isEmpty()) {
-            courtNo = "배정된";
-        } else {
-            courtNo = courtNo + "번";
+
+        if ("wait1_ready".equals(type)) {
+            String expectedCourtNo = value(data, "expectedCourtNo");
+            String expectedCourtText = expectedCourtNo.isEmpty()
+                    ? "경기 시간이 가장 많이 지난 코트가"
+                    : expectedCourtNo + "번 코트가";
+            showAssignmentNotification(
+                    assignmentId,
+                    "대기 1순위 안내",
+                    memberName,
+                    "대기 1순위입니다. " + expectedCourtText +
+                            " 다음으로 나올 예정이니 준비해 주세요."
+            );
+            return;
         }
 
+        String courtNo = value(data, "courtNo");
+        String courtText = courtNo.isEmpty()
+                ? "배정된 코트"
+                : courtNo + "번 코트";
         showAssignmentNotification(
                 assignmentId,
+                "코트 입장 안내",
                 memberName,
-                courtNo + " 코트로 들어가 주세요."
+                courtText + "로 들어가 주세요."
         );
     }
 
@@ -71,10 +86,10 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
 
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "코트 배정 알림",
+                "대기·코트 배정 알림",
                 NotificationManager.IMPORTANCE_HIGH
         );
-        channel.setDescription("내 이름이 코트로 호출될 때 진동과 알림을 표시합니다.");
+        channel.setDescription("대기1 승급과 코트 입장 시 진동과 알림을 표시합니다.");
         channel.enableVibration(true);
         channel.setVibrationPattern(VIBRATION_PATTERN);
         channel.enableLights(true);
@@ -92,6 +107,7 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
 
     private void showAssignmentNotification(
             String assignmentId,
+            String title,
             String memberName,
             String instruction
     ) {
@@ -106,7 +122,6 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        String title = "코트 배정 안내";
         String body = (memberName.isEmpty() ? "회원" : memberName + "님") + ", " + instruction;
 
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
