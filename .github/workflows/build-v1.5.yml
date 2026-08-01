@@ -53,22 +53,59 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "## v1.5 scaffold validation succeeded"
-              echo ""
-              echo "The admin source and Firebase Function syntax are valid."
-              echo "The two final APKs were not produced because the three Firebase repository secrets are not configured yet."
-            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Decode member Firebase configuration
-        if: steps.firebase_config.outputs.ready == 'true'
+      - name: Prepare member Firebase configuration
+        shell: bash
         run: |
-          printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > member/google-services.json
+          if [[ "${{ steps.firebase_config.outputs.ready }}" == "true" ]]; then
+            printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > member/google-services.json
+          else
+            cat > member/google-services.json <<'JSON'
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "jayuminton-build-validation",
+              "storage_bucket": "jayuminton-build-validation.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:123456789012:android:0123456789abcdef012345",
+                  "android_client_info": {
+                    "package_name": "com.jayuminton.member"
+                  }
+                },
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyBuildValidationOnly000000000000000"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          JSON
+          fi
 
       - name: Build v1.5 member app
-        if: steps.firebase_config.outputs.ready == 'true'
         run: gradle --no-daemon :member:assembleRelease
+
+      - name: Record scaffold validation
+        if: steps.firebase_config.outputs.ready != 'true'
+        run: |
+          {
+            echo "## v1.5 source validation succeeded"
+            echo ""
+            echo "Both Android apps compiled and the Firebase Function syntax passed."
+            echo "The member APK used a nonfunctional build-only Firebase placeholder and was not uploaded."
+            echo "Add the three Firebase repository secrets to produce the two installable final APKs."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare final APKs
         if: steps.firebase_config.outputs.ready == 'true'
