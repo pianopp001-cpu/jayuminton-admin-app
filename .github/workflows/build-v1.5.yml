@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ v1.5-firebase ]
+  pull_request:
+    branches: [ main ]
 
 permissions:
   contents: read
