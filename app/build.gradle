@@ -8,7 +8,10 @@ def escapeBuildConfig = { String value ->
             .replace('"', '\\"')
 }
 
-def pushFunctionUrl = escapeBuildConfig(System.getenv('JAYUMINTON_PUSH_FUNCTION_URL'))
+def configuredPushFunctionUrl = System.getenv('JAYUMINTON_PUSH_FUNCTION_URL')
+def pushFunctionUrl = escapeBuildConfig(
+        configuredPushFunctionUrl ?: 'https://asia-northeast3-jayuminton-push.cloudfunctions.net/publishAssignment'
+)
 def pushSharedSecret = escapeBuildConfig(System.getenv('JAYUMINTON_PUSH_SHARED_SECRET'))
 
 android {
