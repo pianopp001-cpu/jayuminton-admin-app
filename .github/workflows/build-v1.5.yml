@@ -16,7 +16,6 @@ jobs:
     timeout-minutes: 30
     env:
       FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
-      JAYUMINTON_PUSH_FUNCTION_URL: ${{ secrets.JAYUMINTON_PUSH_FUNCTION_URL }}
       JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
 
     steps:
@@ -42,14 +41,11 @@ jobs:
       - name: Validate Firebase function syntax
         run: node --check firebase/functions/index.js
 
-      - name: Build v1.5 admin app
-        run: gradle --no-daemon :app:assembleRelease
-
       - name: Check Firebase build configuration
         id: firebase_config
         shell: bash
         run: |
-          if [[ -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64" && -n "$JAYUMINTON_PUSH_FUNCTION_URL" && -n "$JAYUMINTON_PUSH_SHARED_SECRET" ]]; then
+          if [[ -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64" && -n "$JAYUMINTON_PUSH_SHARED_SECRET" ]]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -93,6 +89,9 @@ jobs:
           JSON
           fi
 
+      - name: Build v1.5 admin app
+        run: gradle --no-daemon :app:assembleRelease
+
       - name: Build v1.5 member app
         run: gradle --no-daemon :member:assembleRelease
 
@@ -104,7 +103,7 @@ jobs:
             echo ""
             echo "Both Android apps compiled and the Firebase Function syntax passed."
             echo "The member APK used a nonfunctional build-only Firebase placeholder and was not uploaded."
-            echo "Add the three Firebase repository secrets to produce the two installable final APKs."
+            echo "Add FIREBASE_GOOGLE_SERVICES_JSON_B64 and JAYUMINTON_PUSH_SHARED_SECRET to produce the two installable final APKs."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare final APKs
