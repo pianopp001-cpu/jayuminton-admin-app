@@ -46,36 +46,127 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
             (function installJayumintonAssignmentPushHook(){
               if (window.__jayumintonAssignmentPushHookInstalled) return;
               var attempts = 0;
+
+              function normalizeMembers(members){
+                return Array.isArray(members)
+                  ? members.filter(function(member){
+                      return member && member.id != null &&
+                        String(member.name || '').trim();
+                    }).map(function(member){
+                      return {
+                        id: String(member.id),
+                        name: String(member.name || '').trim()
+                      };
+                    })
+                  : [];
+              }
+
+              function membersFromIds(ids){
+                if (!Array.isArray(ids)) return [];
+                return normalizeMembers(ids.map(function(id){
+                  try {
+                    if (typeof memberById === 'function') {
+                      return memberById(id);
+                    }
+                    return Array.isArray(STATE.members)
+                      ? STATE.members.find(function(member){
+                          return member && String(member.id) === String(id);
+                        })
+                      : null;
+                  } catch (error) {
+                    return null;
+                  }
+                }));
+              }
+
+              function mostElapsedCourtNo(){
+                try {
+                  var fullCourts = [1,2,3,4].filter(function(courtNo){
+                    return STATE && STATE.courts &&
+                      Array.isArray(STATE.courts[courtNo]) &&
+                      STATE.courts[courtNo].length === 4;
+                  });
+                  if (!fullCourts.length) return 0;
+
+                  var timed = fullCourts.map(function(courtNo){
+                    var raw = STATE.courtStartedAt &&
+                      (STATE.courtStartedAt[courtNo] ||
+                       STATE.courtStartedAt[String(courtNo)] || '');
+                    var startedAt = Date.parse(String(raw || ''));
+                    return {
+                      courtNo: courtNo,
+                      startedAt: Number.isFinite(startedAt)
+                        ? startedAt
+                        : Number.POSITIVE_INFINITY
+                    };
+                  }).sort(function(left, right){
+                    return left.startedAt - right.startedAt ||
+                      left.courtNo - right.courtNo;
+                  });
+
+                  if (Number.isFinite(timed[0].startedAt)) {
+                    return timed[0].courtNo;
+                  }
+                  return fullCourts.sort(function(a,b){ return a-b; })[0];
+                } catch (error) {
+                  return 0;
+                }
+              }
+
+              function makeEventId(prefix, courtNo, members){
+                var ids = members.map(function(member){
+                  return member.id;
+                }).sort();
+                return prefix + '_' + Date.now().toString(36) + '_' +
+                  String(courtNo || 0) + '_' + ids.join('_');
+              }
+
+              function publish(payload){
+                try {
+                  window.NativePush.publishAssignment(
+                    JSON.stringify(payload)
+                  );
+                } catch (error) {}
+              }
+
               function installHook(){
                 if (window.__jayumintonAssignmentPushHookInstalled) return true;
                 if (!window.NativePush) return false;
                 if (typeof rememberVoiceAnnouncement !== 'function') return false;
+
                 var originalRememberVoiceAnnouncement = rememberVoiceAnnouncement;
                 rememberVoiceAnnouncement = function(courtNo, members){
                   var result = originalRememberVoiceAnnouncement.apply(this, arguments);
                   try {
-                    var assigned = Array.isArray(members)
-                      ? members.filter(function(member){
-                          return member && member.id != null && String(member.name || '').trim();
-                        }).map(function(member){
-                          return {
-                            id: String(member.id),
-                            name: String(member.name || '').trim()
-                          };
-                        })
-                      : [];
+                    var assigned = normalizeMembers(members);
                     if (assigned.length === 4) {
-                      var sortedIds = assigned.map(function(member){
-                        return member.id;
-                      }).sort();
-                      var assignmentId =
-                        'jm_' + Date.now().toString(36) + '_' +
-                        String(courtNo) + '_' + sortedIds.join('_');
-                      window.NativePush.publishAssignment(JSON.stringify({
-                        assignmentId: assignmentId,
+                      publish({
+                        type: 'court_assignment',
+                        assignmentId: makeEventId(
+                          'court', Number(courtNo), assigned
+                        ),
                         courtNo: Number(courtNo),
                         members: assigned
-                      }));
+                      });
+
+                      var promoted = membersFromIds(
+                        STATE && Array.isArray(STATE.waitGroups)
+                          ? (STATE.waitGroups[0] || [])
+                          : []
+                      );
+                      if (promoted.length > 0 && promoted.length <= 4) {
+                        var expectedCourtNo = mostElapsedCourtNo();
+                        if (expectedCourtNo >= 1 && expectedCourtNo <= 4) {
+                          publish({
+                            type: 'wait1_ready',
+                            assignmentId: makeEventId(
+                              'wait1', expectedCourtNo, promoted
+                            ),
+                            expectedCourtNo: expectedCourtNo,
+                            members: promoted
+                          });
+                        }
+                      }
                     }
                   } catch (error) {}
                   return result;
@@ -83,6 +174,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                 window.__jayumintonAssignmentPushHookInstalled = true;
                 return true;
               }
+
               if (installHook()) return;
               var timer = setInterval(function(){
                 attempts += 1;
@@ -121,6 +213,14 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         recoverAudioIfNeeded();
         tts = new TextToSpeech(this, this);
         configureWebView();
+        findViewById(R.id.refreshButton).setOnClickListener(view -> refreshPage());
+    }
+
+    private void refreshPage() {
+        if (tts != null) tts.stop();
+        speaking.set(false);
+        restoreAudio();
+        if (webView != null) webView.reload();
     }
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
@@ -340,11 +440,24 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
             HttpURLConnection connection = null;
             try {
                 JSONObject payload = new JSONObject(payloadJson == null ? "{}" : payloadJson);
-                int courtNo = payload.optInt("courtNo", 0);
+                String type = payload.optString("type", "court_assignment").trim();
                 String assignmentId = payload.optString("assignmentId", "").trim();
                 JSONArray members = payload.optJSONArray("members");
-                if (courtNo < 1 || courtNo > 4 || assignmentId.isEmpty() ||
-                        members == null || members.length() != 4) {
+                int memberCount = members == null ? 0 : members.length();
+
+                boolean validCourtAssignment =
+                        "court_assignment".equals(type) &&
+                                payload.optInt("courtNo", 0) >= 1 &&
+                                payload.optInt("courtNo", 0) <= 4 &&
+                                memberCount == 4;
+                boolean validWaitOneReady =
+                        "wait1_ready".equals(type) &&
+                                payload.optInt("expectedCourtNo", 0) >= 1 &&
+                                payload.optInt("expectedCourtNo", 0) <= 4 &&
+                                memberCount >= 1 && memberCount <= 4;
+
+                if (assignmentId.isEmpty() ||
+                        (!validCourtAssignment && !validWaitOneReady)) {
                     return;
                 }
 
