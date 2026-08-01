@@ -3,11 +3,11 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 echo ==================================================
-echo Jayuminton v1.5 browser push hosting deployment
+echo Jayuminton v1.5 unified member page + browser push
 echo Firebase project: jayuminton-push
 echo ==================================================
 echo.
-set /p RELAY_URL=Paste the Apps Script /exec URL and press Enter: 
+set /p RELAY_URL=Paste the notification Apps Script /exec URL and press Enter: 
 
 if "%RELAY_URL%"=="" (
   echo [ERROR] Apps Script URL is empty.
@@ -15,7 +15,8 @@ if "%RELAY_URL%"=="" (
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Content -Raw 'web-push\config.template.js').Replace('__RELAY_URL__',$env:RELAY_URL) ^| Set-Content -Encoding UTF8 'web-push\config.js'"
+set RELAY_URL=%RELAY_URL%
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=Get-Content -Raw 'web-push\config.template.js'; $t=$t.Replace('__RELAY_URL__',$env:RELAY_URL); [IO.File]::WriteAllText((Resolve-Path 'web-push\config.js'),$t,(New-Object Text.UTF8Encoding($false)))"
 if errorlevel 1 goto :failed
 
 echo.
@@ -24,15 +25,15 @@ call npx --yes firebase-tools@latest login
 if errorlevel 1 goto :failed
 
 echo.
-echo [2/2] Deploy free Firebase Hosting
+echo [2/2] Deploy one-page member PWA
 call npx --yes firebase-tools@latest deploy --only hosting --project jayuminton-push
 if errorlevel 1 goto :failed
 
 echo.
 echo ==================================================
 echo Deployment completed.
-echo Open:
-echo https://jayuminton-push.web.app
+echo Use this as the ONLY member URL:
+echo https://jayuminton-push.web.app/
 echo ==================================================
 pause
 exit /b 0
