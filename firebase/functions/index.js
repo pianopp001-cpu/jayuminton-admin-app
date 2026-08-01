@@ -24,16 +24,16 @@ function secretsMatch(actual, expected) {
   return timingSafeEqual(left, right);
 }
 
-function cleanAssignment(body) {
+function cleanEvent(body) {
+  const type = String(body && body.type || "court_assignment").trim();
   const assignmentId = String(body && body.assignmentId || "").trim();
-  const courtNo = Number(body && body.courtNo);
   const sourceMembers = Array.isArray(body && body.members) ? body.members : [];
 
+  if (!["court_assignment", "wait1_ready"].includes(type)) {
+    throw new Error("invalid event type");
+  }
   if (!/^[A-Za-z0-9_.-]{8,500}$/.test(assignmentId)) {
     throw new Error("invalid assignmentId");
-  }
-  if (![1, 2, 3, 4].includes(courtNo)) {
-    throw new Error("invalid courtNo");
   }
 
   const unique = new Map();
@@ -49,7 +49,19 @@ function cleanAssignment(body) {
     throw new Error("exactly four members are required");
   }
 
-  return {assignmentId, courtNo, members};
+  if (type === "court_assignment") {
+    const courtNo = Number(body && body.courtNo);
+    if (![1, 2, 3, 4].includes(courtNo)) {
+      throw new Error("invalid courtNo");
+    }
+    return {type, assignmentId, courtNo, members};
+  }
+
+  const expectedCourtNo = Number(body && body.expectedCourtNo);
+  if (![1, 2, 3, 4].includes(expectedCourtNo)) {
+    throw new Error("invalid expectedCourtNo");
+  }
+  return {type, assignmentId, expectedCourtNo, members};
 }
 
 exports.publishAssignment = onRequest(
@@ -74,9 +86,9 @@ exports.publishAssignment = onRequest(
         return;
       }
 
-      let assignment;
+      let event;
       try {
-        assignment = cleanAssignment(request.body);
+        event = cleanEvent(request.body);
       } catch (error) {
         response.status(400).json({
           ok: false,
@@ -85,22 +97,31 @@ exports.publishAssignment = onRequest(
         return;
       }
 
-      const messages = assignment.members.map((member) => ({
-        topic: topicForMemberId(member.id),
-        data: {
-          type: "court_assignment",
-          assignmentId: assignment.assignmentId,
-          courtNo: String(assignment.courtNo),
+      const messages = event.members.map((member) => {
+        const data = {
+          type: event.type,
+          assignmentId: event.assignmentId,
           memberId: member.id,
           memberName: member.name,
-        },
-        android: {
-          priority: "high",
-          ttl: 10 * 60 * 1000,
-          collapseKey: assignment.assignmentId,
-          restrictedPackageName: "com.jayuminton.member",
-        },
-      }));
+        };
+
+        if (event.type === "court_assignment") {
+          data.courtNo = String(event.courtNo);
+        } else {
+          data.expectedCourtNo = String(event.expectedCourtNo);
+        }
+
+        return {
+          topic: topicForMemberId(member.id),
+          data,
+          android: {
+            priority: "high",
+            ttl: 10 * 60 * 1000,
+            collapseKey: event.assignmentId,
+            restrictedPackageName: "com.jayuminton.member",
+          },
+        };
+      });
 
       try {
         const results = await Promise.all(
@@ -108,12 +129,14 @@ exports.publishAssignment = onRequest(
         );
         response.status(200).json({
           ok: true,
-          assignmentId: assignment.assignmentId,
+          type: event.type,
+          assignmentId: event.assignmentId,
           sent: results.length,
         });
       } catch (error) {
         console.error("publishAssignment failed", {
-          assignmentId: assignment.assignmentId,
+          type: event.type,
+          assignmentId: event.assignmentId,
           code: error && error.code,
         });
         response.status(500).json({ok: false});
