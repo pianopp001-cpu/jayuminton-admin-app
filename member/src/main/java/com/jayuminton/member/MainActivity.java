@@ -81,6 +81,9 @@ public final class MainActivity extends Activity {
         JayumintonMessagingService.ensureNotificationChannel(this);
         requestNotificationPermission();
         configureWebView();
+        findViewById(R.id.refreshButton).setOnClickListener(view -> {
+            if (webView != null) webView.reload();
+        });
         restoreSubscription();
         updateSelectedMemberText();
     }
@@ -247,7 +250,7 @@ public final class MainActivity extends Activity {
                     updateSelectedMemberText();
                     Toast.makeText(
                             MainActivity.this,
-                            choice.name + "님의 코트 배정 알림을 받습니다.",
+                            choice.name + "님의 대기1·코트 배정 알림을 받습니다.",
                             Toast.LENGTH_LONG
                     ).show();
                 }));
