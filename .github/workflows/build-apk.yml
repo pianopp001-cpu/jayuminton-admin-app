@@ -28,12 +28,12 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Apply v1.4 media volume level 2
+      - name: Apply v1.4 media volume level 4
         run: |
-          sed -i 's/int minimumMusic = maxMedia > 0 ? 1 : 0;/int minimumMusic = maxMedia > 0 ? Math.min(2, maxMedia) : 0;/' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          sed -i 's/versionCode 14/versionCode 15/' app/build.gradle
-          grep -F 'int minimumMusic = maxMedia > 0 ? Math.min(2, maxMedia) : 0;' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'versionCode 15' app/build.gradle
+          sed -i 's/int minimumMusic = maxMedia > 0 ? 1 : 0;/int minimumMusic = maxMedia > 0 ? Math.min(4, maxMedia) : 0;/' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          sed -i 's/versionCode 14/versionCode 17/' app/build.gradle
+          grep -F 'int minimumMusic = maxMedia > 0 ? Math.min(4, maxMedia) : 0;' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'versionCode 17' app/build.gradle
 
       - name: Decode signing key
         run: |
@@ -49,7 +49,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-admin-v1.4-volume2
+          name: jayuminton-admin-v1.4-volume4
           path: jayuminton-admin-v1.4.apk
           if-no-files-found: error
           retention-days: 30
