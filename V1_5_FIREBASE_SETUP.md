@@ -1,8 +1,11 @@
-# 자유민턴 v1.5 Firebase 개인 배정 알림 설정
+# 자유민턴 v1.5 무료 Firebase 개인 배정 알림 설정
+
+> 이 방식은 Firebase Cloud Functions와 Blaze 요금제를 사용하지 않습니다.
+> 무료 Google Apps Script가 FCM HTTP v1 API를 호출합니다.
 
 ## v1.5 동작
 
-- 관리자 앱의 v1.4 TTS와 음악 음량 6단계 동작은 그대로 유지합니다.
+- 확정된 v1.4 관리자 TTS와 음악 음량 6단계 동작을 그대로 유지합니다.
 - 대기2의 4명이 대기1로 올라오면 선택한 회원 휴대폰에 한 번만 진동·알림을 보냅니다.
 - 준비 알림은 `대기 1순위입니다. ○번 코트가 다음으로 나올 예정이니 준비해 주세요.` 형식입니다.
 - 예정 코트는 현재 4명이 경기 중인 코트 가운데 `courtStartedAt`이 가장 오래된 코트로 계산합니다.
@@ -12,76 +15,90 @@
 - 음성 다시 재생과 반복 재생은 새 개인 알림을 만들지 않습니다.
 - 관리자 앱과 사용자 앱에 현재 창을 다시 불러오는 새로고침 버튼이 있습니다.
 
-## 확인된 Firebase 프로젝트
+## 준비된 항목
 
 - Firebase 프로젝트 ID: `jayuminton-push`
-- 사용자가 제공한 웹 앱 구성과 Web Push VAPID 공개키는 웹 브라우저 푸시용입니다.
-- Android 사용자 APK에는 별도로 등록한 Android 앱의 `google-services.json`이 필요합니다.
+- Android 사용자 앱 패키지: `com.jayuminton.member`
+- GitHub Repository secrets
+  - `FIREBASE_GOOGLE_SERVICES_JSON_B64`
+  - `JAYUMINTON_PUSH_SHARED_SECRET`
 
-## 1. 사용자 Android 앱 등록
+## 1. Firebase 서비스 계정 비공개 키 받기
 
 1. Firebase Console에서 `jayuminton-push` 프로젝트를 엽니다.
-2. `프로젝트 설정 → 일반 → 내 앱 → 앱 추가 → Android`를 선택합니다.
-3. Android 패키지 이름을 정확히 `com.jayuminton.member`로 입력합니다.
-4. 앱을 등록하고 `google-services.json`을 내려받습니다.
-5. 파일 이름을 바꾸지 말고 보관합니다. Git 저장소에는 직접 커밋하지 않습니다.
-6. Cloud Functions 배포를 위해 프로젝트가 Blaze 요금제인지 확인합니다.
+2. `프로젝트 설정 → 서비스 계정`으로 이동합니다.
+3. `Firebase Admin SDK → 새 비공개 키 생성`을 누릅니다.
+4. 내려받은 JSON 파일을 안전한 PC 폴더에 보관합니다.
 
-기본 FCM 알림에는 SHA 인증서 지문을 입력하지 않아도 됩니다.
+이 파일은 Firebase 발송 권한이 있는 비공개 키입니다.
 
-## 2. Firebase Function 배포
+- 채팅에 올리지 않습니다.
+- GitHub에 커밋하지 않습니다.
+- 다른 사람에게 전달하지 않습니다.
+- Apps Script의 Script Property에만 저장합니다.
 
-PC에 Node.js 22와 Firebase CLI를 설치한 뒤 저장소 루트에서 실행합니다.
+## 2. 무료 Google Apps Script 발송기 만들기
 
-```bash
-firebase login
-cp .firebaserc.example .firebaserc
-firebase use jayuminton-push
-```
+1. 브라우저에서 `https://script.new`를 엽니다.
+2. 프로젝트 이름을 `자유민턴 개인 알림`으로 정합니다.
+3. 저장소의 `apps-script-push/Code.gs` 전체를 기본 `Code.gs`에 붙여 넣습니다.
+4. 왼쪽 `프로젝트 설정`에서 `편집기에 appsscript.json 매니페스트 파일 표시`를 켭니다.
+5. 저장소의 `apps-script-push/appsscript.json` 전체를 Apps Script의 `appsscript.json`에 붙여 넣습니다.
 
-관리자 앱과 Function이 함께 사용할 충분히 긴 임의 문자열을 정한 뒤 Secret Manager에 저장합니다.
+## 3. Apps Script 속성 두 개 등록
 
-```bash
-firebase functions:secrets:set JAYUMINTON_PUSH_SECRET
-firebase deploy --only functions:publishAssignment
-```
-
-배포가 완료되면 출력되는 `publishAssignment` HTTPS 주소를 보관합니다.
-
-## 3. GitHub Actions Secrets 등록
-
-GitHub 저장소의 `Settings → Secrets and variables → Actions`에서 다음 Repository secrets 세 개를 추가합니다.
-
-### `FIREBASE_GOOGLE_SERVICES_JSON_B64`
-
-PowerShell에서 다음 명령으로 `google-services.json`을 Base64 문자열로 바꾼 값을 등록합니다.
-
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("google-services.json"))
-```
-
-### `JAYUMINTON_PUSH_FUNCTION_URL`
-
-배포 후 받은 `publishAssignment` HTTPS 주소를 그대로 등록합니다.
+Apps Script의 `프로젝트 설정 → 스크립트 속성 → 스크립트 속성 추가`에서 등록합니다.
 
 ### `JAYUMINTON_PUSH_SHARED_SECRET`
 
-`firebase functions:secrets:set JAYUMINTON_PUSH_SECRET` 실행 시 입력한 것과 완전히 같은 문자열을 등록합니다.
+GitHub Repository secret에 등록한 것과 완전히 같은 긴 문자열을 넣습니다.
 
-웹 VAPID 공개키는 위 세 Secret 중 어느 곳에도 넣지 않습니다.
+### `FCM_SERVICE_ACCOUNT_JSON`
 
-## 4. APK 빌드
+1단계에서 받은 서비스 계정 JSON 파일을 메모장으로 열고, 중괄호 `{`부터 마지막 `}`까지 전체 내용을 넣습니다.
 
-세 Secret을 저장한 다음 `v1.5-firebase` 브랜치에 새 커밋이 생기면 `Build v1.5 Firebase APKs`가 실행됩니다. 또는 워크플로를 수동 실행합니다.
+저장 후 편집기 상단 함수 목록에서 `verifyPushConfiguration`을 선택하고 `실행`합니다. 처음 한 번 외부 요청 권한을 승인합니다.
+
+실행 기록에 오류 없이 완료되면 서비스 계정과 FCM 인증이 정상입니다.
+
+## 4. Apps Script를 웹 앱으로 배포
+
+1. 오른쪽 위 `배포 → 새 배포`
+2. 유형에서 `웹 앱`
+3. 다음 사용자로 실행: `나`
+4. 액세스 권한: `모든 사용자`
+5. `배포`
+6. 발급된 `/exec`로 끝나는 웹 앱 URL을 복사합니다.
+
+웹 앱 URL을 브라우저로 열었을 때 다음과 비슷한 JSON이 보이면 정상입니다.
+
+```json
+{"ok":true,"service":"jayuminton-free-fcm-relay","projectId":"jayuminton-push"}
+```
+
+## 5. 마지막 GitHub Secret 등록
+
+GitHub 저장소의 `Settings → Secrets and variables → Actions → New repository secret`에서 추가합니다.
+
+```text
+Name: JAYUMINTON_PUSH_APPS_SCRIPT_URL
+Secret: Apps Script에서 발급된 /exec 웹 앱 URL
+```
+
+관리자 APK 빌드 시 이 URL 뒤에 공유 보안키를 안전하게 URL 인코딩하여 붙입니다. 기존 네이티브 알림 브리지는 그대로 사용합니다.
+
+## 6. APK 빌드
+
+`v1.5-firebase` 브랜치의 `Build v1.5 Firebase APKs` 워크플로를 실행합니다.
 
 완료된 Artifact `jayuminton-v1.5-apks`에는 다음 두 파일이 들어 있습니다.
 
 - `jayuminton-admin-v1.5.apk`
 - `jayuminton-member-v1.5.apk`
 
-관리자 APK는 확정된 v1.4 위에 덮어쓰기 설치합니다. 사용자 APK는 알림을 받을 각 회원 휴대폰에 설치합니다.
+관리자 APK는 확정된 v1.4 위에 덮어쓰기 설치합니다. 사용자 APK는 알림을 받을 회원 휴대폰에 설치합니다.
 
-## 5. 실제 테스트
+## 7. 실제 테스트
 
 1. 회원 휴대폰에 사용자 앱을 설치하고 알림 권한을 허용합니다.
 2. 사용자 페이지 로그인 후 하단의 `내 이름 선택`에서 본인의 정확한 이름을 선택합니다.
