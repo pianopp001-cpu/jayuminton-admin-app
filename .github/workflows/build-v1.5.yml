@@ -1,4 +1,4 @@
-name: Build v1.5 Browser Push
+name: Build v1.5 Browser Push Admin
 
 on:
   workflow_dispatch:
@@ -38,56 +38,24 @@ jobs:
           mkdir -p signing
           base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
 
-      - name: Validate Apps Script relay
-        run: node --check < apps-script-push/Code.gs
-
-      - name: Validate browser push scripts
-        run: |
-          node --check web-push/app.js
-          node --check web-push/firebase-messaging-sw.js
-
-      - name: Check final build configuration
-        id: config
+      - name: Check admin push configuration
         shell: bash
         run: |
-          if [[ -n "$JAYUMINTON_PUSH_SHARED_SECRET" && -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ]]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
+          test -n "$JAYUMINTON_PUSH_SHARED_SECRET"
+          test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
 
       - name: Build v1.5 admin app
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Prepare deliverables
+      - name: Prepare admin APK
         run: |
           mkdir -p artifacts
           cp app/build/outputs/apk/release/app-release.apk artifacts/jayuminton-admin-v1.5-web.apk
-          zip -r artifacts/jayuminton-browser-push-setup-v1.5.zip \
-            apps-script-push web-push firebase.json deploy-web-push.bat V1_5_BROWSER_PUSH_SETUP.md
 
       - name: Upload admin APK
-        if: steps.config.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: jayuminton-admin-v1.5-web
           path: artifacts/jayuminton-admin-v1.5-web.apk
           if-no-files-found: error
           retention-days: 30
-
-      - name: Upload browser setup files
-        uses: actions/upload-artifact@v4
-        with:
-          name: jayuminton-browser-push-setup-v1.5
-          path: artifacts/jayuminton-browser-push-setup-v1.5.zip
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Record configuration warning
-        if: steps.config.outputs.ready != 'true'
-        run: |
-          {
-            echo "## Admin source build succeeded"
-            echo ""
-            echo "The browser setup ZIP was uploaded, but the installable admin APK was not uploaded because one of the two repository secrets is missing."
-          } >> "$GITHUB_STEP_SUMMARY"
