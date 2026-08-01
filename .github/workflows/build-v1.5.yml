@@ -1,5 +1,4 @@
-# Final build trigger after Apps Script URL secret registration
-name: Build v1.5 Firebase APKs
+name: Build v1.5 Browser Push
 
 on:
   workflow_dispatch:
@@ -16,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
       JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
       JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
 
@@ -40,85 +38,56 @@ jobs:
           mkdir -p signing
           base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
 
-      - name: Validate free Apps Script relay syntax
+      - name: Validate Apps Script relay
         run: node --check < apps-script-push/Code.gs
 
+      - name: Validate browser push scripts
+        run: |
+          node --check web-push/app.js
+          node --check web-push/firebase-messaging-sw.js
+
       - name: Check final build configuration
-        id: firebase_config
+        id: config
         shell: bash
         run: |
-          if [[ -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64" && -n "$JAYUMINTON_PUSH_SHARED_SECRET" && -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ]]; then
+          if [[ -n "$JAYUMINTON_PUSH_SHARED_SECRET" && -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ]]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Prepare member Firebase configuration
-        shell: bash
-        run: |
-          if [[ -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64" ]]; then
-            printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > member/google-services.json
-          else
-            cat > member/google-services.json <<'JSON'
-          {
-            "project_info": {
-              "project_number": "123456789012",
-              "project_id": "jayuminton-build-validation",
-              "storage_bucket": "jayuminton-build-validation.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:123456789012:android:0123456789abcdef012345",
-                  "android_client_info": {
-                    "package_name": "com.jayuminton.member"
-                  }
-                },
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyBuildValidationOnly000000000000000"
-                  }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": []
-                  }
-                }
-              }
-            ],
-            "configuration_version": "1"
-          }
-          JSON
-          fi
-
       - name: Build v1.5 admin app
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Build v1.5 member app
-        run: gradle --no-daemon :member:assembleRelease
-
-      - name: Record source validation
-        if: steps.firebase_config.outputs.ready != 'true'
-        run: |
-          {
-            echo "## v1.5 source validation succeeded"
-            echo ""
-            echo "Both Android apps compiled and the free Apps Script relay passed syntax validation."
-            echo "The final APK artifact is waiting only for JAYUMINTON_PUSH_APPS_SCRIPT_URL."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Prepare final APKs
-        if: steps.firebase_config.outputs.ready == 'true'
+      - name: Prepare deliverables
         run: |
           mkdir -p artifacts
-          cp app/build/outputs/apk/release/app-release.apk artifacts/jayuminton-admin-v1.5.apk
-          cp member/build/outputs/apk/release/member-release.apk artifacts/jayuminton-member-v1.5.apk
+          cp app/build/outputs/apk/release/app-release.apk artifacts/jayuminton-admin-v1.5-web.apk
+          zip -r artifacts/jayuminton-browser-push-setup-v1.5.zip \
+            apps-script-push web-push firebase.json deploy-web-push.bat V1_5_BROWSER_PUSH_SETUP.md
 
-      - name: Upload v1.5 APKs
-        if: steps.firebase_config.outputs.ready == 'true'
+      - name: Upload admin APK
+        if: steps.config.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-v1.5-apks
-          path: artifacts/*.apk
+          name: jayuminton-admin-v1.5-web
+          path: artifacts/jayuminton-admin-v1.5-web.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload browser setup files
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-browser-push-setup-v1.5
+          path: artifacts/jayuminton-browser-push-setup-v1.5.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record configuration warning
+        if: steps.config.outputs.ready != 'true'
+        run: |
+          {
+            echo "## Admin source build succeeded"
+            echo ""
+            echo "The browser setup ZIP was uploaded, but the installable admin APK was not uploaded because one of the two repository secrets is missing."
+          } >> "$GITHUB_STEP_SUMMARY"
