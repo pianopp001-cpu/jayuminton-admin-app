@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.jayuminton.admin'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.jayuminton.admin'
+        minSdk 24
+        targetSdk 34
+        versionCode 14
+        versionName '1.4'
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../signing/jayuminton-release.jks')
+            storePassword 'JayuMinton14!'
+            keyAlias 'jayuminton'
+            keyPassword 'JayuMinton14!'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
