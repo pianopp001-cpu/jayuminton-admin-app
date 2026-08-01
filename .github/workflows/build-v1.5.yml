@@ -1,3 +1,4 @@
+# Final build trigger after Apps Script URL secret registration
 name: Build v1.5 Firebase APKs
 
 on:
