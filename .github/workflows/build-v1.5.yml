@@ -17,6 +17,7 @@ jobs:
     env:
       FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
       JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+      JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
 
     steps:
       - name: Checkout
@@ -38,14 +39,14 @@ jobs:
           mkdir -p signing
           base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
 
-      - name: Validate Firebase function syntax
-        run: node --check firebase/functions/index.js
+      - name: Validate free Apps Script relay syntax
+        run: node --check < apps-script-push/Code.gs
 
-      - name: Check Firebase build configuration
+      - name: Check final build configuration
         id: firebase_config
         shell: bash
         run: |
-          if [[ -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64" && -n "$JAYUMINTON_PUSH_SHARED_SECRET" ]]; then
+          if [[ -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64" && -n "$JAYUMINTON_PUSH_SHARED_SECRET" && -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ]]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -54,7 +55,7 @@ jobs:
       - name: Prepare member Firebase configuration
         shell: bash
         run: |
-          if [[ "${{ steps.firebase_config.outputs.ready }}" == "true" ]]; then
+          if [[ -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64" ]]; then
             printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > member/google-services.json
           else
             cat > member/google-services.json <<'JSON'
@@ -95,15 +96,14 @@ jobs:
       - name: Build v1.5 member app
         run: gradle --no-daemon :member:assembleRelease
 
-      - name: Record scaffold validation
+      - name: Record source validation
         if: steps.firebase_config.outputs.ready != 'true'
         run: |
           {
             echo "## v1.5 source validation succeeded"
             echo ""
-            echo "Both Android apps compiled and the Firebase Function syntax passed."
-            echo "The member APK used a nonfunctional build-only Firebase placeholder and was not uploaded."
-            echo "Add FIREBASE_GOOGLE_SERVICES_JSON_B64 and JAYUMINTON_PUSH_SHARED_SECRET to produce the two installable final APKs."
+            echo "Both Android apps compiled and the free Apps Script relay passed syntax validation."
+            echo "The final APK artifact is waiting only for JAYUMINTON_PUSH_APPS_SCRIPT_URL."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare final APKs
