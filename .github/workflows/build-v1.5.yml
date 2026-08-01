@@ -1,0 +1,85 @@
+name: Build v1.5 Firebase APKs
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ v1.5-firebase ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
+      JAYUMINTON_PUSH_FUNCTION_URL: ${{ secrets.JAYUMINTON_PUSH_FUNCTION_URL }}
+      JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Restore signing key
+        run: |
+          mkdir -p signing
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+
+      - name: Validate Firebase function syntax
+        run: node --check firebase/functions/index.js
+
+      - name: Build v1.5 admin app
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Check Firebase build configuration
+        id: firebase_config
+        shell: bash
+        run: |
+          if [[ -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64" && -n "$JAYUMINTON_PUSH_FUNCTION_URL" && -n "$JAYUMINTON_PUSH_SHARED_SECRET" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## v1.5 scaffold validation succeeded"
+              echo ""
+              echo "The admin source and Firebase Function syntax are valid."
+              echo "The two final APKs were not produced because the three Firebase repository secrets are not configured yet."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Decode member Firebase configuration
+        if: steps.firebase_config.outputs.ready == 'true'
+        run: |
+          printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > member/google-services.json
+
+      - name: Build v1.5 member app
+        if: steps.firebase_config.outputs.ready == 'true'
+        run: gradle --no-daemon :member:assembleRelease
+
+      - name: Prepare final APKs
+        if: steps.firebase_config.outputs.ready == 'true'
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/release/app-release.apk artifacts/jayuminton-admin-v1.5.apk
+          cp member/build/outputs/apk/release/member-release.apk artifacts/jayuminton-member-v1.5.apk
+
+      - name: Upload v1.5 APKs
+        if: steps.firebase_config.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-v1.5-apks
+          path: artifacts/*.apk
+          if-no-files-found: error
+          retention-days: 30
