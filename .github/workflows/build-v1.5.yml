@@ -49,16 +49,6 @@ jobs:
           node --check web-push/app.js
           node --check web-push/firebase-messaging-sw.js
           node --check < apps-script-push/Code.gs
-          python - <<'PY'
-          from pathlib import Path
-          source = Path('apps-script-main/Script.html').read_text(encoding='utf-8')
-          assert source.startswith('<script>') and source.rstrip().endswith('</script>')
-          Path('/tmp/jayuminton-member-script.js').write_text(
-              source[len('<script>'):source.rfind('</script>')],
-              encoding='utf-8'
-          )
-          PY
-          node --check /tmp/jayuminton-member-script.js
 
       - name: Build v1.5 admin app
         run: gradle --no-daemon :app:assembleRelease
@@ -67,8 +57,8 @@ jobs:
         run: |
           mkdir -p artifacts
           cp app/build/outputs/apk/release/app-release.apk artifacts/jayuminton-admin-v1.5-unified.apk
-          zip -r artifacts/jayuminton-v1.5-unified-member-setup.zip \
-            apps-script-main apps-script-push web-push firebase.json \
+          zip -r artifacts/jayuminton-v1.5-hosting-and-relay.zip \
+            apps-script-push web-push firebase.json \
             deploy-web-push.bat V1_5_UNIFIED_MEMBER_SETUP.md
 
       - name: Upload admin APK
@@ -79,10 +69,10 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload unified member setup
+      - name: Upload hosting and relay setup
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-v1.5-unified-member-setup
-          path: artifacts/jayuminton-v1.5-unified-member-setup.zip
+          name: jayuminton-v1.5-hosting-and-relay
+          path: artifacts/jayuminton-v1.5-hosting-and-relay.zip
           if-no-files-found: error
           retention-days: 30
