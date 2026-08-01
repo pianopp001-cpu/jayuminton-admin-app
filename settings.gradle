@@ -16,4 +16,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "Jayuminton"
 include(":app")
-include(":member")
