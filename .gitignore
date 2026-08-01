@@ -1,0 +1,19 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+
+# Firebase local configuration and secrets
+.firebaserc
+member/google-services.json
+firebase/functions/node_modules/
+firebase-debug.log
+firebase-debug.*.log
+
+# Local secret files
+*.secret
+*.secrets
+.env
+.env.*
