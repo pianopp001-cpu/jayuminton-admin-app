@@ -1,4 +1,4 @@
-name: Build v1.6.6 APK
+name: Build v199 PIN Fix APK
 
 on:
   workflow_dispatch:
@@ -30,33 +30,31 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Apply v1.6.6 admin session fix
+      - name: Apply v199 member registration PIN fix
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           java_path = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           text = java_path.read_text(encoding='utf-8')
 
-          old_urls = [
-              'https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec?mode=admin',
-              'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=1.5',
-          ]
-          admin_url = 'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=1.6.6'
-          for old_url in old_urls:
-              text = text.replace(old_url, admin_url)
+          text = re.sub(
+              r'https://script\.google\.com/macros/s/[^"\\]+/exec\?mode=admin(?:&appVersion=[^"\\]+)?',
+              'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=199',
+              text,
+              count=1
+          )
 
-          text = text.replace('JayumintonNative/1.4', 'JayumintonNative/1.6.6')
-          text = text.replace('JayumintonNative/1.5', 'JayumintonNative/1.6.6')
+          text = re.sub(
+              r'JayumintonNative/[0-9.]+',
+              'JayumintonNative/199-pinfix',
+              text
+          )
 
           if 'settings.setCacheMode(WebSettings.LOAD_NO_CACHE);' not in text:
-              marker = 'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.6.6");'
+              marker = 'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/199-pinfix");'
               text = text.replace(marker, marker + '\n        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);')
-
-          text = text.replace(
-              'int minimumMusic = maxMedia > 0 ? 1 : 0;',
-              'int minimumMusic = maxMedia > 0 ? Math.min(6, maxMedia) : 0;'
-          )
 
           if 'webView.clearCache(true);' not in text:
               text = text.replace(
@@ -64,22 +62,45 @@ jobs:
                   'webView.clearCache(true);\n        webView.loadUrl(ADMIN_URL);'
               )
 
+          old_js = (
+              '"window.__JAYUMINTON_NATIVE_APP__=true;" +\n'
+              '                        "document.documentElement.setAttribute(\'data-native-app\',\'1\');"'
+          )
+          new_js = (
+              '"window.__JAYUMINTON_NATIVE_APP__=true;" +\n'
+              '                        "document.documentElement.setAttribute(\'data-native-app\',\'1\');" +\n'
+              '                        "(function(){" +\n'
+              '                        "var install=function(){" +\n'
+              '                        "if(typeof window.runAction!==\'function\')return false;" +\n'
+              '                        "if(window.__JAYUMINTON_V199_PIN_FIX__)return true;" +\n'
+              '                        "window.__JAYUMINTON_V199_PIN_FIX__=true;" +\n'
+              '                        "window.addMember=async function(){" +\n'
+              '                        "var c=\'\';try{c=String(localStorage.getItem(\'jayuminton_admin_session_v1\')||\'\');}catch(e){}" +\n'
+              '                        "try{if(typeof ADMIN_PIN_VALUE!==\'undefined\'&&ADMIN_PIN_VALUE)c=String(ADMIN_PIN_VALUE);}catch(e){}" +\n'
+              '                        "var n=document.getElementById(\'newName\'),g=document.getElementById(\'newGender\'),r=document.getElementById(\'newGrade\'),x=document.getElementById(\'newExperience\');" +\n'
+              '                        "await window.runAction(\'addMember\',[c,n?String(n.value||\'\').trim():\'\',g?String(g.value||\'\'):\'\',r?String(r.value||\'\').trim():\'\',x?String(x.value||\'\').trim():\'\']);" +\n'
+              '                        "[n,g,r,x].forEach(function(i){if(i)i.value=\'\';});" +\n'
+              '                        "};return true;};" +\n'
+              '                        "if(!install()){var t=setInterval(function(){if(install())clearInterval(t);},100);setTimeout(function(){clearInterval(t);},10000);}" +\n'
+              '                        "})();"'
+          )
+          if old_js not in text:
+              raise SystemExit('WebView injection marker not found')
+          text = text.replace(old_js, new_js)
           java_path.write_text(text, encoding='utf-8')
 
           gradle_path = Path('app/build.gradle')
           gradle = gradle_path.read_text(encoding='utf-8')
-          import re
-          gradle = re.sub(r'versionCode\s+\d+', 'versionCode 20', gradle, count=1)
-          gradle = re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '1.6.6'", gradle, count=1)
+          gradle = re.sub(r'versionCode\s+\d+', 'versionCode 1991', gradle, count=1)
+          gradle = re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '199.1'", gradle, count=1)
           gradle_path.write_text(gradle, encoding='utf-8')
           PY
 
-          grep -F 'appVersion=1.6.6' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'JayumintonNative/1.6.6' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'WebSettings.LOAD_NO_CACHE' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'webView.clearCache(true)' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'versionCode 20' app/build.gradle
-          grep -F "versionName '1.6.6'" app/build.gradle
+          grep -F 'appVersion=199' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'JAYUMINTON_V199_PIN_FIX' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'jayuminton_admin_session_v1' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'versionCode 1991' app/build.gradle
+          grep -F "versionName '199.1'" app/build.gradle
 
       - name: Decode signing key
         run: |
@@ -92,13 +113,13 @@ jobs:
       - name: Save APK
         run: |
           mkdir -p releases
-          cp app/build/outputs/apk/release/app-release.apk releases/jayuminton-admin-v1.6.6.apk
+          cp app/build/outputs/apk/release/app-release.apk releases/jayuminton-v199-pinfix.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-admin-v1.6.6
-          path: releases/jayuminton-admin-v1.6.6.apk
+          name: jayuminton-v199-pinfix
+          path: releases/jayuminton-v199-pinfix.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -107,6 +128,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add releases/jayuminton-admin-v1.6.6.apk
-          git commit -m "Add Jayuminton v1.6.6 APK" || exit 0
+          git add releases/jayuminton-v199-pinfix.apk
+          git commit -m "Add Jayuminton v199 PIN fix APK" || exit 0
           git push
