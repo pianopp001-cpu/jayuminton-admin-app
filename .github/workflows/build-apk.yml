@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -32,29 +32,24 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
           java_path = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           text = java_path.read_text(encoding='utf-8')
-
-          old_url = 'https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec?mode=admin'
-          new_url = 'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=1.5'
-          if old_url not in text:
-              raise SystemExit('Old admin URL was not found')
-          text = text.replace(old_url, new_url)
-
           text = text.replace(
-              'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.4");',
-              'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.5");\n        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);'
+            'https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec?mode=admin',
+            'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=1.5'
           )
           text = text.replace(
-              'int minimumMusic = maxMedia > 0 ? 1 : 0;',
-              'int minimumMusic = maxMedia > 0 ? Math.min(6, maxMedia) : 0;'
+            'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.4");',
+            'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.5");\n        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);'
           )
           text = text.replace(
-              'webView.loadUrl(ADMIN_URL);',
-              'webView.clearCache(true);\n        webView.loadUrl(ADMIN_URL);'
+            'int minimumMusic = maxMedia > 0 ? 1 : 0;',
+            'int minimumMusic = maxMedia > 0 ? Math.min(6, maxMedia) : 0;'
           )
-
+          text = text.replace(
+            'webView.loadUrl(ADMIN_URL);',
+            'webView.clearCache(true);\n        webView.loadUrl(ADMIN_URL);'
+          )
           java_path.write_text(text, encoding='utf-8')
 
           gradle_path = Path('app/build.gradle')
@@ -64,13 +59,6 @@ jobs:
           gradle_path.write_text(gradle, encoding='utf-8')
           PY
 
-          grep -F 'AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'JayumintonNative/1.5' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'WebSettings.LOAD_NO_CACHE' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'Math.min(6, maxMedia)' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'versionCode 19' app/build.gradle
-          grep -F "versionName '1.5'" app/build.gradle
-
       - name: Decode signing key
         run: |
           mkdir -p signing
@@ -79,13 +67,23 @@ jobs:
       - name: Build signed release APK
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk jayuminton-admin-v1.5-session-fix.apk
+      - name: Save APK
+        run: |
+          mkdir -p releases
+          cp app/build/outputs/apk/release/app-release.apk releases/jayuminton-admin-v1.5-session-fix.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: jayuminton-admin-v1.5-session-fix
-          path: jayuminton-admin-v1.5-session-fix.apk
+          path: releases/jayuminton-admin-v1.5-session-fix.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Commit APK to repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add releases/jayuminton-admin-v1.5-session-fix.apk
+          git commit -m "Add fixed Jayuminton v1.5 APK" || exit 0
+          git push
