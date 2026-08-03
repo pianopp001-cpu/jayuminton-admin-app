@@ -49,6 +49,7 @@ jobs:
 
       - name: Restore v199 design and PIN session bridge
         run: |
+          python3 scripts/clean_v199_archive.py
           python3 scripts/prepare_v199_firebase_build.py
           test -s app/src/main/assets/admin-runtime.js
           test -s app/src/main/assets/court-orientation.js
