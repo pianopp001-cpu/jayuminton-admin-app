@@ -1,4 +1,4 @@
-name: Build v1.4 APK
+name: Build v1.5 APK
 
 on:
   workflow_dispatch:
@@ -28,12 +28,48 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Apply v1.4 media volume level 6
+      - name: Apply v1.5 admin session fix
         run: |
-          sed -i 's/int minimumMusic = maxMedia > 0 ? 1 : 0;/int minimumMusic = maxMedia > 0 ? Math.min(6, maxMedia) : 0;/' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          sed -i 's/versionCode 14/versionCode 18/' app/build.gradle
-          grep -F 'int minimumMusic = maxMedia > 0 ? Math.min(6, maxMedia) : 0;' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'versionCode 18' app/build.gradle
+          python3 - <<'PY'
+          from pathlib import Path
+
+          java_path = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
+          text = java_path.read_text(encoding='utf-8')
+
+          old_url = 'https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec?mode=admin'
+          new_url = 'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=1.5'
+          if old_url not in text:
+              raise SystemExit('Old admin URL was not found')
+          text = text.replace(old_url, new_url)
+
+          text = text.replace(
+              'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.4");',
+              'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.5");\n        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);'
+          )
+          text = text.replace(
+              'int minimumMusic = maxMedia > 0 ? 1 : 0;',
+              'int minimumMusic = maxMedia > 0 ? Math.min(6, maxMedia) : 0;'
+          )
+          text = text.replace(
+              'webView.loadUrl(ADMIN_URL);',
+              'webView.clearCache(true);\n        webView.loadUrl(ADMIN_URL);'
+          )
+
+          java_path.write_text(text, encoding='utf-8')
+
+          gradle_path = Path('app/build.gradle')
+          gradle = gradle_path.read_text(encoding='utf-8')
+          gradle = gradle.replace('versionCode 14', 'versionCode 19')
+          gradle = gradle.replace("versionName '1.4'", "versionName '1.5'")
+          gradle_path.write_text(gradle, encoding='utf-8')
+          PY
+
+          grep -F 'AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'JayumintonNative/1.5' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'WebSettings.LOAD_NO_CACHE' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'Math.min(6, maxMedia)' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'versionCode 19' app/build.gradle
+          grep -F "versionName '1.5'" app/build.gradle
 
       - name: Decode signing key
         run: |
@@ -44,12 +80,12 @@ jobs:
         run: gradle --no-daemon :app:assembleRelease
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk jayuminton-admin-v1.4.apk
+        run: cp app/build/outputs/apk/release/app-release.apk jayuminton-admin-v1.5-session-fix.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-admin-v1.4-volume6
-          path: jayuminton-admin-v1.4.apk
+          name: jayuminton-admin-v1.5-session-fix
+          path: jayuminton-admin-v1.5-session-fix.apk
           if-no-files-found: error
           retention-days: 30
