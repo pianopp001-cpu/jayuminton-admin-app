@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-import base64
 import re
+import subprocess
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE_B64 = ROOT / "bootstrap" / "v199-assets.zip.b64"
-ARCHIVE_ZIP = ROOT / "bootstrap" / "v199-assets.zip"
 ASSETS = ROOT / "app" / "src" / "main" / "assets"
 MAIN_ACTIVITY = ROOT / "app" / "src" / "main" / "java" / "com" / "jayuminton" / "admin" / "MainActivity.java"
+SOURCE_APK = ROOT / "bootstrap" / "jayuminton-v199-source.apk"
+LOCAL_RELEASE_APK = ROOT / "releases" / "jayuminton-v199.3-reinstall.apk"
+SOURCE_COMMIT = "4c5a79749f3b638dc389f7ddc419b6286fa25ece"
+SOURCE_PATH = "releases/jayuminton-v199.3-reinstall.apk"
 
 REQUIRED = (
     "admin-runtime.js",
@@ -19,14 +21,46 @@ REQUIRED = (
 )
 
 
-def decode_and_extract() -> None:
-    raw = "".join(ARCHIVE_B64.read_text(encoding="utf-8").split())
-    ARCHIVE_ZIP.write_bytes(base64.b64decode(raw, validate=True))
+def restore_source_apk() -> Path:
+    SOURCE_APK.parent.mkdir(parents=True, exist_ok=True)
+    if LOCAL_RELEASE_APK.exists() and LOCAL_RELEASE_APK.stat().st_size > 0:
+        SOURCE_APK.write_bytes(LOCAL_RELEASE_APK.read_bytes())
+        return SOURCE_APK
+
+    result = subprocess.run(
+        ["git", "show", f"{SOURCE_COMMIT}:{SOURCE_PATH}"],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout:
+        error = result.stderr.decode("utf-8", errors="replace")
+        raise SystemExit(f"could not restore v199 source APK: {error}")
+    SOURCE_APK.write_bytes(result.stdout)
+    return SOURCE_APK
+
+
+def extract_runtime() -> None:
+    source = restore_source_apk()
     ASSETS.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(ARCHIVE_ZIP) as archive:
-        for name in REQUIRED:
-            data = archive.read(name)
-            (ASSETS / name).write_bytes(data)
+    try:
+        with zipfile.ZipFile(source) as archive:
+            entries = archive.namelist()
+            for required_name in REQUIRED:
+                matches = [name for name in entries if Path(name).name == required_name]
+                if not matches:
+                    raise SystemExit(f"v199 source APK is missing {required_name}")
+                preferred = next(
+                    (name for name in matches if name == f"assets/{required_name}"),
+                    matches[0],
+                )
+                data = archive.read(preferred)
+                if len(data) < 100:
+                    raise SystemExit(f"invalid v199 runtime file: {required_name}")
+                (ASSETS / required_name).write_bytes(data)
+    except zipfile.BadZipFile as exc:
+        raise SystemExit(f"v199 source APK is not a valid APK/ZIP: {exc}") from exc
 
 
 def patch_admin_credential_bridge() -> None:
@@ -122,7 +156,7 @@ def verify() -> None:
 
 
 if __name__ == "__main__":
-    decode_and_extract()
+    extract_runtime()
     patch_admin_credential_bridge()
     patch_court_credential_reader()
     patch_main_activity()
