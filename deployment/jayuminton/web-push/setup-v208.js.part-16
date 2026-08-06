@@ -1,0 +1,3 @@
+idden');toastTimer=setTimeout(()=>toast.classList.add('hidden'),4000); }
+})();
+
