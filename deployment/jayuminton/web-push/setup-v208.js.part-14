@@ -1,0 +1,87 @@
+lIntentArmed),
+      prepRemaining:installPreparationRemaining(),
+      nativeInstall:Boolean(supportsNativeInstallElement() || supportsNavigatorInstall()),
+      message:String(messageText || '')
+    });
+  }
+
+  function updateInstallClickProxy(data) {
+    lastInstallButtonRect = {
+      visible:Boolean(data.visible),
+      left:Number(data.left || 0),
+      top:Number(data.top || 0),
+      width:Number(data.width || 0),
+      height:Number(data.height || 0)
+    };
+    refreshInstallProxyPosition();
+  }
+
+  function refreshInstallProxyPosition() {
+    if (!appInstallClickProxy) return;
+    const rect = lastInstallButtonRect;
+    const installed = isUserAppInstalledState();
+    const hasUsableRect = androidDevice && !installed && rect && rect.visible && rect.width >= 16 && rect.height >= 16;
+    if (!hasUsableRect) {
+      appInstallClickProxy.hidden = true;
+      if (appInstallChromeLink) appInstallChromeLink.hidden = true;
+      if (nativeInstallControl) nativeInstallControl.hidden = true;
+      return;
+    }
+
+    const frameRect = frame.getBoundingClientRect();
+    const left = Math.round(window.scrollX + frameRect.left + rect.left) + 'px';
+    const top = Math.round(window.scrollY + frameRect.top + rect.top) + 'px';
+    const width = Math.round(rect.width) + 'px';
+    const height = Math.round(rect.height) + 'px';
+
+    // Kakao/Daangn must receive an actual top-level anchor tap. A postMessage followed by
+    // location.href loses the trusted user gesture and can be handed to Google Drive.
+    if (embeddedBrowser && appInstallChromeLink) {
+      const links = buildAndroidChromeIntent();
+      appInstallChromeLink.href = links.intentUrl;
+      appInstallChromeLink.style.left = left;
+      appInstallChromeLink.style.top = top;
+      appInstallChromeLink.style.width = width;
+      appInstallChromeLink.style.height = height;
+      appInstallChromeLink.hidden = false;
+      appInstallClickProxy.hidden = true;
+      if (nativeInstallControl) nativeInstallControl.hidden = true;
+      return;
+    }
+
+    if (appInstallChromeLink) appInstallChromeLink.hidden = true;
+    appInstallClickProxy.style.left = left;
+    appInstallClickProxy.style.top = top;
+    appInstallClickProxy.style.width = width;
+    appInstallClickProxy.style.height = height;
+    appInstallClickProxy.hidden = false;
+    if (nativeInstallControl) nativeInstallControl.hidden = true;
+  }
+
+  function showIOSInstallGuide() {
+    if (!iosDevice || isStandaloneApp()) return;
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    setInstallMessage('Safari 공유 → 홈 화면에 추가 → 추가를 눌러 주세요.', 'success');
+    showToast('아이폰: Safari 공유 → 홈 화면에 추가 → 추가');
+    sendAppInstallStatus('Safari 공유 → 홈 화면에 추가 → 추가');
+  }
+
+  function closeIOSInstallGuide() {}
+  function confirmIOSInstallGuide() { showIOSInstallGuide(); }
+
+  function isIOSDevice() {
+    const ua = String(navigator.userAgent || '');
+    return /iPhone|iPad|iPod/i.test(ua) ||
+      (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
+  }
+
+  function isAndroidDevice() {
+    return /Android/i.test(String(navigator.userAgent || ''));
+  }
+
+  function isEmbeddedBrowser() {
+    const ua = String(navigator.userAgent || '');
+    const source = String(new URLSearchParams(window.location.search).get('source') || '').toLowerCase();
+    // The Chrome intent target explicitly uses source=chrome. Never classify that page
+    // as embedded merely because document.referrer still contains Kakao or Daangn.
+    if (source ==
