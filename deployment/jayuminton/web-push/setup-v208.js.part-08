@@ -1,0 +1,94 @@
+mentSeconds >= MIN_INSTALL_ENGAGEMENT_SECONDS) scheduleInstallabilityRecheck();
+    if (engagementTimer) return;
+    engagementTimer = window.setInterval(() => {
+      if (document.hidden || deferredInstallPrompt || isStandaloneApp()) return;
+      if (engagementSeconds < MIN_INSTALL_ENGAGEMENT_SECONDS) {
+        engagementSeconds += 1;
+        persistEngagementSeconds();
+        refreshInstallState();
+        if (engagementSeconds >= MIN_INSTALL_ENGAGEMENT_SECONDS) scheduleInstallabilityRecheck();
+      }
+    }, 1000);
+  }
+
+  function stopEngagementClock() {
+    if (!engagementTimer) return;
+    clearInterval(engagementTimer);
+    engagementTimer = null;
+  }
+
+  function persistEngagementSeconds() {
+    try { localStorage.setItem(STORAGE.engagementSeconds, String(Math.max(0, Math.min(MIN_INSTALL_ENGAGEMENT_SECONDS, engagementSeconds)))); } catch (_) {}
+  }
+
+  function installPreparationRemaining() {
+    return Math.max(0, MIN_INSTALL_ENGAGEMENT_SECONDS - Math.floor(engagementSeconds));
+  }
+
+
+  function setInstallIntentArmed(value) {
+    installIntentArmed = Boolean(value);
+    try {
+      if (installIntentArmed) sessionStorage.setItem('jayuminton_pwa_install_armed_v206', '1');
+      else sessionStorage.removeItem('jayuminton_pwa_install_armed_v206');
+    } catch (_) {}
+  }
+
+  function scheduleInstallabilityRecheck() {
+    if (!androidDevice || embeddedBrowser || deferredInstallPrompt || isStandaloneApp()) return;
+    if (!installIntentArmed || installPreparationRemaining() > 0) return;
+    // Never reload or reopen Chrome here. Chrome dispatches beforeinstallprompt when
+    // the current top-level page becomes installable. Reloading destroyed the pending
+    // state and made the visible OFF button loop forever.
+    consumeEarlyInstallPrompt();
+    setInstallMessage('Chrome 설치 가능 신호를 기다리고 있습니다.', 'success');
+    sendAppInstallStatus('설치 가능 신호 대기');
+    refreshInstallState();
+  }
+
+  function supportsNativeInstallElement() {
+    // The <install> element is an origin-trial feature. This site does not rely on it.
+    return false;
+  }
+
+  function supportsNavigatorInstall() {
+    // navigator.install() is also an origin-trial feature. Use the stable
+    // beforeinstallprompt flow so the button never reports false readiness.
+    return false;
+  }
+
+  function handleNativeInstallAction() {
+    installAttemptPending = true;
+    setInstallIntentArmed(false);
+    setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
+    sendAppInstallStatus('설치 확인중');
+    refreshInstallState();
+  }
+
+  function handleNativeInstallDismiss() {
+    installAttemptPending = false;
+    setInstallIntentArmed(false);
+    const detail = '앱 설치가 취소되었습니다.';
+    setInstallMessage(detail);
+    sendAppInstallStatus(detail);
+    refreshInstallState();
+  }
+
+  function handleNativeInstallValidation(event) {
+    const reason = String((event && event.target && event.target.invalidReason) || '');
+    if (!reason) return;
+    installAttemptPending = false;
+    sendAppInstallStatus('설치 준비 확인 중');
+    refreshInstallState();
+  }
+
+  function handleDirectInstallScreenButton(event) {
+    if (!directInstallMode) return;
+    if (directInstallButton && directInstallButton.getAttribute('aria-disabled') === 'true') {
+      if (event) event.preventDefault();
+      return;
+    }
+    if (embeddedBrowser) {
+      // Keep the default action of the real top-level intent anchor. This preserves
+      // the user's tap and opens com.android.chrome without an iframe or Drive fallback.
+      const links = 
