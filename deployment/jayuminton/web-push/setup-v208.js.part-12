@@ -1,8 +1,8 @@
 arget = buildChromeUserTarget();
     const targetUrl = target.toString();
     const hostAndPath = target.host + target.pathname + target.search + target.hash;
-    // Do not attach browser_fallback_url here. Some Kakao/Daangn WebViews misroute the
-    // encoded fallback to Google Drive. The package is fixed to the installed Chrome app.
+    // Do not attach any encoded fallback parameter here. Some Kakao/Daangn WebViews
+    // misroute it to Google Drive. The package is fixed to the installed Chrome app.
     const intentUrl = 'intent://' + hostAndPath +
       '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
       'category=android.intent.category.BROWSABLE;end';
