@@ -41,39 +41,42 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check one-time deployment secrets
+        id: secret_check
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON" || {
-            echo 'JAYUMINTON_DEPLOY_CONFIG_JSON secret is missing.'
-            exit 1
-          }
-          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || {
-            echo 'FIREBASE_SERVICE_ACCOUNT_JSON secret is missing.'
-            exit 1
-          }
-          if [[ "$DEPLOY_TARGET" == 'all' ]]; then
-            test -n "$CLASPRC_JSON" || {
-              echo 'CLASPRC_JSON secret is missing.'
-              exit 1
-            }
+          missing=()
+          [[ -n "$JAYUMINTON_DEPLOY_CONFIG_JSON" ]] || missing+=(JAYUMINTON_DEPLOY_CONFIG_JSON)
+          [[ -n "$FIREBASE_SERVICE_ACCOUNT_JSON" ]] || missing+=(FIREBASE_SERVICE_ACCOUNT_JSON)
+          if [[ "$DEPLOY_TARGET" == 'all' && -z "$CLASPRC_JSON" ]]; then
+            missing+=(CLASPRC_JSON)
           fi
+          if (( ${#missing[@]} )); then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo "::notice title=자유민턴 자동 배포 최초 연결 필요::Actions Secrets에 ${missing[*]} 값을 등록하세요. 실제 배포는 안전하게 건너뜁니다."
+            exit 0
+          fi
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js 22
+        if: steps.secret_check.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Install deployment tools
+        if: steps.secret_check.outputs.ready == 'true'
         shell: bash
         run: npm install --global firebase-tools@latest @google/clasp@latest
 
       - name: Authenticate to Google Cloud
+        if: steps.secret_check.outputs.ready == 'true'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Read existing deployment IDs and URLs
+      - name: Read deployment IDs and URLs
+        if: steps.secret_check.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -105,7 +108,7 @@ jobs:
           fi
 
       - name: Pull, overlay and redeploy MAIN Apps Script
-        if: env.DEPLOY_TARGET == 'all'
+        if: steps.secret_check.outputs.ready == 'true' && env.DEPLOY_TARGET == 'all'
         shell: bash
         run: |
           set -euo pipefail
@@ -122,7 +125,7 @@ jobs:
             --description "GitHub Actions ${GITHUB_SHA::7}"
 
       - name: Pull, overlay and redeploy PUSH Apps Script
-        if: env.DEPLOY_TARGET == 'all'
+        if: steps.secret_check.outputs.ready == 'true' && env.DEPLOY_TARGET == 'all'
         shell: bash
         run: |
           set -euo pipefail
@@ -139,14 +142,15 @@ jobs:
             --description "GitHub Actions ${GITHUB_SHA::7}"
 
       - name: Verify Apps Script URLs
-        if: env.DEPLOY_TARGET == 'all'
+        if: steps.secret_check.outputs.ready == 'true' && env.DEPLOY_TARGET == 'all'
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --location --retry 3 --max-time 60 "$MAIN_URL?verify=$GITHUB_RUN_ID" >/dev/null
           curl --fail --location --retry 3 --max-time 60 "$PUSH_URL?verify=$GITHUB_RUN_ID" >/dev/null
 
-      - name: Rebuild PWA from current production and GitHub overrides
+      - name: Rebuild PWA from production and GitHub source
+        if: steps.secret_check.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -191,10 +195,20 @@ jobs:
             fi
           done
 
+          rsync -a --exclude='.gitkeep' deployment/jayuminton/web-push/ "$BUILD_ROOT/web-push/"
           rsync -a --exclude='.gitkeep' deployment/jayuminton/web-push-overrides/ "$BUILD_ROOT/web-push/"
 
+          if compgen -G "$BUILD_ROOT/web-push/setup-v208.js.part-*" >/dev/null; then
+            cat "$BUILD_ROOT"/web-push/setup-v208.js.part-* > "$BUILD_ROOT/web-push/setup-v208.js"
+            rm -f "$BUILD_ROOT"/web-push/setup-v208.js.part-*
+          fi
+
+          (
+            cd "$BUILD_ROOT/web-push"
+            sha256sum --check "$GITHUB_WORKSPACE/deployment/jayuminton/web-push/setup-v208.js.sha256"
+          )
+
           python3 - <<'PY'
-          import glob
           import os
           import re
           from pathlib import Path
@@ -229,11 +243,20 @@ jobs:
           print(f'Validated Jayuminton v{version} using {entry.name}')
           PY
 
+          node --check "$BUILD_ROOT/web-push/setup-v208.js"
+          grep -F 'browser_fallback_url' "$BUILD_ROOT/web-push/setup-v208.js" && {
+            echo 'Forbidden Google Drive fallback remains in the PWA installer.'
+            exit 1
+          } || true
+          grep -F 'package=com.android.chrome' "$BUILD_ROOT/web-push/setup-v208.js"
+          grep -F 'direct-install-mode' "$BUILD_ROOT/web-push/setup-v208.js"
+
       - name: Deploy Firebase Hosting
-        working-directory: ${{ env.BUILD_ROOT }}
+        if: steps.secret_check.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
+          cd "$BUILD_ROOT"
           firebase deploy \
             --only hosting \
             --project "$FIREBASE_PROJECT_ID" \
@@ -241,6 +264,7 @@ jobs:
             --message "GitHub Actions v${RELEASE_VERSION} ${GITHUB_SHA::7}"
 
       - name: Verify live PWA version
+        if: steps.secret_check.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -250,10 +274,15 @@ jobs:
             "$BASE/?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-index.html"
           grep -F "$RELEASE_VERSION" "$RUNNER_TEMP/live-index.html"
           curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/setup-v208.js?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-setup.js"
+          grep -F "$RELEASE_VERSION" "$RUNNER_TEMP/live-setup.js"
+          grep -F 'package=com.android.chrome' "$RUNNER_TEMP/live-setup.js"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
             "$BASE/firebase-messaging-sw.js?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-worker.js"
           grep -F "$RELEASE_VERSION" "$RUNNER_TEMP/live-worker.js"
 
       - name: Deployment summary
+        if: steps.secret_check.outputs.ready == 'true'
         shell: bash
         run: |
           {
