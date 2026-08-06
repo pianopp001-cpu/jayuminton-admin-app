@@ -1,0 +1,82 @@
+
+    }
+    const typed = firstTwoSearchChars(nameInput.value);
+    if (Array.from(typed).length < 2) {
+      setMessage('이름을 두 글자 이상 입력해 주세요.', 'error');
+      return;
+    }
+    const exactSelected = member && member.id
+      ? members.find((item) => String(item.id) === String(member.id))
+      : null;
+    const matches = exactSelected
+      ? [exactSelected]
+      : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+    if (!matches.length) {
+      setMessage('등록된 회원 중 ' + typed + ' 이름을 찾지 못했습니다.', 'error');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:'이름을 찾지 못했습니다.'});
+      return;
+    }
+    if (matches.length > 1) {
+      setMessage('앞 두 글자가 같은 회원이 여러 명입니다. 관리자에게 이름 구분을 요청해 주세요.', 'error');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:'동일 이름이 여러 명입니다.'});
+      return;
+    }
+
+    member = {id: String(matches[0].id), name: String(matches[0].name)};
+    saveJson(STORAGE.member, member);
+    setConnecting();
+    try {
+      const instance = await initializeMessaging();
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        throw new Error(iosDevice ? '아이폰 설정에서 자유민턴 코트현황 알림을 허용해 주세요.' : '브라우저 알림을 허용해 주세요.');
+      }
+      const token = await instance.getToken({vapidKey: cfg.vapidKey, serviceWorkerRegistration: registration});
+      if (!token) throw new Error('알림 연결 정보를 만들지 못했습니다.');
+      await submitRelay('register_web_token', token);
+      localStorage.setItem(STORAGE.token, token);
+      setConnected();
+      sendCourtMessage('JAYUMINTON_UNIFIED_PUSH_STATUS', {
+        connected: true,
+        member,
+        message: member.name + '님 알림 예정'
+      });
+      showToast(member.name + '님 알림·진동 설정 완료');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:true, member, message:member.name + '님 알림 예정'});
+      collapseSetupAfterSuccess();
+    } catch (error) {
+      const failureMessage = error && error.message ? error.message : String(error);
+      setOff(failureMessage);
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:failureMessage});
+    } finally {
+      connectButton.disabled = false;
+      connectButton.textContent = isConnected ? '해지' : (member ? '연결' : '완료');
+    }
+  }
+
+  async function disconnectAlarm() {
+    connectButton.disabled = true;
+    connectButton.textContent = '해지 중…';
+    stateBadge.textContent = '💡 해지 중';
+    stateBadge.className = 'state-pill is-connecting';
+    try {
+      const instance = await initializeMessaging();
+      const token = localStorage.getItem(STORAGE.token) || await instance.getToken({vapidKey:cfg.vapidKey, serviceWorkerRegistration:registration});
+      if (token && member) await submitRelay('unregister_web_token', token);
+      if (token) await instance.deleteToken().catch(() => false);
+      localStorage.removeItem(STORAGE.token);
+      isConnected = false;
+      setOff('순서알람 연결을 해지했습니다.');
+      sendCourtMessage('JAYUMINTON_UNIFIED_PUSH_STATUS', {connected:false, member, message:'연결 OFF'});
+      showToast('순서알람 연결 해지 완료');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, member, message:'알림 OFF'});
+      collapseSetupAfterSuccess();
+    } catch (error) {
+      setMessage(error && error.message ? error.message : String(error), 'error');
+    } finally {
+      connectButton.disabled = false;
+      connectButton.textContent = '연결';
+    }
+  }
+
+  async function refreshConnectio
