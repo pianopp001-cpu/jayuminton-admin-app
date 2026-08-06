@@ -1,0 +1,78 @@
+  } else if (data.type === 'JAYUMINTON_MEMBER_SELECTED') {
+        member = null;
+        localStorage.removeItem(STORAGE.member);
+        nameInput.value = '';
+      }
+      sendBootstrap();
+    } else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {
+      if (data.member && data.member.id && data.member.name) {
+        member = {id:String(data.member.id), name:String(data.member.name)};
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+      }
+      connectAlarm();
+    } else if (data.type === 'JAYUMINTON_PUSH_DISCONNECT_REQUEST') {
+      if (isConnected || localStorage.getItem(STORAGE.token)) disconnectAlarm();
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_BUTTON_RECT') {
+      updateInstallClickProxy(data);
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {
+      handleAppInstallButton(true);
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_OFF') {
+      setAppDownloadOff();
+    } else if (data.type === 'JAYUMINTON_CONTENT_HEIGHT') {
+      const height = Math.max(500, Math.ceil(Number(data.height || 0)));
+      frame.style.height = height + 'px';
+    }
+  }
+
+  function sendBootstrap() {
+    sendCourtMessage('JAYUMINTON_UNIFIED_BOOTSTRAP', {
+      authVersion:String(localStorage.getItem(STORAGE.auth) || ''),
+      authSession:String(localStorage.getItem(STORAGE.authSession) || ''),
+      member,
+      pushConnected:Boolean(localStorage.getItem(STORAGE.token) && member && 'Notification' in window && Notification.permission === 'granted'),
+      pushMember:member,
+      appInstalled:isUserAppInstalledState(),
+      appInstallChoice:String(localStorage.getItem(STORAGE.installChoice) || ''),
+      appInstallPlatform:iosDevice ? 'ios' : (androidDevice ? 'android' : 'other'),
+      appInstallBrowserContext:browserContext,
+      appInstallReady:Boolean(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall()),
+      appInstallPending:Boolean(installAttemptPending),
+      appInstallArmed:Boolean(installIntentArmed),
+      appInstallPrepRemaining:installPreparationRemaining(),
+      appInstallNative:Boolean(supportsNativeInstallElement() || supportsNavigatorInstall())
+    });
+  }
+
+  function sendCourtMessage(type, extra) {
+    if (frame.contentWindow) frame.contentWindow.postMessage(Object.assign({type}, extra || {}), '*');
+  }
+
+  function captureAndroidInstallPrompt(event) {
+    if (!event || !androidDevice || isStandaloneApp()) return;
+    try { event.preventDefault(); } catch (_) {}
+    deferredInstallPrompt = event;
+    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
+    installAttemptPending = false;
+    setInstallIntentArmed(false);
+    engagementSeconds = MIN_INSTALL_ENGAGEMENT_SECONDS;
+    persistEngagementSeconds();
+    try { sessionStorage.removeItem(STORAGE.installRecheck); } catch (_) {}
+    clearTimeout(installAttemptTimer);
+    refreshInstallState();
+    showToast('설치 준비 완료: PWA 설치 버튼을 눌러 주세요.');
+  }
+
+  function consumeEarlyInstallPrompt() {
+    const early = window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
+    if (early && early !== deferredInstallPrompt) captureAndroidInstallPrompt(early);
+    if (window.__JAYUMINTON_EARLY_APP_INSTALLED) handleUserAppInstalled();
+  }
+
+  function startEngagementClock() {
+    if (!androidDevice || embeddedBrowser || isStandaloneApp() || document.hidden || deferredInstallPrompt) return;
+    if (MIN_INSTALL_ENGAGEMENT_SECONDS <= 0) {
+      scheduleInstallabilityRecheck();
+      return;
+    }
+    if (engage

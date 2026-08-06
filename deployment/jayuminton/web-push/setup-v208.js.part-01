@@ -1,0 +1,71 @@
+(() => {
+  'use strict';
+  // v1.6.41: Chrome install entry uses a visible top-level Firebase install screen.
+  // The Google Apps Script iframe is not loaded until installation is finished or skipped.
+
+  const cfg = window.JAYUMINTON_PUSH_SETUP_CONFIG || {};
+  const frame = document.getElementById('courtFrame');
+  const setupPanel = document.getElementById('setupPanel');
+  const setupToggle = document.getElementById('setupToggle');
+  const setupBody = document.getElementById('setupBody');
+  const alarmSummaryBadge = document.getElementById('alarmSummaryBadge');
+  const installSummaryBadge = document.getElementById('installSummaryBadge');
+  const nameInput = document.getElementById('alarmNameInput');
+  const connectButton = document.getElementById('alarmConnectButton');
+  const stateBadge = document.getElementById('alarmState');
+  const message = document.getElementById('alarmMessage');
+  const appInstallButton = document.getElementById('appInstallButton');
+  const appInstallOffButton = document.getElementById('appInstallOffButton');
+  const appInstallState = document.getElementById('appInstallState');
+  const installTitle = document.getElementById('installTitle');
+  const installHint = document.getElementById('installHint');
+  const installMessage = document.getElementById('installMessage');
+  const toast = document.getElementById('toast');
+  const appInstallClickProxy = document.getElementById('appInstallClickProxy');
+  const appInstallChromeLink = document.getElementById('appInstallChromeLink');
+  const directInstallScreen = document.getElementById('directInstallScreen');
+  const directInstallButton = document.getElementById('directInstallButton');
+  const directInstallContinue = document.getElementById('directInstallContinue');
+  const directInstallStatus = document.getElementById('directInstallStatus');
+  const nativeInstallControl = document.getElementById('nativeInstallControl');
+
+  const STORAGE = Object.freeze({
+    member: 'jayuminton_push_setup_member_v164',
+    token: 'jayuminton_push_token_v158',
+    auth: 'jayuminton_member_auth_v164',
+    authSession: 'jayuminton_member_session_token_v1',
+    installChoice: 'jayuminton_user_app_download_choice_v170',
+    installGuideSeen: 'jayuminton_ios_install_guide_seen_v170',
+    installConfirmed: 'jayuminton_user_app_installed_confirmed_v206',
+    setupCollapsed: 'jayuminton_setup_panel_collapsed_v206',
+    engagementSeconds: 'jayuminton_pwa_chrome_visible_seconds_v206',
+    installRecheck: 'jayuminton_pwa_installability_recheck_v206'
+  });
+
+  let members = [];
+  let member = readJson(STORAGE.member);
+  let messaging = null;
+  let registration = null;
+  let serviceWorkerPromise = null;
+  let sdkPromise = null;
+  let toastTimer = null;
+  let isConnected = false;
+  let deferredInstallPrompt = null;
+  let installAttemptPending = false;
+  let installAttemptTimer = null;
+  let lastInstallButtonRect = null;
+  let installIntentArmed = false;
+  try { installIntentArmed = sessionStorage.getItem('jayuminton_pwa_install_armed_v206') === '1'; } catch (_) {}
+  let engagementTimer = null;
+  let engagementSeconds = (() => {
+    try {
+      const value = Number(localStorage.getItem(STORAGE.engagementSeconds) || 0);
+      return Number.isFinite(value) ? Math.max(0, Math.min(30, Math.floor(value))) : 0;
+    } catch (_) {
+      return 0;
+    }
+  })();
+  const MIN_INSTALL_ENGAGEMENT_SECONDS = 0;
+  const iosDevice = isIOSDevice();
+  const androidDevice = isAndroidDevice();
+  const embeddedBrowser = isEmb

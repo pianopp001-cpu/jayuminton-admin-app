@@ -1,0 +1,88 @@
+buildAndroidChromeIntent();
+      directInstallButton.href = links.intentUrl;
+      setDirectInstallStatus('Chrome에서 자유민턴 설치 화면을 여는 중입니다.', 'success');
+      return;
+    }
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    handleAppInstallButton(true);
+  }
+
+  function leaveDirectInstallScreen(event) {
+    if (event) event.preventDefault();
+    if (!directInstallMode) return;
+    if (directInstallScreen) {
+      directInstallScreen.hidden = true;
+      directInstallScreen.setAttribute('aria-hidden', 'true');
+    }
+    document.body.classList.remove('direct-install-mode');
+    if (!frame.src || frame.src === 'about:blank') {
+      frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
+    }
+    try {
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete('install');
+      clean.searchParams.delete('external');
+      clean.searchParams.set('source', 'pwa');
+      window.history.replaceState({}, document.title, clean.pathname + clean.search + clean.hash);
+    } catch (_) {}
+  }
+
+  function setDirectInstallStatus(text, type) {
+    if (!directInstallStatus) return;
+    directInstallStatus.textContent = String(text || '');
+    directInstallStatus.className = 'direct-install-status' + (type ? ' ' + type : '');
+  }
+
+  function refreshDirectInstallScreen() {
+    if (!directInstallMode || !directInstallScreen || !directInstallButton) return;
+    directInstallScreen.hidden = false;
+    directInstallScreen.setAttribute('aria-hidden', 'false');
+
+    if (embeddedBrowser) {
+      const links = buildAndroidChromeIntent();
+      directInstallButton.href = links.intentUrl;
+      directInstallButton.textContent = 'Chrome에서 설치하기';
+      directInstallButton.classList.remove('is-disabled');
+      directInstallButton.setAttribute('aria-disabled', 'false');
+      setDirectInstallStatus('아래 버튼을 누르면 Chrome의 전용 설치 화면으로 이동합니다.', 'success');
+      directInstallContinue.textContent = '설치하지 않고 계속';
+      return;
+    }
+
+    directInstallButton.href = '#';
+    const installed = isUserAppInstalledState();
+    if (installed) {
+      directInstallButton.textContent = '설치 완료';
+      directInstallButton.classList.add('is-disabled');
+      directInstallButton.setAttribute('aria-disabled', 'true');
+      setDirectInstallStatus('설치가 완료되었습니다. 홈 화면의 자유민턴 아이콘으로 실행하세요.', 'success');
+      directInstallContinue.textContent = '자유민턴 화면 보기';
+      return;
+    }
+    if (installAttemptPending) {
+      directInstallButton.textContent = '설치 확인 중';
+      directInstallButton.classList.add('is-disabled');
+      directInstallButton.setAttribute('aria-disabled', 'true');
+      setDirectInstallStatus('Chrome의 설치 완료 신호를 확인하고 있습니다.', 'success');
+      return;
+    }
+    directInstallButton.classList.remove('is-disabled');
+    directInstallButton.setAttribute('aria-disabled', 'false');
+    if (deferredInstallPrompt || supportsNavigatorInstall()) {
+      directInstallButton.textContent = '자유민턴 앱 설치';
+      setDirectInstallStatus('버튼을 누르면 Chrome 시스템 설치창이 열립니다.', 'success');
+    } else {
+      directInstallButton.textContent = '설치 상태 다시 확인';
+      setDirectInstallStatus('Chrome이 설치 버튼을 준비하고 있습니다. 잠시 후 이 버튼을 다시 눌러 주세요. 계속 준비되지 않으면 Chrome 오른쪽 위 ⋮ 메뉴에서 “앱 설치”를 선택하세요.');
+    }
+    directInstallContinue.textContent = '설치하지 않고 계속';
+  }
+
+  async function ensureChromeInstallControl() {
+    if (!androidDevice || embeddedBrowser || isStandaloneApp()) return;
+    try {
+      await prepareServiceWorker();
+   

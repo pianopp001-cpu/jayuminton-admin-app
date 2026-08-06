@@ -1,0 +1,299 @@
+name: Deploy Jayuminton
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '배포 범위'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - web-only
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/**'
+      - '.github/workflows/deploy-pwa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'all' }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check one-time deployment secrets
+        id: secret_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$JAYUMINTON_DEPLOY_CONFIG_JSON" ]] || missing+=(JAYUMINTON_DEPLOY_CONFIG_JSON)
+          [[ -n "$FIREBASE_SERVICE_ACCOUNT_JSON" ]] || missing+=(FIREBASE_SERVICE_ACCOUNT_JSON)
+          if [[ "$DEPLOY_TARGET" == 'all' && -z "$CLASPRC_JSON" ]]; then
+            missing+=(CLASPRC_JSON)
+          fi
+          if (( ${#missing[@]} )); then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo "::notice title=자유민턴 자동 배포 최초 연결 필요::Actions Secrets에 ${missing[*]} 값을 등록하세요. 실제 배포는 안전하게 건너뜁니다."
+            exit 0
+          fi
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js 22
+        if: steps.secret_check.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deployment tools
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: npm install --global firebase-tools@latest @google/clasp@latest
+
+      - name: Authenticate to Google Cloud
+        if: steps.secret_check.outputs.ready == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Read deployment IDs and URLs
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          CONFIG_FILE="$RUNNER_TEMP/jayuminton-deploy-config.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG_FILE"
+
+          jq -e '
+            .mainScriptId and .mainDeploymentId and .mainUrl and
+            .pushScriptId and .pushDeploymentId and .pushUrl and
+            .firebaseProjectId and .hostingUrl
+          ' "$CONFIG_FILE" >/dev/null
+
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG_FILE")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG_FILE")"
+            echo "MAIN_URL=$(jq -r '.mainUrl' "$CONFIG_FILE")"
+            echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$CONFIG_FILE")"
+            echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG_FILE")"
+            echo "PUSH_URL=$(jq -r '.pushUrl' "$CONFIG_FILE")"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG_FILE")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG_FILE")"
+            echo "RELEASE_VERSION=$(tr -d '\r\n ' < deployment/jayuminton/RELEASE_VERSION)"
+            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-build"
+          } >> "$GITHUB_ENV"
+
+          if [[ "$DEPLOY_TARGET" == 'all' ]]; then
+            printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          fi
+
+      - name: Pull, overlay and redeploy MAIN Apps Script
+        if: steps.secret_check.outputs.ready == 'true' && env.DEPLOY_TARGET == 'all'
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/apps-script-main"
+          rm -rf "$WORK"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          rsync -a --exclude='.gitkeep' "$GITHUB_WORKSPACE/deployment/jayuminton/apps-script-main-overrides/" ./
+          clasp push --force
+          clasp create-deployment \
+            --deploymentId "$MAIN_DEPLOYMENT_ID" \
+            --description "GitHub Actions ${GITHUB_SHA::7}"
+
+      - name: Pull, overlay and redeploy PUSH Apps Script
+        if: steps.secret_check.outputs.ready == 'true' && env.DEPLOY_TARGET == 'all'
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/apps-script-push"
+          rm -rf "$WORK"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          rsync -a --exclude='.gitkeep' "$GITHUB_WORKSPACE/deployment/jayuminton/apps-script-push-overrides/" ./
+          clasp push --force
+          clasp create-deployment \
+            --deploymentId "$PUSH_DEPLOYMENT_ID" \
+            --description "GitHub Actions ${GITHUB_SHA::7}"
+
+      - name: Verify Apps Script URLs
+        if: steps.secret_check.outputs.ready == 'true' && env.DEPLOY_TARGET == 'all'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --max-time 60 "$MAIN_URL?verify=$GITHUB_RUN_ID" >/dev/null
+          curl --fail --location --retry 3 --max-time 60 "$PUSH_URL?verify=$GITHUB_RUN_ID" >/dev/null
+
+      - name: Rebuild PWA from production and GitHub source
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$BUILD_ROOT"
+          mkdir -p "$BUILD_ROOT/web-push"
+          cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
+
+          BASE="${HOSTING_URL%/}"
+          CURRENT_FILES=(
+            index.html
+            manifest.webmanifest
+            setup-v208.css
+            setup-v208.js
+            config-v203.js
+            firebase-messaging-sw.js
+            icon-198.png
+            icon-512.png
+            apple-touch-icon-180.png
+            badge-96.png
+            icon.svg
+            badge.svg
+          )
+
+          for asset in "${CURRENT_FILES[@]}"; do
+            curl --fail --location --retry 3 --max-time 60 \
+              -H 'Cache-Control: no-cache' \
+              "$BASE/$asset?source=github-actions-$GITHUB_RUN_ID" \
+              --output "$BUILD_ROOT/web-push/$asset"
+            test -s "$BUILD_ROOT/web-push/$asset"
+          done
+
+          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202; do
+            url="$BASE/firebase-messaging-sw-v${version}.js?source=github-actions-$GITHUB_RUN_ID"
+            output="$BUILD_ROOT/web-push/firebase-messaging-sw-v${version}.js"
+            if ! curl --fail --location --retry 2 --max-time 45 "$url" --output "$output"; then
+              cat > "$output" <<'EOF'
+          /* Legacy service-worker migration shim. */
+          importScripts('/firebase-messaging-sw.js');
+          self.addEventListener('install', () => self.skipWaiting());
+          self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+          EOF
+            fi
+          done
+
+          rsync -a --exclude='.gitkeep' deployment/jayuminton/web-push/ "$BUILD_ROOT/web-push/"
+          rsync -a --exclude='.gitkeep' deployment/jayuminton/web-push-overrides/ "$BUILD_ROOT/web-push/"
+
+          if compgen -G "$BUILD_ROOT/web-push/setup-v208.js.part-*" >/dev/null; then
+            cat "$BUILD_ROOT"/web-push/setup-v208.js.part-* > "$BUILD_ROOT/web-push/setup-v208.js"
+            rm -f "$BUILD_ROOT"/web-push/setup-v208.js.part-*
+          fi
+
+          (
+            cd "$BUILD_ROOT/web-push"
+            sha256sum --check "$GITHUB_WORKSPACE/deployment/jayuminton/web-push/setup-v208.js.sha256"
+          )
+
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+          templates = sorted(
+              root.glob('config-v*.template.js'),
+              key=lambda p: int(re.search(r'config-v(\d+)', p.name).group(1)),
+              reverse=True,
+          )
+          if templates:
+              template = templates[0]
+              output = Path(str(template).replace('.template.js', '.js'))
+              text = template.read_text(encoding='utf-8')
+              text = text.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL'])
+              text = text.replace('__RELAY_URL__', os.environ['PUSH_URL'])
+              if '__MEMBER_PAGE_URL__' in text or '__RELAY_URL__' in text:
+                  raise SystemExit('PWA URL replacement failed')
+              output.write_text(text, encoding='utf-8')
+
+          index = (root / 'index.html').read_text(encoding='utf-8')
+          match = re.search(r'/((?:setup|app)-v?\d+\.js)', index)
+          if not match:
+              raise SystemExit('PWA entry JavaScript was not found in index.html')
+          entry = root / match.group(1)
+          if not entry.is_file():
+              raise SystemExit(f'PWA entry file is missing: {entry.name}')
+          version = os.environ['RELEASE_VERSION']
+          combined = index + '\n' + entry.read_text(encoding='utf-8') + '\n' + (root / 'firebase-messaging-sw.js').read_text(encoding='utf-8')
+          if version not in combined:
+              raise SystemExit(f'Release version {version} was not found in PWA files')
+          print(f'Validated Jayuminton v{version} using {entry.name}')
+          PY
+
+          node --check "$BUILD_ROOT/web-push/setup-v208.js"
+          grep -F 'browser_fallback_url' "$BUILD_ROOT/web-push/setup-v208.js" && {
+            echo 'Forbidden Google Drive fallback remains in the PWA installer.'
+            exit 1
+          } || true
+          grep -F 'package=com.android.chrome' "$BUILD_ROOT/web-push/setup-v208.js"
+          grep -F 'direct-install-mode' "$BUILD_ROOT/web-push/setup-v208.js"
+
+      - name: Deploy Firebase Hosting
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$BUILD_ROOT"
+          firebase deploy \
+            --only hosting \
+            --project "$FIREBASE_PROJECT_ID" \
+            --non-interactive \
+            --message "GitHub Actions v${RELEASE_VERSION} ${GITHUB_SHA::7}"
+
+      - name: Verify live PWA version
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          CACHE_BUST="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-index.html"
+          grep -F "$RELEASE_VERSION" "$RUNNER_TEMP/live-index.html"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/setup-v208.js?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-setup.js"
+          grep -F "$RELEASE_VERSION" "$RUNNER_TEMP/live-setup.js"
+          grep -F 'package=com.android.chrome' "$RUNNER_TEMP/live-setup.js"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/firebase-messaging-sw.js?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-worker.js"
+          grep -F "$RELEASE_VERSION" "$RUNNER_TEMP/live-worker.js"
+
+      - name: Deployment summary
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          {
+            echo '## 자유민턴 자동 배포 완료'
+            echo
+            echo "- Version: $RELEASE_VERSION"
+            echo "- Target: $DEPLOY_TARGET"
+            echo "- Firebase Hosting: $HOSTING_URL"
+            if [[ "$DEPLOY_TARGET" == 'all' ]]; then
+              echo '- Apps Script: MAIN/PUSH 기존 주소로 재배포'
+            else
+              echo '- Apps Script: 변경 없음'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

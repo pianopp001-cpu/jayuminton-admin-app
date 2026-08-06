@@ -1,0 +1,82 @@
+nState() {
+    const token = localStorage.getItem(STORAGE.token);
+    if (member && token && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const instance = await initializeMessaging();
+        const currentToken = await instance.getToken({vapidKey:cfg.vapidKey, serviceWorkerRegistration:registration});
+        if (!currentToken) throw new Error('알림 연결이 끊어졌습니다.');
+        if (currentToken !== token) {
+          await submitRelay('register_web_token', currentToken);
+          localStorage.setItem(STORAGE.token, currentToken);
+        }
+        setConnected();
+      } catch (_) {
+        setOff('알림 연결이 끊어졌습니다. 완료를 눌러 다시 연결해 주세요.');
+      }
+    } else {
+      setOff(member ? '알림 연결이 꺼져 있습니다.' : '직접 입력하거나 명단에서 이름을 누르세요.');
+    }
+  }
+
+  function setConnecting() {
+    connectButton.disabled = true;
+    connectButton.textContent = '연결 중…';
+    stateBadge.textContent = '💡 연결 중';
+    stateBadge.className = 'state-pill is-connecting';
+    alarmSummaryBadge.textContent = '알림 연결 중';
+    alarmSummaryBadge.className = 'mini-state is-wait';
+    setMessage('알림과 진동을 연결하고 있습니다…');
+  }
+
+  function setConnected() {
+    isConnected = true;
+    stateBadge.textContent = '💡 ON';
+    stateBadge.className = 'state-pill is-on';
+    alarmSummaryBadge.textContent = '알림 ON';
+    alarmSummaryBadge.className = 'mini-state is-on';
+    connectButton.textContent = '해지';
+    setMessage((member && member.name ? member.name : '선택 회원') + '님 알림 예정', 'success');
+  }
+
+  function setOff(text) {
+    isConnected = false;
+    stateBadge.textContent = '💡 OFF';
+    stateBadge.className = 'state-pill is-off';
+    alarmSummaryBadge.textContent = '알림 OFF';
+    alarmSummaryBadge.className = 'mini-state is-off';
+    connectButton.textContent = member ? '연결' : '완료';
+    setMessage(text || '알림 연결이 꺼져 있습니다.', text && /못|꺼|허용|오류|먼저/.test(text) ? 'error' : '');
+  }
+
+  async function prepareServiceWorker() {
+    if (serviceWorkerPromise) return serviceWorkerPromise;
+    serviceWorkerPromise = (async () => {
+      if (!('serviceWorker' in navigator)) return null;
+      registration = registration || await navigator.serviceWorker.register('/firebase-messaging-sw.js', {scope:'/', updateViaCache:'none'});
+      await navigator.serviceWorker.ready;
+      return registration;
+    })();
+    return serviceWorkerPromise;
+  }
+
+  async function initializeMessaging() {
+    if (!validRelayUrl(cfg.relayUrl)) throw new Error('PUSH 연결 주소가 설정되지 않았습니다.');
+    if (iosDevice && !isStandaloneApp()) {
+      throw new Error('아이폰은 홈 화면에 설치한 자유민턴 코트현황 앱에서만 알림을 연결할 수 있습니다.');
+    }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      throw new Error('현재 브라우저 또는 운영체제가 웹 알림을 지원하지 않습니다.');
+    }
+    await loadFirebaseSdk();
+    if (!firebase.apps.length) firebase.initializeApp(cfg.firebase);
+    registration = registration || await prepareServiceWorker();
+    messaging = messaging || firebase.messaging();
+    if (!messaging.__jayumintonForegroundBound) {
+      messaging.__jayumintonForegroundBound = true;
+      messaging.onMessage((payload) => {
+        const data = payload && payload.data ? payload.data : {};
+        const repeatCount = Math.max(1, Math.min(3, Number(data.repeatCount || (data.type === 'court_assignment' ? 3 : 1))));
+        for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex += 1) {
+          setTimeout(() => {
+            showToast(data.body || '새 배정 안내가 있습니다.');
+            let shown = false;

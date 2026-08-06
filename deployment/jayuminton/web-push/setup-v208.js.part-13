@@ -1,0 +1,67 @@
+nt = '앱설치 완료';
+      appInstallButton.disabled = true;
+      appInstallOffButton.classList.add('hidden');
+      setInstallMessage('홈 화면의 자유민턴 코트현황 앱으로 실행 중입니다.', 'success');
+      refreshDirectInstallScreen();
+      sendAppInstallStatus('앱설치 ON');
+      return;
+    }
+
+    appInstallButton.disabled = false;
+    appInstallOffButton.classList.remove('hidden');
+    if (iosDevice && embeddedBrowser) {
+      installTitle.textContent = '아이폰 PWA';
+      installHint.textContent = 'Safari로 이동해 자유민턴 코트현황을 홈 화면에 추가합니다.';
+      appInstallButton.textContent = 'Safari 열기';
+    } else if (iosDevice) {
+      installTitle.textContent = '아이폰 PWA';
+      installHint.textContent = 'Safari 홈 화면에 자유민턴 코트현황을 추가합니다.';
+      appInstallButton.textContent = 'PWA 설치';
+    } else if (androidDevice && embeddedBrowser) {
+      installTitle.textContent = 'Chrome 또는 PWA';
+      installHint.textContent = 'Chrome에서 바로 사용하거나, 열린 뒤 PWA로 설치할 수 있습니다.';
+      appInstallButton.textContent = 'Chrome 열기';
+    } else if (androidDevice) {
+      installTitle.textContent = '안드로이드 PWA';
+      installHint.textContent = 'Chrome에서 그대로 사용하거나 PWA로 설치합니다.';
+      appInstallButton.textContent = installAttemptPending ? '설치 확인중' : (deferredInstallPrompt ? 'PWA 설치' : '설치 준비중');
+    } else {
+      installTitle.textContent = '웹앱';
+      installHint.textContent = '브라우저의 앱 설치 또는 홈 화면 추가 기능을 사용합니다.';
+      appInstallButton.textContent = 'PWA 설치';
+    }
+
+    appInstallState.textContent = '앱설치 OFF';
+    appInstallState.className = installAttemptPending ? 'state-pill is-wait' : 'state-pill is-off';
+    installSummaryBadge.textContent = installAttemptPending ? '설치 확인' : '앱설치 OFF';
+    installSummaryBadge.className = installAttemptPending ? 'mini-state is-wait' : 'mini-state is-off';
+    if (choice === 'off') {
+      setInstallMessage('앱설치 OFF로 저장되어 있습니다. 자동으로 다시 묻지 않습니다.', 'success');
+    } else if (installAttemptPending) {
+      setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
+    } else if (androidDevice && embeddedBrowser) {
+      setInstallMessage('Chrome에서 설치 화면을 준비합니다.');
+    } else if (androidDevice && deferredInstallPrompt) {
+      setInstallMessage(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall() ? '앱설치를 누르면 시스템 설치창이 열립니다.' : 'Chrome 설치 가능 상태를 확인하고 있습니다.', 'success');
+    } else if (androidDevice) {
+      setInstallMessage('설치 준비 중입니다. 잠시 후 PWA 설치 버튼을 한 번 눌러 주세요.', 'success');
+    } else if (iosDevice && embeddedBrowser) {
+      setInstallMessage('누르면 Safari로 이동합니다. Safari에서 PWA 설치를 진행하세요.');
+    } else if (iosDevice) {
+      setInstallMessage('PWA 설치를 누른 뒤 Safari 공유 → 홈 화면에 추가를 선택하세요.');
+    }
+    refreshDirectInstallScreen();
+    sendAppInstallStatus(choice === 'off' ? '앱설치 OFF' : (installAttemptPending ? '설치 확인중' : (deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall() ? '설치 가능' : '설치 준비')));
+    refreshInstallProxyPosition();
+  }
+
+  function sendAppInstallStatus(messageText) {
+    sendCourtMessage('JAYUMINTON_APP_INSTALL_STATUS', {
+      installed:isUserAppInstalledState(),
+      choice:String(localStorage.getItem(STORAGE.installChoice) || ''),
+      platform:iosDevice ? 'ios' : (androidDevice ? 'android' : 'other'),
+      browserContext:browserContext,
+      source:String(new URLSearchParams(window.location.search).get('source') || ''),
+      ready:Boolean(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall()),
+      installing:Boolean(installAttemptPending),
+      armed:Boolean(instal
