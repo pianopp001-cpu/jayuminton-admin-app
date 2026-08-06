@@ -1,0 +1,78 @@
+name: Validate Jayuminton deployment
+
+on:
+  pull_request:
+    paths:
+      - 'deployment/jayuminton/**'
+      - '.github/workflows/deploy-pwa.yml'
+      - '.github/workflows/validate-jayuminton-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reassemble exact PWA installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/jayuminton-validate"
+          mkdir -p "$WORK"
+          cp deployment/jayuminton/web-push/setup-v208.js.part-* "$WORK/"
+          cat "$WORK"/setup-v208.js.part-* > "$WORK/setup-v208.js"
+          test "$(find "$WORK" -name 'setup-v208.js.part-*' | wc -l)" -eq 16
+          (
+            cd "$WORK"
+            sha256sum --check "$GITHUB_WORKSPACE/deployment/jayuminton/web-push/setup-v208.js.sha256"
+          )
+          echo "VALIDATED_SETUP_JS=$WORK/setup-v208.js" >> "$GITHUB_ENV"
+
+      - name: Validate JavaScript and installer rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '\r\n ' < deployment/jayuminton/RELEASE_VERSION)"
+          node --check "$VALIDATED_SETUP_JS"
+          grep -F "$VERSION" "$VALIDATED_SETUP_JS"
+          grep -F 'package=com.android.chrome' "$VALIDATED_SETUP_JS"
+          grep -F 'direct-install-mode' "$VALIDATED_SETUP_JS"
+          if grep -F 'browser_fallback_url' "$VALIDATED_SETUP_JS"; then
+            echo 'Forbidden Android browser fallback remains in the installer.'
+            exit 1
+          fi
+
+      - name: Validate Firebase configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          config = json.loads(Path('deployment/jayuminton/firebase.json').read_text(encoding='utf-8'))
+          hosting = config.get('hosting') or {}
+          if hosting.get('public') != 'web-push':
+              raise SystemExit('firebase.json public directory must be web-push')
+          rewrites = hosting.get('rewrites') or []
+          if not any(item.get('destination') == '/index.html' for item in rewrites):
+              raise SystemExit('firebase.json index rewrite is missing')
+          print('firebase.json is valid')
+          PY
+
+      - name: Validate deployment workflow source paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'deployment/jayuminton/web-push/' .github/workflows/deploy-pwa.yml
+          grep -F 'setup-v208.js.part-*' .github/workflows/deploy-pwa.yml
+          grep -F 'sha256sum --check' .github/workflows/deploy-pwa.yml
+          grep -F 'clasp create-deployment' .github/workflows/deploy-pwa.yml
+          grep -F 'firebase deploy' .github/workflows/deploy-pwa.yml
