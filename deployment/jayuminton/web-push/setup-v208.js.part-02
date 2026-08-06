@@ -1,0 +1,65 @@
+eddedBrowser();
+  const browserContext = detectBrowserContext();
+  const query = new URLSearchParams(window.location.search);
+  const installationEntryRequested = query.get('install') === 'choose' || query.get('install') === '1';
+  const externalBrowserEntry = query.get('source') === 'embedded' || query.get('external') === '1';
+  const directInstallMode = androidDevice && installationEntryRequested && !isStandaloneApp();
+  if (androidDevice && !embeddedBrowser && (installationEntryRequested || externalBrowserEntry)) {
+    setInstallIntentArmed(true);
+  }
+  const transferredMemberSession = String(query.get('memberSession') || localStorage.getItem(STORAGE.authSession) || '');
+  if (transferredMemberSession) localStorage.setItem(STORAGE.authSession, transferredMemberSession);
+  if (query.has('memberSession')) {
+    try {
+      query.delete('memberSession');
+      const cleanUrl = window.location.pathname + (query.toString() ? '?' + query.toString() : '') + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch (_) {}
+  }
+
+  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
+    member = {id:String(query.get('memberId')), name:String(query.get('memberName'))};
+    saveJson(STORAGE.member, member);
+  }
+  if (member && member.name) nameInput.value = shortName(member.name);
+  syncStandaloneInstallState();
+  if (directInstallMode) {
+    document.body.classList.add('direct-install-mode');
+    if (directInstallScreen) {
+      directInstallScreen.hidden = false;
+      directInstallScreen.setAttribute('aria-hidden', 'false');
+    }
+    // Do not load Google Apps Script during installation. A failed/expired Apps Script
+    // URL can render a Google Drive error page and hide the iframe-owned install button.
+    frame.src = 'about:blank';
+  } else {
+    frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
+  }
+
+  // Chrome으로 넘어온 뒤에는 설치창을 자동 호출하지 않는다.
+  // beforeinstallprompt.prompt()는 최상위 문서의 실제 사용자 터치에서 실행해야 하므로,
+  // iframe 위에 정렬된 투명 버튼이 다음 터치를 직접 받아 시스템 설치창을 연다.
+  function announceChromeInstallEntry() {
+    if (!androidDevice || embeddedBrowser || !installationEntryRequested || isStandaloneApp()) return;
+    consumeEarlyInstallPrompt();
+    if (deferredInstallPrompt) {
+      setInstallMessage('설치 준비가 완료되었습니다. 앱설치를 한 번 눌러 주세요.', 'success');
+      sendAppInstallStatus('PWA 설치 가능');
+    } else {
+      setInstallMessage('Chrome에서 설치 준비 중입니다. 버튼이 PWA 설치로 바뀌면 한 번 눌러 주세요.', 'success');
+      sendAppInstallStatus('설치 준비 중');
+    }
+    refreshInstallState();
+  }
+  window.addEventListener('jayuminton:installpromptready', announceChromeInstallEntry);
+  window.setTimeout(announceChromeInstallEntry, 900);
+
+  setupToggle.addEventListener('click', () => setSetupCollapsed(!setupPanel.classList.contains('is-collapsed'), true));
+  connectButton.addEventListener('click', handleAlarmButton);
+  appInstallButton.addEventListener('click', handleAppInstallButton);
+  appInstallOffButton.addEventListener('click', setAppDownloadOff);
+  if (appInstallClickProxy) appInstallClickProxy.addEventListener('click', handleDirectInstallProxyClick);
+  if (directInstallButton) directInstallButton.addEventListener('click', handleDirectInstallScreenButton);
+  if (directInstallContinue) directInstallContinue.addEventListener('click', leaveDirectInstallScreen);
+  if (nativeInstallControl) {
+    nativeInstallControl.addEventListener('promptaction', handleNativeInstallAction
