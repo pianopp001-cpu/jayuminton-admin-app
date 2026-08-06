@@ -1,0 +1,187 @@
+name: Deploy Jayuminton PWA and Apps Script
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - web-only
+  push:
+    branches: [ main ]
+    paths:
+      - 'deployment/jayuminton/**'
+      - '.github/workflows/deploy-jayuminton.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check one-time GitHub secrets
+        id: secret_check
+        shell: bash
+        run: |
+          if [[ -z "$JAYUMINTON_DEPLOY_CONFIG_JSON" || -z "$CLASPRC_JSON" || -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Jayuminton auto deploy is not connected yet::Add the three repository secrets described in deployment/jayuminton/README_GITHUB_AUTO_DEPLOY_KO.md. Deployment was safely skipped."
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        if: steps.secret_check.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deployment CLIs
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: npm install --global @google/clasp@latest firebase-tools@latest
+
+      - name: Prepare authentication and deployment configuration
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          umask 077
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/jayuminton-deploy-config.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+
+          jq -e '.mainScriptId and .mainDeploymentId and .mainUrl and .pushScriptId and .pushDeploymentId and .pushUrl and .firebaseProjectId and .hostingUrl' \
+            "$RUNNER_TEMP/jayuminton-deploy-config.json" >/dev/null
+
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$RUNNER_TEMP/jayuminton-deploy-config.json")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$RUNNER_TEMP/jayuminton-deploy-config.json")"
+            echo "MAIN_URL=$(jq -r '.mainUrl' "$RUNNER_TEMP/jayuminton-deploy-config.json")"
+            echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$RUNNER_TEMP/jayuminton-deploy-config.json")"
+            echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$RUNNER_TEMP/jayuminton-deploy-config.json")"
+            echo "PUSH_URL=$(jq -r '.pushUrl' "$RUNNER_TEMP/jayuminton-deploy-config.json")"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$RUNNER_TEMP/jayuminton-deploy-config.json")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$RUNNER_TEMP/jayuminton-deploy-config.json")"
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json"
+            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-build"
+          } >> "$GITHUB_ENV"
+
+      - name: Pull and redeploy MAIN Apps Script at the same URL
+        if: steps.secret_check.outputs.ready == 'true' && (github.event_name == 'push' || inputs.target == 'all')
+        shell: bash
+        run: |
+          mkdir -p "$BUILD_ROOT/apps-script-main"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BUILD_ROOT/apps-script-main/.clasp.json"
+          cd "$BUILD_ROOT/apps-script-main"
+          clasp pull
+          rsync -a --exclude='.gitkeep' "$GITHUB_WORKSPACE/deployment/jayuminton/apps-script-main-overrides/" ./
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "GitHub Actions ${GITHUB_SHA::7}"
+
+      - name: Pull and redeploy PUSH Apps Script at the same URL
+        if: steps.secret_check.outputs.ready == 'true' && (github.event_name == 'push' || inputs.target == 'all')
+        shell: bash
+        run: |
+          mkdir -p "$BUILD_ROOT/apps-script-push"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$BUILD_ROOT/apps-script-push/.clasp.json"
+          cd "$BUILD_ROOT/apps-script-push"
+          clasp pull
+          rsync -a --exclude='.gitkeep' "$GITHUB_WORKSPACE/deployment/jayuminton/apps-script-push-overrides/" ./
+          clasp push --force
+          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "GitHub Actions ${GITHUB_SHA::7}"
+
+      - name: Assemble Firebase Hosting files
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          mkdir -p "$BUILD_ROOT/web-push"
+          cp -a deployment/jayuminton/web-push/. "$BUILD_ROOT/web-push/"
+          cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
+
+          BASE="${HOSTING_URL%/}"
+          for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 3 --max-time 60 "$BASE/$asset?source=github-actions" \
+              --output "$BUILD_ROOT/web-push/$asset"
+            test -s "$BUILD_ROOT/web-push/$asset"
+          done
+
+          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202; do
+            cat > "$BUILD_ROOT/web-push/firebase-messaging-sw-v${version}.js" <<EOF
+          /* Jayuminton legacy service-worker migration shim.
+             Existing devices are redirected to the permanent worker URL. */
+          importScripts('/firebase-messaging-sw.js?v=1641');
+          self.addEventListener('activate', (event) => {
+            event.waitUntil((async () => {
+              try {
+                const windows = await self.clients.matchAll({type:'window', includeUncontrolled:true});
+                await Promise.all(windows.map(async (client) => {
+                  try { await client.navigate(client.url); } catch (_) {}
+                }));
+              } catch (_) {}
+            })());
+          });
+          EOF
+          done
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+          config = json.loads((Path(os.environ['RUNNER_TEMP']) / 'jayuminton-deploy-config.json').read_text(encoding='utf-8'))
+          template = root / 'config-v203.template.js'
+          output = root / 'config-v203.js'
+          text = template.read_text(encoding='utf-8')
+          text = text.replace('__MEMBER_PAGE_URL__', config['mainUrl'])
+          text = text.replace('__RELAY_URL__', config['pushUrl'])
+          if '__MEMBER_PAGE_URL__' in text or '__RELAY_URL__' in text:
+              raise SystemExit('PWA URL replacement failed')
+          output.write_text(text, encoding='utf-8')
+          PY
+
+          test -f "$BUILD_ROOT/web-push/index.html"
+          test -f "$BUILD_ROOT/web-push/setup-v208.js"
+          test -f "$BUILD_ROOT/web-push/setup-v208.css"
+          test -f "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+          grep -F '/setup-v208.js' "$BUILD_ROOT/web-push/index.html"
+          grep -F 'v1.6.41' "$BUILD_ROOT/web-push/setup-v208.js"
+          grep -F "JAYUMINTON_SW_VERSION = '1.6.41'" "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+
+      - name: Deploy Firebase Hosting
+        if: steps.secret_check.outputs.ready == 'true'
+        working-directory: ${{ env.BUILD_ROOT }}
+        shell: bash
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "GitHub Actions ${GITHUB_SHA::7}"
+
+      - name: Verify live deployment
+        if: steps.secret_check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "push" || "${{ inputs.target }}" == "all" ]]; then
+            curl --fail --location --max-time 60 "$MAIN_URL?verify=$GITHUB_RUN_ID" >/dev/null
+            curl --fail --location --max-time 60 "$PUSH_URL?verify=$GITHUB_RUN_ID" >/dev/null
+          fi
+
+          BASE="${HOSTING_URL%/}"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$GITHUB_RUN_ID" | grep -F '/setup-v208.js'
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/setup-v208.js?verify=$GITHUB_RUN_ID" | grep -F 'v1.6.41'
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$GITHUB_RUN_ID" | grep -F "JAYUMINTON_SW_VERSION = '1.6.41'"
