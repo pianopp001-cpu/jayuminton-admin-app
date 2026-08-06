@@ -1,0 +1,87 @@
+arget = buildChromeUserTarget();
+    const targetUrl = target.toString();
+    const hostAndPath = target.host + target.pathname + target.search + target.hash;
+    // Do not attach browser_fallback_url here. Some Kakao/Daangn WebViews misroute the
+    // encoded fallback to Google Drive. The package is fixed to the installed Chrome app.
+    const intentUrl = 'intent://' + hostAndPath +
+      '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+      'category=android.intent.category.BROWSABLE;end';
+    return { targetUrl, intentUrl };
+  }
+
+  function launchChromeFromFirebaseTop() {
+    const links = buildAndroidChromeIntent();
+    const hasActivation = !navigator.userActivation || navigator.userActivation.isActive;
+    if (!hasActivation) {
+      setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'error');
+      sendAppInstallStatus('Chrome 직접 터치 필요');
+      return;
+    }
+    // Backup only. In Kakao/Daangn the transparent top-level <a> handles the real tap.
+    window.location.href = links.intentUrl;
+  }
+
+  function openInAndroidChrome() {
+    launchChromeFromFirebaseTop();
+  }
+
+  function openInIOSSafari() {
+    const target = new URL(window.location.href);
+    target.searchParams.set('install', 'choose');
+    target.searchParams.set('external', '1');
+    target.searchParams.set('source', 'embedded');
+    target.searchParams.set('app', 'user');
+    target.searchParams.set('mode', 'user');
+    const authSession = String(localStorage.getItem(STORAGE.authSession) || '');
+    if (authSession) target.searchParams.set('memberSession', authSession);
+    const safariTarget = 'x-safari-https://' + target.host + target.pathname + target.search + target.hash;
+    window.location.href = safariTarget;
+    window.setTimeout(() => {
+      showToast('Safari가 열리지 않으면 우측 상단 메뉴에서 Safari로 열기를 선택하세요.');
+      sendAppInstallStatus('Safari로 열기');
+    }, 900);
+  }
+
+  function handleUserAppInstalled() {
+    deferredInstallPrompt = null;
+    installAttemptPending = false;
+    setInstallIntentArmed(false);
+    stopEngagementClock();
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installConfirmed, '1');
+    markAppDownloadOn();
+    showToast('자유민턴 코트현황 앱 설치 완료');
+    collapseSetupAfterSuccess();
+  }
+
+  function setAppDownloadOff() {
+    installAttemptPending = false;
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installChoice, 'off');
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    refreshInstallState();
+    setInstallMessage('앱설치 OFF로 저장했습니다. 자동으로 다시 묻지 않습니다.', 'success');
+    sendAppInstallStatus('앱설치 OFF');
+    showToast('앱설치 OFF 저장 완료');
+    collapseSetupAfterSuccess();
+  }
+
+  function markAppDownloadOn() {
+    installAttemptPending = false;
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installConfirmed, '1');
+    localStorage.setItem(STORAGE.installChoice, 'on');
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    refreshInstallState();
+  }
+
+  function refreshInstallState() {
+    const choice = localStorage.getItem(STORAGE.installChoice) || '';
+    const installed = isUserAppInstalledState();
+    if (installed) {
+      if (choice !== 'on') localStorage.setItem(STORAGE.installChoice, 'on');
+      appInstallState.textContent = '앱설치 ON';
+      appInstallState.className = 'state-pill is-on';
+      installSummaryBadge.textContent = '앱설치 ON';
+      installSummaryBadge.className = 'mini-state is-on';
+      appInstallButton.textConte
