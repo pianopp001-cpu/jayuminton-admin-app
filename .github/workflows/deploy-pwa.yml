@@ -1,18 +1,13 @@
 name: Deploy Jayuminton PWA
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'deployment/**'
-      - '.github/workflows/deploy-pwa.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'deployment/**'
-      - '.github/workflows/deploy-pwa.yml'
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: '배포할 Git 브랜치 또는 커밋'
+        required: true
+        default: 'v1.5-firebase'
+        type: string
       scope:
         description: '배포 범위'
         required: true
@@ -21,6 +16,13 @@ on:
         options:
           - web
           - full
+  push:
+    branches: [main]
+    paths:
+      - 'web-push/**'
+      - 'firebase.json'
+      - 'apps-script-main/**'
+      - 'apps-script-push/**'
 
 permissions:
   contents: read
@@ -30,105 +32,88 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validate:
-    name: Validate deployment bundle
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Decode deployment bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf "$RUNNER_TEMP/jayuminton-deploy"
-          mkdir -p "$RUNNER_TEMP/jayuminton-deploy"
-          base64 --decode deployment/jayuminton-deploy-v1.6.41.zip.b64 > "$RUNNER_TEMP/jayuminton-deploy.zip"
-          unzip -q "$RUNNER_TEMP/jayuminton-deploy.zip" -d "$RUNNER_TEMP/jayuminton-deploy"
-
-      - name: Validate required files and version
-        shell: bash
-        run: |
-          set -euo pipefail
-          ROOT="$RUNNER_TEMP/jayuminton-deploy"
-          test -s "$ROOT/firebase.json"
-          test -s "$ROOT/web-push/index.html"
-          test -s "$ROOT/web-push/setup-v208.js"
-          test -s "$ROOT/web-push/setup-v208.css"
-          test -s "$ROOT/web-push/firebase-messaging-sw.js"
-          test -s "$ROOT/web-push/manifest.webmanifest"
-          test -s "$ROOT/apps-script-main/Code.gs"
-          test -s "$ROOT/apps-script-push/Code.gs"
-          grep -Fq '/setup-v208.js' "$ROOT/web-push/index.html"
-          grep -Fq 'v1.6.41' "$ROOT/web-push/setup-v208.js"
-          grep -Fq "JAYUMINTON_SW_VERSION = '1.6.41'" "$ROOT/web-push/firebase-messaging-sw.js"
-          unzip -t "$RUNNER_TEMP/jayuminton-deploy.zip"
-
-      - name: Upload validated bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: jayuminton-deploy-v1.6.41
-          path: ${{ runner.temp }}/jayuminton-deploy.zip
-          retention-days: 30
-
   deploy:
-    name: Deploy production
-    needs: validate
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    name: Validate and deploy
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment: production
     env:
       FIREBASE_PROJECT_ID: jayuminton-push
       HOSTING_URL: https://jayuminton-push.web.app
-      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JAYUMINTON_PUSH }}
       MAIN_WEB_APP_URL: ${{ vars.JAYUMINTON_MAIN_WEB_APP_URL || secrets.JAYUMINTON_MAIN_WEB_APP_URL }}
       PUSH_WEB_APP_URL: ${{ vars.JAYUMINTON_PUSH_APPS_SCRIPT_URL || secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
     steps:
-      - name: Checkout
+      - name: Resolve source ref
+        shell: bash
+        run: |
+          if [[ '${{ github.event_name }}' == 'workflow_dispatch' ]]; then
+            echo "SOURCE_REF=${{ inputs.source_ref }}" >> "$GITHUB_ENV"
+            echo "DEPLOY_SCOPE=${{ inputs.scope }}" >> "$GITHUB_ENV"
+          else
+            echo "SOURCE_REF=${GITHUB_SHA}" >> "$GITHUB_ENV"
+            echo "DEPLOY_SCOPE=web" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout deployment source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Decode deployment bundle
+      - name: Validate deployment source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf "$RUNNER_TEMP/jayuminton-deploy"
-          mkdir -p "$RUNNER_TEMP/jayuminton-deploy"
-          base64 --decode deployment/jayuminton-deploy-v1.6.41.zip.b64 > "$RUNNER_TEMP/jayuminton-deploy.zip"
-          unzip -q "$RUNNER_TEMP/jayuminton-deploy.zip" -d "$RUNNER_TEMP/jayuminton-deploy"
-          echo "DEPLOY_ROOT=$RUNNER_TEMP/jayuminton-deploy" >> "$GITHUB_ENV"
+          test -s firebase.json
+          test -s web-push/index.html
+          test -s web-push/firebase-messaging-sw.js
+          test -s web-push/manifest.webmanifest
+          if [[ ! -f web-push/config.template.js ]] && ! compgen -G 'web-push/config-v*.template.js' >/dev/null; then
+            echo 'web-push config template is missing.'
+            exit 1
+          fi
+          grep -Eq 'firebase-messaging-sw|app\.js|setup-v[0-9]+\.js' web-push/index.html
 
-      - name: Render current Apps Script URLs
+      - name: Render Apps Script URLs
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$MAIN_WEB_APP_URL" || { echo 'JAYUMINTON_MAIN_WEB_APP_URL variable/secret is missing.'; exit 1; }
           test -n "$PUSH_WEB_APP_URL" || { echo 'JAYUMINTON_PUSH_APPS_SCRIPT_URL variable/secret is missing.'; exit 1; }
           python3 - <<'PY'
+          import glob
           import os
+          import re
           from pathlib import Path
 
-          root = Path(os.environ['DEPLOY_ROOT'])
-          template = root / 'web-push' / 'config-v203.template.js'
-          output = root / 'web-push' / 'config-v203.js'
+          candidates = sorted(
+              glob.glob('web-push/config-v*.template.js'),
+              key=lambda p: int(re.search(r'config-v(\d+)', p).group(1)),
+              reverse=True,
+          )
+          template = Path(candidates[0] if candidates else 'web-push/config.template.js')
+          output = Path(str(template).replace('.template.js', '.js'))
           text = template.read_text(encoding='utf-8')
-          text = text.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_WEB_APP_URL'].strip())
           text = text.replace('__RELAY_URL__', os.environ['PUSH_WEB_APP_URL'].strip())
-          if '__MEMBER_PAGE_URL__' in text or '__RELAY_URL__' in text:
-              raise SystemExit('Apps Script URL replacement failed')
+          if '__MEMBER_PAGE_URL__' in text:
+              main_url = os.environ.get('MAIN_WEB_APP_URL', '').strip()
+              if not main_url:
+                  raise SystemExit('JAYUMINTON_MAIN_WEB_APP_URL variable/secret is missing.')
+              text = text.replace('__MEMBER_PAGE_URL__', main_url)
+          if '__RELAY_URL__' in text or '__MEMBER_PAGE_URL__' in text:
+              raise SystemExit('Apps Script URL replacement failed.')
           output.write_text(text, encoding='utf-8')
+          print(f'Rendered {output}')
           PY
 
-      - name: Require Firebase deployment credential
+      - name: Require Firebase credential
         shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JAYUMINTON_PUSH }}
         run: |
-          set -euo pipefail
           test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || {
             echo 'FIREBASE_SERVICE_ACCOUNT_JAYUMINTON_PUSH secret is missing.'
             exit 1
@@ -140,72 +125,80 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JAYUMINTON_PUSH }}
 
       - name: Install Firebase CLI
-        shell: bash
         run: npm install --global firebase-tools@latest
 
       - name: Deploy Firebase Hosting
         shell: bash
-        working-directory: ${{ env.DEPLOY_ROOT }}
         run: |
           set -euo pipefail
           firebase deploy \
             --only hosting \
             --project "$FIREBASE_PROJECT_ID" \
             --non-interactive \
-            --message "GitHub Actions ${GITHUB_SHA}"
+            --message "GitHub Actions source=${SOURCE_REF} run=${GITHUB_RUN_ID}"
 
-      - name: Verify production PWA
+      - name: Verify Firebase Hosting
         shell: bash
         run: |
           set -euo pipefail
           CACHE_BUST="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          curl -fsSL -H 'Cache-Control: no-cache' "$HOSTING_URL/?verify=$CACHE_BUST" | grep -Fq '/setup-v208.js'
-          curl -fsSL -H 'Cache-Control: no-cache' "$HOSTING_URL/setup-v208.js?verify=$CACHE_BUST" | grep -Fq 'v1.6.41'
-          curl -fsSL -H 'Cache-Control: no-cache' "$HOSTING_URL/firebase-messaging-sw.js?verify=$CACHE_BUST" | grep -Fq "JAYUMINTON_SW_VERSION = '1.6.41'"
+          curl -fsSL -H 'Cache-Control: no-cache' "$HOSTING_URL/?verify=$CACHE_BUST" >/tmp/jayuminton-index.html
+          grep -Eq 'firebase-messaging-sw|app\.js|setup-v[0-9]+\.js' /tmp/jayuminton-index.html
+          curl -fsSL -H 'Cache-Control: no-cache' "$HOSTING_URL/firebase-messaging-sw.js?verify=$CACHE_BUST" | grep -Eq 'firebase|JAYUMINTON'
 
-      - name: Prepare Apps Script full deployment
-        if: github.event_name == 'workflow_dispatch' && inputs.scope == 'full'
+      - name: Prepare clasp authentication
+        if: env.DEPLOY_SCOPE == 'full'
         shell: bash
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
-          MAIN_MANIFEST_JSON: ${{ secrets.JAYUMINTON_MAIN_MANIFEST_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$CLASPRC_JSON" || { echo 'CLASPRC_JSON secret is missing.'; exit 1; }
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+
+      - name: Deploy MAIN Apps Script when present
+        if: env.DEPLOY_SCOPE == 'full'
+        shell: bash
+        env:
           MAIN_SCRIPT_ID: ${{ vars.JAYUMINTON_MAIN_SCRIPT_ID || secrets.JAYUMINTON_MAIN_SCRIPT_ID }}
           MAIN_DEPLOYMENT_ID: ${{ vars.JAYUMINTON_MAIN_DEPLOYMENT_ID || secrets.JAYUMINTON_MAIN_DEPLOYMENT_ID }}
+          MAIN_MANIFEST_JSON: ${{ secrets.JAYUMINTON_MAIN_MANIFEST_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ ! -d apps-script-main ]]; then
+            echo 'apps-script-main directory is not present in this source ref; skipping MAIN.'
+            exit 0
+          fi
+          test -n "$MAIN_SCRIPT_ID" || { echo 'JAYUMINTON_MAIN_SCRIPT_ID is missing.'; exit 1; }
+          test -n "$MAIN_DEPLOYMENT_ID" || { echo 'JAYUMINTON_MAIN_DEPLOYMENT_ID is missing.'; exit 1; }
+          if [[ ! -f apps-script-main/appsscript.json ]]; then
+            test -n "$MAIN_MANIFEST_JSON" || { echo 'JAYUMINTON_MAIN_MANIFEST_JSON is missing.'; exit 1; }
+            printf '%s' "$MAIN_MANIFEST_JSON" > apps-script-main/appsscript.json
+          fi
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > apps-script-main/.clasp.json
+          cd apps-script-main
+          npx --yes @google/clasp@latest push --force
+          npx --yes @google/clasp@latest create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "GitHub Actions ${GITHUB_SHA}"
+
+      - name: Deploy PUSH Apps Script when present
+        if: env.DEPLOY_SCOPE == 'full'
+        shell: bash
+        env:
           PUSH_SCRIPT_ID: ${{ vars.JAYUMINTON_PUSH_SCRIPT_ID || secrets.JAYUMINTON_PUSH_SCRIPT_ID }}
           PUSH_DEPLOYMENT_ID: ${{ vars.JAYUMINTON_PUSH_DEPLOYMENT_ID || secrets.JAYUMINTON_PUSH_DEPLOYMENT_ID }}
         run: |
           set -euo pipefail
-          for required in CLASPRC_JSON MAIN_MANIFEST_JSON MAIN_SCRIPT_ID MAIN_DEPLOYMENT_ID PUSH_SCRIPT_ID PUSH_DEPLOYMENT_ID; do
-            test -n "${!required:-}" || { echo "$required is missing."; exit 1; }
-          done
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          printf '%s' "$MAIN_MANIFEST_JSON" > "$DEPLOY_ROOT/apps-script-main/appsscript.json"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$DEPLOY_ROOT/apps-script-main/.clasp.json"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$DEPLOY_ROOT/apps-script-push/.clasp.json"
-          echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
-          echo "PUSH_DEPLOYMENT_ID=$PUSH_DEPLOYMENT_ID" >> "$GITHUB_ENV"
-
-      - name: Deploy MAIN Apps Script
-        if: github.event_name == 'workflow_dispatch' && inputs.scope == 'full'
-        shell: bash
-        working-directory: ${{ env.DEPLOY_ROOT }}/apps-script-main
-        run: |
-          set -euo pipefail
+          if [[ ! -d apps-script-push ]]; then
+            echo 'apps-script-push directory is not present in this source ref; skipping PUSH.'
+            exit 0
+          fi
+          test -n "$PUSH_SCRIPT_ID" || { echo 'JAYUMINTON_PUSH_SCRIPT_ID is missing.'; exit 1; }
+          test -n "$PUSH_DEPLOYMENT_ID" || { echo 'JAYUMINTON_PUSH_DEPLOYMENT_ID is missing.'; exit 1; }
+          test -s apps-script-push/appsscript.json
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > apps-script-push/.clasp.json
+          cd apps-script-push
           npx --yes @google/clasp@latest push --force
-          npx --yes @google/clasp@latest create-deployment \
-            --deploymentId "$MAIN_DEPLOYMENT_ID" \
-            --description "GitHub Actions ${GITHUB_SHA}"
-
-      - name: Deploy PUSH Apps Script
-        if: github.event_name == 'workflow_dispatch' && inputs.scope == 'full'
-        shell: bash
-        working-directory: ${{ env.DEPLOY_ROOT }}/apps-script-push
-        run: |
-          set -euo pipefail
-          npx --yes @google/clasp@latest push --force
-          npx --yes @google/clasp@latest create-deployment \
-            --deploymentId "$PUSH_DEPLOYMENT_ID" \
-            --description "GitHub Actions ${GITHUB_SHA}"
+          npx --yes @google/clasp@latest create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "GitHub Actions ${GITHUB_SHA}"
 
       - name: Deployment summary
         shell: bash
@@ -213,11 +206,7 @@ jobs:
           {
             echo '## 자유민턴 배포 완료'
             echo
+            echo "- Source ref: $SOURCE_REF"
+            echo "- Scope: $DEPLOY_SCOPE"
             echo "- Firebase Hosting: $HOSTING_URL"
-            echo "- Commit: $GITHUB_SHA"
-            if [[ '${{ github.event_name }}' == 'workflow_dispatch' && '${{ inputs.scope }}' == 'full' ]]; then
-              echo '- Apps Script: MAIN/PUSH 전체 배포'
-            else
-              echo '- Apps Script: 변경 없음 (웹 자동 배포)'
-            fi
           } >> "$GITHUB_STEP_SUMMARY"
