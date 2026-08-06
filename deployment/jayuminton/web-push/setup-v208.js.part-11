@@ -1,0 +1,97 @@
+tion installAndroidUserApp(fromDirectUserTap) {
+    if (!deferredInstallPrompt) {
+      installAttemptPending = false;
+      const detail = 'PWA 설치 준비가 아직 끝나지 않았습니다. 준비가 완료되면 버튼이 PWA 설치로 바뀝니다.';
+      setInstallMessage(detail);
+      sendAppInstallStatus(detail);
+      showToast(detail);
+      prepareServiceWorker().then(() => ensureChromeInstallControl()).catch(() => null);
+      refreshInstallState();
+      return;
+    }
+
+    if (!fromDirectUserTap) {
+      const detail = '설치 버튼의 직접 터치가 필요합니다. 앱설치 버튼을 다시 눌러 주세요.';
+      setInstallMessage(detail, 'error');
+      sendAppInstallStatus(detail);
+      showToast(detail);
+      return;
+    }
+
+    const promptEvent = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    installAttemptPending = true;
+    clearTimeout(installAttemptTimer);
+    setInstallMessage('설치 확인창에서 설치를 눌러 주세요.', 'success');
+    sendAppInstallStatus('설치 확인창을 표시했습니다.');
+    refreshInstallProxyPosition();
+
+    let promptResult;
+    try {
+      // Must run synchronously inside the top-level button's user action.
+      promptResult = promptEvent.prompt();
+    } catch (error) {
+      installAttemptPending = false;
+      const detail = 'Chrome이 시스템 설치창 요청을 허용하지 않았습니다.';
+      setInstallMessage(detail, 'error');
+      sendAppInstallStatus(detail);
+      showToast(detail);
+      refreshInstallState();
+      return;
+    }
+
+    Promise.resolve(promptResult)
+      .then((result) => {
+        if (result && result.outcome) return result;
+        return promptEvent.userChoice || {outcome:'dismissed'};
+      })
+      .then((choice) => {
+        if (choice && choice.outcome === 'accepted') {
+          installAttemptPending = true;
+          setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
+          sendAppInstallStatus('설치 확인중');
+          showToast('설치가 완료되면 앱설치 ON으로 바뀝니다.');
+          installAttemptTimer = window.setTimeout(() => {
+            if (!isUserAppInstalledState()) {
+              installAttemptPending = false;
+              const detail = '설치 완료 신호가 확인되지 않았습니다. 홈 화면에 앱이 생겼는지 확인해 주세요.';
+              setInstallMessage(detail, 'error');
+              sendAppInstallStatus(detail);
+              refreshInstallState();
+            }
+          }, 15000);
+        } else {
+          installAttemptPending = false;
+          const detail = '앱 설치가 취소되었습니다.';
+          setInstallMessage(detail);
+          sendAppInstallStatus(detail);
+          showToast(detail);
+          refreshInstallState();
+        }
+      })
+      .catch(() => {
+        installAttemptPending = false;
+        const detail = '설치 결과를 확인하지 못했습니다.';
+        setInstallMessage(detail, 'error');
+        sendAppInstallStatus(detail);
+        showToast(detail);
+        refreshInstallState();
+      });
+  }
+
+  function buildChromeUserTarget() {
+    const target = new URL('https://jayuminton-push.web.app/');
+    target.searchParams.set('install', 'choose');
+    target.searchParams.set('external', '1');
+    target.searchParams.set('source', 'chrome');
+    target.searchParams.set('app', 'user');
+    target.searchParams.set('mode', 'user');
+    if (member && member.id) target.searchParams.set('memberId', String(member.id));
+    if (member && member.name) target.searchParams.set('memberName', String(member.name));
+    const authSession = String(localStorage.getItem(STORAGE.authSession) || transferredMemberSession || '');
+    if (authSession) target.searchParams.set('memberSession', authSession);
+    return target;
+  }
+
+  function buildAndroidChromeIntent() {
+    const t
