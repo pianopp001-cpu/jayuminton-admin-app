@@ -38,26 +38,18 @@ jobs:
     timeout-minutes: 25
     environment: production
     env:
+      SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.sha }}
+      DEPLOY_SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.scope || 'web' }}
       FIREBASE_PROJECT_ID: jayuminton-push
       HOSTING_URL: https://jayuminton-push.web.app
       MAIN_WEB_APP_URL: ${{ vars.JAYUMINTON_MAIN_WEB_APP_URL || secrets.JAYUMINTON_MAIN_WEB_APP_URL }}
       PUSH_WEB_APP_URL: ${{ vars.JAYUMINTON_PUSH_APPS_SCRIPT_URL || secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
-    steps:
-      - name: Resolve source ref
-        shell: bash
-        run: |
-          if [[ '${{ github.event_name }}' == 'workflow_dispatch' ]]; then
-            echo "SOURCE_REF=${{ inputs.source_ref }}" >> "$GITHUB_ENV"
-            echo "DEPLOY_SCOPE=${{ inputs.scope }}" >> "$GITHUB_ENV"
-          else
-            echo "SOURCE_REF=${GITHUB_SHA}" >> "$GITHUB_ENV"
-            echo "DEPLOY_SCOPE=web" >> "$GITHUB_ENV"
-          fi
 
+    steps:
       - name: Checkout deployment source
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_REF }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.sha }}
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
