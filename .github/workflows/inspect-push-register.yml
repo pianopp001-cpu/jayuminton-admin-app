@@ -23,47 +23,60 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --global @google/clasp@latest
-      - name: Pull and inspect PUSH functions
+      - name: Pull actual MAIN and decode v1.6.37 PWA
         shell: bash
         run: |
           set -euo pipefail
           C="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          SID="$(jq -r '.pushScriptId' "$C")"
-          W="$RUNNER_TEMP/push"; mkdir -p "$W"
+          SID="$(jq -r '.mainScriptId' "$C")"
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
           cd "$W"; clasp pull
-          python3 - "$GITHUB_WORKSPACE/deployment/jayuminton/PUSH_REGISTER_DIAGNOSTIC.txt" <<'PY'
+          cat "$GITHUB_WORKSPACE"/deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
+          gzip -dc "$RUNNER_TEMP/setup.gz" > "$RUNNER_TEMP/setup-v205.js"
+          python3 - "$W/Script.html" "$RUNNER_TEMP/setup-v205.js" "$GITHUB_WORKSPACE/deployment/jayuminton/MEMBER_INSTALL_CODE_DIAGNOSTIC.txt" <<'PY'
           from pathlib import Path
           import re,sys
-          text='\n'.join(p.read_text(encoding='utf-8',errors='ignore') for p in list(Path('.').glob('*.js'))+list(Path('.').glob('*.gs')))
-          def extract(name):
+          main=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore')
+          pwa=Path(sys.argv[2]).read_text(encoding='utf-8',errors='ignore')
+          def function(text,name):
               m=re.search(r'function\s+'+re.escape(name)+r'\s*\([^)]*\)\s*\{',text)
               if not m: return name+': NOT_FOUND'
-              start=m.start(); i=m.end(); depth=1; quote=None; esc=False
+              start=m.start(); i=m.end(); depth=1; q=None; esc=False
               while i<len(text) and depth:
                   c=text[i]
-                  if quote:
+                  if q:
                       if esc: esc=False
                       elif c=='\\': esc=True
-                      elif c==quote: quote=None
+                      elif c==q: q=None
                   else:
-                      if c in "'\"`": quote=c
+                      if c in "'\"`": q=c
                       elif c=='{': depth+=1
                       elif c=='}': depth-=1
                   i+=1
               return text[start:i]
-          raw='\n\n'.join([extract('registerWebToken_'),extract('unregisterWebToken_'),extract('getWebPushTokens_'),extract('countWebPushTokens_')])
-          raw=re.sub(r'https?://[^\s\"\']+','<URL>',raw)
-          raw=re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}','<EMAIL>',raw)
-          raw=re.sub(r'([\"\'])[A-Za-z0-9_\-]{32,}\1',r'\1<OPAQUE>\1',raw)
-          Path(sys.argv[1]).write_text(raw[:24000],encoding='utf-8')
+          def around(text,needle,radius=1200):
+              i=text.find(needle)
+              return (needle+': NOT_FOUND') if i<0 else text[max(0,i-radius):min(len(text),i+radius)]
+          chunks=['=== MAIN ===']
+          for n in ['openMemberSelfSettings','renderMemberSelfSettings','selectMemberSelf','clearMemberSelfSelection','completeMemberSelfSettings','handleMemberSelfSearchInput','handleMemberSelfDone']:
+              chunks.append(function(main,n))
+          chunks.append('=== MAIN INPUT OCCURRENCES ===')
+          chunks.append(around(main,"memberSelfSearchInput",2500))
+          chunks.append('=== PWA ===')
+          for n in ['isEmbeddedBrowser','buildAndroidChromeIntent','buildChromeUserTarget','handleAppInstallButton','handleEmbeddedChromeLinkClick','connectAlarm','submitRelay','handleCourtMessage']:
+              chunks.append(function(pwa,n))
+          out='\n\n'.join(chunks)
+          # no deployment IDs/URLs should be persisted
+          out=re.sub(r'https?://[^\s\"\']+','<URL>',out)
+          Path(sys.argv[3]).write_text(out[:50000],encoding='utf-8')
           PY
           cd "$GITHUB_WORKSPACE"
           git config user.name 'github-actions[bot]'
           git config user.email '4189822+github-actions[bot]@users.noreply.github.com'
-          git add deployment/jayuminton/PUSH_REGISTER_DIAGNOSTIC.txt
-          git commit -m 'Record exact PUSH registration functions' || exit 0
+          git add deployment/jayuminton/MEMBER_INSTALL_CODE_DIAGNOSTIC.txt
+          git commit -m 'Record actual member/install code diagnostic' || exit 0
           git pull --rebase origin main || true
           git push
