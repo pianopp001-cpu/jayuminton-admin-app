@@ -215,12 +215,11 @@
     const targetUrl = target.toString();
     const hostAndPath = target.host + target.pathname + target.search + target.hash;
     // A real href intent is required in Kakao/Daangn WebView. JavaScript location changes
-    // are often treated as a same-page refresh. The HTTPS fallback keeps source=chrome
-    // so the destination is never classified as embedded again.
+    // are often treated as a same-page refresh. Do not add browser_fallback_url here:
+    // that fallback was the path that produced the Google Drive missing-address page.
     const intentUrl = 'intent://' + hostAndPath +
       '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
-      'category=android.intent.category.BROWSABLE;S.browser_fallback_url=' +
-      encodeURIComponent(targetUrl) + ';end';
+      'category=android.intent.category.BROWSABLE;end';
     return { targetUrl, intentUrl };
   }
 
