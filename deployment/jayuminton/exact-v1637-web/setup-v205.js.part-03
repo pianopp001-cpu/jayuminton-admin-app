@@ -1,0 +1,239 @@
+      installSummaryBadge.className = 'mini-state is-on';
+      appInstallButton.textContent = '앱설치 완료';
+      appInstallButton.disabled = true;
+      appInstallOffButton.classList.add('hidden');
+      appInstallClickProxy.hidden = true;
+      appInstallChromeLink.hidden = true;
+      setInstallMessage('홈 화면의 자유민턴 코트현황 앱으로 실행 중입니다.', 'success');
+      sendAppInstallStatus('앱설치 ON');
+      return;
+    }
+
+    appInstallButton.disabled = false;
+    appInstallOffButton.classList.remove('hidden');
+    if (iosDevice && embeddedBrowser) {
+      installTitle.textContent = '아이폰 PWA';
+      installHint.textContent = 'Safari로 이동해 자유민턴 코트현황을 홈 화면에 추가합니다.';
+      appInstallButton.textContent = 'Safari 열기';
+    } else if (iosDevice) {
+      installTitle.textContent = '아이폰 PWA';
+      installHint.textContent = 'Safari 홈 화면에 자유민턴 코트현황을 추가합니다.';
+      appInstallButton.textContent = 'PWA 설치';
+    } else if (androidDevice && embeddedBrowser) {
+      installTitle.textContent = 'Chrome 또는 PWA';
+      installHint.textContent = 'Chrome에서 바로 사용하거나, 열린 뒤 PWA로 설치할 수 있습니다.';
+      appInstallButton.textContent = 'Chrome에서 설치';
+    } else if (androidDevice) {
+      installTitle.textContent = '안드로이드 PWA';
+      installHint.textContent = 'Chrome에서 그대로 사용하거나 PWA로 설치합니다.';
+      appInstallButton.textContent = installAttemptPending
+        ? '설치 확인중'
+        : (deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall()
+          ? 'PWA 설치'
+          : '설치 준비중');
+    } else {
+      installTitle.textContent = '웹앱';
+      installHint.textContent = '브라우저의 앱 설치 또는 홈 화면 추가 기능을 사용합니다.';
+      appInstallButton.textContent = 'PWA 설치';
+    }
+
+    appInstallState.textContent = '앱설치 OFF';
+    appInstallState.className = installAttemptPending ? 'state-pill is-wait' : 'state-pill is-off';
+    installSummaryBadge.textContent = installAttemptPending ? '설치 확인' : '앱설치 OFF';
+    installSummaryBadge.className = installAttemptPending ? 'mini-state is-wait' : 'mini-state is-off';
+    if (choice === 'off') {
+      setInstallMessage('앱설치 OFF로 저장되어 있습니다. 자동으로 다시 묻지 않습니다.', 'success');
+    } else if (installAttemptPending) {
+      setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
+    } else if (androidDevice && embeddedBrowser) {
+      setInstallMessage('누르면 Chrome으로 이동합니다. Chrome에서 앱설치를 한 번 더 눌러 시스템 설치창을 여세요.');
+    } else if (androidDevice && deferredInstallPrompt) {
+      setInstallMessage(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall() ? '앱설치를 누르면 시스템 설치창이 열립니다.' : 'Chrome 설치 가능 상태를 확인하고 있습니다.', 'success');
+    } else if (androidDevice) {
+      const remaining = installPreparationRemaining();
+      setInstallMessage(remaining > 0 ? 'PWA 설치 준비 ' + remaining + '초' : 'Chrome 설치창을 준비하고 있습니다.', 'success');
+    } else if (iosDevice && embeddedBrowser) {
+      setInstallMessage('누르면 Safari로 이동합니다. Safari에서 PWA 설치를 진행하세요.');
+    } else if (iosDevice) {
+      setInstallMessage('PWA 설치를 누른 뒤 Safari 공유 → 홈 화면에 추가를 선택하세요.');
+    }
+    sendAppInstallStatus(choice === 'off' ? '앱설치 OFF' : (installAttemptPending ? '설치 확인중' : (deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall() ? '설치 가능' : '설치 준비')));
+    refreshInstallProxyPosition();
+  }
+
+  function sendAppInstallStatus(messageText) {
+    sendCourtMessage('JAYUMINTON_APP_INSTALL_STATUS', {
+      installed:isUserAppInstalledState(),
+      choice:String(localStorage.getItem(STORAGE.installChoice) || ''),
+      platform:iosDevice ? 'ios' : (androidDevice ? 'android' : 'other'),
+      browserContext:browserContext,
+      source:String(new URLSearchParams(window.location.search).get('source') || ''),
+      ready:Boolean(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall()),
+      installing:Boolean(installAttemptPending),
+      armed:Boolean(installIntentArmed),
+      prepRemaining:installPreparationRemaining(),
+      nativeInstall:Boolean(supportsNativeInstallElement() || supportsNavigatorInstall()),
+      message:String(messageText || '')
+    });
+  }
+
+  function updateInstallClickProxy(data) {
+    lastInstallButtonRect = {
+      visible:Boolean(data.visible),
+      left:Number(data.left || 0),
+      top:Number(data.top || 0),
+      width:Number(data.width || 0),
+      height:Number(data.height || 0)
+    };
+    refreshInstallProxyPosition();
+  }
+
+  function refreshInstallProxyPosition() {
+    const rect = lastInstallButtonRect;
+    const installed = isUserAppInstalledState();
+    if (!rect || !rect.visible || installed || rect.width < 16 || rect.height < 16) {
+      appInstallClickProxy.hidden = true;
+      appInstallChromeLink.hidden = true;
+      if (nativeInstallControl) nativeInstallControl.hidden = true;
+      return;
+    }
+    const frameRect = frame.getBoundingClientRect();
+    const left = Math.round(window.scrollX + frameRect.left + rect.left) + 'px';
+    const top = Math.round(window.scrollY + frameRect.top + rect.top) + 'px';
+    const width = Math.round(rect.width) + 'px';
+    const height = Math.round(rect.height) + 'px';
+    // Kakao/Daangn WebView must receive a real top-level <a href="intent://...">
+    // generated from the user's direct tap. JavaScript location changes can be blocked
+    // or converted into a refresh by the host app.
+    if (androidDevice && embeddedBrowser) {
+      const links = buildAndroidChromeIntent();
+      appInstallChromeLink.href = links.intentUrl;
+      appInstallChromeLink.style.left = left;
+      appInstallChromeLink.style.top = top;
+      appInstallChromeLink.style.width = width;
+      appInstallChromeLink.style.height = height;
+      appInstallChromeLink.hidden = false;
+      appInstallClickProxy.hidden = true;
+      if (nativeInstallControl) nativeInstallControl.hidden = true;
+      return;
+    }
+    appInstallChromeLink.hidden = true;
+    // In real Chrome, the transparent top-level button directly calls prompt().
+    if (supportsNativeInstallElement()) {
+      nativeInstallControl.style.left = left;
+      nativeInstallControl.style.top = top;
+      nativeInstallControl.style.width = width;
+      nativeInstallControl.style.height = height;
+      nativeInstallControl.hidden = false;
+      appInstallClickProxy.hidden = true;
+      return;
+    }
+    if (nativeInstallControl) nativeInstallControl.hidden = true;
+    appInstallClickProxy.style.left = left;
+    appInstallClickProxy.style.top = top;
+    appInstallClickProxy.style.width = width;
+    appInstallClickProxy.style.height = height;
+    appInstallClickProxy.hidden = false;
+  }
+
+  function showIOSInstallGuide() {
+    if (!iosDevice || isStandaloneApp()) return;
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    setInstallMessage('Safari 공유 → 홈 화면에 추가 → 추가를 눌러 주세요.', 'success');
+    showToast('아이폰: Safari 공유 → 홈 화면에 추가 → 추가');
+    sendAppInstallStatus('Safari 공유 → 홈 화면에 추가 → 추가');
+  }
+
+  function closeIOSInstallGuide() {}
+  function confirmIOSInstallGuide() { showIOSInstallGuide(); }
+
+  function isIOSDevice() {
+    const ua = String(navigator.userAgent || '');
+    return /iPhone|iPad|iPod/i.test(ua) ||
+      (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
+  }
+
+  function isAndroidDevice() {
+    return /Android/i.test(String(navigator.userAgent || ''));
+  }
+
+  function isEmbeddedBrowser() {
+    const ua = String(navigator.userAgent || '');
+    const source = String(new URLSearchParams(window.location.search).get('source') || '').toLowerCase();
+    // The Chrome intent target explicitly uses source=chrome. Never classify that page
+    // as embedded merely because document.referrer still contains Kakao or Daangn.
+    if (source === 'chrome' || source === 'pwa') return false;
+    if (source === 'embedded') return true;
+    return /;\s*wv\)|\bwv\b|KAKAOTALK|KakaoTalk|DaumApps|NAVER|Instagram|FBAN|FBAV|Line\/|Daangn|Danggeun|Karrot|com\.towneers|EverytimeApp|WhaleInApp/i.test(ua) ||
+      !!window.NativeVoice;
+  }
+
+  function isIOSSafari() {
+    const ua = String(navigator.userAgent || '');
+    return iosDevice && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|KAKAOTALK|DaumApps|NAVER|Instagram|FBAN|FBAV/i.test(ua);
+  }
+
+  function detectBrowserContext() {
+    if (isStandaloneApp()) return 'standalone';
+    if (androidDevice && embeddedBrowser) return 'android-embedded';
+    if (androidDevice) return 'android-chrome';
+    if (iosDevice && embeddedBrowser) return 'ios-embedded';
+    if (isIOSSafari()) return 'ios-safari';
+    if (iosDevice) return 'ios-browser';
+    return 'other';
+  }
+
+  function isStandaloneApp() {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+  }
+
+  function syncStandaloneInstallState() {
+    if (!isStandaloneApp()) return false;
+    installAttemptPending = false;
+    deferredInstallPrompt = null;
+    setInstallIntentArmed(false);
+    clearTimeout(installAttemptTimer);
+    try {
+      localStorage.setItem(STORAGE.installConfirmed, '1');
+      localStorage.setItem(STORAGE.installChoice, 'on');
+      sessionStorage.removeItem(STORAGE.installRecheck);
+    } catch (_) {}
+    return true;
+  }
+
+  function isUserAppInstalledState() {
+    if (syncStandaloneInstallState()) return true;
+    return localStorage.getItem(STORAGE.installConfirmed) === '1';
+  }
+
+  function normalizedName(value) { return String(value || '').normalize('NFC').replace(/[\s()\[\]{}._\-·]/g,'').toLocaleLowerCase('ko-KR'); }
+  function firstTwoSearchChars(value) { return Array.from(normalizedName(value)).slice(0,2).join(''); }
+  function shortName(value) { return Array.from(String(value || '').trim()).slice(0,2).join(''); }
+  function readJson(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } }
+  function saveJson(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} }
+  function validMemberPageUrl(value) { const t=String(value||'').trim(); return /^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/exec\/?$/.test(t)?t.replace(/\/$/,''):''; }
+  function userOnlyMemberPageUrl(value, sessionToken) {
+    const t = validMemberPageUrl(value);
+    if (!t) return '';
+    const u = new URL(t);
+    u.searchParams.set('mode', 'user');
+    u.searchParams.set('app', 'user');
+    u.searchParams.set('source', 'pwa');
+    if (isStandaloneApp()) u.searchParams.set('pwaStandalone', '1');
+    if (sessionToken) u.searchParams.set('memberSession', String(sessionToken));
+    return u.toString();
+  }
+  function validRelayUrl(value) { return validMemberPageUrl(value); }
+  function vibrationPattern(type) {
+    return type === 'court_assignment'
+      ? [1400,500,1400,500,1400]
+      : [900,450,900,450,900];
+  }
+  function notificationRepeatGap(type) {
+    return type === 'court_assignment' ? 6500 : 0;
+  }
+  function setMessage(text, type) { message.textContent=text; message.className='setting-message'+(type?' '+type:''); }
+  function setInstallMessage(text, type) { installMessage.textContent=text; installMessage.className='setting-message'+(type?' '+type:''); }
+  function showToast(text) { clearTimeout(toastTimer);toast.textContent=text;toast.classList.remove('hidden');toastTimer=setTimeout(()=>toast.classList.add('hidden'),4000); }
+})();
