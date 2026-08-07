@@ -1,0 +1,41 @@
+name: Hash current Script blocks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hash-current-script-blocks.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hash Script.html by 100-line blocks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          path = Path('source-snapshot/current-main/Script.html')
+          lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
+          out = []
+          for start in range(0, len(lines), 100):
+              data = ''.join(lines[start:start+100]).encode('utf-8')
+              out.append(f'{start+1}-{min(start+100,len(lines))} {hashlib.sha256(data).hexdigest()}')
+          Path('source-snapshot/current-main/Script.block-sha256.txt').write_text('\n'.join(out)+'\n', encoding='utf-8')
+          print('\n'.join(out))
+          PY
+      - name: Commit block hashes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add source-snapshot/current-main/Script.block-sha256.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Hash current Script.html blocks'
+          git push origin HEAD:main
