@@ -16,35 +16,64 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Record kick started
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'stage=kick-started\nsource_commit=%s\nkick_run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > V1637_KICK_STATUS.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add V1637_KICK_STATUS.txt
+          git commit -m 'Record v1.6.37 restore kick started' || true
+          git push || true
+
       - name: Dispatch real restore workflow and wait
+        id: dispatch
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           WF='continue-exact-v1637-restore.yml'
-          BEFORE="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-          gh workflow run "$WF" --repo "$GITHUB_REPOSITORY" --ref main
+          BEFORE="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0' 2>/tmp/gh-before.err || echo 0)"
+          if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY" --ref main 2>/tmp/gh-dispatch.err; then
+            printf 'stage=dispatch-failed\nsource_commit=%s\nkick_run=%s\nerror=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(tr '\n' ' ' </tmp/gh-dispatch.err)" > V1637_KICK_STATUS.txt
+            exit 1
+          fi
+          printf 'stage=dispatched\nsource_commit=%s\nkick_run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > V1637_KICK_STATUS.txt
           RUN_ID=''
           for i in $(seq 1 60); do
             sleep 5
-            RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0' 2>/dev/null || echo 0)"
             if [ -n "$RUN_ID" ] && [ "$RUN_ID" != '0' ] && [ "$RUN_ID" != "$BEFORE" ]; then break; fi
           done
-          test -n "$RUN_ID" && [ "$RUN_ID" != '0' ] && [ "$RUN_ID" != "$BEFORE" ] || { echo 'Restore run was not created'; exit 1; }
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = '0' ] || [ "$RUN_ID" = "$BEFORE" ]; then
+            printf 'stage=run-not-created\nsource_commit=%s\nkick_run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > V1637_KICK_STATUS.txt
+            exit 1
+          fi
+          printf 'stage=restore-running\nsource_commit=%s\nkick_run=%s\nrestore_run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$RUN_ID" > V1637_KICK_STATUS.txt
           set +e
           gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
           RC=$?
           set -e
-          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json databaseId,status,conclusion,url,headSha > /tmp/restore-result.json
-          cat /tmp/restore-result.json
-          CONCLUSION="$(jq -r '.conclusion // .status // "unknown"' /tmp/restore-result.json)"
-          URL="$(jq -r '.url // ""' /tmp/restore-result.json)"
-          SHA="$(jq -r '.headSha // ""' /tmp/restore-result.json)"
-          printf 'run_id=%s\nconclusion=%s\nhead_sha=%s\nurl=%s\n' "$RUN_ID" "$CONCLUSION" "$SHA" "$URL" > V1637_LIVE_RESTORE_RESULT.txt
+          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json databaseId,status,conclusion,url,headSha > /tmp/restore-result.json || true
+          CONCLUSION="$(jq -r '.conclusion // .status // "unknown"' /tmp/restore-result.json 2>/dev/null || echo unknown)"
+          URL="$(jq -r '.url // ""' /tmp/restore-result.json 2>/dev/null || true)"
+          SHA="$(jq -r '.headSha // ""' /tmp/restore-result.json 2>/dev/null || true)"
+          printf 'stage=restore-finished\nrestore_run=%s\nconclusion=%s\nhead_sha=%s\nurl=%s\n' "$RUN_ID" "$CONCLUSION" "$SHA" "$URL" > V1637_KICK_STATUS.txt
+          exit "$RC"
+
+      - name: Record final kick result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f V1637_KICK_STATUS.txt || printf 'stage=kick-step-missing\nsource_commit=%s\nkick_run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > V1637_KICK_STATUS.txt
+          printf 'kick_step_outcome=%s\n' '${{ steps.dispatch.outcome }}' >> V1637_KICK_STATUS.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add V1637_LIVE_RESTORE_RESULT.txt
-          git commit -m "Record live v1.6.37 restore result: $CONCLUSION" || true
+          git add V1637_KICK_STATUS.txt
+          git commit -m 'Record live v1.6.37 restore kick result' || true
           git push || true
-          exit "$RC"
