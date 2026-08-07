@@ -1,16 +1,15 @@
-name: Build reinstallable v199 PIN Fix APK
+name: Build v199 PIN-only APK
 
 on:
   workflow_dispatch:
-  push:
+  pull_request:
     branches: [ main ]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -32,7 +31,7 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Apply v199 PIN session and CSS repair
+      - name: Apply PIN session patch only
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -43,21 +42,11 @@ jobs:
 
           text = re.sub(
               r'https://script\.google\.com/macros/s/[^"\\]+/exec\?mode=admin(?:&appVersion=[^"\\]+)?',
-              'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=199.3',
+              'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=199',
               text,
               count=1
           )
-          text = re.sub(r'JayumintonNative/[0-9A-Za-z.\-]+', 'JayumintonNative/199.3', text)
-
-          marker = 'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/199.3");'
-          if 'settings.setCacheMode(WebSettings.LOAD_DEFAULT);' not in text:
-              text = text.replace(marker, marker + '\n        settings.setCacheMode(WebSettings.LOAD_DEFAULT);')
-
-          text = text.replace('webView.clearCache(true);\n        ', '')
-
-          cookie_marker = 'cookieManager.setAcceptThirdPartyCookies(webView, true);'
-          if 'cookieManager.flush();' not in text:
-              text = text.replace(cookie_marker, cookie_marker + '\n        cookieManager.flush();')
+          text = re.sub(r'JayumintonNative/[0-9A-Za-z.\-]+', 'JayumintonNative/199-pin-only', text)
 
           old_js = (
               '"window.__JAYUMINTON_NATIVE_APP__=true;" +\n'
@@ -67,26 +56,28 @@ jobs:
               '"window.__JAYUMINTON_NATIVE_APP__=true;" +\n'
               '                        "document.documentElement.setAttribute(\'data-native-app\',\'1\');" +\n'
               '                        "(function(){" +\n'
-              '                        "var repairCss=function(){try{var nodes=[].slice.call(document.body.childNodes);var css=\'\';var remove=[];nodes.forEach(function(n){var t=(n.nodeType===3?n.nodeValue:(n.nodeType===1?n.textContent:\'\'))||\'\';var s=t.trim();if((s.indexOf(\':root{\')===0||s.indexOf(\':root {\')===0)&&s.indexOf(\'--primary\')>-1&&s.indexOf(\'.header-replay-button\')>-1){css+=s;remove.push(n);}});if(css){var st=document.getElementById(\'jayuminton-repaired-style\');if(!st){st=document.createElement(\'style\');st.id=\'jayuminton-repaired-style\';document.head.appendChild(st);}st.textContent=css;remove.forEach(function(n){if(n&&n.parentNode)n.parentNode.removeChild(n);});return true;}}catch(e){}return false;};" +\n'
               '                        "var readSession=function(){var keys=[\'jayuminton_admin_session_v1\',\'adminSession\',\'adminPin\',\'adminPIN\'];for(var i=0;i<keys.length;i++){try{var v=localStorage.getItem(keys[i])||sessionStorage.getItem(keys[i]);if(v)return String(v);}catch(e){}}try{if(typeof ADMIN_PIN_VALUE!==\'undefined\'&&ADMIN_PIN_VALUE)return String(ADMIN_PIN_VALUE);}catch(e){}return \'\';};" +\n'
-              '                        "var install=function(){repairCss();if(typeof window.runAction!==\'function\')return false;if(window.__JAYUMINTON_V199_PIN_FIX__)return true;window.__JAYUMINTON_V199_PIN_FIX__=true;" +\n'
-              '                        "var original=window.addMember;window.addMember=async function(){var c=readSession();var n=document.getElementById(\'newName\'),g=document.getElementById(\'newGender\'),r=document.getElementById(\'newGrade\'),x=document.getElementById(\'newExperience\');if(!c&&typeof original===\'function\')return original.apply(this,arguments);return window.runAction(\'addMember\',[c,n?String(n.value||\'\').trim():\'\',g?String(g.value||\'\'):\'\',r?String(r.value||\'\').trim():\'\',x?String(x.value||\'\').trim():\'\']);};return true;};" +\n'
-              '                        "repairCss();var t=setInterval(function(){repairCss();if(install())clearInterval(t);},100);setTimeout(function(){clearInterval(t);repairCss();},15000);" +\n'
+              '                        "var install=function(){if(typeof window.runAction!==\'function\')return false;if(window.__JAYUMINTON_PIN_ONLY__)return true;window.__JAYUMINTON_PIN_ONLY__=true;var original=window.addMember;window.addMember=async function(){var c=readSession();if(!c&&typeof original===\'function\')return original.apply(this,arguments);var n=document.getElementById(\'newName\'),g=document.getElementById(\'newGender\'),r=document.getElementById(\'newGrade\'),x=document.getElementById(\'newExperience\');return window.runAction(\'addMember\',[c,n?String(n.value||\'\').trim():\'\',g?String(g.value||\'\'):\'\',r?String(r.value||\'\').trim():\'\',x?String(x.value||\'\').trim():\'\']);};return true;};" +\n'
+              '                        "if(!install()){var t=setInterval(function(){if(install())clearInterval(t);},100);setTimeout(function(){clearInterval(t);},10000);}" +\n'
               '                        "})();"'
           )
-          if old_js in text:
-              text = text.replace(old_js, new_js)
-          elif '__JAYUMINTON_V199_PIN_FIX__' not in text:
+          if old_js not in text:
               raise SystemExit('WebView injection marker not found')
-
+          text = text.replace(old_js, new_js)
           java_path.write_text(text, encoding='utf-8')
 
           gradle_path = Path('app/build.gradle')
           gradle = gradle_path.read_text(encoding='utf-8')
-          gradle = re.sub(r'versionCode\s+\d+', 'versionCode 1993', gradle, count=1)
-          gradle = re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '199.3'", gradle, count=1)
+          gradle = re.sub(r'versionCode\s+\d+', 'versionCode 1994', gradle, count=1)
+          gradle = re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '199.4-pin-only'", gradle, count=1)
           gradle_path.write_text(gradle, encoding='utf-8')
           PY
+
+          grep -F 'JAYUMINTON_PIN_ONLY' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          if grep -F 'repairCss' app/src/main/java/com/jayuminton/admin/MainActivity.java; then
+            echo 'CSS repair code must not be injected' >&2
+            exit 1
+          fi
 
       - name: Build fresh-install APK
         run: gradle --no-daemon :app:assembleDebug
@@ -98,25 +89,11 @@ jobs:
           unzip -t "$APK"
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           "$APKSIGNER" verify --verbose "$APK"
-          ls -lh "$APK"
-
-      - name: Save APK
-        run: |
-          mkdir -p releases
-          cp app/build/outputs/apk/debug/app-debug.apk releases/jayuminton-v199.3-reinstall.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-v199.3-reinstall
-          path: releases/jayuminton-v199.3-reinstall.apk
+          name: jayuminton-v199.4-pin-only
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
-
-      - name: Commit verified APK
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add releases/jayuminton-v199.3-reinstall.apk
-          git commit -m "Add verified Jayuminton v199.3 reinstall APK" || exit 0
-          git push
