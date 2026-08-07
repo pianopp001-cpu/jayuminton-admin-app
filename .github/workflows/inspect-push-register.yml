@@ -23,60 +23,33 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --global @google/clasp@latest
-      - name: Pull actual MAIN and decode v1.6.37 PWA
+      - name: Inspect exact event wiring
         shell: bash
         run: |
           set -euo pipefail
-          C="$RUNNER_TEMP/deploy.json"
-          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          SID="$(jq -r '.mainScriptId' "$C")"
-          W="$RUNNER_TEMP/main"; mkdir -p "$W"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
-          cd "$W"; clasp pull
-          cat "$GITHUB_WORKSPACE"/deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
-          gzip -dc "$RUNNER_TEMP/setup.gz" > "$RUNNER_TEMP/setup-v205.js"
-          python3 - "$W/Script.html" "$RUNNER_TEMP/setup-v205.js" "$GITHUB_WORKSPACE/deployment/jayuminton/MEMBER_INSTALL_CODE_DIAGNOSTIC.txt" <<'PY'
+          C="$RUNNER_TEMP/deploy.json"; printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"; printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SID="$(jq -r '.mainScriptId' "$C")"; W="$RUNNER_TEMP/main"; mkdir -p "$W"; printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"; cd "$W"; clasp pull
+          cat "$GITHUB_WORKSPACE"/deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"; gzip -dc "$RUNNER_TEMP/setup.gz" > "$RUNNER_TEMP/setup.js"
+          python3 - "$W/Script.html" "$RUNNER_TEMP/setup.js" "$GITHUB_WORKSPACE/deployment/jayuminton/MEMBER_INSTALL_WIRING.txt" <<'PY'
           from pathlib import Path
           import re,sys
-          main=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore')
-          pwa=Path(sys.argv[2]).read_text(encoding='utf-8',errors='ignore')
-          def function(text,name):
-              m=re.search(r'function\s+'+re.escape(name)+r'\s*\([^)]*\)\s*\{',text)
-              if not m: return name+': NOT_FOUND'
-              start=m.start(); i=m.end(); depth=1; q=None; esc=False
-              while i<len(text) and depth:
-                  c=text[i]
-                  if q:
-                      if esc: esc=False
-                      elif c=='\\': esc=True
-                      elif c==q: q=None
-                  else:
-                      if c in "'\"`": q=c
-                      elif c=='{': depth+=1
-                      elif c=='}': depth-=1
-                  i+=1
-              return text[start:i]
-          def around(text,needle,radius=1200):
-              i=text.find(needle)
-              return (needle+': NOT_FOUND') if i<0 else text[max(0,i-radius):min(len(text),i+radius)]
-          chunks=['=== MAIN ===']
-          for n in ['openMemberSelfSettings','renderMemberSelfSettings','selectMemberSelf','clearMemberSelfSelection','completeMemberSelfSettings','handleMemberSelfSearchInput','handleMemberSelfDone']:
-              chunks.append(function(main,n))
-          chunks.append('=== MAIN INPUT OCCURRENCES ===')
-          chunks.append(around(main,"memberSelfSearchInput",2500))
-          chunks.append('=== PWA ===')
-          for n in ['isEmbeddedBrowser','buildAndroidChromeIntent','buildChromeUserTarget','handleAppInstallButton','handleEmbeddedChromeLinkClick','connectAlarm','submitRelay','handleCourtMessage']:
-              chunks.append(function(pwa,n))
-          out='\n\n'.join(chunks)
-          # no deployment IDs/URLs should be persisted
+          main=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore'); pwa=Path(sys.argv[2]).read_text(encoding='utf-8',errors='ignore')
+          def allaround(text,needles,r=1800):
+              spans=[]
+              for needle in needles:
+                  pos=0
+                  while True:
+                      i=text.find(needle,pos)
+                      if i<0: break
+                      spans.append((max(0,i-r),min(len(text),i+r),needle)); pos=i+len(needle)
+              spans.sort(); out=[]; last=-1
+              for a,b,n in spans:
+                  if a<last: continue
+                  out.append('--- '+n+' ---\n'+text[a:b]); last=b
+              return '\n'.join(out)
+          out='=== MAIN WIRING ===\n'+allaround(main,['memberSelfDone','memberSelfSearchInput','JAYUMINTON_PUSH_SETUP_REQUEST'],2200)
+          out+='\n=== PWA INSTALL WIRING ===\n'+allaround(pwa,['beforeinstallprompt','deferredInstallPrompt','installAndroidUserApp','directInstall','appInstallButton.addEventListener'],2400)
           out=re.sub(r'https?://[^\s\"\']+','<URL>',out)
-          Path(sys.argv[3]).write_text(out[:50000],encoding='utf-8')
+          Path(sys.argv[3]).write_text(out[:70000],encoding='utf-8')
           PY
-          cd "$GITHUB_WORKSPACE"
-          git config user.name 'github-actions[bot]'
-          git config user.email '4189822+github-actions[bot]@users.noreply.github.com'
-          git add deployment/jayuminton/MEMBER_INSTALL_CODE_DIAGNOSTIC.txt
-          git commit -m 'Record actual member/install code diagnostic' || exit 0
-          git pull --rebase origin main || true
-          git push
+          cd "$GITHUB_WORKSPACE"; git config user.name 'github-actions[bot]'; git config user.email '4189822+github-actions[bot]@users.noreply.github.com'; git add deployment/jayuminton/MEMBER_INSTALL_WIRING.txt; git commit -m 'Record member/install event wiring' || exit 0; git pull --rebase origin main || true; git push
