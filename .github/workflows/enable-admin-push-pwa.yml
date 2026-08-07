@@ -140,7 +140,6 @@ jobs:
 
           clasp push --force
           clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "admin push-app launcher ${GITHUB_SHA::7}"
-
           cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
 
       - name: Sync patched Script.html snapshot
@@ -157,7 +156,7 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
-      - name: Build PWA with install enabled
+      - name: Build PWA with safe Chrome handoff and install enabled
         shell: bash
         run: |
           set -euo pipefail
@@ -175,13 +174,85 @@ jobs:
           from pathlib import Path
 
           root = Path(os.environ['BUILD_ROOT']) / 'web-push'
-          idx = root / 'index.html'
-          s = idx.read_text(encoding='utf-8')
+          js = root / 'setup-v205.js'
+          s = js.read_text(encoding='utf-8')
 
-          marker = 'JAYUMINTON_VISIBLE_PWA_INSTALL_V1'
-          if marker not in s:
+          def extract_block(src, start_idx):
+              brace_open = src.find('{', start_idx)
+              if brace_open < 0:
+                  raise SystemExit('opening brace missing')
+              depth = 0
+              i = brace_open
+              while i < len(src):
+                  if src[i] == '{':
+                      depth += 1
+                  elif src[i] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return src[start_idx:i+1], start_idx, i+1
+                  i += 1
+              raise SystemExit('unbalanced braces')
+
+          # Critical: never send Android Chrome handoff through a browser_fallback_url.
+          # That old fallback is what can land on a Google Drive "file cannot be opened" page.
+          a = s.find('function buildAndroidChromeIntent() {')
+          if a < 0:
+              raise SystemExit('buildAndroidChromeIntent function missing')
+          block, bstart, bend = extract_block(s, a)
+          if 'S.browser_fallback_url' in block:
+              safe_block = """function buildAndroidChromeIntent() {
+            const target = buildChromeUserTarget();
+            const targetUrl = target.toString();
+            const hostAndPath = target.host + target.pathname + target.search + target.hash;
+            const intentUrl = 'intent://' + hostAndPath +
+              '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+              'category=android.intent.category.BROWSABLE;end';
+            return { targetUrl, intentUrl };
+          }"""
+              s = s[:bstart] + safe_block + s[bend:]
+
+          # A timer/postMessage is not a fresh user gesture. Do not fall back to a same-page
+          # navigation that can be rewritten by an embedded browser. Wait for another tap.
+          a = s.find('function launchChromeFromFirebaseTop() {')
+          if a < 0:
+              raise SystemExit('launchChromeFromFirebaseTop function missing')
+          fn, fstart, fend = extract_block(s, a)
+          guard = fn.find('if (!hasActivation) {')
+          if guard >= 0:
+              iblock, istart, iend = extract_block(fn, guard)
+              if 'window.location.href = links.targetUrl' in iblock:
+                  replacement = """if (!hasActivation) {
+              setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');
+              sendAppInstallStatus('Chrome 직접 터치 대기');
+              refreshInstallProxyPosition();
+              return;
+            }"""
+                  fn = fn[:istart] + replacement + fn[iend:]
+                  s = s[:fstart] + fn + s[fend:]
+
+          # Apps Script may add a googleusercontent iframe layer. Accept that trusted origin
+          # instead of requiring exact window identity, while keeping the origin allow-list.
+          old_guard = '\n'.join([
+              '  function handleCourtMessage(event) {',
+              '    if (event.source !== frame.contentWindow) return;',
+          ])
+          if old_guard in s:
+              new_guard = '\n'.join([
+                  '  function handleCourtMessage(event) {',
+                  '    const originOk = event.source === frame.contentWindow ||',
+                  "      /^https:\\/\\/([a-z0-9-]+\\.)*(script\\.google\\.com|googleusercontent\\.com)$/i.test(String(event.origin || ''));",
+                  '    if (!originOk) return;',
+              ])
+              s = s.replace(old_guard, new_guard, 1)
+
+          js.write_text(s, encoding='utf-8')
+
+          idx = root / 'index.html'
+          html = idx.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_VISIBLE_PWA_INSTALL_V2'
+          if marker not in html:
               head_patch = r'''
-  <!-- JAYUMINTON_VISIBLE_PWA_INSTALL_V1 -->
+  <!-- JAYUMINTON_VISIBLE_PWA_INSTALL_V2 -->
   <style>
     #jayumintonPwaInstallButton {
       position: fixed;
@@ -208,66 +279,67 @@ jobs:
       return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     }
 
-    function installButton() {
+    function button() {
       return document.getElementById('jayumintonPwaInstallButton');
     }
 
-    function refreshInstallButton() {
-      const button = installButton();
-      if (!button) return;
-      button.hidden = isStandalone() || !deferredPwaInstallPrompt;
+    function refresh() {
+      const el = button();
+      if (!el) return;
+      el.hidden = isStandalone() || !deferredPwaInstallPrompt;
     }
 
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
       deferredPwaInstallPrompt = event;
-      refreshInstallButton();
+      refresh();
     });
 
     window.addEventListener('appinstalled', () => {
       deferredPwaInstallPrompt = null;
-      refreshInstallButton();
+      refresh();
     });
 
     window.addEventListener('DOMContentLoaded', () => {
       if (window.__JAYUMINTON_EARLY_INSTALL_PROMPT) {
         deferredPwaInstallPrompt = window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
       }
-      refreshInstallButton();
 
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }).catch(() => {});
       }
 
-      const button = installButton();
-      if (!button) return;
-      button.addEventListener('click', async () => {
-        const promptEvent = deferredPwaInstallPrompt || window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
-        if (!promptEvent) {
-          refreshInstallButton();
-          return;
-        }
-        button.disabled = true;
-        try {
-          await promptEvent.prompt();
-          await promptEvent.userChoice;
-        } catch (_) {}
-        deferredPwaInstallPrompt = null;
-        window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
-        button.disabled = false;
-        refreshInstallButton();
-      });
+      const el = button();
+      if (el) {
+        el.addEventListener('click', async () => {
+          const promptEvent = deferredPwaInstallPrompt || window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
+          if (!promptEvent) {
+            refresh();
+            return;
+          }
+          el.disabled = true;
+          try {
+            await promptEvent.prompt();
+            await promptEvent.userChoice;
+          } catch (_) {}
+          deferredPwaInstallPrompt = null;
+          window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
+          el.disabled = false;
+          refresh();
+        });
+      }
+      refresh();
     });
   })();
   </script>
 '''
               body_patch = '\n  <button id="jayumintonPwaInstallButton" type="button" hidden aria-label="자유민턴 앱 설치">📲 앱 설치</button>\n'
-              s = s.replace('</head>', head_patch + '</head>', 1)
-              s = s.replace('<main class="court-shell">', body_patch + '  <main class="court-shell">', 1)
+              html = html.replace('</head>', head_patch + '</head>', 1)
+              html = html.replace('<main class="court-shell">', body_patch + '  <main class="court-shell">', 1)
 
-          s = s.replace('/setup-v205.js?v=1637', '/setup-v205.js?v=1637-pwa-on1')
-          s = s.replace('/config-v204.js?v=1637', '/config-v204.js?v=1637-pwa-on1')
-          idx.write_text(s, encoding='utf-8')
+          html = html.replace('/setup-v205.js?v=1637', '/setup-v205.js?v=1637-pwa-on2')
+          html = html.replace('/config-v204.js?v=1637', '/config-v204.js?v=1637-pwa-on2')
+          idx.write_text(html, encoding='utf-8')
 
           template = Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
           cfg = template.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
@@ -276,18 +348,23 @@ jobs:
 
           sw = root / 'firebase-messaging-sw.js'
           t = sw.read_text(encoding='utf-8')
-          t = t.replace("const JAYUMINTON_SW_VERSION = '1.6.37';", "const JAYUMINTON_SW_VERSION = '1.6.37-pwa-on1';")
-          t = t.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';", "const JAYUMINTON_CACHE = 'jayuminton-shell-v219';")
+          t = t.replace("const JAYUMINTON_SW_VERSION = '1.6.37';", "const JAYUMINTON_SW_VERSION = '1.6.37-pwa-on2';")
+          t = t.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';", "const JAYUMINTON_CACHE = 'jayuminton-shell-v220';")
           sw.write_text(t, encoding='utf-8')
           PY
 
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
-          grep -F 'JAYUMINTON_VISIBLE_PWA_INSTALL_V1' "$BUILD_ROOT/web-push/index.html" >/dev/null
+          grep -F 'JAYUMINTON_VISIBLE_PWA_INSTALL_V2' "$BUILD_ROOT/web-push/index.html" >/dev/null
           grep -F 'navigator.serviceWorker.register' "$BUILD_ROOT/web-push/index.html" >/dev/null
           grep -F 'beforeinstallprompt' "$BUILD_ROOT/web-push/index.html" >/dev/null
           grep -F '"display": "standalone"' "$BUILD_ROOT/web-push/manifest.webmanifest" >/dev/null
-          grep -F '"start_url": "/?app=user&mode=user&source=pwa"' "$BUILD_ROOT/web-push/manifest.webmanifest" >/dev/null
           grep -F '"scope": "/"' "$BUILD_ROOT/web-push/manifest.webmanifest" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then
+            echo 'Unsafe browser_fallback_url remains'; exit 1
+          fi
+          if grep -F 'window.location.href = links.targetUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then
+            echo 'Unsafe same-page Chrome fallback remains'; exit 1
+          fi
 
           BASE="${HOSTING_URL%/}"
           for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
@@ -297,7 +374,7 @@ jobs:
 
       - name: Deploy Firebase Hosting
         working-directory: ${{ env.BUILD_ROOT }}
-        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "PWA install ON ${GITHUB_SHA::7}"
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "PWA install ON safe Chrome ${GITHUB_SHA::7}"
 
       - name: Verify live PWA
         shell: bash
@@ -305,11 +382,14 @@ jobs:
           set -euo pipefail
           sleep 8
           BASE="${HOSTING_URL%/}"
-          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-pwa-on1"
+          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-pwa-on2"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/?v=$BUST" > "$RUNNER_TEMP/index-live"
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?v=$BUST" > "$RUNNER_TEMP/setup-live"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/manifest.webmanifest?v=$BUST" > "$RUNNER_TEMP/manifest-live"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?v=$BUST" > "$RUNNER_TEMP/sw-live"
-          grep -F 'JAYUMINTON_VISIBLE_PWA_INSTALL_V1' "$RUNNER_TEMP/index-live" >/dev/null
+          grep -F 'JAYUMINTON_VISIBLE_PWA_INSTALL_V2' "$RUNNER_TEMP/index-live" >/dev/null
           grep -F '📲 앱 설치' "$RUNNER_TEMP/index-live" >/dev/null
           grep -F '"display": "standalone"' "$RUNNER_TEMP/manifest-live" >/dev/null
-          grep -F "1.6.37-pwa-on1" "$RUNNER_TEMP/sw-live" >/dev/null
+          grep -F "1.6.37-pwa-on2" "$RUNNER_TEMP/sw-live" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup-live" >/dev/null; then exit 1; fi
+          if grep -F 'window.location.href = links.targetUrl' "$RUNNER_TEMP/setup-live" >/dev/null; then exit 1; fi
