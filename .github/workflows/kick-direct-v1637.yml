@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo 'Triggering corrected v1.6.37 restore after removing the false dynamic app-label check.'
+          echo 'Triggering checksum-free final v1.6.37 restore.'
           WF='continue-exact-v1637-restore.yml'
           BEFORE="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
           gh workflow run "$WF" --repo "$GITHUB_REPOSITORY" --ref main
