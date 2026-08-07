@@ -1,6 +1,8 @@
 (() => {
   'use strict';
 
+  const HOTFIX_VERSION = 'v209.1';
+
   // The original v199 administrator app still uses this Apps Script deployment.
   // The same deployment serves the member court screen with mode=user/app=user.
   const STABLE_MEMBER_PAGE_URL =
@@ -27,4 +29,5 @@
   }));
 
   window.__JAYUMINTON_MEMBER_PAGE_URL_V209__ = STABLE_MEMBER_PAGE_URL;
+  window.__JAYUMINTON_HOTFIX_VERSION__ = HOTFIX_VERSION;
 })();
