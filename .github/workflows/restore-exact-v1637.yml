@@ -1,0 +1,385 @@
+name: Restore exact Jayuminton v1.6.37
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-exact-v1637.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-exact-v1637-restore
+  cancel-in-progress: true
+
+jobs:
+  restore:
+    name: Restore original design and working links
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON" || { echo 'JAYUMINTON_DEPLOY_CONFIG_JSON is missing.'; exit 1; }
+          test -n "$CLASPRC_JSON" || { echo 'CLASPRC_JSON is missing.'; exit 1; }
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || { echo 'FIREBASE_SERVICE_ACCOUNT_JSON is missing.'; exit 1; }
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deployment tools
+        run: npm install --global @google/clasp@latest firebase-tools@latest
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Read deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          CONFIG_FILE="$RUNNER_TEMP/jayuminton-deploy-config.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG_FILE"
+          jq -e '.mainScriptId and .pushScriptId and .firebaseProjectId and .hostingUrl' "$CONFIG_FILE" >/dev/null
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG_FILE")"
+            echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$CONFIG_FILE")"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG_FILE")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG_FILE")"
+            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-v1637-restored"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore exact v1.6.37 MAIN source
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/apps-script-main-v1637"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          path = Path('Script.html')
+          text = path.read_text(encoding='utf-8')
+          current_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+          expected_hash = '05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441'
+
+          if current_hash != expected_hash:
+              wrong_install = """function openMemberInstallInChrome(installUrl) {
+            // v1.6.40: Google Drive로 잘못 전달되던 browser_fallback_url을 제거한다.
+            // Android가 설치된 Chrome 앱(com.android.chrome)으로만 전달하도록 고정한다.
+            try {
+              const target = new URL(installUrl);
+              if (target.origin !== UNIFIED_MEMBER_APP_ORIGIN) throw new Error('invalid member app origin');
+              target.searchParams.set('install', '1');
+              target.searchParams.set('external', '1');
+              target.searchParams.set('source', 'chrome');
+              target.searchParams.set('app', 'user');
+              target.searchParams.set('mode', 'user');
+              const hostPath = target.host + target.pathname + target.search + target.hash;
+              const intentUrl = 'intent://' + hostPath +
+                '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+                'category=android.intent.category.BROWSABLE;end';
+              navigateMemberTop(intentUrl);
+              return;
+            } catch (error) {}
+            navigateMemberTop('intent://jayuminton-push.web.app/?install=1&external=1&source=chrome&app=user&mode=user' +
+              '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+              'category=android.intent.category.BROWSABLE;end');
+          }
+          """
+              original_install = """function openMemberInstallInChrome(installUrl) {
+            // Google Apps Script의 샌드박스 안에서 intent://를 직접 실행하면
+            // Google Drive 문서 링크로 잘못 해석되는 기기가 있다.
+            // 고정된 Firebase 사용자 페이지로 이동한다. Chrome 실행은 최상위 직접 클릭 링크가 담당한다.
+            try {
+              const target = new URL(installUrl);
+              if (target.origin !== UNIFIED_MEMBER_APP_ORIGIN) {
+                throw new Error('invalid member app origin');
+              }
+              target.searchParams.set('external', '1');
+              target.searchParams.set('source', 'embedded');
+              navigateMemberTop(target.toString());
+              return;
+            } catch (error) {}
+            navigateMemberTop(UNIFIED_MEMBER_APP_URL + '?install=choose&external=1&source=embedded&app=user&mode=user');
+          }
+          """
+              wrong_label = "installLabel = remain > 0 ? '설치 준비중' : '앱 설치';"
+              original_label = "installLabel = remain > 0 ? '설치 준비 ' + remain + '초' : '설치 확인 중';"
+
+              if wrong_install not in text:
+                  raise SystemExit('The v1.6.40 Google Drive redirect block was not found.')
+              if wrong_label not in text:
+                  raise SystemExit('The v1.6.40 install label block was not found.')
+              text = text.replace(wrong_install, original_install, 1)
+              text = text.replace(wrong_label, original_label, 1)
+              path.write_text(text, encoding='utf-8')
+
+          hashes = {
+              'Admin.html': '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0',
+              'Code.js': '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b',
+              'Index.html': '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c',
+              'Script.html': expected_hash,
+              'Style.html': 'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625',
+          }
+          for name, expected in hashes.items():
+              actual = hashlib.sha256(Path(name).read_bytes()).hexdigest()
+              if actual != expected:
+                  raise SystemExit(f'{name} differs from the uploaded v1.6.37 source: {actual}')
+              print(f'v1.6.37 verified: {name} {actual}')
+          PY
+
+          clasp push --force
+          DEPLOY_OUTPUT="$(clasp deploy --description "Exact v1.6.37 restore ${GITHUB_SHA::7}" 2>&1)"
+          printf '%s\n' "$DEPLOY_OUTPUT"
+          MAIN_DEPLOYMENT_ID="$(printf '%s\n' "$DEPLOY_OUTPUT" | grep -Eo 'AKfy[A-Za-z0-9_-]+' | tail -n 1 || true)"
+          test -n "$MAIN_DEPLOYMENT_ID" || { echo 'Could not read the fresh MAIN deployment ID.'; exit 1; }
+          echo "MAIN_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+
+      - name: Create a fresh PUSH deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/apps-script-push-v1637"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          DEPLOY_OUTPUT="$(clasp deploy --description "Jayuminton PUSH restore ${GITHUB_SHA::7}" 2>&1)"
+          printf '%s\n' "$DEPLOY_OUTPUT"
+          PUSH_DEPLOYMENT_ID="$(printf '%s\n' "$DEPLOY_OUTPUT" | grep -Eo 'AKfy[A-Za-z0-9_-]+' | tail -n 1 || true)"
+          test -n "$PUSH_DEPLOYMENT_ID" || { echo 'Could not read the fresh PUSH deployment ID.'; exit 1; }
+          echo "PUSH_URL=https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+
+      - name: Verify fresh Google endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          MAIN_BODY="$RUNNER_TEMP/main.html"
+          MAIN_FINAL="$RUNNER_TEMP/main-final.txt"
+          curl --fail --location --retry 5 --retry-delay 3 --max-time 90 \
+            --output "$MAIN_BODY" --write-out '%{url_effective}' \
+            "$MAIN_URL?mode=user&app=user&source=restore-$GITHUB_RUN_ID" > "$MAIN_FINAL"
+          test -s "$MAIN_BODY"
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$MAIN_FINAL"; then
+            echo 'Fresh MAIN redirected to Google Drive.'
+            cat "$MAIN_FINAL"
+            exit 1
+          fi
+          if grep -Eiq 'file you have requested does not exist|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$MAIN_BODY"; then
+            echo 'Fresh MAIN returned a missing-address page.'
+            exit 1
+          fi
+          grep -F 'memberSelfSearchInput' "$MAIN_BODY"
+          grep -F 'memberSelfMatches' "$MAIN_BODY"
+
+          PUSH_BODY="$RUNNER_TEMP/push.html"
+          PUSH_FINAL="$RUNNER_TEMP/push-final.txt"
+          curl --location --retry 3 --max-time 60 \
+            --output "$PUSH_BODY" --write-out '%{url_effective}' \
+            "$PUSH_URL?health=1&run=$GITHUB_RUN_ID" > "$PUSH_FINAL"
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$PUSH_FINAL"; then
+            echo 'Fresh PUSH redirected to Google Drive.'
+            cat "$PUSH_FINAL"
+            exit 1
+          fi
+
+      - name: Build exact v1.6.37 PWA design with behavior fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$BUILD_ROOT"
+          mkdir -p "$BUILD_ROOT/web-push"
+          cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
+          cp deployment/jayuminton/exact-v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
+          cp deployment/jayuminton/exact-v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
+          cat deployment/jayuminton/exact-v1637-web/setup-v205.js.part-* > "$BUILD_ROOT/web-push/setup-v205.js"
+          cp deployment/jayuminton/exact-v1637-web/config-v204.js "$BUILD_ROOT/web-push/config-v204.js"
+          cp deployment/jayuminton/exact-v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
+          cp deployment/jayuminton/exact-v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+
+          printf '%s  %s\n' \
+            '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d' "$BUILD_ROOT/web-push/index.html" \
+            '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f' "$BUILD_ROOT/web-push/setup-v205.css" \
+            '53828f38565e057b865750b9fbf66737b8841451ac4afebc34150b0f93d8fd9b' "$BUILD_ROOT/web-push/setup-v205.js" | sha256sum --check
+
+          BASE="${HOSTING_URL%/}"
+          for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' \
+              "$BASE/$asset?restore-source=$GITHUB_RUN_ID" \
+              --output "$BUILD_ROOT/web-push/$asset"
+            test -s "$BUILD_ROOT/web-push/$asset"
+          done
+          printf '%s  %s\n' \
+            '2871bef80f0e14033bf2aa7eb97cb03a5e70cfc342f732fd00054ee58d176a59' "$BUILD_ROOT/web-push/icon-198.png" \
+            '97b4ad45fcf47de38b4e25d2d099f573c206173043ecb586c06705946c3010bc' "$BUILD_ROOT/web-push/icon-512.png" \
+            '4a861930d455f73f371a8413b3a82101f5e08c1d066db62def67d405e5a66eaf' "$BUILD_ROOT/web-push/apple-touch-icon-180.png" \
+            '7ad429810f2129ea4805911bc740b92bf5b0cb671fa6d9647ebde029ec6f0a8a' "$BUILD_ROOT/web-push/badge-96.png" | sha256sum --check
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+          config_path = root / 'config-v204.js'
+          config = config_path.read_text(encoding='utf-8')
+          config = config.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL'])
+          config = config.replace('__RELAY_URL__', os.environ['PUSH_URL'])
+          if '__MEMBER_PAGE_URL__' in config or '__RELAY_URL__' in config:
+              raise SystemExit('URL placeholder replacement failed')
+          config_path.write_text(config, encoding='utf-8')
+
+          setup_path = root / 'setup-v205.js'
+          setup = setup_path.read_text(encoding='utf-8')
+
+          entry_anchor = "  const externalBrowserEntry = query.get('source') === 'embedded' || query.get('external') === '1';\n"
+          entry_fix = entry_anchor + """  // Uninstalling a PWA does not erase Chrome site storage. Only standalone mode proves installation.
+          if (!isStandaloneApp()) {
+            try {
+              localStorage.removeItem(STORAGE.installConfirmed);
+              if (localStorage.getItem(STORAGE.installChoice) === 'on') {
+                localStorage.removeItem(STORAGE.installChoice);
+              }
+            } catch (_) {}
+          }
+          """
+          if entry_anchor not in setup:
+              raise SystemExit('Install state patch anchor missing')
+          setup = setup.replace(entry_anchor, entry_fix, 1)
+
+          listener_anchor = "  connectButton.addEventListener('click', handleAlarmButton);\n"
+          listener_fix = listener_anchor + """  nameInput.addEventListener('input', () => {
+            const typed = firstTwoSearchChars(nameInput.value);
+            const saved = member && member.name ? firstTwoSearchChars(member.name) : '';
+            if (member && typed && typed !== saved) {
+              member = null;
+              try { localStorage.removeItem(STORAGE.member); } catch (_) {}
+              isConnected = false;
+              setOff('새 이름을 입력한 뒤 아래 말풍선에서 이름을 눌러 주세요.');
+              sendBootstrap();
+            }
+          });
+          """
+          if listener_anchor not in setup:
+              raise SystemExit('Name input patch anchor missing')
+          setup = setup.replace(listener_anchor, listener_fix, 1)
+
+          old_match = """    const exactSelected = member && member.id
+              ? members.find((item) => String(item.id) === String(member.id))
+              : null;
+            const matches = exactSelected
+              ? [exactSelected]
+              : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+          """
+          new_match = """    const typedMatchesSavedMember = Boolean(
+              member && member.id && firstTwoSearchChars(member.name) === typed
+            );
+            const exactSelected = typedMatchesSavedMember
+              ? members.find((item) => String(item.id) === String(member.id))
+              : null;
+            const matches = exactSelected
+              ? [exactSelected]
+              : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+          """
+          if old_match not in setup:
+              raise SystemExit('Saved member priority patch anchor missing')
+          setup = setup.replace(old_match, new_match, 1)
+          setup_path.write_text(setup, encoding='utf-8')
+
+          manifest = json.loads((root / 'manifest.webmanifest').read_text(encoding='utf-8'))
+          if any('maskable' in str(icon.get('purpose', '')) for icon in manifest.get('icons', [])):
+              raise SystemExit('maskable icon still exists')
+          if manifest.get('name') != '자유민턴 코트현황' or manifest.get('short_name') != '자유민턴 코트현황':
+              raise SystemExit('Original app title was not restored')
+
+          index = (root / 'index.html').read_text(encoding='utf-8')
+          if 'directInstallScreen' in index or 'setup-v208' in index:
+              raise SystemExit('Experimental install design is still present')
+          if 'setup-v205.js' not in index or '1.6.37' not in index:
+              raise SystemExit('Original v1.6.37 shell is missing')
+          PY
+
+          node --check "$BUILD_ROOT/web-push/setup-v205.js"
+
+          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210; do
+            cat > "$BUILD_ROOT/web-push/firebase-messaging-sw-v${version}.js" <<'EOF'
+          /* Legacy service-worker migration shim. */
+          importScripts('/firebase-messaging-sw.js');
+          self.addEventListener('install', () => self.skipWaiting());
+          self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+          EOF
+          done
+
+      - name: Deploy restored Firebase PWA
+        working-directory: ${{ env.BUILD_ROOT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive \
+            --message "Exact v1.6.37 design restore ${GITHUB_SHA::7}"
+
+      - name: Verify live restored design and links
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$BUST" > "$RUNNER_TEMP/live-index.html"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$BUST" > "$RUNNER_TEMP/live-setup.js"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/config-v204.js?verify=$BUST" > "$RUNNER_TEMP/live-config.js"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/manifest.webmanifest?verify=$BUST" > "$RUNNER_TEMP/live-manifest.json"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$BUST" > "$RUNNER_TEMP/live-worker.js"
+
+          grep -F 'jayuminton-build" content="1.6.37' "$RUNNER_TEMP/live-index.html"
+          grep -F 'setup-v205.js' "$RUNNER_TEMP/live-index.html"
+          ! grep -F 'directInstallScreen' "$RUNNER_TEMP/live-index.html"
+          grep -F "$MAIN_URL" "$RUNNER_TEMP/live-config.js"
+          grep -F "$PUSH_URL" "$RUNNER_TEMP/live-config.js"
+          grep -F '새 이름을 입력한 뒤 아래 말풍선에서 이름을 눌러 주세요.' "$RUNNER_TEMP/live-setup.js"
+          grep -F 'jayuminton-shell-v211' "$RUNNER_TEMP/live-worker.js"
+          ! grep -F 'maskable' "$RUNNER_TEMP/live-manifest.json"
+          grep -F '"name": "자유민턴 코트현황"' "$RUNNER_TEMP/live-manifest.json"
+
+          curl --fail --location --retry 3 --max-time 60 \
+            "$MAIN_URL?mode=user&app=user&source=live-verify-$BUST" > "$RUNNER_TEMP/live-main.html"
+          grep -F 'memberSelfSearchInput' "$RUNNER_TEMP/live-main.html"
+          grep -F 'memberSelfMatches' "$RUNNER_TEMP/live-main.html"
+
+      - name: Restoration summary
+        shell: bash
+        run: |
+          {
+            echo '## 자유민턴 원본 디자인 복원 완료'
+            echo
+            echo '- v1.6.37 index/CSS/setup source restored and hash-verified'
+            echo '- Google Drive 오류를 만든 v1.6.40 intent code removed'
+            echo '- Fresh MAIN/PUSH web-app deployments verified'
+            echo '- Deleted app is no longer treated as installed'
+            echo '- Name speech-bubble selection replaces the previously saved member'
+            echo '- Original dog PNG retained; maskable crop/zoom removed'
+            echo '- App title: 자유민턴 코트현황'
+          } >> "$GITHUB_STEP_SUMMARY"
