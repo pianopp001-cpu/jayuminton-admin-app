@@ -66,9 +66,18 @@ jobs:
           # Visible v1.6.37 UI files must stay byte-for-byte unchanged.
           printf '%s  %s\n' \
             '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
-            '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
             '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
             'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
+
+          # Code.js now needs one small additive function (member self profile edit), so
+          # it is no longer byte-locked - but we still confirm it starts from the known
+          # v1.6.37 baseline (or already carries our addition) before touching it.
+          CODE_HASH=$(sha256sum Code.js | awk '{print $1}')
+          if [ "$CODE_HASH" != '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' ] && \
+             ! grep -qF 'function updateMemberSelfProfile(' Code.js; then
+            echo 'Code.js is neither the known v1.6.37 baseline nor already patched' >&2
+            exit 1
+          fi
 
           python3 - <<'PY'
           from pathlib import Path
@@ -161,6 +170,87 @@ jobs:
           """,1)
               s=s[:a]+block+s[b:]
 
+          # Automatic Android intent handoff kept failing unpredictably (blank overlay
+          # miss, Apps Script sandbox iframe breaking postMessage, and finally an
+          # immediate Google Drive error on tap even after every known fix). Stop
+          # attempting it inside Kakao/Daangn's WebView. Show the install URL as plain
+          # selectable text instead so the user can long-press-copy it and paste into
+          # Chrome themselves - one tap, no risky navigation/intent at all.
+          old_embedded='\n'.join([
+            "  if (platform === 'android' && context === 'android-embedded') {",
+            "    showMemberSettingMessage('Chrome에서 자유민턴 코트현황을 여는 중입니다.');",
+            '    openMemberInstallInChrome(installUrl);',
+            '    return;',
+            '  }',
+          ])
+          new_embedded='\n'.join([
+            "  if (platform === 'android' && context === 'android-embedded') {",
+            "    showMemberSettingMessage('아래 주소를 길게 눌러 복사한 뒤 Chrome 앱을 열어 붙여넣어 주세요: ' + installUrl);",
+            '    return;',
+            '  }',
+          ])
+          if new_embedded not in s:
+              if old_embedded not in s:
+                  raise SystemExit('android-embedded branch changed unexpectedly')
+              s=s.replace(old_embedded,new_embedded,1)
+
+          # In user mode, blank grade/experience should not show "미입력" placeholders -
+          # just show whatever info actually exists, cleanly. Admin view is unchanged.
+          old_detail='\n'.join([
+            'function memberInfoDetailHtml(member, locationOverride) {',
+            '  normalizeMemberProfile(member);',
+            "  const grade = String(member && member.grade || '').trim();",
+            "  let experience = String(member && member.experience || '').trim();",
+            '',
+            "  experience = experience.replace(/^구력\\s*/i, '').trim();",
+            '',
+            '  if (!grade && !experience) {',
+            '    return \'<span class="member-info-detail is-missing">급수·구력 미입력</span>\';',
+            '  }',
+            '',
+            "  const gradeText = grade || '급수 미입력';",
+            "  const experienceText = experience ? '구력 ' + experience : '구력 미입력';",
+            '',
+            "  return '<span class=\"member-info-detail' +",
+            "    ((!grade || !experience) ? ' is-missing' : '') + '\">' +",
+            "    escapeMemberInfo(gradeText) + ' · ' + escapeMemberInfo(experienceText) +",
+            "    '</span>';",
+            '}',
+          ])
+          new_detail='\n'.join([
+            'function memberInfoDetailHtml(member, locationOverride) {',
+            '  normalizeMemberProfile(member);',
+            "  const grade = String(member && member.grade || '').trim();",
+            "  let experience = String(member && member.experience || '').trim();",
+            '',
+            "  experience = experience.replace(/^구력\\s*/i, '').trim();",
+            '',
+            '  if (!IS_ADMIN) {',
+            '    const parts = [];',
+            '    if (grade) parts.push(escapeMemberInfo(grade));',
+            "    if (experience) parts.push(escapeMemberInfo('구력 ' + experience));",
+            "    if (!parts.length) return '';",
+            "    return '<span class=\"member-info-detail\">' + parts.join(' · ') + '</span>';",
+            '  }',
+            '',
+            '  if (!grade && !experience) {',
+            '    return \'<span class="member-info-detail is-missing">급수·구력 미입력</span>\';',
+            '  }',
+            '',
+            "  const gradeText = grade || '급수 미입력';",
+            "  const experienceText = experience ? '구력 ' + experience : '구력 미입력';",
+            '',
+            "  return '<span class=\"member-info-detail' +",
+            "    ((!grade || !experience) ? ' is-missing' : '') + '\">' +",
+            "    escapeMemberInfo(gradeText) + ' · ' + escapeMemberInfo(experienceText) +",
+            "    '</span>';",
+            '}',
+          ])
+          if new_detail not in s:
+              if old_detail not in s:
+                  raise SystemExit('memberInfoDetailHtml changed unexpectedly')
+              s=s.replace(old_detail,new_detail,1)
+
           # Kakao/Daangn WebView often blanks or rewrites document.referrer, which made
           # isUnifiedMemberFrame() wrongly return false on the 2nd install tap and fall
           # through to a full top-level reload instead of asking the parent to hand off
@@ -203,39 +293,104 @@ jobs:
           if 'publishMemberAppInstallButtonRect();' not in after:
               s=s[:brace+1]+"\n  publishMemberAppInstallButtonRect();"+s[brace+1:]
 
-          # Diagnostic (temporary): show immediately, without waiting for a parent reply,
-          # whether postUnifiedMemberMessage actually attempted the send and what
-          # window.top/window.parent look like from inside this frame. This splits the
-          # "no reaction at all" symptom into send-side vs receive-side.
-          a=s.find('function openMemberInstallInChrome(installUrl) {')
-          if a<0:
-              raise SystemExit('openMemberInstallInChrome missing')
-          ofn_block,ofn_start,ofn_end=extract_block(s,a)
-          old_inner='\n'.join([
-            '  if (isUnifiedMemberFrame()) {',
-            "    postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {",
-            "      platform: 'android',",
-            '      browserContext: detectMemberInstallBrowserContext(),',
-            '      installUrl: installUrl',
-            '    });',
-            '    return;',
-            '  }',
+          # Diagnostic code from earlier debugging is no longer needed now that the
+          # embedded-Android install flow uses a plain copy-the-link message instead of
+          # the automatic Chrome intent handoff (see the requestMemberAppInstall patch
+          # above) - openMemberInstallInChrome is no longer called from that path.
+
+          # Member self-service edit: a small toggle button + inline form for gender,
+          # grade, and experience, appended next to the existing alarm/message area.
+          # Name changes still use the existing search/bubble flow untouched.
+          anchor2='function requestMemberAppInstall() {'
+          if anchor2 not in s:
+              raise SystemExit('requestMemberAppInstall entry point missing')
+          if 'function ensureMemberProfileEditor()' not in s:
+              editor_fn='\n'.join([
+                'function ensureMemberProfileEditor() {',
+                "  const message = document.getElementById('memberUnifiedSettingMessage');",
+                '  if (!message || !message.parentNode) return;',
+                '',
+                "  let toggle = document.getElementById('memberProfileEditToggle');",
+                "  let form = document.getElementById('memberProfileEditForm');",
+                '',
+                '  if (!toggle) {',
+                "    toggle = document.createElement('button');",
+                "    toggle.type = 'button';",
+                "    toggle.id = 'memberProfileEditToggle';",
+                "    toggle.textContent = '내 정보 수정';",
+                "    toggle.style.cssText = 'margin-top:6px;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid #d0d5dd;background:#fff;color:#333;cursor:pointer;';",
+                '    message.parentNode.insertBefore(toggle, message.nextSibling);',
+                '  }',
+                '',
+                '  if (!form) {',
+                "    form = document.createElement('div');",
+                "    form.id = 'memberProfileEditForm';",
+                "    form.style.cssText = 'display:none;margin-top:6px;gap:6px;flex-wrap:wrap;align-items:center;';",
+                '    form.innerHTML =',
+                '      \'<label style="font-size:12px;display:flex;align-items:center;gap:3px;"><input type="radio" name="memberProfileGender" value="male">남</label>\' +',
+                '      \'<label style="font-size:12px;display:flex;align-items:center;gap:3px;"><input type="radio" name="memberProfileGender" value="female">여</label>\' +',
+                '      \'<input id="memberProfileGradeInput" type="text" maxlength="12" placeholder="급수(예: A급)" style="flex:1;min-width:90px;padding:5px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;">\' +',
+                '      \'<input id="memberProfileExperienceInput" type="text" maxlength="20" placeholder="구력(예: 3년)" style="flex:1;min-width:90px;padding:5px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;">\' +',
+                '      \'<button type="button" id="memberProfileSaveButton" style="padding:5px 12px;border-radius:6px;border:0;background:#315efb;color:#fff;font-size:12px;">저장</button>\';',
+                '    toggle.parentNode.insertBefore(form, toggle.nextSibling);',
+                '',
+                "    toggle.addEventListener('click', function() {",
+                "      const visible = form.style.display !== 'none';",
+                "      form.style.display = visible ? 'none' : 'flex';",
+                '      if (!visible) {',
+                '        const genderMale = form.querySelector(\'input[name="memberProfileGender"][value="male"]\');',
+                '        const genderFemale = form.querySelector(\'input[name="memberProfileGender"][value="female"]\');',
+                "        const isFemale = !!member && member.gender === 'female';",
+                '        if (genderMale) genderMale.checked = !isFemale;',
+                '        if (genderFemale) genderFemale.checked = isFemale;',
+                "        const gradeInput = document.getElementById('memberProfileGradeInput');",
+                "        const experienceInput = document.getElementById('memberProfileExperienceInput');",
+                "        if (gradeInput) gradeInput.value = String((member && member.grade) || '');",
+                "        if (experienceInput) experienceInput.value = String((member && member.experience) || '');",
+                '      }',
+                '    });',
+                '',
+                "    document.getElementById('memberProfileSaveButton').addEventListener('click', function() {",
+                '      if (!member || !member.id) {',
+                "        showMemberSettingMessage('먼저 내 이름을 선택해 주세요.', true);",
+                '        return;',
+                '      }',
+                '      const genderChecked = form.querySelector(\'input[name="memberProfileGender"]:checked\');',
+                "      const gradeInput = document.getElementById('memberProfileGradeInput');",
+                "      const experienceInput = document.getElementById('memberProfileExperienceInput');",
+                "      const gender = genderChecked ? genderChecked.value : (member.gender === 'female' ? 'female' : 'male');",
+                "      const grade = gradeInput ? gradeInput.value.trim() : '';",
+                "      const experience = experienceInput ? experienceInput.value.trim() : '';",
+                "      showMemberSettingMessage('저장 중입니다...');",
+                '      google.script.run',
+                '        .withSuccessHandler(function(result) {',
+                "          member.gender = String((result && result.gender) || gender);",
+                "          member.grade = String((result && result.grade) || grade);",
+                "          member.experience = String((result && result.experience) || experience);",
+                "          showMemberSettingMessage('내 정보가 저장되었습니다.');",
+                "          form.style.display = 'none';",
+                '          renderMemberSelfSettings();',
+                '        })',
+                '        .withFailureHandler(function(error) {',
+                "          showMemberSettingMessage(String((error && error.message) || '저장에 실패했습니다.'), true);",
+                '        })',
+                '        .updateMemberSelfProfile(member.id, gender, grade, experience);',
+                '    });',
+                '  }',
+                '}',
+                '',
+                '',
+              ])
+              s=s.replace(anchor2,editor_fn+anchor2,1)
+
+          rerender_anchor='\n'.join([
+            '  if (!compact) renderMemberSelfMatches();',
+            '  requestAnimationFrame(publishMemberAppInstallButtonRect);',
           ])
-          if old_inner not in ofn_block:
-              raise SystemExit('openMemberInstallInChrome inner block mismatch')
-          new_inner='\n'.join([
-            '  if (isUnifiedMemberFrame()) {',
-            "    var __sendOk = postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {",
-            "      platform: 'android',",
-            '      browserContext: detectMemberInstallBrowserContext(),',
-            '      installUrl: installUrl',
-            '    });',
-            "    showMemberSettingMessage('[진단A] 전송=' + __sendOk + ' top!=window:' + (window.top !== window) + ' top!=parent:' + (window.top !== window.parent));",
-            '    return;',
-            '  }',
-          ])
-          ofn_block=ofn_block.replace(old_inner,new_inner,1)
-          s=s[:ofn_start]+ofn_block+s[ofn_end:]
+          if rerender_anchor not in s:
+              raise SystemExit('renderMemberSelfSettings tail changed unexpectedly')
+          if 'ensureMemberProfileEditor();' not in s:
+              s=s.replace(rerender_anchor,rerender_anchor+'\n  ensureMemberProfileEditor();',1)
 
           p.write_text(s,encoding='utf-8')
           PY
@@ -253,6 +408,80 @@ jobs:
           b=s.find('function openMemberInstallInSafari(installUrl) {',a)
           if 'intent://' in s[a:b]:
               raise SystemExit('MAIN still launches intent://')
+          PY
+
+          # Add the member self-service profile update endpoint to Code.js (additive
+          # only - every existing function stays untouched).
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Code.js')
+          s=p.read_text(encoding='utf-8')
+
+          if 'function updateMemberSelfProfile(' not in s:
+              anchor='function addMember(pin, name, gender, grade, experience) {'
+              if anchor not in s:
+                  raise SystemExit('addMember anchor missing in Code.js')
+              new_fn='\n'.join([
+                'function updateMemberSelfProfileUnlocked_(memberId, gender, grade, experience) {',
+                "  memberId = String(memberId == null ? '' : memberId).trim();",
+                "  gender = gender === 'female' ? 'female' : 'male';",
+                "  grade = String(grade == null ? '' : grade).trim();",
+                "  experience = String(experience == null ? '' : experience).trim();",
+                '',
+                '  if (!memberId) {',
+                "    throw new Error('회원 정보가 없습니다.');",
+                '  }',
+                '  if (grade.length > 12) {',
+                "    throw new Error('급수는 12자 이내로 입력하세요.');",
+                '  }',
+                '  if (experience.length > 20) {',
+                "    throw new Error('구력은 20자 이내로 입력하세요.');",
+                '  }',
+                '',
+                '  const members = readMembers_();',
+                '  let found = null;',
+                '  for (let i = 0; i < members.length; i++) {',
+                '    if (String(members[i].id) === memberId) {',
+                '      found = members[i];',
+                '      break;',
+                '    }',
+                '  }',
+                '  if (!found) {',
+                "    throw new Error('회원을 찾을 수 없습니다.');",
+                '  }',
+                '',
+                '  found.gender = gender;',
+                '  found.grade = grade;',
+                '  found.experience = experience;',
+                '  writeMembers_(members);',
+                '',
+                '  return {',
+                '    id: found.id,',
+                '    name: found.name,',
+                '    gender: gender,',
+                '    grade: grade,',
+                '    experience: experience',
+                '  };',
+                '}',
+                '',
+                'function updateMemberSelfProfile(memberId, gender, grade, experience) {',
+                '  return withDocumentLock_(',
+                "    '내 정보 수정',",
+                '    function() {',
+                '      return updateMemberSelfProfileUnlocked_(',
+                '        memberId,',
+                '        gender,',
+                '        grade,',
+                '        experience',
+                '      );',
+                '    }',
+                '  );',
+                '}',
+                '',
+                '',
+              ])
+              s=s.replace(anchor,new_fn+anchor,1)
+              p.write_text(s,encoding='utf-8')
           PY
 
           clasp push --force
