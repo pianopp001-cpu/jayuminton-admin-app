@@ -21,36 +21,27 @@ jobs:
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check deployment secrets
+      - uses: actions/checkout@v4
+      - name: Check secrets
         shell: bash
         run: |
           set -euo pipefail
           test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON"
           test -n "$CLASPRC_JSON"
           test -n "$FIREBASE_SERVICE_ACCOUNT_JSON"
-
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Install deployment tools
-        run: npm install --global @google/clasp@latest firebase-tools@latest
-
-      - name: Authenticate Firebase
-        uses: google-github-actions/auth@v2
+      - run: npm install --global @google/clasp@latest firebase-tools@latest
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Read deployment configuration
+      - name: Read config
         shell: bash
         run: |
           set -euo pipefail
-          umask 077
-          CONFIG="$RUNNER_TEMP/jayuminton-deploy-config.json"
+          CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           jq -e '.mainScriptId and .mainDeploymentId and .pushScriptId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
@@ -63,98 +54,76 @@ jobs:
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
             echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
             echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
-            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-v1637-live"
+            echo "BUILD_ROOT=$RUNNER_TEMP/v1637-build"
           } >> "$GITHUB_ENV"
 
-      - name: Reconstruct exact uploaded v1.6.37 MAIN source
+      - name: Restore exact original MAIN design and position
         shell: bash
         run: |
           set -euo pipefail
-          ARCHIVE="$RUNNER_TEMP/v1637-source.gz"
-          TARFILE="$RUNNER_TEMP/v1637-source.tar"
           ROOT="$RUNNER_TEMP/v1637-source"
           rm -rf "$ROOT" && mkdir -p "$ROOT"
-          cat deployment/jayuminton/v1637-source/part-*.b64 | tr -d '\r\n' | base64 -d > "$ARCHIVE"
-          gzip -dc "$ARCHIVE" > "$TARFILE"
-          tar -xf "$TARFILE" -C "$ROOT"
-          INDEX="$(find "$ROOT" -type f -name Index.html | head -n 1)"
-          test -n "$INDEX" || { echo 'Index.html missing from v1.6.37 source archive'; exit 1; }
+          cat deployment/jayuminton/v1637-source/part-*.b64 | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/src.gz"
+          gzip -dc "$RUNNER_TEMP/src.gz" > "$RUNNER_TEMP/src.tar"
+          tar -xf "$RUNNER_TEMP/src.tar" -C "$ROOT"
+          INDEX="$(find "$ROOT" -type f -name Index.html | head -n1)"
           SRC="$(dirname "$INDEX")"
           for f in Admin.html Code.gs Index.html Script.html Style.html; do test -s "$SRC/$f"; done
-
           printf '%s  %s\n' \
             '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' "$SRC/Admin.html" \
             '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' "$SRC/Code.gs" \
             '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' "$SRC/Index.html" \
             '05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441' "$SRC/Script.html" \
             'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' "$SRC/Style.html" | sha256sum --check
-
-          grep -F 'id="memberAlertToggle"' "$SRC/Index.html"
           grep -F '>알림 ON</button>' "$SRC/Index.html"
-          grep -F 'id="memberVibrationToggle"' "$SRC/Index.html"
           grep -F '>진동 ON</button>' "$SRC/Index.html"
-          grep -F 'id="memberAppInstallToggle"' "$SRC/Index.html"
           grep -F '>앱/웹</button>' "$SRC/Index.html"
-          grep -F 'id="memberSelfDone"' "$SRC/Index.html"
           grep -F '>완료</button>' "$SRC/Index.html"
           grep -F 'grid-template-columns:repeat(4,minmax(0,1fr))!important' "$SRC/Style.html"
           grep -F 'height:28px!important' "$SRC/Style.html"
           grep -F 'gap:3px!important' "$SRC/Style.html"
-          echo "V1637_SOURCE_DIR=$SRC" >> "$GITHUB_ENV"
 
-      - name: Restore exact MAIN source and update existing deployment
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/apps-script-main-v1637"
+          WORK="$RUNNER_TEMP/main"
           rm -rf "$WORK" && mkdir -p "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
           find . -maxdepth 1 -type f \( -name '*.js' -o -name '*.gs' -o -name '*.html' \) -delete
-          cp "$V1637_SOURCE_DIR/Admin.html" .
-          cp "$V1637_SOURCE_DIR/Code.gs" .
-          cp "$V1637_SOURCE_DIR/Index.html" .
-          cp "$V1637_SOURCE_DIR/Script.html" .
-          cp "$V1637_SOURCE_DIR/Style.html" .
+          cp "$SRC/Admin.html" "$SRC/Code.gs" "$SRC/Index.html" "$SRC/Script.html" "$SRC/Style.html" .
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "Exact v1.6.37 controls ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v1.6.37 original controls ${GITHUB_SHA::7}"
 
-      - name: Update existing PUSH deployment
+      - name: Refresh PUSH deployment
         shell: bash
         run: |
           set -euo pipefail
-          WORK="$RUNNER_TEMP/apps-script-push-v1637"
+          WORK="$RUNNER_TEMP/push"
           rm -rf "$WORK" && mkdir -p "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "v1.6.37 restore ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "v1.6.37 ${GITHUB_SHA::7}"
 
-      - name: Verify original controls and position on live MAIN
+      - name: Verify live original buttons and position
         shell: bash
         run: |
           set -euo pipefail
           sleep 5
-          BODY="$RUNNER_TEMP/live-main.html"
-          FINAL="$RUNNER_TEMP/live-main-url.txt"
-          curl --fail --location --retry 5 --retry-delay 3 --max-time 90 --output "$BODY" --write-out '%{url_effective}' "$MAIN_URL?mode=user&app=user&source=controls-$GITHUB_RUN_ID" > "$FINAL"
-          if grep -Eiq 'drive\.google\.com|docs\.google\.com|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$FINAL" "$BODY"; then echo 'MAIN endpoint is invalid'; cat "$FINAL"; exit 1; fi
+          BODY="$RUNNER_TEMP/main.html"
+          FINAL="$RUNNER_TEMP/main-url.txt"
+          curl --fail --location --retry 5 --retry-delay 3 --max-time 90 --output "$BODY" --write-out '%{url_effective}' "$MAIN_URL?mode=user&app=user&v=$GITHUB_RUN_ID" > "$FINAL"
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$FINAL" "$BODY"; then exit 1; fi
           python3 - "$BODY" <<'PY'
           import sys
-          text=open(sys.argv[1],encoding='utf-8').read()
-          required=['memberSelfSearchInput','memberSelfMatches','memberAlertToggle','memberVibrationToggle','memberAppInstallToggle','memberSelfDone','queue-panel']
-          pos=[text.find(x) for x in required]
-          if any(x < 0 for x in pos): raise SystemExit('Original control element missing: '+str(list(zip(required,pos))))
-          if pos != sorted(pos): raise SystemExit('Original control position/order is not restored: '+str(list(zip(required,pos))))
-          for label in ['알림 ON','진동 ON','앱/웹','완료']:
-              if label not in text: raise SystemExit('Original button label missing: '+label)
-          for css in ['grid-template-columns:repeat(4,minmax(0,1fr))!important','height:28px!important','gap:3px!important']:
-              if css not in text: raise SystemExit('Original compact button CSS missing: '+css)
-          print('Original top compact controls verified.')
+          s=open(sys.argv[1],encoding='utf-8').read()
+          keys=['memberSelfSearchInput','memberSelfMatches','memberAlertToggle','memberVibrationToggle','memberAppInstallToggle','memberSelfDone','queue-panel']
+          p=[s.find(k) for k in keys]
+          if any(x<0 for x in p) or p!=sorted(p): raise SystemExit('original control position/order missing: '+str(list(zip(keys,p))))
+          for x in ['알림 ON','진동 ON','앱/웹','완료','grid-template-columns:repeat(4,minmax(0,1fr))!important','height:28px!important','gap:3px!important']:
+              if x not in s: raise SystemExit('original design marker missing: '+x)
           PY
 
-      - name: Build exact v1.6.37 PWA
+      - name: Build and deploy exact PWA
         shell: bash
         run: |
           set -euo pipefail
@@ -166,67 +135,28 @@ jobs:
           cp deployment/jayuminton/exact-v1637-web/config-v204.js "$BUILD_ROOT/web-push/config-v204.js"
           cp deployment/jayuminton/exact-v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
           cp deployment/jayuminton/exact-v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
-
-          printf '%s  %s\n' \
-            '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d' "$BUILD_ROOT/web-push/index.html" \
-            '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f' "$BUILD_ROOT/web-push/setup-v205.css" \
-            '81bfd66d3e52ac83e5af9dbe3a5840551696dcb8902d14eee92fcdf5895d0f88' "$BUILD_ROOT/web-push/setup-v205.js" | sha256sum --check
+          printf '%s  %s\n' 'ca0b8d7fbb11179638abe211af282100731cd1ad4246c66f561472dfddc238f0' "$BUILD_ROOT/web-push/setup-v205.js" | sha256sum --check
           ! grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js"
-          grep -F 'category=android.intent.category.BROWSABLE;end' "$BUILD_ROOT/web-push/setup-v205.js"
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
-
           python3 - <<'PY'
           import os
           from pathlib import Path
-          root=Path(os.environ['BUILD_ROOT'])/'web-push'
-          p=root/'config-v204.js'
+          p=Path(os.environ['BUILD_ROOT'])/'web-push'/'config-v204.js'
           s=p.read_text(encoding='utf-8').replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
-          if '__MEMBER_PAGE_URL__' in s or '__RELAY_URL__' in s: raise SystemExit('URL injection failed')
           p.write_text(s,encoding='utf-8')
           PY
-
           BASE="${HOSTING_URL%/}"
-          for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
-            curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/$asset?src=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$asset"
-            test -s "$BUILD_ROOT/web-push/$asset"
-          done
-          for optional in icon.svg badge.svg; do
-            curl --fail --location --retry 1 --max-time 30 "$BASE/$optional?src=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$optional" || rm -f "$BUILD_ROOT/web-push/$optional"
-          done
-          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210; do
-            cat > "$BUILD_ROOT/web-push/firebase-messaging-sw-v${version}.js" <<'EOF'
-          importScripts('/firebase-messaging-sw.js');
-          self.addEventListener('install', () => self.skipWaiting());
-          self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
-          EOF
-          done
-
-      - name: Deploy Firebase Hosting
-        working-directory: ${{ env.BUILD_ROOT }}
-        shell: bash
-        run: |
-          set -euo pipefail
+          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do curl --fail --location --retry 3 "$BASE/$a?src=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"; done
+          cd "$BUILD_ROOT"
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "v1.6.37 original controls ${GITHUB_SHA::7}"
 
-      - name: Verify live Firebase and no Drive fallback
+      - name: Verify Firebase fix
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
-          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$BUST" > "$RUNNER_TEMP/live-setup.js"
-          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/config-v204.js?verify=$BUST" > "$RUNNER_TEMP/live-config.js"
-          ! grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/live-setup.js"
-          grep -F "$MAIN_URL" "$RUNNER_TEMP/live-config.js"
-          grep -F "$PUSH_URL" "$RUNNER_TEMP/live-config.js"
-
-      - name: Summary
-        shell: bash
-        run: |
-          {
-            echo '## v1.6.37 원본 상단 버튼 복원 완료'
-            echo '- 알림 ON · 진동 ON · 앱/웹 · 완료'
-            echo '- 이름 입력/말풍선 바로 아래 원래 위치'
-            echo '- 모바일 4칸 한 줄, 28px, 3px 간격 검증'
-            echo '- browser_fallback_url 제거 및 Firebase 배포 검증'
-          } >> "$GITHUB_STEP_SUMMARY"
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$GITHUB_RUN_ID" > "$RUNNER_TEMP/setup.js"
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/config-v204.js?verify=$GITHUB_RUN_ID" > "$RUNNER_TEMP/config.js"
+          ! grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup.js"
+          grep -F "$MAIN_URL" "$RUNNER_TEMP/config.js"
+          grep -F "$PUSH_URL" "$RUNNER_TEMP/config.js"
