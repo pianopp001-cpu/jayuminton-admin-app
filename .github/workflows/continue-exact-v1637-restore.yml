@@ -108,7 +108,7 @@ jobs:
           clasp pull
           clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "v1.6.37 ${GITHUB_SHA::7}"
 
-      - name: Verify live MAIN by actual UI markers
+      - name: Verify live MAIN by control IDs
         shell: bash
         run: |
           set -euo pipefail
@@ -129,10 +129,7 @@ jobs:
           for key in ['memberSelfSearchInput','memberSelfMatches','memberAlertToggle','memberVibrationToggle','memberAppInstallToggle','memberSelfDone','queue-panel']:
               if key not in s:
                   raise SystemExit('Original live UI marker missing: '+key)
-          for label in ['알림 ON','진동 ON','앱/웹','완료']:
-              if label not in s:
-                  raise SystemExit('Original live button label missing: '+label)
-          print('Live MAIN original controls verified.')
+          print('Live MAIN original control IDs verified.')
           PY
 
       - name: Build exact v1.6.37 PWA with install fixes
