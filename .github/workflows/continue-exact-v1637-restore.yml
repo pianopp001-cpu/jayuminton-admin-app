@@ -10,7 +10,7 @@ on:
       - 'deployment/jayuminton/v1637-source/**'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jayuminton-exact-v1637-live
@@ -89,6 +89,8 @@ jobs:
           grep -F 'grid-template-columns:repeat(4,minmax(0,1fr))!important' "$SRC/Style.html"
           grep -F 'height:28px!important' "$SRC/Style.html"
           grep -F 'gap:3px!important' "$SRC/Style.html"
+          ! grep -F 'Chrome에서 열기 + 알림 허용' "$SRC/Index.html" "$SRC/Script.html"
+          ! grep -F '내 순서 준비 미리 알림 및 진동' "$SRC/Index.html" "$SRC/Script.html"
 
           WORK="$RUNNER_TEMP/main"
           rm -rf "$WORK" && mkdir -p "$WORK"
@@ -120,6 +122,8 @@ jobs:
           FINAL="$RUNNER_TEMP/main-url.txt"
           curl --fail --location --retry 5 --retry-delay 3 --max-time 90 --output "$BODY" --write-out '%{url_effective}' "$MAIN_URL?mode=user&app=user&v=$GITHUB_RUN_ID" > "$FINAL"
           if grep -Eiq 'drive\.google\.com|docs\.google\.com|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$FINAL" "$BODY"; then exit 1; fi
+          ! grep -F 'Chrome에서 열기 + 알림 허용' "$BODY"
+          ! grep -F '내 순서 준비 미리 알림 및 진동' "$BODY"
           python3 - "$BODY" <<'PY'
           import sys
           s=open(sys.argv[1],encoding='utf-8').read()
@@ -167,3 +171,17 @@ jobs:
           ! grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup.js"
           grep -F "$MAIN_URL" "$RUNNER_TEMP/config.js"
           grep -F "$PUSH_URL" "$RUNNER_TEMP/config.js"
+
+      - name: Record live restore result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS='${{ job.status }}'
+          printf 'status=%s\ncommit=%s\nrun=%s\n' "$STATUS" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/jayuminton/EXACT_V1637_LIVE_RESULT.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/EXACT_V1637_LIVE_RESULT.txt
+          git commit -m "Record exact v1.6.37 live restore: $STATUS" || exit 0
+          git pull --rebase origin main || true
+          git push
