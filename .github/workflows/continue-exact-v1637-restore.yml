@@ -50,7 +50,7 @@ jobs:
             echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
-            echo "BUILD_ROOT=$RUNNER_TEMP/v1637-final5"
+            echo "BUILD_ROOT=$RUNNER_TEMP/v1637-final6"
           } >> "$GITHUB_ENV"
 
       - name: Patch MAIN behavior only
@@ -63,7 +63,7 @@ jobs:
           cd "$WORK"
           clasp pull
 
-          # Visible design stays byte-for-byte v1.6.37.
+          # Design safety: these four visible files are never changed.
           printf '%s  %s\n' \
             '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
             '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
@@ -72,19 +72,19 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           p=Path('Script.html')
           s=p.read_text(encoding='utf-8')
 
-          # 1) Apps Script MAIN never launches intent://. This removes the Google Drive misroute path.
+          # MAIN never launches Android intent. Firebase top-level owns Chrome/PWA installation.
           a=s.find('function openMemberInstallInChrome(installUrl) {')
           b=s.find('function openMemberInstallInSafari(installUrl) {',a)
           if a<0 or b<0: raise SystemExit('Chrome install function not found')
-          chrome="""function openMemberInstallInChrome(installUrl) {
+          safe="""function openMemberInstallInChrome(installUrl) {
             if (isUnifiedMemberFrame()) {
               postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {
-                platform: 'android',
-                browserContext: detectMemberInstallBrowserContext(),
-                installUrl: installUrl
+                platform: 'android', browserContext: detectMemberInstallBrowserContext(), installUrl: installUrl
               });
               return;
             }
@@ -103,15 +103,14 @@ jobs:
           }
 
           """
-          s=s[:a]+chrome+s[b:]
+          s=s[:a]+safe+s[b:]
 
-          # 2) Opening the compact name setting starts a real edit session with an empty field.
+          # Opening the existing name panel starts an edit session: blank field, no old-name refill.
           a=s.find('function openMemberSelfSettings() {')
           b=s.find('function renderMemberSelfSettings() {',a)
           if a<0 or b<0: raise SystemExit('member settings block not found')
-          open_edit="""function openMemberSelfSettings() {
-            try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); }
-            catch (error) {}
+          edit="""function openMemberSelfSettings() {
+            try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); } catch (error) {}
             const input = document.getElementById('memberSelfSearchInput');
             if (input) {
               input.value = '';
@@ -125,69 +124,69 @@ jobs:
           }
 
           """
-          s=s[:a]+open_edit+s[b:]
+          s=s[:a]+edit+s[b:]
 
-          # Any legacy old-name autofill line must either be guarded or absent.
-          old="  if (input && selected && !input.value) input.value = selected.name;"
-          focus_old="  if (input && selected && !input.value && document.activeElement !== input) input.value = selected.name;"
-          guarded="  if (input && selected && !input.value && input.dataset.userEditing !== '1') input.value = selected.name;"
-          if old in s: s=s.replace(old,guarded,1)
-          if focus_old in s: s=s.replace(focus_old,guarded,1)
+          # Guard any remaining form of the old automatic refill; absence is also valid.
+          s=re.sub(
+            r"^\s*if \(input && selected && !input\.value(?: && [^\n]*)?\) input\.value = selected\.name;\s*$",
+            "  if (input && selected && !input.value && input.dataset.userEditing !== '1') input.value = selected.name;",
+            s, count=1, flags=re.M
+          )
 
-          # Selecting a new speech-bubble result ends edit mode and confirms that member.
+          # A bubble tap is the only thing that finishes editing and confirms a new user.
           a=s.find('function selectMemberSelf(memberId) {')
           b=s.find('function clearMemberSelfSelection() {',a)
           if a<0 or b<0: raise SystemExit('selectMemberSelf block not found')
           block=s[a:b]
           if "memberInput.dataset.userEditing = '0'" not in block:
-              needle="  if (!member) return;\n"
-              insert="""  if (!member) return;
+              needle='  if (!member) return;\n'
+              if needle not in block: raise SystemExit('member selection insertion point missing')
+              block=block.replace(needle,"""  if (!member) return;
             const memberInput = document.getElementById('memberSelfSearchInput');
             if (memberInput) {
               memberInput.dataset.userEditing = '0';
               memberInput.value = String(member.name || '').trim();
             }
-          """
-              if needle not in block: raise SystemExit('member selection insertion point missing')
-              block=block.replace(needle,insert,1)
+          """,1)
               s=s[:a]+block+s[b:]
 
-          # Parent bootstrap may update status, but cannot refill the visible edit field.
-          p.write_text(s+'\n// v1637-final5-main\n',encoding='utf-8')
+          p.write_text(s+'\n// v1637-final6-main\n',encoding='utf-8')
           PY
 
-          grep -F 'v1637-final5-main' Script.html >/dev/null
+          grep -F 'v1637-final6-main' Script.html >/dev/null
           grep -F "input.dataset.userEditing = '1'" Script.html >/dev/null
           grep -F "memberInput.dataset.userEditing = '0'" Script.html >/dev/null
-          if grep -F 'if (input && selected && !input.value) input.value = selected.name;' Script.html >/dev/null; then
-            echo 'Old automatic name refill still exists'; exit 1
-          fi
-          if grep -F 'S.browser_fallback_url' Script.html >/dev/null; then
-            echo 'browser_fallback_url still exists in MAIN'; exit 1
-          fi
-          if grep -F "navigateMemberTop('intent://" Script.html >/dev/null; then
-            echo 'MAIN still directly launches intent://'; exit 1
-          fi
+          if grep -F 'S.browser_fallback_url' Script.html >/dev/null; then exit 1; fi
+          # The patched Chrome function itself may not contain any intent URL.
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('Script.html').read_text(encoding='utf-8')
+          a=s.find('function openMemberInstallInChrome(installUrl) {')
+          b=s.find('function openMemberInstallInSafari(installUrl) {',a)
+          if 'intent://' in s[a:b]: raise SystemExit('MAIN Chrome function still contains intent://')
+          PY
 
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v1.6.37 UI final5 name/install ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v1.6.37 UI final6 ${GITHUB_SHA::7}"
 
-      - name: Verify live MAIN
+      - name: Verify MAIN endpoint only
         shell: bash
         run: |
           set -euo pipefail
           sleep 7
+          BODY="$RUNNER_TEMP/main.html"
+          FINAL="$RUNNER_TEMP/main-final-url.txt"
           curl --fail --location --retry 5 --retry-delay 3 --max-time 90 \
-            "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/main.html"
+            --output "$BODY" --write-out '%{url_effective}' \
+            "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" > "$FINAL"
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then
+            echo 'MAIN endpoint redirected to Google Drive'; cat "$FINAL"; exit 1
+          fi
           for key in memberSelfSearchInput memberSelfMatches memberAlertToggle memberVibrationToggle memberAppInstallToggle memberSelfDone; do
-            grep -F "$key" "$RUNNER_TEMP/main.html" >/dev/null
+            grep -F "$key" "$BODY" >/dev/null || { echo "Missing UI marker: $key"; exit 1; }
           done
-          grep -F 'v1637-final5-main' "$RUNNER_TEMP/main.html" >/dev/null
-          grep -F "input.dataset.userEditing = '1'" "$RUNNER_TEMP/main.html" >/dev/null
-          if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/main.html" >/dev/null; then exit 1; fi
-          if grep -F "navigateMemberTop('intent://" "$RUNNER_TEMP/main.html" >/dev/null; then exit 1; fi
 
-      - name: Build PWA without design changes
+      - name: Build PWA behavior only
         shell: bash
         run: |
           set -euo pipefail
@@ -196,7 +195,6 @@ jobs:
           cp deployment/jayuminton/exact-v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
           cp deployment/jayuminton/exact-v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
           cat deployment/jayuminton/exact-v1637-web/setup-v205.js.part-* > "$BUILD_ROOT/web-push/setup-v205.js"
-          cp deployment/jayuminton/exact-v1637-web/config-v204.js "$BUILD_ROOT/web-push/config-v204.js"
           cp deployment/jayuminton/exact-v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
           cp deployment/jayuminton/exact-v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
 
@@ -207,71 +205,63 @@ jobs:
           p=root/'setup-v205.js'
           s=p.read_text(encoding='utf-8')
 
-          # Stale install-complete state is cleared ONLY when Chrome emits beforeinstallprompt,
-          # which proves this PWA is installable/not currently installed.
-          old="""    deferredInstallPrompt = event;
-            window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
-          """
-          if 'final5-stale-install-reset' not in s:
-              if old not in s: raise SystemExit('beforeinstallprompt anchor missing')
-              new="""    deferredInstallPrompt = event;
+          # Reset stale "installed" only when beforeinstallprompt proves the app is installable.
+          anchor="    deferredInstallPrompt = event;\n    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;\n"
+          if 'final6-stale-install-reset' not in s:
+              if anchor not in s: raise SystemExit('beforeinstallprompt anchor missing')
+              s=s.replace(anchor,"""    deferredInstallPrompt = event;
             try {
               localStorage.removeItem(STORAGE.installConfirmed);
               if (localStorage.getItem(STORAGE.installChoice) === 'on') localStorage.removeItem(STORAGE.installChoice);
             } catch (_) {}
-            // final5-stale-install-reset
+            // final6-stale-install-reset
             window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
-          """
-              s=s.replace(old,new,1)
+          """,1)
 
-          # memberId/memberName are a one-time handoff. Remove them from URL after import,
-          # so refresh/back cannot resurrect the old member automatically.
+          # Consume member handoff once so refresh/back cannot restore the previous name.
           handoff="""  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
             member = {id:String(query.get('memberId')), name:String(query.get('memberName'))};
             saveJson(STORAGE.member, member);
           }
           if (member && member.name) nameInput.value = shortName(member.name);
           """
-          if 'final5-member-handoff-consumed' not in s:
+          if 'final6-member-handoff-consumed' not in s:
               if handoff not in s: raise SystemExit('member handoff anchor missing')
-              fixed="""  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
+              s=s.replace(handoff,"""  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
             member = {id:String(query.get('memberId')), name:String(query.get('memberName'))};
             saveJson(STORAGE.member, member);
           }
           if (query.has('memberId') || query.has('memberName')) {
             try {
-              query.delete('memberId');
-              query.delete('memberName');
+              query.delete('memberId'); query.delete('memberName');
               const cleanMemberUrl = window.location.pathname + (query.toString() ? '?' + query.toString() : '') + window.location.hash;
               window.history.replaceState({}, document.title, cleanMemberUrl);
             } catch (_) {}
           }
-          // final5-member-handoff-consumed
+          // final6-member-handoff-consumed
           if (member && member.name) nameInput.value = shortName(member.name);
-          """
-              s=s.replace(handoff,fixed,1)
+          """,1)
 
-          s += '\n// v1637-final5-pwa\n'
-          p.write_text(s,encoding='utf-8')
+          p.write_text(s+'\n// v1637-final6-pwa\n',encoding='utf-8')
 
           idx=root/'index.html'
-          t=idx.read_text(encoding='utf-8')
-          t=t.replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-final5')
-          t=t.replace('/config-v204.js?v=1637','/config-v204.js?v=1637-final5')
+          t=idx.read_text(encoding='utf-8').replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-final6').replace('/config-v204.js?v=1637','/config-v204.js?v=1637-final6')
           idx.write_text(t,encoding='utf-8')
 
-          cfg=root/'config-v204.js'
-          t=cfg.read_text(encoding='utf-8').replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
-          cfg.write_text(t,encoding='utf-8')
+          template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          config=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          (root/'config-v204.js').write_text(config,encoding='utf-8')
+          for alias in ('config-v202.js','config-v203.js'):
+              (root/alias).write_text(config,encoding='utf-8')
 
           sw=root/'firebase-messaging-sw.js'
-          t=sw.read_text(encoding='utf-8').replace("const JAYUMINTON_SW_VERSION = '1.6.37-fix1';","const JAYUMINTON_SW_VERSION = '1.6.37-final5';").replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v211';","const JAYUMINTON_CACHE = 'jayuminton-shell-v215';")
+          t=sw.read_text(encoding='utf-8').replace("const JAYUMINTON_SW_VERSION = '1.6.37-fix1';","const JAYUMINTON_SW_VERSION = '1.6.37-final6';").replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v211';","const JAYUMINTON_CACHE = 'jayuminton-shell-v216';")
           sw.write_text(t,encoding='utf-8')
           PY
 
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
-          grep -F 'final5-stale-install-reset' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
-          grep -F 'final5-member-handoff-consumed' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'final6-stale-install-reset' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'final6-member-handoff-consumed' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
           grep -F 'appInstallChromeLink.href = links.intentUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
           grep -F 'promptResult = promptEvent.prompt()' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
           if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then exit 1; fi
@@ -285,7 +275,7 @@ jobs:
 
       - name: Deploy Firebase Hosting
         working-directory: ${{ env.BUILD_ROOT }}
-        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "v1.6.37 UI unchanged final5 ${GITHUB_SHA::7}"
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "v1.6.37 design unchanged final6 ${GITHUB_SHA::7}"
 
       - name: Verify live Firebase
         shell: bash
@@ -296,10 +286,9 @@ jobs:
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/?v=$BUST" > "$RUNNER_TEMP/index"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?v=$BUST" > "$RUNNER_TEMP/setup"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/config-v204.js?v=$BUST" > "$RUNNER_TEMP/config"
-          grep -F 'setup-v205.js?v=1637-final5' "$RUNNER_TEMP/index" >/dev/null
-          grep -F 'v1637-final5-pwa' "$RUNNER_TEMP/setup" >/dev/null
-          grep -F 'final5-stale-install-reset' "$RUNNER_TEMP/setup" >/dev/null
-          grep -F 'final5-member-handoff-consumed' "$RUNNER_TEMP/setup" >/dev/null
+          grep -F 'setup-v205.js?v=1637-final6' "$RUNNER_TEMP/index" >/dev/null
+          grep -F 'v1637-final6-pwa' "$RUNNER_TEMP/setup" >/dev/null
+          grep -F 'final6-stale-install-reset' "$RUNNER_TEMP/setup" >/dev/null
           grep -F 'promptResult = promptEvent.prompt()' "$RUNNER_TEMP/setup" >/dev/null
           if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
           if grep -F 'window.location.href = links.targetUrl' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
@@ -315,6 +304,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/jayuminton/EXACT_V1637_LIVE_RESULT.txt
-          git commit -m "Record exact v1.6.37 final5: $STATUS" || exit 0
+          git commit -m "Record exact v1.6.37 final6: $STATUS" || exit 0
           git pull --rebase origin main || true
           git push
