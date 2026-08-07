@@ -1,4 +1,4 @@
-name: Restore Jayuminton v1.6.37
+name: Fix Jayuminton member and install
 
 on:
   workflow_dispatch:
@@ -6,181 +6,216 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/deploy-pwa.yml'
-      - 'deployment/jayuminton/v1637-web/**'
-      - 'deployment/jayuminton/v1637-source/**'
+      - 'deployment/jayuminton/exact-v1637-web/**'
+      - 'deployment/jayuminton/v1637-web/index.html'
+      - 'deployment/jayuminton/v1637-web/setup-v205.css'
+      - 'deployment/jayuminton/v1637-web/manifest.webmanifest'
+      - 'deployment/jayuminton/v1637-web/firebase-messaging-sw.js'
+      - 'deployment/jayuminton/v1637-web/config-v204.template.js'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: jayuminton-v1637-original-restore-v3
+  group: jayuminton-member-install-fix-v1
   cancel-in-progress: true
 
 jobs:
-  restore:
-    name: Restore original v1.6.37 UI
+  deploy:
+    name: Keep v1.6.37 UI and restore fixed behavior
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check deployment secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON" || { echo 'JAYUMINTON_DEPLOY_CONFIG_JSON is missing.'; exit 1; }
-          test -n "$CLASPRC_JSON" || { echo 'CLASPRC_JSON is missing.'; exit 1; }
-          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || { echo 'FIREBASE_SERVICE_ACCOUNT_JSON is missing.'; exit 1; }
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Install deployment tools
-        run: npm install --global firebase-tools@latest @google/clasp@latest
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
 
       - name: Authenticate Firebase
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Read original deployment configuration
+      - name: Read deployment configuration
         shell: bash
         run: |
           set -euo pipefail
-          umask 077
+          test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON" || { echo 'JAYUMINTON_DEPLOY_CONFIG_JSON is missing.'; exit 1; }
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || { echo 'FIREBASE_SERVICE_ACCOUNT_JSON is missing.'; exit 1; }
           CONFIG="$RUNNER_TEMP/jayuminton-deploy-config.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
-          jq -e '.mainScriptId and .mainDeploymentId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
-          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
-          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$CONFIG")"
+          jq -e '.mainDeploymentId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
+          MAIN_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          PUSH_ID="$(jq -r '.pushDeploymentId' "$CONFIG")"
+          [[ "$MAIN_ID" =~ ^[A-Za-z0-9_-]+$ ]] || { echo 'Invalid MAIN deployment ID.'; exit 1; }
+          [[ "$PUSH_ID" =~ ^[A-Za-z0-9_-]+$ ]] || { echo 'Invalid PUSH deployment ID.'; exit 1; }
           {
-            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
-            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
-            echo "MAIN_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec"
-            echo "PUSH_URL=https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec"
+            echo "MAIN_URL=https://script.google.com/macros/s/$MAIN_ID/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$PUSH_ID/exec"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
-            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-v1637-build"
+            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-member-install-fix"
           } >> "$GITHUB_ENV"
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
 
-      - name: Reconstruct exact uploaded v1.6.37 MAIN source
+      - name: Verify current member page endpoint
         shell: bash
         run: |
           set -euo pipefail
-          ARCHIVE="$RUNNER_TEMP/v1637-source.gz"
-          PAYLOAD="$RUNNER_TEMP/v1637-source.tar"
-          SRCROOT="$RUNNER_TEMP/v1637-source"
-          rm -rf "$SRCROOT" && mkdir -p "$SRCROOT"
-          cat deployment/jayuminton/v1637-source/part-*.b64 | tr -d '\r\n' | base64 -d > "$ARCHIVE"
-          gzip -dc "$ARCHIVE" > "$PAYLOAD"
-          tar -tf "$PAYLOAD" >/dev/null
-          tar -xf "$PAYLOAD" -C "$SRCROOT"
-          CODE="$(find "$SRCROOT" -type f -name Code.gs | head -n 1)"
-          test -n "$CODE"
-          SOURCE_DIR="$(dirname "$CODE")"
-          for f in Code.gs Index.html Style.html Script.html Admin.html; do test -s "$SOURCE_DIR/$f"; done
-
-          echo '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b  '"$SOURCE_DIR/Code.gs" | sha256sum -c -
-          echo '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c  '"$SOURCE_DIR/Index.html" | sha256sum -c -
-          echo 'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625  '"$SOURCE_DIR/Style.html" | sha256sum -c -
-          echo '05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441  '"$SOURCE_DIR/Script.html" | sha256sum -c -
-          echo '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0  '"$SOURCE_DIR/Admin.html" | sha256sum -c -
-
-          grep -F 'id="memberAlertToggle"' "$SOURCE_DIR/Index.html" >/dev/null
-          grep -F '>알림 ON</button>' "$SOURCE_DIR/Index.html" >/dev/null
-          grep -F 'id="memberVibrationToggle"' "$SOURCE_DIR/Index.html" >/dev/null
-          grep -F '>진동 ON</button>' "$SOURCE_DIR/Index.html" >/dev/null
-          grep -F 'id="memberAppInstallToggle"' "$SOURCE_DIR/Index.html" >/dev/null
-          grep -F 'class="member-self-toggle-row member-self-unified-toggle-row"' "$SOURCE_DIR/Index.html" >/dev/null
-          grep -F '.member-self-unified-toggle-row button{min-height:29px' "$SOURCE_DIR/Style.html" >/dev/null
-          grep -F 'function selectMemberSelf(memberId)' "$SOURCE_DIR/Script.html" >/dev/null
-          echo "V1637_SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
-
-      - name: Push exact ZIP MAIN source and update original deployment ID
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/main-live"
-          rm -rf "$WORK" && mkdir -p "$WORK"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
-          cd "$WORK"
-
-          # Pull only to preserve the real appsscript.json manifest from the Apps Script project.
-          clasp pull
-          test -s appsscript.json || { echo 'MAIN appsscript.json was not pulled.'; exit 1; }
-          find . -maxdepth 1 -type f \( -name '*.gs' -o -name '*.html' \) -delete
-          cp "$V1637_SOURCE_DIR/Code.gs" .
-          cp "$V1637_SOURCE_DIR/Index.html" .
-          cp "$V1637_SOURCE_DIR/Style.html" .
-          cp "$V1637_SOURCE_DIR/Script.html" .
-          cp "$V1637_SOURCE_DIR/Admin.html" .
-
-          # This is the same deployment method used by the uploaded v1.6.37 oneclick-deploy.ps1.
-          clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "Jayuminton original v1.6.37 ${GITHUB_SHA::7}"
-
-      - name: Verify original compact buttons are actually live
-        shell: bash
-        run: |
-          set -euo pipefail
-          BODY="$RUNNER_TEMP/main-live.html"
-          FINAL="$RUNNER_TEMP/main-final.txt"
-          curl --fail --location --retry 5 --retry-delay 3 --max-time 90 \
+          BODY="$RUNNER_TEMP/member-page.html"
+          FINAL="$RUNNER_TEMP/member-final-url.txt"
+          curl --fail --location --retry 4 --retry-delay 3 --max-time 90 \
             --output "$BODY" --write-out '%{url_effective}' \
-            "$MAIN_URL?mode=user&app=user&restore=$GITHUB_RUN_ID" > "$FINAL"
-
-          if grep -Eiq 'drive\.google\.com|docs\.google\.com|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$FINAL" "$BODY"; then
-            echo 'MAIN URL still points to a missing Google page.'
+            "$MAIN_URL?mode=user&app=user&source=pwa-fix" > "$FINAL"
+          test -s "$BODY"
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지|file you have requested does not exist' "$FINAL" "$BODY"; then
+            echo 'MAIN member page is not valid.'
             cat "$FINAL"
             exit 1
           fi
+          grep -F 'memberSelfSearchInput' "$BODY" >/dev/null || { echo 'Member name search is missing from MAIN.'; exit 1; }
 
-          # Do not call this a success unless the exact small top-row controls are in the served HTML.
-          grep -F 'id="memberAlertToggle"' "$BODY" >/dev/null || { echo 'LIVE ERROR: 알림 ON button is missing.'; exit 1; }
-          grep -F '>알림 ON</button>' "$BODY" >/dev/null || { echo 'LIVE ERROR: 알림 ON label is missing.'; exit 1; }
-          grep -F 'id="memberVibrationToggle"' "$BODY" >/dev/null || { echo 'LIVE ERROR: 진동 ON button is missing.'; exit 1; }
-          grep -F '>진동 ON</button>' "$BODY" >/dev/null || { echo 'LIVE ERROR: 진동 ON label is missing.'; exit 1; }
-          grep -F 'id="memberAppInstallToggle"' "$BODY" >/dev/null || { echo 'LIVE ERROR: 앱설치 button is missing.'; exit 1; }
-          grep -F 'member-self-unified-toggle-row' "$BODY" >/dev/null || { echo 'LIVE ERROR: compact top button row is missing.'; exit 1; }
-          grep -F 'memberSelfSearchInput' "$BODY" >/dev/null || { echo 'LIVE ERROR: name input is missing.'; exit 1; }
-          echo 'LIVE MAIN contains the original compact alert/vibration/install buttons.'
-
-      - name: Build exact v1.6.37 Firebase PWA
+      - name: Build v1.6.37 UI with fixed behavior only
         shell: bash
         run: |
           set -euo pipefail
           rm -rf "$BUILD_ROOT"
           mkdir -p "$BUILD_ROOT/web-push"
           cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
+
+          # Keep the exact v1.6.37 visible UI files.
           cp deployment/jayuminton/v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
           cp deployment/jayuminton/v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
           cp deployment/jayuminton/v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
           cp deployment/jayuminton/v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
-          cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d | gzip -d > "$BUILD_ROOT/web-push/setup-v205.js"
-          echo '53828f38565e057b865750b9fbf66737b8841451ac4afebc34150b0f93d8fd9b  '"$BUILD_ROOT/web-push/setup-v205.js" | sha256sum -c -
 
-          # Only the stale uninstall state is fixed. No visible HTML/CSS is changed.
+          # IMPORTANT: deploy the repaired source parts, not the old ZIP-compressed setup copy.
+          cat deployment/jayuminton/exact-v1637-web/setup-v205.js.part-* > "$BUILD_ROOT/web-push/setup-v205.js"
+
           python3 - <<'PY'
           import os
           from pathlib import Path
-          p = Path(os.environ['BUILD_ROOT']) / 'web-push' / 'setup-v205.js'
-          s = p.read_text(encoding='utf-8')
-          old = "    deferredInstallPrompt = event;\n    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;\n"
-          new = "    deferredInstallPrompt = event;\n    try {\n      localStorage.removeItem(STORAGE.installConfirmed);\n      if (localStorage.getItem(STORAGE.installChoice) === 'on') localStorage.removeItem(STORAGE.installChoice);\n    } catch (_) {}\n    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;\n"
-          if old not in s:
-              raise SystemExit('Install-state patch anchor not found.')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+          setup_path = root / 'setup-v205.js'
+          setup = setup_path.read_text(encoding='utf-8')
+
+          # 1) An uninstalled PWA must not stay falsely locked as "installed" because
+          # Chrome keeps site localStorage after uninstall.
+          standalone_anchor = "  syncStandaloneInstallState();\n  frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';\n"
+          standalone_fix = """  syncStandaloneInstallState();
+  if (!isStandaloneApp()) {
+    try {
+      localStorage.removeItem(STORAGE.installConfirmed);
+      if (localStorage.getItem(STORAGE.installChoice) === 'on') {
+        localStorage.removeItem(STORAGE.installChoice);
+      }
+    } catch (_) {}
+  }
+  frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
+"""
+          if standalone_anchor not in setup:
+              raise SystemExit('Standalone install-state anchor not found.')
+          setup = setup.replace(standalone_anchor, standalone_fix, 1)
+
+          # 2) When the user types a different name, stop forcing the previously saved member.
+          listener_anchor = "  connectButton.addEventListener('click', handleAlarmButton);\n"
+          listener_fix = """  connectButton.addEventListener('click', handleAlarmButton);
+  nameInput.addEventListener('input', () => {
+    const typed = firstTwoSearchChars(nameInput.value);
+    const saved = member && member.name ? firstTwoSearchChars(member.name) : '';
+    if (member && typed && typed !== saved) {
+      member = null;
+      try { localStorage.removeItem(STORAGE.member); } catch (_) {}
+      isConnected = false;
+      setOff('새 이름을 입력한 뒤 아래 이름 검색 결과에서 본인을 눌러 주세요.');
+      sendBootstrap();
+    }
+  });
+"""
+          if listener_anchor not in setup:
+              raise SystemExit('Name-input listener anchor not found.')
+          setup = setup.replace(listener_anchor, listener_fix, 1)
+
+          old_match = """    const exactSelected = member && member.id
+      ? members.find((item) => String(item.id) === String(member.id))
+      : null;
+    const matches = exactSelected
+      ? [exactSelected]
+      : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+"""
+          new_match = """    const typedMatchesSavedMember = Boolean(
+      member && member.id && firstTwoSearchChars(member.name) === typed
+    );
+    const exactSelected = typedMatchesSavedMember
+      ? members.find((item) => String(item.id) === String(member.id))
+      : null;
+    const matches = exactSelected
+      ? [exactSelected]
+      : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+"""
+          if old_match not in setup:
+              raise SystemExit('Saved-member search anchor not found.')
+          setup = setup.replace(old_match, new_match, 1)
+
+          # 3) Selecting another member really replaces the old member and old push token.
+          branch_marker = "} else if (data.type === 'JAYUMINTON_MEMBER_SELECTED' || data.type === 'JAYUMINTON_MEMBER_CLICKED') {"
+          branch_start = setup.find(branch_marker)
+          if branch_start < 0:
+              raise SystemExit('Member-selection branch not found.')
+          assignment = """        member = {id:String(data.member.id), name:String(data.member.name)};
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+"""
+          assignment_pos = setup.find(assignment, branch_start)
+          if assignment_pos < 0 or assignment_pos > branch_start + 1200:
+              raise SystemExit('Member replacement assignment not found.')
+          replacement = """        const nextMember = {id:String(data.member.id), name:String(data.member.name)};
+        const memberChanged = Boolean(member && String(member.id) !== String(nextMember.id));
+        member = nextMember;
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+        if (memberChanged) {
+          try { localStorage.removeItem(STORAGE.token); } catch (_) {}
+          isConnected = false;
+          setOff(member.name + '님으로 변경했습니다. 완료를 눌러 알림을 다시 연결해 주세요.');
+        }
+"""
+          setup = setup[:assignment_pos] + replacement + setup[assignment_pos + len(assignment):]
+          setup_path.write_text(setup, encoding='utf-8')
+
+          # Cache-bust behavior JS only. HTML structure/CSS design remain unchanged.
+          index_path = root / 'index.html'
+          index = index_path.read_text(encoding='utf-8')
+          index = index.replace('/setup-v205.js?v=1637', '/setup-v205.js?v=1637-name-install-fix1')
+          index = index.replace('/config-v204.js?v=1637', '/config-v204.js?v=1637-name-install-fix1')
+          index_path.write_text(index, encoding='utf-8')
+
+          worker_path = root / 'firebase-messaging-sw.js'
+          worker = worker_path.read_text(encoding='utf-8')
+          worker = worker.replace("const JAYUMINTON_SW_VERSION = '1.6.37';", "const JAYUMINTON_SW_VERSION = '1.6.37-name-install-fix1';")
+          worker = worker.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';", "const JAYUMINTON_CACHE = 'jayuminton-shell-v205-name-install-fix1';")
+          worker_path.write_text(worker, encoding='utf-8')
           PY
+
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
+          grep -F 'typedMatchesSavedMember' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'memberChanged' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'Never refresh or reopen this page' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F "appInstallClickProxy.removeAttribute('href')" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          if grep -F 'S.browser_fallback_url=' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then
+            echo 'Unsafe Android browser fallback is still present.'
+            exit 1
+          fi
 
           python3 - <<'PY'
           import os
@@ -190,19 +225,21 @@ jobs:
           if '__MEMBER_PAGE_URL__' in out or '__RELAY_URL__' in out:
               raise SystemExit('URL injection failed.')
           root = Path(os.environ['BUILD_ROOT']) / 'web-push'
-          for name in ('config-v202.js','config-v203.js','config-v204.js'):
+          for name in ('config-v202.js', 'config-v203.js', 'config-v204.js'):
               (root / name).write_text(out, encoding='utf-8')
           PY
 
           BASE="${HOSTING_URL%/}"
           for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
-            curl --fail --location --retry 3 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/$asset?restore=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$asset"
+            curl --fail --location --retry 3 --max-time 60 -H 'Cache-Control: no-cache' \
+              "$BASE/$asset?behaviorfix=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$asset"
             test -s "$BUILD_ROOT/web-push/$asset"
           done
           for optional in icon.svg badge.svg; do
-            curl --fail --location --retry 1 --max-time 30 "$BASE/$optional?restore=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$optional" || rm -f "$BUILD_ROOT/web-push/$optional"
+            curl --fail --location --retry 1 --max-time 30 \
+              "$BASE/$optional?behaviorfix=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$optional" || rm -f "$BUILD_ROOT/web-push/$optional"
           done
-          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204; do
+          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205; do
             cat > "$BUILD_ROOT/web-push/firebase-messaging-sw-v${version}.js" <<'EOF'
           importScripts('/firebase-messaging-sw.js');
           self.addEventListener('install', () => self.skipWaiting());
@@ -210,38 +247,32 @@ jobs:
           EOF
           done
 
-          # Visible design must be byte-for-byte the uploaded ZIP originals.
-          echo '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d  '"$BUILD_ROOT/web-push/index.html" | sha256sum -c -
-          echo '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f  '"$BUILD_ROOT/web-push/setup-v205.css" | sha256sum -c -
-
       - name: Deploy Firebase Hosting
         working-directory: ${{ env.BUILD_ROOT }}
         shell: bash
         run: |
           set -euo pipefail
-          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "Original v1.6.37 UI ${GITHUB_SHA::7}"
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive \
+            --message "Restore name change and no-reload install ${GITHUB_SHA::7}"
 
-      - name: Verify Firebase points to restored MAIN
+      - name: Verify live behavior fix
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
           BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$BUST" -o "$RUNNER_TEMP/live-index.html"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$BUST" -o "$RUNNER_TEMP/live-setup.js"
           curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/config-v204.js?verify=$BUST" -o "$RUNNER_TEMP/live-config.js"
-          echo '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d  '"$RUNNER_TEMP/live-index.html" | sha256sum -c -
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$BUST" -o "$RUNNER_TEMP/live-worker.js"
+          grep -F 'setup-v205.js?v=1637-name-install-fix1' "$RUNNER_TEMP/live-index.html" >/dev/null
+          grep -F 'typedMatchesSavedMember' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'memberChanged' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'Never refresh or reopen this page' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          if grep -F 'S.browser_fallback_url=' "$RUNNER_TEMP/live-setup.js" >/dev/null; then
+            echo 'Unsafe Android browser fallback is live.'
+            exit 1
+          fi
           grep -F "$MAIN_URL" "$RUNNER_TEMP/live-config.js" >/dev/null
-          echo 'Firebase now points to the exact v1.6.37 MAIN deployment.'
-
-      - name: Record restore result
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          STATUS='${{ job.status }}'
-          printf 'status=%s\nsource_commit=%s\nrun=%s\n' "$STATUS" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/jayuminton/V1637_RESTORE_RESULT.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/jayuminton/V1637_RESTORE_RESULT.txt
-          git commit -m "Record original v1.6.37 UI restore: $STATUS" || exit 0
-          git push
+          grep -F 'jayuminton-shell-v205-name-install-fix1' "$RUNNER_TEMP/live-worker.js" >/dev/null
+          echo 'Name replacement and no-reload PWA install behavior are live.'
