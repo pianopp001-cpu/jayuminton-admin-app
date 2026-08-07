@@ -1,9 +1,45 @@
+    setInstallIntentArmed(false);
+    stopEngagementClock();
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installConfirmed, '1');
+    markAppDownloadOn();
+    showToast('자유민턴 코트현황 앱 설치 완료');
+    collapseSetupAfterSuccess();
+  }
+
+  function setAppDownloadOff() {
+    installAttemptPending = false;
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installChoice, 'off');
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    refreshInstallState();
+    setInstallMessage('앱설치 OFF로 저장했습니다. 자동으로 다시 묻지 않습니다.', 'success');
+    sendAppInstallStatus('앱설치 OFF');
+    showToast('앱설치 OFF 저장 완료');
+    collapseSetupAfterSuccess();
+  }
+
+  function markAppDownloadOn() {
+    installAttemptPending = false;
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installConfirmed, '1');
+    localStorage.setItem(STORAGE.installChoice, 'on');
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    refreshInstallState();
+  }
+
+  function refreshInstallState() {
+    const choice = localStorage.getItem(STORAGE.installChoice) || '';
+    const installed = isUserAppInstalledState();
+    if (installed) {
+      if (choice !== 'on') localStorage.setItem(STORAGE.installChoice, 'on');
+      appInstallState.textContent = '앱설치 ON';
+      appInstallState.className = 'state-pill is-on';
+      installSummaryBadge.textContent = '앱설치 ON';
       installSummaryBadge.className = 'mini-state is-on';
       appInstallButton.textContent = '앱설치 완료';
       appInstallButton.disabled = true;
       appInstallOffButton.classList.add('hidden');
-      appInstallClickProxy.hidden = true;
-      appInstallChromeLink.hidden = true;
       setInstallMessage('홈 화면의 자유민턴 코트현황 앱으로 실행 중입니다.', 'success');
       sendAppInstallStatus('앱설치 ON');
       return;
@@ -22,15 +58,11 @@
     } else if (androidDevice && embeddedBrowser) {
       installTitle.textContent = 'Chrome 또는 PWA';
       installHint.textContent = 'Chrome에서 바로 사용하거나, 열린 뒤 PWA로 설치할 수 있습니다.';
-      appInstallButton.textContent = 'Chrome에서 설치';
+      appInstallButton.textContent = 'Chrome 열기';
     } else if (androidDevice) {
       installTitle.textContent = '안드로이드 PWA';
       installHint.textContent = 'Chrome에서 그대로 사용하거나 PWA로 설치합니다.';
-      appInstallButton.textContent = installAttemptPending
-        ? '설치 확인중'
-        : (deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall()
-          ? 'PWA 설치'
-          : '설치 준비중');
+      appInstallButton.textContent = installAttemptPending ? '설치 확인중' : (deferredInstallPrompt ? 'PWA 설치' : '설치 준비중');
     } else {
       installTitle.textContent = '웹앱';
       installHint.textContent = '브라우저의 앱 설치 또는 홈 화면 추가 기능을 사용합니다.';
@@ -46,12 +78,11 @@
     } else if (installAttemptPending) {
       setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
     } else if (androidDevice && embeddedBrowser) {
-      setInstallMessage('누르면 Chrome으로 이동합니다. Chrome에서 앱설치를 한 번 더 눌러 시스템 설치창을 여세요.');
+      setInstallMessage('Chrome에서 설치 화면을 준비합니다.');
     } else if (androidDevice && deferredInstallPrompt) {
       setInstallMessage(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall() ? '앱설치를 누르면 시스템 설치창이 열립니다.' : 'Chrome 설치 가능 상태를 확인하고 있습니다.', 'success');
     } else if (androidDevice) {
-      const remaining = installPreparationRemaining();
-      setInstallMessage(remaining > 0 ? 'PWA 설치 준비 ' + remaining + '초' : 'Chrome 설치창을 준비하고 있습니다.', 'success');
+      setInstallMessage('설치 준비 중입니다. 잠시 후 PWA 설치 버튼을 한 번 눌러 주세요.', 'success');
     } else if (iosDevice && embeddedBrowser) {
       setInstallMessage('누르면 Safari로 이동합니다. Safari에서 PWA 설치를 진행하세요.');
     } else if (iosDevice) {
@@ -89,23 +120,26 @@
   }
 
   function refreshInstallProxyPosition() {
+    if (!appInstallClickProxy) return;
     const rect = lastInstallButtonRect;
     const installed = isUserAppInstalledState();
-    if (!rect || !rect.visible || installed || rect.width < 16 || rect.height < 16) {
+    const hasUsableRect = androidDevice && !installed && rect && rect.visible && rect.width >= 16 && rect.height >= 16;
+    if (!hasUsableRect) {
       appInstallClickProxy.hidden = true;
-      appInstallChromeLink.hidden = true;
+      if (appInstallChromeLink) appInstallChromeLink.hidden = true;
       if (nativeInstallControl) nativeInstallControl.hidden = true;
       return;
     }
+
     const frameRect = frame.getBoundingClientRect();
     const left = Math.round(window.scrollX + frameRect.left + rect.left) + 'px';
     const top = Math.round(window.scrollY + frameRect.top + rect.top) + 'px';
     const width = Math.round(rect.width) + 'px';
     const height = Math.round(rect.height) + 'px';
-    // Kakao/Daangn WebView must receive a real top-level <a href="intent://...">
-    // generated from the user's direct tap. JavaScript location changes can be blocked
-    // or converted into a refresh by the host app.
-    if (androidDevice && embeddedBrowser) {
+
+    // Kakao/Daangn must receive an actual top-level anchor tap. A postMessage followed by
+    // location.href loses the trusted user gesture and can be handed to Google Drive.
+    if (embeddedBrowser && appInstallChromeLink) {
       const links = buildAndroidChromeIntent();
       appInstallChromeLink.href = links.intentUrl;
       appInstallChromeLink.style.left = left;
@@ -117,23 +151,14 @@
       if (nativeInstallControl) nativeInstallControl.hidden = true;
       return;
     }
-    appInstallChromeLink.hidden = true;
-    // In real Chrome, the transparent top-level button directly calls prompt().
-    if (supportsNativeInstallElement()) {
-      nativeInstallControl.style.left = left;
-      nativeInstallControl.style.top = top;
-      nativeInstallControl.style.width = width;
-      nativeInstallControl.style.height = height;
-      nativeInstallControl.hidden = false;
-      appInstallClickProxy.hidden = true;
-      return;
-    }
-    if (nativeInstallControl) nativeInstallControl.hidden = true;
+
+    if (appInstallChromeLink) appInstallChromeLink.hidden = true;
     appInstallClickProxy.style.left = left;
     appInstallClickProxy.style.top = top;
     appInstallClickProxy.style.width = width;
     appInstallClickProxy.style.height = height;
     appInstallClickProxy.hidden = false;
+    if (nativeInstallControl) nativeInstallControl.hidden = true;
   }
 
   function showIOSInstallGuide() {
