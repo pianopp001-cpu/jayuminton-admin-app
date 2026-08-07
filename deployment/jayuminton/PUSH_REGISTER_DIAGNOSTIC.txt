@@ -1,0 +1,124 @@
+files=Code.js
+register_occurrences=2
+unregister_occurrences=1
+has_appendRow=False
+has_setValue=False
+has_deleteRow=False
+has_token_lookup=False
+---SANITIZED_CONTEXT---
+ * Handles:
+ * 1) Public browser token registration/unregistration.
+ * 2) Protected admin assignment events.
+ */
+function doPost(e) {
+  try {
+    const rawBody = e && e.parameter && e.parameter.payload
+      ? String(e.parameter.payload || '')
+      : String(e && e.postData ? (e.postData.contents || '') : '');
+    const body = JSON.parse(rawBody || '{}');
+    const action = String(body.action || '').trim();
+
+    if (action === 'register_web_token') {
+      return jsonOutput_(registerWebToken_(body));
+    }
+    if (action === 'unregister_web_token') {
+      return jsonOutput_(unregisterWebToken_(body));
+    }
+
+    verifyAdminSecret_(e);
+    const event = cleanEvent_(body);
+    return jsonOutput_(sendAssignmentEvent_(event));
+  } catch (error) {
+    console.error(error && error.stack ? error.stack : String(error));
+    return jsonOutput_({
+      ok: false,
+      error: String(error && error.message ? error.message : error)
+    });
+  }
+}
+
+function verifyPushConfiguration() {
+  const properties = PropertiesService.getScriptProperties();
+  const sharedSecret = String(
+    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+  );
+  const serviceAccountJson = String(
+    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+  );
+
+  if (!sharedSecret) {
+    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+  }
+  if (!serviceAccountJson) {
+    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+  }
+
+  const credentials = JSON.parse(serviceAccountJson);
+  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+    throw new Error('Service-account project_id must be jayuminton-push.');
+  }
+
+  const token = getFcmAccessToken_(true);
+  return {
+    ok: Boolean(token),
+    projectId: credentials.project_id,
+    clientEmail: credentials.client_email,
+---CUT---
+ */
+function doPost(e) {
+  try {
+    const rawBody = e && e.parameter && e.parameter.payload
+      ? String(e.parameter.payload || '')
+      : String(e && e.postData ? (e.postData.contents || '') : '');
+    const body = JSON.parse(rawBody || '{}');
+    const action = String(body.action || '').trim();
+
+    if (action === 'register_web_token') {
+      return jsonOutput_(registerWebToken_(body));
+    }
+    if (action === 'unregister_web_token') {
+      return jsonOutput_(unregisterWebToken_(body));
+    }
+
+    verifyAdminSecret_(e);
+    const event = cleanEvent_(body);
+    return jsonOutput_(sendAssignmentEvent_(event));
+  } catch (error) {
+    console.error(error && error.stack ? error.stack : String(error));
+    return jsonOutput_({
+      ok: false,
+      error: String(error && error.message ? error.message : error)
+    });
+  }
+}
+
+function verifyPushConfiguration() {
+  const properties = PropertiesService.getScriptProperties();
+  const sharedSecret = String(
+    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+  );
+  const serviceAccountJson = String(
+    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+  );
+
+  if (!sharedSecret) {
+    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+  }
+  if (!serviceAccountJson) {
+    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+  }
+
+  const credentials = JSON.parse(serviceAccountJson);
+  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+    throw new Error('Service-account project_id must be jayuminton-push.');
+  }
+
+  const token = getFcmAccessToken_(true);
+  return {
+    ok: Boolean(token),
+    projectId: credentials.project_id,
+    clientEmail: credentials.client_email,
+    registeredTokens: countWebPushTokens_()
+  };
+}
+---CUT---
