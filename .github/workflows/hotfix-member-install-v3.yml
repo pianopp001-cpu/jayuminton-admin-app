@@ -1,0 +1,219 @@
+name: Definitive member and install loop hotfix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-member-install-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-definitive-member-install-hotfix
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Read config
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$C" >/dev/null
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$C")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$C")/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$C")/exec"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")"
+            echo "BUILD_ROOT=$RUNNER_TEMP/v1637-hotfix-v3"
+          } >> "$GITHUB_ENV"
+
+      - name: Patch MAIN name selection only
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/main"; rm -rf "$W"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"; clasp pull
+          printf '%s  %s\n' \
+            '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
+            '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
+            '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
+            'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('Script.html'); s=p.read_text(encoding='utf-8')
+          end=s.rfind('</script>')
+          if end<0: raise SystemExit('missing script close')
+          s=s[:end+len('</script>')]+'\n'
+          a=s.find('function openMemberSelfSettings() {'); b=s.find('function renderMemberSelfSettings() {',a)
+          if a<0 or b<0: raise SystemExit('missing member settings functions')
+          s=s[:a]+"""function openMemberSelfSettings() {
+            try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); } catch (error) {}
+            const input = document.getElementById('memberSelfSearchInput');
+            if (input) { input.dataset.userEditing = '1'; input.value = ''; }
+            renderMemberSelfSettings();
+            setTimeout(function() {
+              const currentInput = document.getElementById('memberSelfSearchInput');
+              if (currentInput) { currentInput.dataset.userEditing = '1'; currentInput.value = ''; currentInput.focus(); }
+            }, 0);
+          }
+
+          """+s[b:]
+          s=re.sub(r"(?m)^(?P<i>\s*)if \(input && selected && !input\.value[^\n]*\) input\.value = selected\.name;\s*$",lambda m:m.group('i')+"if (input && selected && !input.value && input.dataset.userEditing !== '1') input.value = selected.name;",s)
+          a=s.find('function selectMemberSelf(memberId) {'); b=s.find('function clearMemberSelfSelection() {',a)
+          if a<0 or b<0: raise SystemExit('missing member select')
+          block=s[a:b]
+          if "dataset.userEditing = '0'" not in block:
+            block,n=re.subn(r"(?m)^(?P<i>\s*)if \(!member\) return;\s*$",lambda m:m.group(0)+"\n"+m.group('i')+"const memberInput = document.getElementById('memberSelfSearchInput');\n"+m.group('i')+"if (memberInput) { memberInput.dataset.userEditing = '0'; memberInput.value = String(member.name || '').trim(); }",block,count=1)
+            if n!=1: raise SystemExit('member select insertion failed')
+            s=s[:a]+block+s[b:]
+          p.write_text(s,encoding='utf-8')
+          PY
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member hotfix v3 ${GITHUB_SHA::7}"
+
+      - name: Build v1.6.37 behavior hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$BUILD_ROOT"; mkdir -p "$BUILD_ROOT/web-push"
+          cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
+          cp deployment/jayuminton/v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
+          cp deployment/jayuminton/v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
+          cp deployment/jayuminton/v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
+          cp deployment/jayuminton/v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+          cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
+          gzip -dc "$RUNNER_TEMP/setup.gz" > "$BUILD_ROOT/web-push/setup-v205.js"
+          printf '%s  %s\n' '53828f38565e057b865750b9fbf66737b8841451ac4afebc34150b0f93d8fd9b' "$BUILD_ROOT/web-push/setup-v205.js" | sha256sum --check
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          root=Path(os.environ['BUILD_ROOT'])/'web-push'; p=root/'setup-v205.js'; s=p.read_text(encoding='utf-8')
+
+          # 1. Chrome destination is explicitly chrome, never embedded.
+          s,n=re.subn(r"target\.searchParams\.set\('source',\s*'embedded'\);","target.searchParams.set('source', 'chrome');",s,count=1)
+          if n!=1: raise SystemExit('source=embedded target not found')
+
+          # 2. Once Chrome has opened, never classify that page as an embedded browser again.
+          a=s.find('function isEmbeddedBrowser() {'); b=s.find('function ',a+10)
+          if a<0 or b<0: raise SystemExit('isEmbeddedBrowser function not found')
+          block=s[a:b]
+          needle="const source = String(new URLSearchParams(window.location.search).get('source') || '').toLowerCase();"
+          if "source === 'chrome'" not in block:
+            if needle not in block: raise SystemExit('source parser not found')
+            block=block.replace(needle,needle+"\n    if (source === 'chrome' || source === 'pwa') return false;",1)
+          s=s[:a]+block+s[b:]
+
+          # 3. No Drive fallback in Android intent.
+          s=re.sub(r"'category=android\.intent\.category\.BROWSABLE;S\.browser_fallback_url='\s*\+\s*encodeURIComponent\(targetUrl\)\s*\+\s*';end'","'category=android.intent.category.BROWSABLE;end'",s,count=1)
+
+          # 4. If a new member is chosen, unregister the old token under the OLD member first,
+          # then save the new member and connect/register again.
+          marker="} else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {"
+          start=s.find(marker); stop=s.find("} else if (data.type === 'JAYUMINTON_PUSH_DISCONNECT_REQUEST')",start)
+          if start<0 or stop<0: raise SystemExit('push setup branch not found')
+          replacement="""} else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {
+      if (data.member && data.member.id && data.member.name) {
+        const nextMember = {id:String(data.member.id), name:String(data.member.name)};
+        const oldMember = member && member.id ? {id:String(member.id), name:String(member.name || '')} : null;
+        const changed = Boolean(oldMember && String(oldMember.id) !== String(nextMember.id));
+        const oldToken = localStorage.getItem(STORAGE.token) || '';
+        if (changed && oldToken) {
+          submitRelay('unregister_web_token', oldToken).catch(() => null).finally(() => {
+            member = nextMember;
+            saveJson(STORAGE.member, member);
+            nameInput.value = shortName(member.name);
+            isConnected = false;
+            connectAlarm();
+          });
+          return;
+        }
+        member = nextMember;
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+      }
+      connectAlarm();
+    """
+          s=s[:start]+replacement+s[stop:]
+
+          # 5. Typing another name invalidates the stale selected member immediately.
+          listener="connectButton.addEventListener('click', handleAlarmButton);"
+          if listener not in s: raise SystemExit('alarm listener not found')
+          s=s.replace(listener,listener+"\n  // member-reassignment-v3\n  nameInput.addEventListener('input', () => {\n    const typed = firstTwoSearchChars(nameInput.value);\n    const saved = member && member.name ? firstTwoSearchChars(member.name) : '';\n    if (member && typed && typed !== saved) { member = null; try { localStorage.removeItem(STORAGE.member); } catch (_) {} isConnected = false; }\n  });",1)
+
+          # 6. Chrome-arrived page may call PWA prompt but may never launch Chrome intent again.
+          a=s.find('function handleAppInstallButton('); b=s.find('function ',a+10)
+          if a<0 or b<0: raise SystemExit('install button function missing')
+          block=s[a:b]
+          block=block.replace("if (androidDevice && embeddedBrowser) {","if (androidDevice && embeddedBrowser && String(new URLSearchParams(window.location.search).get('source') || '').toLowerCase() !== 'chrome') {",1)
+          s=s[:a]+block+s[b:]
+          p.write_text(s,encoding='utf-8')
+
+          idx=root/'index.html'; t=idx.read_text(encoding='utf-8').replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-hotfix-v3').replace('/config-v204.js?v=1637','/config-v204.js?v=1637-hotfix-v3'); idx.write_text(t,encoding='utf-8')
+          tpl=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8'); cfg=tpl.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          for n in ('config-v202.js','config-v203.js','config-v204.js'): (root/n).write_text(cfg,encoding='utf-8')
+          sw=root/'firebase-messaging-sw.js'; w=sw.read_text(encoding='utf-8').replace("const JAYUMINTON_SW_VERSION = '1.6.37';","const JAYUMINTON_SW_VERSION = '1.6.37-hotfix-v3';").replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';","const JAYUMINTON_CACHE = 'jayuminton-shell-v221';"); sw.write_text(w,encoding='utf-8')
+          PY
+          node --check "$BUILD_ROOT/web-push/setup-v205.js"
+          grep -F "target.searchParams.set('source', 'chrome');" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F "source === 'chrome'" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F "submitRelay('unregister_web_token', oldToken)" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'member-reassignment-v3' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then exit 1; fi
+          BASE="${HOSTING_URL%/}"
+          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do curl --fail --location --retry 3 "$BASE/$a?x=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"; done
+
+      - name: Deploy Firebase
+        working-directory: ${{ env.BUILD_ROOT }}
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "member install hotfix v3 ${GITHUB_SHA::7}"
+
+      - name: Verify live
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          B="${HOSTING_URL%/}"
+          curl --fail --location -H 'Cache-Control: no-cache' "$B/?v=$GITHUB_RUN_ID" > "$RUNNER_TEMP/index"
+          curl --fail --location -H 'Cache-Control: no-cache' "$B/setup-v205.js?v=$GITHUB_RUN_ID" > "$RUNNER_TEMP/setup"
+          grep -F 'setup-v205.js?v=1637-hotfix-v3' "$RUNNER_TEMP/index" >/dev/null
+          grep -F "target.searchParams.set('source', 'chrome');" "$RUNNER_TEMP/setup" >/dev/null
+          grep -F "submitRelay('unregister_web_token', oldToken)" "$RUNNER_TEMP/setup" >/dev/null
+          grep -F 'member-reassignment-v3' "$RUNNER_TEMP/setup" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
+
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          STATUS='${{ job.status }}'
+          printf 'status=%s\ncommit=%s\nrun=%s\n' "$STATUS" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/jayuminton/MEMBER_INSTALL_V3_RESULT.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '4189822+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/MEMBER_INSTALL_V3_RESULT.txt
+          git commit -m "Record member/install v3: $STATUS" || exit 0
+          git pull --rebase origin main || true
+          git push
