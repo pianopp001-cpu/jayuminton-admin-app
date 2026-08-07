@@ -70,8 +70,13 @@ jobs:
           set -euo pipefail
           ROOT="$RUNNER_TEMP/v1637-source"
           rm -rf "$ROOT" && mkdir -p "$ROOT"
-          cat deployment/jayuminton/v1637-source/part-*.b64 | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/src.gz"
+          : > "$RUNNER_TEMP/src.gz"
+          for part in deployment/jayuminton/v1637-source/part-*.b64; do
+            base64 -d "$part" >> "$RUNNER_TEMP/src.gz"
+          done
+          gzip -t "$RUNNER_TEMP/src.gz"
           gzip -dc "$RUNNER_TEMP/src.gz" > "$RUNNER_TEMP/src.tar"
+          tar -tf "$RUNNER_TEMP/src.tar" >/dev/null
           tar -xf "$RUNNER_TEMP/src.tar" -C "$ROOT"
           INDEX="$(find "$ROOT" -type f -name Index.html | head -n1)"
           SRC="$(dirname "$INDEX")"
