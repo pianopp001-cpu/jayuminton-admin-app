@@ -1,0 +1,5 @@
+conclusion=failure
+run_id=31141565007
+head_sha=5d46c3c26da7902b9e6772aa6d7456c594f345f5
+run_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/31141565007
+recorded_at=2026-08-07T02:34:14Z
