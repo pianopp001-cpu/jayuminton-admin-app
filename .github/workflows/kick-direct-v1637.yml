@@ -1,0 +1,48 @@
+name: Kick direct v1.6.37 restore
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kick-direct-v1637.yml'
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  kick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dispatch and wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          WF='continue-exact-v1637-restore.yml'
+          BEFORE="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run "$WF" --repo "$GITHUB_REPOSITORY" --ref main
+          RUN=''
+          for i in $(seq 1 60); do
+            sleep 3
+            RUN="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "$RUN" != '0' ] && [ "$RUN" != "$BEFORE" ]; then break; fi
+          done
+          test -n "$RUN" && [ "$RUN" != '0' ] && [ "$RUN" != "$BEFORE""]" || true
+          echo "restore_run=$RUN" > DIRECT_V1637_RUN.txt
+          set +e
+          gh run watch "$RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+          RC=$?
+          set -e
+          CONCLUSION="$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion // "unknown"')"
+          printf 'restore_run=%s\nconclusion=%s\n' "$RUN" "$CONCLUSION" > DIRECT_V1637_RUN.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add DIRECT_V1637_RUN.txt
+          git commit -m "Record direct restore result: $CONCLUSION" || true
+          git pull --rebase origin main || true
+          git push || true
+          exit "$RC"
