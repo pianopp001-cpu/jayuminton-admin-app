@@ -1,14 +1,90 @@
+        persistEngagementSeconds();
+        refreshInstallState();
+        if (engagementSeconds >= MIN_INSTALL_ENGAGEMENT_SECONDS) scheduleInstallabilityRecheck();
+      }
+    }, 1000);
+  }
+
+  function stopEngagementClock() {
+    if (!engagementTimer) return;
+    clearInterval(engagementTimer);
+    engagementTimer = null;
+  }
+
+  function persistEngagementSeconds() {
+    try { localStorage.setItem(STORAGE.engagementSeconds, String(Math.max(0, Math.min(MIN_INSTALL_ENGAGEMENT_SECONDS, engagementSeconds)))); } catch (_) {}
+  }
+
+  function installPreparationRemaining() {
+    return Math.max(0, MIN_INSTALL_ENGAGEMENT_SECONDS - Math.floor(engagementSeconds));
+  }
+
+
+  function setInstallIntentArmed(value) {
+    installIntentArmed = Boolean(value);
+    try {
+      if (installIntentArmed) sessionStorage.setItem('jayuminton_pwa_install_armed_v206', '1');
+      else sessionStorage.removeItem('jayuminton_pwa_install_armed_v206');
+    } catch (_) {}
+  }
+
+  function scheduleInstallabilityRecheck() {
+    if (!androidDevice || embeddedBrowser || deferredInstallPrompt || isStandaloneApp()) return;
+    if (!installIntentArmed || installPreparationRemaining() > 0) return;
+    // Never reload or reopen Chrome here. Chrome dispatches beforeinstallprompt when
+    // the current top-level page becomes installable. Reloading destroyed the pending
+    // state and made the visible OFF button loop forever.
+    consumeEarlyInstallPrompt();
+    setInstallMessage('Chrome 설치 가능 신호를 기다리고 있습니다.', 'success');
+    sendAppInstallStatus('설치 가능 신호 대기');
+    refreshInstallState();
+  }
+
+  function supportsNativeInstallElement() {
+    // The <install> element is an origin-trial feature. This site does not rely on it.
+    return false;
+  }
+
+  function supportsNavigatorInstall() {
+    // navigator.install() is also an origin-trial feature. Use the stable
+    // beforeinstallprompt flow so the button never reports false readiness.
+    return false;
+  }
+
+  function handleNativeInstallAction() {
+    installAttemptPending = true;
+    setInstallIntentArmed(false);
+    setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
+    sendAppInstallStatus('설치 확인중');
+    refreshInstallState();
+  }
+
+  function handleNativeInstallDismiss() {
+    installAttemptPending = false;
+    setInstallIntentArmed(false);
+    const detail = '앱 설치가 취소되었습니다.';
+    setInstallMessage(detail);
+    sendAppInstallStatus(detail);
+    refreshInstallState();
+  }
+
+  function handleNativeInstallValidation(event) {
+    const reason = String((event && event.target && event.target.invalidReason) || '');
+    if (!reason) return;
+    installAttemptPending = false;
+    sendAppInstallStatus('설치 준비 확인 중');
+    refreshInstallState();
+  }
+
+  async function ensureChromeInstallControl() {
+    if (!androidDevice || embeddedBrowser || isStandaloneApp()) return;
+    try {
       await prepareServiceWorker();
       consumeEarlyInstallPrompt();
       refreshInstallState();
     } catch (_) {
       refreshInstallState();
     }
-  }
-
-  function handleEmbeddedChromeLinkClick() {
-    setInstallMessage('Chrome으로 이동합니다. 열린 Chrome 화면에서 앱설치를 한 번 눌러 주세요.', 'success');
-    sendAppInstallStatus('Chrome으로 이동');
   }
 
   function handleDirectInstallProxyClick(event) {
@@ -58,9 +134,6 @@
       return;
     }
     if (androidDevice) {
-      // The prompt may have fired before this visible button was tapped.
-      // Consume it again now so this same user gesture can open the real system install UI.
-      consumeEarlyInstallPrompt();
       if (deferredInstallPrompt) {
         installAndroidUserApp(Boolean(fromDirectUserTap));
         return;
@@ -74,15 +147,17 @@
         refreshInstallState();
         return;
       }
-      // Chrome has not emitted beforeinstallprompt yet. Never refresh or reopen this page.
-      // Register the service worker and wait on this same screen. If Chrome suppresses
-      // the event, the user can still use Chrome menu > 앱 설치.
+      // Real Android Chrome: never open another window and never reload.
+      // Wait on this page for beforeinstallprompt, then this same button calls prompt().
       setInstallIntentArmed(true);
-      ensureChromeInstallControl();
-      const detail = '설치창을 준비 중입니다. 잠시 뒤 다시 누르거나 Chrome ⋮ 메뉴의 앱 설치를 선택하세요.';
+      startEngagementClock();
+      const remaining = installPreparationRemaining();
+      if (remaining <= 0) scheduleInstallabilityRecheck();
+      const detail = remaining > 0
+        ? 'PWA 설치 준비 ' + remaining + '초'
+        : '설치 준비 중입니다. 버튼이 PWA 설치로 바뀌면 한 번 눌러 주세요.';
       setInstallMessage(detail, 'success');
       sendAppInstallStatus(detail);
-      showToast(detail);
       refreshInstallState();
       return;
     }
@@ -217,8 +292,8 @@
     const target = buildChromeUserTarget();
     const targetUrl = target.toString();
     const hostAndPath = target.host + target.pathname + target.search + target.hash;
-    // A real href intent is required in Kakao/Daangn WebView. JavaScript location changes
-    // are often treated as a same-page refresh. Do not add a browser_fallback_url here.
+    // Do not attach browser_fallback_url here. Some Kakao/Daangn WebViews misroute the
+    // encoded fallback to Google Drive. The package is fixed to the installed Chrome app.
     const intentUrl = 'intent://' + hostAndPath +
       '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
       'category=android.intent.category.BROWSABLE;end';
@@ -229,14 +304,11 @@
     const links = buildAndroidChromeIntent();
     const hasActivation = !navigator.userActivation || navigator.userActivation.isActive;
     if (!hasActivation) {
-      // A message/timer callback has no trusted user activation. The old fallback navigated
-      // to the same Firebase URL and caused the install button to look like a refresh loop.
-      // Stay on this exact page and wait for the user's next direct tap instead.
-      const detail = 'Chrome 열기는 앱설치 버튼을 직접 눌렀을 때만 실행합니다.';
-      setInstallMessage(detail, 'success');
-      sendAppInstallStatus('설치 버튼 직접 터치 대기');
+      setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'error');
+      sendAppInstallStatus('Chrome 직접 터치 필요');
       return;
     }
+    // Backup only. In Kakao/Daangn the transparent top-level <a> handles the real tap.
     window.location.href = links.intentUrl;
   }
 
@@ -264,41 +336,3 @@
   function handleUserAppInstalled() {
     deferredInstallPrompt = null;
     installAttemptPending = false;
-    setInstallIntentArmed(false);
-    stopEngagementClock();
-    clearTimeout(installAttemptTimer);
-    localStorage.setItem(STORAGE.installConfirmed, '1');
-    markAppDownloadOn();
-    showToast('자유민턴 코트현황 앱 설치 완료');
-    collapseSetupAfterSuccess();
-  }
-
-  function setAppDownloadOff() {
-    installAttemptPending = false;
-    clearTimeout(installAttemptTimer);
-    localStorage.setItem(STORAGE.installChoice, 'off');
-    localStorage.setItem(STORAGE.installGuideSeen, '1');
-    refreshInstallState();
-    setInstallMessage('앱설치 OFF로 저장했습니다. 자동으로 다시 묻지 않습니다.', 'success');
-    sendAppInstallStatus('앱설치 OFF');
-    showToast('앱설치 OFF 저장 완료');
-    collapseSetupAfterSuccess();
-  }
-
-  function markAppDownloadOn() {
-    installAttemptPending = false;
-    clearTimeout(installAttemptTimer);
-    localStorage.setItem(STORAGE.installConfirmed, '1');
-    localStorage.setItem(STORAGE.installChoice, 'on');
-    localStorage.setItem(STORAGE.installGuideSeen, '1');
-    refreshInstallState();
-  }
-
-  function refreshInstallState() {
-    const choice = localStorage.getItem(STORAGE.installChoice) || '';
-    const installed = isUserAppInstalledState();
-    if (installed) {
-      if (choice !== 'on') localStorage.setItem(STORAGE.installChoice, 'on');
-      appInstallState.textContent = '앱설치 ON';
-      appInstallState.className = 'state-pill is-on';
-      installSummaryBadge.textContent = '앱설치 ON';
