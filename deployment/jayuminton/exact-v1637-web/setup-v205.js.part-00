@@ -1,0 +1,300 @@
+(() => {
+  'use strict';
+  // v1.6.37: embedded browsers use a real top-level intent link; Chrome uses the native beforeinstallprompt event without reload loops.
+
+  const cfg = window.JAYUMINTON_PUSH_SETUP_CONFIG || {};
+  const frame = document.getElementById('courtFrame');
+  const setupPanel = document.getElementById('setupPanel');
+  const setupToggle = document.getElementById('setupToggle');
+  const setupBody = document.getElementById('setupBody');
+  const alarmSummaryBadge = document.getElementById('alarmSummaryBadge');
+  const installSummaryBadge = document.getElementById('installSummaryBadge');
+  const nameInput = document.getElementById('alarmNameInput');
+  const connectButton = document.getElementById('alarmConnectButton');
+  const stateBadge = document.getElementById('alarmState');
+  const message = document.getElementById('alarmMessage');
+  const appInstallButton = document.getElementById('appInstallButton');
+  const appInstallOffButton = document.getElementById('appInstallOffButton');
+  const appInstallState = document.getElementById('appInstallState');
+  const installTitle = document.getElementById('installTitle');
+  const installHint = document.getElementById('installHint');
+  const installMessage = document.getElementById('installMessage');
+  const toast = document.getElementById('toast');
+  const appInstallClickProxy = document.getElementById('appInstallClickProxy');
+  const appInstallChromeLink = document.getElementById('appInstallChromeLink');
+  const nativeInstallControl = document.getElementById('nativeInstallControl');
+
+  const STORAGE = Object.freeze({
+    member: 'jayuminton_push_setup_member_v164',
+    token: 'jayuminton_push_token_v158',
+    auth: 'jayuminton_member_auth_v164',
+    authSession: 'jayuminton_member_session_token_v1',
+    installChoice: 'jayuminton_user_app_download_choice_v170',
+    installGuideSeen: 'jayuminton_ios_install_guide_seen_v170',
+    installConfirmed: 'jayuminton_user_app_installed_confirmed_v204',
+    setupCollapsed: 'jayuminton_setup_panel_collapsed_v204',
+    engagementSeconds: 'jayuminton_pwa_chrome_visible_seconds_v204',
+    installRecheck: 'jayuminton_pwa_installability_recheck_v204'
+  });
+
+  let members = [];
+  let member = readJson(STORAGE.member);
+  let messaging = null;
+  let registration = null;
+  let serviceWorkerPromise = null;
+  let sdkPromise = null;
+  let toastTimer = null;
+  let isConnected = false;
+  let deferredInstallPrompt = null;
+  let installAttemptPending = false;
+  let installAttemptTimer = null;
+  let lastInstallButtonRect = null;
+  let installIntentArmed = false;
+  try { installIntentArmed = sessionStorage.getItem('jayuminton_pwa_install_armed_v204') === '1'; } catch (_) {}
+  let engagementTimer = null;
+  let engagementSeconds = (() => {
+    try {
+      const value = Number(localStorage.getItem(STORAGE.engagementSeconds) || 0);
+      return Number.isFinite(value) ? Math.max(0, Math.min(30, Math.floor(value))) : 0;
+    } catch (_) {
+      return 0;
+    }
+  })();
+  const MIN_INSTALL_ENGAGEMENT_SECONDS = 0;
+  const iosDevice = isIOSDevice();
+  const androidDevice = isAndroidDevice();
+  const embeddedBrowser = isEmbeddedBrowser();
+  const browserContext = detectBrowserContext();
+  const query = new URLSearchParams(window.location.search);
+  const installationEntryRequested = query.get('install') === 'choose' || query.get('install') === '1';
+  const externalBrowserEntry = query.get('source') === 'embedded' || query.get('external') === '1';
+  if (androidDevice && !embeddedBrowser && (installationEntryRequested || externalBrowserEntry)) {
+    setInstallIntentArmed(true);
+  }
+  const transferredMemberSession = String(query.get('memberSession') || localStorage.getItem(STORAGE.authSession) || '');
+  if (transferredMemberSession) localStorage.setItem(STORAGE.authSession, transferredMemberSession);
+  if (query.has('memberSession')) {
+    try {
+      query.delete('memberSession');
+      const cleanUrl = window.location.pathname + (query.toString() ? '?' + query.toString() : '') + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch (_) {}
+  }
+
+  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
+    member = {id:String(query.get('memberId')), name:String(query.get('memberName'))};
+    saveJson(STORAGE.member, member);
+  }
+  if (member && member.name) nameInput.value = shortName(member.name);
+  syncStandaloneInstallState();
+  frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
+
+
+  setupToggle.addEventListener('click', () => setSetupCollapsed(!setupPanel.classList.contains('is-collapsed'), true));
+  connectButton.addEventListener('click', handleAlarmButton);
+  appInstallButton.addEventListener('click', handleAppInstallButton);
+  appInstallOffButton.addEventListener('click', setAppDownloadOff);
+  appInstallClickProxy.addEventListener('click', handleDirectInstallProxyClick);
+  appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);
+  appInstallChromeLink.addEventListener('touchstart', () => {
+    if (androidDevice && embeddedBrowser) appInstallChromeLink.href = buildAndroidChromeIntent().intentUrl;
+  }, {passive:true});
+  appInstallClickProxy.removeAttribute('href');
+  appInstallClickProxy.removeAttribute('target');
+  appInstallChromeLink.setAttribute('target', '_top');
+  if (nativeInstallControl) {
+    nativeInstallControl.addEventListener('promptaction', handleNativeInstallAction);
+    nativeInstallControl.addEventListener('promptdismiss', handleNativeInstallDismiss);
+    nativeInstallControl.addEventListener('validationstatuschanged', handleNativeInstallValidation);
+  }
+  window.addEventListener('beforeinstallprompt', captureAndroidInstallPrompt);
+  window.addEventListener('jayuminton:installpromptready', consumeEarlyInstallPrompt);
+  window.addEventListener('appinstalled', handleUserAppInstalled);
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      consumeEarlyInstallPrompt();
+      refreshInstallState();
+    });
+  }
+  window.addEventListener('message', handleCourtMessage);
+  window.addEventListener('resize', refreshInstallProxyPosition, {passive:true});
+  window.addEventListener('scroll', refreshInstallProxyPosition, {passive:true});
+  frame.addEventListener('load', () => {
+    window.setTimeout(() => {
+      syncStandaloneInstallState();
+      sendBootstrap();
+      refreshInstallProxyPosition();
+    }, 120);
+  });
+  window.addEventListener('pageshow', () => {
+    syncStandaloneInstallState();
+    refreshInstallState();
+  });
+  const standaloneMedia = window.matchMedia('(display-mode: standalone)');
+  if (standaloneMedia && typeof standaloneMedia.addEventListener === 'function') {
+    standaloneMedia.addEventListener('change', () => {
+      syncStandaloneInstallState();
+      refreshInstallState();
+      sendBootstrap();
+    });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      syncStandaloneInstallState();
+      refreshConnectionState();
+      refreshInstallState();
+      startEngagementClock();
+    } else {
+      stopEngagementClock();
+    }
+  });
+
+  consumeEarlyInstallPrompt();
+  startEngagementClock();
+  prepareServiceWorker()
+    .then(() => ensureChromeInstallControl())
+    .catch(() => null);
+  configureSetupPanel();
+  refreshInstallState();
+  refreshConnectionState();
+  if ((installationEntryRequested || externalBrowserEntry) && !isStandaloneApp()) {
+    window.setTimeout(() => {
+      if (androidDevice && !embeddedBrowser) {
+        showToast('Chrome에서 PWA 설치 가능 상태를 확인하고 있습니다.');
+      } else if (iosDevice && browserContext === 'ios-safari') {
+        showToast('Safari에서 바로 사용할 수 있습니다. 앱설치를 누르면 홈 화면 추가 방법이 표시됩니다.');
+      }
+    }, 700);
+  }
+
+  function configureSetupPanel() {
+    setSetupCollapsed(true, false);
+    setupPanel.hidden = true;
+    setupPanel.setAttribute('aria-hidden', 'true');
+    setupPanel.style.setProperty('display', 'none', 'important');
+    setupPanel.classList.add('hidden-infrastructure');
+  }
+
+  function setSetupCollapsed(collapsed, remember) {
+    setupPanel.classList.toggle('is-collapsed', Boolean(collapsed));
+    setupToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    if (remember) localStorage.setItem(STORAGE.setupCollapsed, collapsed ? '1' : '0');
+  }
+
+  function collapseSetupAfterSuccess() {
+    window.setTimeout(() => setSetupCollapsed(true, true), 500);
+  }
+
+  function handleAlarmButton() {
+    if (isConnected) disconnectAlarm();
+    else connectAlarm();
+  }
+
+  async function connectAlarm() {
+    if (iosDevice && !isStandaloneApp()) {
+      setSetupCollapsed(false, true);
+      setMessage('아이폰은 먼저 아이폰 전용앱 다운 버튼을 눌러 홈 화면에 설치한 뒤, 설치된 앱에서 완료를 눌러 주세요.', 'error');
+      showIOSInstallGuide();
+      return;
+    }
+    if (!members.length) {
+      setMessage('회원 명단을 불러오는 중입니다. 잠시 후 다시 눌러 주세요.', 'error');
+      return;
+    }
+    const typed = firstTwoSearchChars(nameInput.value);
+    if (Array.from(typed).length < 2) {
+      setMessage('이름을 두 글자 이상 입력해 주세요.', 'error');
+      return;
+    }
+    const exactSelected = member && member.id
+      ? members.find((item) => String(item.id) === String(member.id))
+      : null;
+    const matches = exactSelected
+      ? [exactSelected]
+      : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+    if (!matches.length) {
+      setMessage('등록된 회원 중 ' + typed + ' 이름을 찾지 못했습니다.', 'error');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:'이름을 찾지 못했습니다.'});
+      return;
+    }
+    if (matches.length > 1) {
+      setMessage('앞 두 글자가 같은 회원이 여러 명입니다. 관리자에게 이름 구분을 요청해 주세요.', 'error');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:'동일 이름이 여러 명입니다.'});
+      return;
+    }
+
+    member = {id: String(matches[0].id), name: String(matches[0].name)};
+    saveJson(STORAGE.member, member);
+    setConnecting();
+    try {
+      const instance = await initializeMessaging();
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        throw new Error(iosDevice ? '아이폰 설정에서 자유민턴 코트현황 알림을 허용해 주세요.' : '브라우저 알림을 허용해 주세요.');
+      }
+      const token = await instance.getToken({vapidKey: cfg.vapidKey, serviceWorkerRegistration: registration});
+      if (!token) throw new Error('알림 연결 정보를 만들지 못했습니다.');
+      await submitRelay('register_web_token', token);
+      localStorage.setItem(STORAGE.token, token);
+      setConnected();
+      sendCourtMessage('JAYUMINTON_UNIFIED_PUSH_STATUS', {
+        connected: true,
+        member,
+        message: member.name + '님 알림 예정'
+      });
+      showToast(member.name + '님 알림·진동 설정 완료');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:true, member, message:member.name + '님 알림 예정'});
+      collapseSetupAfterSuccess();
+    } catch (error) {
+      const failureMessage = error && error.message ? error.message : String(error);
+      setOff(failureMessage);
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:failureMessage});
+    } finally {
+      connectButton.disabled = false;
+      connectButton.textContent = isConnected ? '해지' : (member ? '연결' : '완료');
+    }
+  }
+
+  async function disconnectAlarm() {
+    connectButton.disabled = true;
+    connectButton.textContent = '해지 중…';
+    stateBadge.textContent = '💡 해지 중';
+    stateBadge.className = 'state-pill is-connecting';
+    try {
+      const instance = await initializeMessaging();
+      const token = localStorage.getItem(STORAGE.token) || await instance.getToken({vapidKey:cfg.vapidKey, serviceWorkerRegistration:registration});
+      if (token && member) await submitRelay('unregister_web_token', token);
+      if (token) await instance.deleteToken().catch(() => false);
+      localStorage.removeItem(STORAGE.token);
+      isConnected = false;
+      setOff('순서알람 연결을 해지했습니다.');
+      sendCourtMessage('JAYUMINTON_UNIFIED_PUSH_STATUS', {connected:false, member, message:'연결 OFF'});
+      showToast('순서알람 연결 해지 완료');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, member, message:'알림 OFF'});
+      collapseSetupAfterSuccess();
+    } catch (error) {
+      setMessage(error && error.message ? error.message : String(error), 'error');
+    } finally {
+      connectButton.disabled = false;
+      connectButton.textContent = '연결';
+    }
+  }
+
+  async function refreshConnectionState() {
+    const token = localStorage.getItem(STORAGE.token);
+    if (member && token && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const instance = await initializeMessaging();
+        const currentToken = await instance.getToken({vapidKey:cfg.vapidKey, serviceWorkerRegistration:registration});
+        if (!currentToken) throw new Error('알림 연결이 끊어졌습니다.');
+        if (currentToken !== token) {
+          await submitRelay('register_web_token', currentToken);
+          localStorage.setItem(STORAGE.token, currentToken);
+        }
+        setConnected();
+      } catch (_) {
+        setOff('알림 연결이 끊어졌습니다. 완료를 눌러 다시 연결해 주세요.');
+      }
+    } else {
+      setOff(member ? '알림 연결이 꺼져 있습니다.' : '직접 입력하거나 명단에서 이름을 누르세요.');
+    }
