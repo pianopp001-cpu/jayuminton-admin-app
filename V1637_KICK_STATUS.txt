@@ -1,3 +1,7 @@
-stage=kick-started
-source_commit=da355e41d5f5d01ec8807882e62f3fd22f136761
-kick_run=31157588427
+stage=restore-finished
+workflow=restore-exact-v1637.yml
+restore_run=31157598071
+conclusion=failure
+head_sha=be5abcfb1fc8866704891beee6ee7dfa7039a7a4
+url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/31157598071
+kick_step_outcome=failure
