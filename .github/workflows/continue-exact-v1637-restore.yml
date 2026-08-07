@@ -190,6 +190,19 @@ jobs:
           }"""
               s=s[:fstart]+new_fblock+s[fend:]
 
+          # The parent's transparent Chrome-intent overlay is positioned from the last
+          # JAYUMINTON_APP_INSTALL_BUTTON_RECT message. If that data is stale (layout
+          # shifted since it was last published), the overlay sits over the wrong spot
+          # and every tap keeps hitting the real button again, which looks like nothing
+          # happens. Publish a fresh rect synchronously at the moment of the tap itself.
+          a=s.find('function requestMemberAppInstall() {')
+          if a<0:
+              raise SystemExit('requestMemberAppInstall missing')
+          brace=s.find('{',a)
+          after=s[brace+1:brace+120]
+          if 'publishMemberAppInstallButtonRect();' not in after:
+              s=s[:brace+1]+"\n  publishMemberAppInstallButtonRect();"+s[brace+1:]
+
           p.write_text(s,encoding='utf-8')
           PY
 
@@ -329,14 +342,30 @@ jobs:
           replacement=(
             m.group(1)
             +indent+"if (androidDevice && embeddedBrowser) {\n"
-            +indent+"  setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');\n"
-            +indent+"  sendAppInstallStatus('Chrome 직접 링크 대기');\n"
             +indent+"  refreshInstallProxyPosition();\n"
+            +indent+"  var __r=lastInstallButtonRect;\n"
+            +indent+"  var __diag='[진단1] rect='+(__r?(__r.visible?'보임':'숨김')+' '+Math.round(__r.left)+','+Math.round(__r.top)+' '+Math.round(__r.width)+'x'+Math.round(__r.height):'없음')+' link.hidden='+appInstallChromeLink.hidden;\n"
+            +indent+"  setInstallMessage(__diag, 'success');\n"
+            +indent+"  sendAppInstallStatus(__diag);\n"
             +indent+"  return;\n"
             +indent+"}\n"
+            +indent+"sendAppInstallStatus('[진단2] 오버레이 대신 원버튼 재클릭 감지');\n"
             +indent+"handleAppInstallButton(true);\n"
           )
           s=s[:m.start()]+replacement+s[m.end():]
+
+          # Diagnostic: confirm whether the real top-level anchor is actually the element
+          # that receives the 2nd tap (if this text never appears, the overlay is being
+          # missed and the tap keeps landing on the original button instead).
+          a=s.find('function handleEmbeddedChromeLinkClick() {')
+          if a<0:
+              raise SystemExit('handleEmbeddedChromeLinkClick missing')
+          cblock,cstart,cend=extract_block(s,a)
+          new_cblock="""function handleEmbeddedChromeLinkClick() {
+            setInstallMessage('[진단3] 투명링크 실제로 클릭됨 → Chrome 이동 시도', 'success');
+            sendAppInstallStatus('[진단3] 투명링크 클릭됨');
+          }"""
+          s=s[:cstart]+new_cblock+s[cend:]
 
           # Uninstalling a PWA does not clear localStorage. Clear stale installed state only
           # when Chrome itself proves the app is installable again.
