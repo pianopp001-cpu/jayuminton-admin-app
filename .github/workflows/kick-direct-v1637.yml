@@ -29,10 +29,12 @@ jobs:
           for i in $(seq 1 60); do
             sleep 3
             RUN="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-            if [ "$RUN" != '0' ] && [ "$RUN" != "$BEFORE" ]; then break; fi
+            if [ -n "$RUN" ] && [ "$RUN" != '0' ] && [ "$RUN" != "$BEFORE" ]; then break; fi
           done
-          test -n "$RUN" && [ "$RUN" != '0' ] && [ "$RUN" != "$BEFORE""]" || true
-          echo "restore_run=$RUN" > DIRECT_V1637_RUN.txt
+          if [ -z "$RUN" ] || [ "$RUN" = '0' ] || [ "$RUN" = "$BEFORE" ]; then
+            echo 'restore run was not created'
+            exit 1
+          fi
           set +e
           gh run watch "$RUN" --repo "$GITHUB_REPOSITORY" --exit-status
           RC=$?
