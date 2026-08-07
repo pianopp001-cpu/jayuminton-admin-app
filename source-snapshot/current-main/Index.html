@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+<?!= include('Style'); ?>
+</style>
+</head>
+<body>
+
+<div id="memberAuthLoading" class="card login auth-loading">
+  <h1>🏸 자유민턴 코트배정 현황</h1>
+  <div class="sub">로그인 상태를 확인하는 중입니다...</div>
+</div>
+
+<div id="memberLoginBox" class="card login hidden">
+  <h1>자유민턴 코트배정 현황</h1>
+  <div class="sub" style="margin:8px 0 14px">
+    관리자가 알려준 멤버 열람 비밀번호를 입력하세요.
+  </div>
+  <div class="toolbar">
+    <input
+      id="memberPasswordInput"
+      type="password"
+      inputmode="text"
+      autocomplete="off"
+      placeholder="멤버 비밀번호"
+    >
+    <button
+      class="primary"
+      onclick="memberLogin()"
+    >
+      확인
+    </button>
+  </div>
+</div>
+
+<div id="memberApp" class="hidden">
+<header>
+  <div class="wrap member-header-row">
+    <div>
+      <h1>🏸 자유민턴 코트배정 현황</h1>
+      <div id="updatedAt" class="sub">불러오는 중...</div>
+    </div>
+    <button id="memberRefreshButton" class="member-refresh-button" type="button" onclick="refreshMemberState()">↻ 현황 갱신</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="memberSelfSettings" class="member-self-settings">
+    <button id="memberSelfSummary" class="member-self-summary hidden" type="button" onclick="openMemberSelfSettings()">
+      <span id="memberSelfSummaryText">🌟 내 이름 설정</span>
+    </button>
+
+    <div id="memberSelfPanel" class="member-self-panel">
+      <div class="member-self-search-row">
+        <input
+          id="memberSelfSearchInput"
+          type="search"
+          autocomplete="off"
+          placeholder="내 이름 검색"
+          oninput="renderMemberSelfMatches()"
+          onkeydown="handleMemberSelfSearchKey(event)"
+        >
+        <button type="button" class="member-self-clear" onclick="clearMemberSelfSelection()">해제</button>
+      </div>
+      <div id="memberSelfMatches" class="member-self-matches"></div>
+      <div class="member-self-toggle-row member-self-unified-toggle-row" aria-label="알림 진동 앱다운 설정">
+        <button id="memberAlertToggle" type="button" onclick="toggleMemberAlertSetting()" aria-label="알림 켜기 또는 끄기">알림 ON</button>
+        <button id="memberVibrationToggle" type="button" onclick="toggleMemberVibrationSetting()" aria-label="진동 켜기 또는 끄기">진동 ON</button>
+        <button id="memberAppInstallToggle" type="button" onclick="requestMemberAppInstall()" aria-label="사용자용 앱 설치">앱/웹</button>
+        <button id="memberSelfDone" type="button" class="primary" onclick="compactMemberSelfSettings()">완료</button>
+      </div>
+    </div>
+    <div id="memberUnifiedSettingMessage" class="member-unified-setting-message" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card section queue-panel">
+    <h2>코트배정 대기</h2>
+    <div
+      id="activeMembersMember"
+      class="roster"
+    ></div>
+  </section>
+
+  <section class="section member-courts-section">
+    <div id="memberCourts" class="grid"></div>
+  </section>
+
+  <section class="section member-wait-section">
+    <div
+      id="memberWaitGroups"
+      class="grid member-wait-stack"
+    ></div>
+  </section>
+
+  <section class="card section">
+    <h2>도착전·휴식·귀가</h2>
+    <div
+      id="inactiveMembers"
+      class="roster"
+    ></div>
+  </section>
+</main>
+</div>
+
+<script>
+window.JAYUMINTON_MEMBER_PAGE_URL = <?!= JSON.stringify(memberPageUrl || '') ?>;
+window.JAYUMINTON_PUSH_RETURN = <?!= pushReturn || '{"connected":false,"memberId":"","memberName":""}' ?>;
+</script>
+
+<div id="memberForegroundAlert" class="member-foreground-alert hidden" role="alert" aria-live="assertive">
+  <div id="memberForegroundAlertTitle" class="member-foreground-alert-title">배정 안내</div>
+  <div id="memberForegroundAlertBody"></div>
+  <button type="button" onclick="closeMemberForegroundAlert()">확인</button>
+</div>
+
+<script>
+const IS_ADMIN = false;
+</script>
+<?!= include('Script'); ?>
+</body>
+</html>

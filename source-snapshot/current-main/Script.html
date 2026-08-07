@@ -1,0 +1,5865 @@
+<script>
+/* Android APK Native TTS bridge.
+   Works inside the Google Apps Script content frame without Chrome/Samsung Internet.
+   Completion is detected by polling NativeVoice.isSpeaking(), so it does not depend
+   on evaluateJavascript callbacks reaching the same iframe. */
+(function installJayumintonNativeTtsBridge() {
+  if (!window.NativeVoice) return;
+  if (
+    window.__jayumintonNativeVoiceWebBridgeInstalled &&
+    window.speechSynthesis &&
+    window.SpeechSynthesisUtterance
+  ) return;
+
+  const pending = Object.create(null);
+  let sequence = 0;
+  let nativeSpeaking = false;
+
+  function NativeUtterance(text) {
+    this.text = String(text == null ? '' : text);
+    this.lang = 'ko-KR';
+    this.rate = 1;
+    this.pitch = 1;
+    this.volume = 1;
+    this.voice = null;
+    this.onstart = null;
+    this.onend = null;
+    this.onerror = null;
+  }
+
+  const voices = [
+    { name: 'Korean Male', lang: 'ko-KR', localService: true, default: false },
+    { name: 'Korean Female', lang: 'ko-KR', localService: true, default: true }
+  ];
+
+  function dispatch(utterance, eventName) {
+    try {
+      const handler = utterance && utterance['on' + eventName];
+      if (typeof handler === 'function') {
+        handler.call(utterance, { type: eventName, utterance: utterance });
+      }
+    } catch (error) {}
+  }
+
+  function clearWatcher(item) {
+    if (!item) return;
+    if (item.timer) clearInterval(item.timer);
+    if (item.timeout) clearTimeout(item.timeout);
+    item.timer = null;
+    item.timeout = null;
+  }
+
+  function finish(id, eventName) {
+    const item = pending[id];
+    if (!item) return;
+    clearWatcher(item);
+    delete pending[id];
+    nativeSpeaking = Object.keys(pending).length > 0;
+    dispatch(item.utterance, eventName === 'end' ? 'end' : 'error');
+  }
+
+  function watchNativeSpeech(id) {
+    const item = pending[id];
+    if (!item) return;
+    let started = false;
+    let falseCount = 0;
+    const startedAt = Date.now();
+
+    item.timer = setInterval(function() {
+      if (!pending[id]) return;
+      let speaking = false;
+      try { speaking = !!window.NativeVoice.isSpeaking(); } catch (error) {}
+
+      if (speaking) {
+        falseCount = 0;
+        if (!started) {
+          started = true;
+          nativeSpeaking = true;
+          dispatch(item.utterance, 'start');
+        }
+        return;
+      }
+
+      if (started) {
+        falseCount += 1;
+        if (falseCount >= 2) finish(id, 'end');
+        return;
+      }
+
+      /* Very short/silent warm-up utterances can finish between polls. */
+      const visibleText = String(item.utterance.text || '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .trim();
+      if (!visibleText && Date.now() - startedAt > 180) {
+        dispatch(item.utterance, 'start');
+        finish(id, 'end');
+      }
+    }, 70);
+
+    item.timeout = setTimeout(function() {
+      if (!pending[id]) return;
+      if (started) finish(id, 'end');
+      else finish(id, 'error');
+    }, 120000);
+  }
+
+  const synthesis = {
+    onvoiceschanged: null,
+    pause: function() {},
+    resume: function() {},
+    getVoices: function() { return voices.slice(); },
+    speak: function(utterance) {
+      if (!utterance) return;
+      const id = 'jm_' + Date.now() + '_' + (++sequence);
+      pending[id] = { utterance: utterance, timer: null, timeout: null };
+      try {
+        window.NativeVoice.speak(
+          id,
+          String(utterance.text || ''),
+          Number(utterance.rate || 1),
+          Number(utterance.pitch || 1),
+          String(utterance.voice && utterance.voice.name || '')
+        );
+        watchNativeSpeech(id);
+      } catch (error) {
+        finish(id, 'error');
+      }
+    },
+    cancel: function() {
+      try { window.NativeVoice.stop(); } catch (error) {}
+      Object.keys(pending).forEach(function(id) {
+        const item = pending[id];
+        clearWatcher(item);
+        delete pending[id];
+        dispatch(item.utterance, 'error');
+      });
+      nativeSpeaking = false;
+    }
+  };
+
+  Object.defineProperties(synthesis, {
+    speaking: {
+      configurable: true,
+      get: function() {
+        try { return !!window.NativeVoice.isSpeaking(); }
+        catch (error) { return nativeSpeaking || Object.keys(pending).length > 0; }
+      }
+    },
+    pending: {
+      configurable: true,
+      get: function() { return Object.keys(pending).length > 0; }
+    },
+    paused: {
+      configurable: true,
+      get: function() { return false; }
+    }
+  });
+
+  /* This callback still works when the APK invokes it in the same frame.
+     The polling watcher remains the fallback for the Apps Script iframe. */
+  window.__jayumintonNativeVoiceCallback = function(id, eventName) {
+    const item = pending[id];
+    if (!item) return;
+    if (eventName === 'start') {
+      nativeSpeaking = true;
+      dispatch(item.utterance, 'start');
+      return;
+    }
+    finish(id, eventName === 'end' ? 'end' : 'error');
+  };
+
+  try {
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      writable: true,
+      value: NativeUtterance
+    });
+  } catch (error) {
+    window.SpeechSynthesisUtterance = NativeUtterance;
+  }
+
+  try {
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      get: function() { return synthesis; }
+    });
+  } catch (error) {
+    window.speechSynthesis = synthesis;
+  }
+
+  window.__jayumintonNativeVoiceWebBridgeInstalled = true;
+  setTimeout(function() {
+    try {
+      if (typeof synthesis.onvoiceschanged === 'function') synthesis.onvoiceschanged();
+    } catch (error) {}
+  }, 0);
+})();
+const MEMBER_AUTH_KEY =
+  'jayuminton_member_password_version_v2';
+const MEMBER_SESSION_KEY =
+  'jayuminton_member_session_token_v1';
+const ADMIN_AUTH_KEY =
+  'jayuminton_admin_session_v1';
+const VOICE_GUIDE_KEY =
+  'jayuminton_voice_guide_enabled_v1';
+const LAST_VOICE_KEY =
+  'jayuminton_last_voice_announcement_v1';
+
+const UNIFIED_MEMBER_APP_URL =
+  'https://jayuminton-push.web.app/';
+const WEB_PUSH_SELECTED_MEMBER_KEY =
+  'jayuminton_web_push_selected_member_v1';
+const WEB_PUSH_CONNECTION_KEY =
+  'jayuminton_web_push_connection_v1';
+const MEMBER_PAGE_URL =
+  String(window.JAYUMINTON_MEMBER_PAGE_URL || '');
+const UNIFIED_MEMBER_APP_ORIGIN = 'https://jayuminton-push.web.app';
+const MEMBER_FOREGROUND_EVENT_KEY = 'jayuminton_member_foreground_event_v1';
+const MEMBER_ALERT_ENABLED_KEY = 'jayuminton_member_alert_enabled_v1';
+const MEMBER_VIBRATION_ENABLED_KEY = 'jayuminton_member_vibration_enabled_v1';
+const MEMBER_SELF_PANEL_COMPACT_KEY = 'jayuminton_member_self_panel_compact_v1';
+let UNIFIED_MEMBER_BRIDGE_CONNECTED = false;
+let MEMBER_SESSION_VALUE = '';
+const MEMBER_PWA_STANDALONE_HINT = (() => {
+  try {
+    const query = new URLSearchParams(window.location.search || '');
+    return query.get('pwaStandalone') === '1' ||
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+  } catch (error) {
+    return false;
+  }
+})();
+let MEMBER_APP_INSTALL_STATE = {installed:MEMBER_PWA_STANDALONE_HINT, choice:MEMBER_PWA_STANDALONE_HINT?'on':'', platform:'other', browserContext:MEMBER_PWA_STANDALONE_HINT?'standalone':'other', message:'', ready:false, installing:false, armed:false, prepRemaining:30, nativeInstall:false};
+
+const COURT_LABELS = {
+  1: '1번코트(안쪽)',
+  2: '2번코트(중앙안쪽)',
+  3: '3번코트(중앙바깥쪽)',
+  4: '4번코트(입구쪽)'
+};
+
+let ADMIN_PIN_VALUE = '';
+let LAST_PUBLIC_STATE = null;
+let MEMBER_ALERT_AUDIO_READY = false;
+let MEMBER_INFO_OPEN_ID = '';
+let ADD_MEMBER_IN_FLIGHT = false;
+const COURT_ENTRANCE_SIDE_KEY = 'jayuminton_court_entrance_side_v1';
+
+let STATE = {
+  members: [],
+  courts: {
+    1: [],
+    2: [],
+    3: [],
+    4: []
+  },
+  waitGroups: [
+    [],
+    [],
+    [],
+    [],
+    []
+  ],
+  courtStartedAt: {
+    1: '',
+    2: '',
+    3: '',
+    4: ''
+  },
+  maxMembers: 500
+};
+
+let SELECTED = new Set();
+
+let PARTIAL_SELECTED_A = new Set();
+let PARTIAL_SELECTED_B = new Set();
+let WAIT_SELECTED_A = new Set();
+let WAIT_SELECTED_B = new Set();
+let QUICK_PICK = null;
+let LAST_UNDO_STATE = null;
+let WHOLE_SWAP_PICK = null;
+let LAST_COURT_MEMBER_TAP = {
+  memberId: '',
+  tappedAt: 0
+};
+let LAST_WAIT_MEMBER_TAP = {
+  memberId: '',
+  tappedAt: 0
+};
+let LAST_EMPTY_SLOT_TAP = {
+  key: '',
+  tappedAt: 0
+};
+let QUICK_FILTER = 'all';
+let AUTO_ASSIGN_TARGET = null;
+let MEMBER_ACTION_IDS = [];
+let MEMBER_LONG_PRESS_TIMER = null;
+let MEMBER_LONG_PRESS_TRACK = null;
+let MEMBER_LONG_PRESS_BLOCK_UNTIL = 0;
+let ACTION_IN_FLIGHT = false;
+let VOICE_GUIDE_ENABLED =
+  localStorage.getItem(VOICE_GUIDE_KEY) !== 'false';
+let VOICE_DUCKED_MEDIA = [];
+let VOICE_DUCK_TIMEOUT = null;
+let VOICE_UTTERANCES = [];
+let VOICE_REPEAT_ENABLED = false;
+let VOICE_PLAYBACK_TOKEN = 0;
+let VOICE_AUDIO_CONTEXT = null;
+let VOICE_WARMED = false;
+let VOICE_QUEUE = [];
+let VOICE_QUEUE_TIMER = null;
+let VOICE_KEEPALIVE_TIMER = null;
+const VOICE_IS_IOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (
+    navigator.platform === 'MacIntel' &&
+    navigator.maxTouchPoints > 1
+  );
+let LAST_VOICE_ANNOUNCEMENT =
+  loadLastVoiceAnnouncement();
+
+function loadLastVoiceAnnouncement() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(LAST_VOICE_KEY) || 'null'
+    );
+    const courtNo = Number(saved && saved.courtNo);
+    if (
+      courtNo < 1 ||
+      courtNo > 4 ||
+      !Array.isArray(saved.members)
+    ) {
+      return null;
+    }
+    return {
+      courtNo: courtNo,
+      members: saved.members
+        .map(function(member) {
+          return {
+            name: String(member && member.name || ''),
+            gender:
+              member && member.gender === 'female'
+                ? 'female'
+                : 'male'
+          };
+        })
+        .filter(function(member) {
+          return member.name;
+        })
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+function updateReplayVoiceButton() {
+  const button =
+    document.getElementById('replayVoiceButton');
+  if (!button) return;
+  button.disabled = !LAST_VOICE_ANNOUNCEMENT;
+}
+
+function updateSoundUnlockButton() {
+  const button =
+    document.getElementById('soundUnlockButton');
+  if (!button) return;
+  button.classList.toggle('hidden', VOICE_WARMED);
+}
+
+function unlockVoiceSound() {
+  try {
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      VOICE_AUDIO_CONTEXT =
+        VOICE_AUDIO_CONTEXT || new AudioContextClass();
+      if (VOICE_AUDIO_CONTEXT.state === 'suspended') {
+        VOICE_AUDIO_CONTEXT.resume();
+      }
+    }
+  } catch (error) {}
+
+  if (!('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.resume();
+    if (!VOICE_WARMED) {
+      const utterance =
+        new SpeechSynthesisUtterance('\u200b');
+      utterance.lang = 'ko-KR';
+      utterance.volume = 0;
+      utterance.onstart = utterance.onend = function() {
+        VOICE_WARMED = true;
+        updateSoundUnlockButton();
+      };
+      window.speechSynthesis.speak(utterance);
+    }
+  } catch (error) {}
+}
+
+document.addEventListener(
+  'pointerdown',
+  unlockVoiceSound,
+  { passive: true }
+);
+
+function rememberVoiceAnnouncement(courtNo, members) {
+  LAST_VOICE_ANNOUNCEMENT = {
+    courtNo: Number(courtNo),
+    members: (members || []).map(function(member) {
+      return {
+        name: String(member.name || ''),
+        gender:
+          member.gender === 'female' ? 'female' : 'male'
+      };
+    })
+  };
+  try {
+    localStorage.setItem(
+      LAST_VOICE_KEY,
+      JSON.stringify(LAST_VOICE_ANNOUNCEMENT)
+    );
+  } catch (error) {}
+  updateReplayVoiceButton();
+}
+
+function replayLastVoiceAnnouncement() {
+  if (!LAST_VOICE_ANNOUNCEMENT) {
+    alert('다시 재생할 경기 종료 안내가 없습니다.');
+    return;
+  }
+  if (!('speechSynthesis' in window)) {
+    alert(
+      '현재 브라우저는 음성 안내를 지원하지 않습니다.\n' +
+      '링크를 Chrome 또는 삼성 인터넷으로 열어 주세요.'
+    );
+    return;
+  }
+  if (!VOICE_GUIDE_ENABLED) {
+    VOICE_GUIDE_ENABLED = true;
+    localStorage.setItem(VOICE_GUIDE_KEY, 'true');
+    updateVoiceGuideButton();
+  }
+  playCourtFinishVoice(
+    LAST_VOICE_ANNOUNCEMENT.courtNo,
+    LAST_VOICE_ANNOUNCEMENT.members
+  );
+}
+
+function updateVoiceRepeatButton() {
+  const button =
+    document.getElementById('repeatVoiceButton');
+  if (!button) return;
+  button.classList.toggle('active', VOICE_REPEAT_ENABLED);
+  button.setAttribute(
+    'aria-pressed',
+    VOICE_REPEAT_ENABLED ? 'true' : 'false'
+  );
+  button.textContent =
+    VOICE_REPEAT_ENABLED ? '🔁 반복 중' : '🔁 반복';
+}
+
+function toggleVoiceRepeat() {
+  VOICE_REPEAT_ENABLED = !VOICE_REPEAT_ENABLED;
+  updateVoiceRepeatButton();
+  if (
+    VOICE_REPEAT_ENABLED &&
+    LAST_VOICE_ANNOUNCEMENT &&
+    !window.speechSynthesis.speaking
+  ) {
+    replayLastVoiceAnnouncement();
+  }
+}
+
+function stopVoiceAnnouncement() {
+  VOICE_REPEAT_ENABLED = false;
+  VOICE_PLAYBACK_TOKEN += 1;
+  updateVoiceRepeatButton();
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  clearVoiceQueueRuntime();
+  restorePageMediaVolume();
+}
+
+function restorePageMediaVolume() {
+  VOICE_DUCKED_MEDIA.forEach(function(item) {
+    if (item.element) {
+      item.element.volume = item.volume;
+    }
+  });
+  VOICE_DUCKED_MEDIA = [];
+
+  if (VOICE_DUCK_TIMEOUT) {
+    clearTimeout(VOICE_DUCK_TIMEOUT);
+    VOICE_DUCK_TIMEOUT = null;
+  }
+}
+
+function duckPageMediaForVoice() {
+  restorePageMediaVolume();
+
+  document
+    .querySelectorAll('audio,video')
+    .forEach(function(element) {
+      if (
+        !element.paused &&
+        !element.muted &&
+        element.volume > 0
+      ) {
+        VOICE_DUCKED_MEDIA.push({
+          element: element,
+          volume: element.volume
+        });
+        element.volume =
+          Math.max(0.05, element.volume * 0.18);
+      }
+    });
+
+  VOICE_DUCK_TIMEOUT = setTimeout(
+    restorePageMediaVolume,
+    90000
+  );
+}
+
+function updateVoiceGuideButton() {
+  const button =
+    document.getElementById('voiceGuideToggle');
+
+  if (!button) return;
+
+  button.textContent =
+    VOICE_GUIDE_ENABLED
+      ? '🔊 음성 안내 켜짐'
+      : '🔇 음성 안내 꺼짐';
+  button.classList.toggle(
+    'active',
+    VOICE_GUIDE_ENABLED
+  );
+  button.setAttribute(
+    'aria-pressed',
+    VOICE_GUIDE_ENABLED ? 'true' : 'false'
+  );
+}
+
+function toggleVoiceGuide() {
+  VOICE_GUIDE_ENABLED = !VOICE_GUIDE_ENABLED;
+  localStorage.setItem(
+    VOICE_GUIDE_KEY,
+    VOICE_GUIDE_ENABLED ? 'true' : 'false'
+  );
+  updateVoiceGuideButton();
+
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    VOICE_UTTERANCES = [];
+  }
+  restorePageMediaVolume();
+
+  if (VOICE_GUIDE_ENABLED) {
+    speakKoreanText('음성 안내가 켜졌습니다.');
+  }
+}
+
+function testVoiceGuide() {
+  if (!('speechSynthesis' in window)) {
+    alert(
+      '현재 브라우저는 음성 안내를 지원하지 않습니다.\n' +
+      '링크를 Chrome 또는 삼성 인터넷으로 열어 주세요.'
+    );
+    return;
+  }
+
+  if (!VOICE_GUIDE_ENABLED) {
+    VOICE_GUIDE_ENABLED = true;
+    localStorage.setItem(VOICE_GUIDE_KEY, 'true');
+    updateVoiceGuideButton();
+  }
+
+  window.speechSynthesis.cancel();
+  VOICE_UTTERANCES = [];
+  speakKoreanText(
+    '음성 안내 테스트입니다. 소리가 들리면 정상입니다.'
+  );
+  window.speechSynthesis.resume();
+}
+
+function koreanVoices() {
+  if (!('speechSynthesis' in window)) return null;
+
+  return window.speechSynthesis
+    .getVoices()
+    .filter(function(voice) {
+      return /^ko[-_]/i.test(voice.lang || '');
+    });
+}
+
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = function() {
+    koreanVoices();
+  };
+}
+
+function getKoreanVoice(gender) {
+  const voices = koreanVoices() || [];
+  const femaleKeywords =
+    /female|여성|sunhi|yuna|sora|nari|seoyeon|jiyeon|heami|해미|유나|소라|나리|서연|지연|선히/i;
+  const maleKeywords =
+    /male|남성|injoon|hyunsu|minsu|junho|woosung|민수|준호|현수|인준/i;
+  const naturalKeywords =
+    /natural|online|premium|enhanced|자연|고품질/i;
+
+  if (gender === 'female') {
+    const naturalFemale = voices.find(function(voice) {
+      const label =
+        (voice.name || '') + ' ' + (voice.lang || '');
+      return femaleKeywords.test(label) && naturalKeywords.test(label);
+    });
+    if (naturalFemale) return naturalFemale;
+
+    const female = voices.find(function(voice) {
+      return femaleKeywords.test(
+        (voice.name || '') + ' ' + (voice.lang || '')
+      );
+    });
+    if (female) return female;
+  }
+
+  if (gender === 'male') {
+    const male = voices.find(function(voice) {
+      return maleKeywords.test(
+        (voice.name || '') + ' ' + (voice.lang || '')
+      );
+    });
+    if (male) return male;
+  }
+
+  return voices.find(function(voice) {
+    return naturalKeywords.test(voice.name || '');
+  }) || voices[0] || null;
+}
+
+function speakKoreanText(text, gender, onComplete) {
+  if (
+    !VOICE_GUIDE_ENABLED ||
+    !('speechSynthesis' in window) ||
+    !text
+  ) {
+    return;
+  }
+
+  const utterance =
+    new SpeechSynthesisUtterance(String(text));
+  utterance.lang = 'ko-KR';
+  utterance.rate =
+    gender === 'male'
+      ? 0.92
+      : gender === 'female'
+        ? 0.92
+        : 0.92;
+  utterance.pitch =
+    gender === 'male'
+      ? 0.88
+      : gender === 'female'
+        ? 1.03
+        : 1.03;
+  utterance.volume = 1;
+
+  const voice = getKoreanVoice(gender);
+  if (voice) utterance.voice = voice;
+
+  VOICE_UTTERANCES.push(utterance);
+
+  function finishUtterance() {
+    VOICE_UTTERANCES =
+      VOICE_UTTERANCES.filter(function(item) {
+        return item !== utterance;
+      });
+    if (typeof onComplete === 'function') {
+      onComplete();
+    }
+  }
+
+  utterance.onend = finishUtterance;
+  utterance.onerror = finishUtterance;
+
+  window.speechSynthesis.speak(utterance);
+  window.speechSynthesis.resume();
+  return utterance;
+}
+
+function speechFriendlyName(name) {
+  const rawName = String(name || '').trim();
+  const matched = rawName.match(
+    /^([^()（）]+?)\s*[（(]\s*([^()（）]+?)\s*[）)]\s*$/
+  );
+
+  if (matched) {
+    const realName = matched[1].trim();
+    const nickname = matched[2].trim();
+    return (realName + ' ' + nickname).trim();
+  }
+
+  return rawName
+    .replace(/[()（）]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function speechFriendlyMemberCall(name) {
+  const friendlyName = speechFriendlyName(name);
+  return friendlyName ? friendlyName + '님.' : '';
+}
+
+function clearVoiceQueueRuntime() {
+  VOICE_QUEUE = [];
+  if (VOICE_QUEUE_TIMER) {
+    clearTimeout(VOICE_QUEUE_TIMER);
+    VOICE_QUEUE_TIMER = null;
+  }
+  if (VOICE_KEEPALIVE_TIMER) {
+    clearInterval(VOICE_KEEPALIVE_TIMER);
+    VOICE_KEEPALIVE_TIMER = null;
+  }
+  VOICE_UTTERANCES = [];
+}
+
+function playVoiceQueue(queue, playbackToken, onComplete) {
+  try {
+    window.speechSynthesis.cancel();
+  } catch (error) {}
+  clearVoiceQueueRuntime();
+  VOICE_QUEUE = queue.slice();
+
+  function next() {
+    if (playbackToken !== VOICE_PLAYBACK_TOKEN) return;
+    if (!VOICE_QUEUE.length) {
+      clearVoiceQueueRuntime();
+      if (typeof onComplete === 'function') onComplete();
+      return;
+    }
+
+    const item = VOICE_QUEUE.shift();
+    const utterance =
+      new SpeechSynthesisUtterance(String(item.text || ''));
+    utterance.lang = 'ko-KR';
+    utterance.rate =
+      item.gender === 'male'
+        ? 0.92
+        : item.gender === 'female'
+          ? 0.92
+          : 0.92;
+    utterance.pitch =
+      item.gender === 'male'
+        ? 0.88
+        : item.gender === 'female'
+          ? 1.03
+          : 1.03;
+    utterance.volume = 1;
+    const voice = getKoreanVoice(item.gender);
+    if (voice) utterance.voice = voice;
+    VOICE_UTTERANCES = [utterance];
+
+    function continueQueue() {
+      VOICE_QUEUE_TIMER = setTimeout(next, 140);
+    }
+    utterance.onstart = function() {
+      VOICE_WARMED = true;
+      updateSoundUnlockButton();
+    };
+    utterance.onend = continueQueue;
+    utterance.onerror = continueQueue;
+
+    try {
+      window.speechSynthesis.resume();
+      window.speechSynthesis.speak(utterance);
+    } catch (error) {
+      continueQueue();
+    }
+
+    if (!VOICE_KEEPALIVE_TIMER) {
+      VOICE_KEEPALIVE_TIMER = setInterval(function() {
+        try {
+          if (
+            window.speechSynthesis.speaking &&
+            window.speechSynthesis.paused
+          ) {
+            window.speechSynthesis.resume();
+          }
+        } catch (error) {}
+      }, 4000);
+    }
+  }
+
+  unlockVoiceSound();
+  VOICE_QUEUE_TIMER = setTimeout(
+    next,
+    VOICE_IS_IOS ? 280 : 100
+  );
+}
+
+function playCourtFinishVoice(courtNo, waitingMembers) {
+  if (
+    !VOICE_GUIDE_ENABLED ||
+    !('speechSynthesis' in window)
+  ) {
+    return;
+  }
+
+  VOICE_PLAYBACK_TOKEN += 1;
+  const playbackToken = VOICE_PLAYBACK_TOKEN;
+  duckPageMediaForVoice();
+
+  function finishAnnouncement() {
+    restorePageMediaVolume();
+    if (
+      VOICE_REPEAT_ENABLED &&
+      playbackToken === VOICE_PLAYBACK_TOKEN
+    ) {
+      setTimeout(function() {
+        if (
+          VOICE_REPEAT_ENABLED &&
+          playbackToken === VOICE_PLAYBACK_TOKEN
+        ) {
+          playCourtFinishVoice(courtNo, waitingMembers);
+        }
+      }, 450);
+    }
+  }
+
+  let announcementText =
+    courtNo + '번 코트 경기가 종료되었습니다. ';
+
+  if (!waitingMembers.length) {
+    announcementText +=
+      '대기 1번에 입장할 인원이 없습니다.';
+  } else {
+    const memberCalls = waitingMembers
+      .map(function(member) {
+        return speechFriendlyMemberCall(member.name);
+      })
+      .filter(Boolean);
+    const memberListText = memberCalls.join(' ');
+    const assignmentBlock =
+      memberListText + ' ' +
+      courtNo + '번 코트로 들어가 주세요.';
+
+    /* 4명 이름과 코트 입장 안내를 한 묶음으로 만들어
+       같은 전체 안내를 정확히 세 번 반복한다. */
+    announcementText +=
+      assignmentBlock + ' ' +
+      assignmentBlock + ' ' +
+      assignmentBlock;
+  }
+
+  const queue = [{
+    text: announcementText.trim(),
+    gender: 'female'
+  }];
+
+  playVoiceQueue(queue, playbackToken, finishAnnouncement);
+}
+
+function server(name, args) {
+  const mutationNames = [
+    'addMember','setMemberStatus','deleteMembers',
+    'assignMembersToCourt','assignMembersToWaitGroup',
+    'assignWaitGroupToCourt',
+    'autoFillCourt','autoFillWaitGroup','moveOrSwapMember',
+    'swapCourts','swapWaitGroups','finishCourt',
+    'removeFromCourt','removeFromWaitGroup','smartAssignSelected',
+    'undoLastAction','decreaseSelectedGameCounts',
+    'resetSelectedGameCounts','resetAllOperationData',
+    'adjustCourtMembers','adjustWaitGroupMembers',
+    'createManualBackup','restoreManualBackup','changeMemberPassword'
+  ];
+  const isMutation = mutationNames.indexOf(name) >= 0;
+
+  if (isMutation && ACTION_IN_FLIGHT) {
+    return Promise.reject(
+      new Error('이전 작업을 저장하고 있습니다. 잠시만 기다려 주세요.')
+    );
+  }
+
+  if (isMutation) setActionBusy(true);
+
+  return new Promise(function(resolve, reject) {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (isMutation) setActionBusy(false);
+        resolve(result);
+      })
+      .withFailureHandler(function(error) {
+        if (isMutation) setActionBusy(false);
+        reject(error);
+      })[name]
+      .apply(
+        google.script.run,
+        args || []
+      );
+  });
+}
+
+function setActionBusy(busy) {
+  ACTION_IN_FLIGHT = Boolean(busy);
+  document.body.classList.toggle(
+    'action-busy',
+    ACTION_IN_FLIGHT
+  );
+  document.body.setAttribute(
+    'aria-busy',
+    ACTION_IN_FLIGHT ? 'true' : 'false'
+  );
+}
+
+document.addEventListener('click', function(event) {
+  if (!ACTION_IN_FLIGHT) return;
+  const control = event.target.closest('button,summary');
+  if (!control) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+
+
+function sortMembersByKoreanName(list) {
+  return list.slice().sort(function(a, b) {
+    return String(a.name || '').localeCompare(
+      String(b.name || ''),
+      'ko-KR',
+      {
+        sensitivity: 'base',
+        numeric: true
+      }
+    );
+  });
+}
+
+function memberById(id) {
+  return STATE.members.find(function(member) {
+    return member.id === id;
+  });
+}
+
+function genderClass(member) {
+  return (
+    member &&
+    member.gender === 'female'
+  )
+    ? 'female'
+    : 'male';
+}
+
+function compactMemberName(name) {
+  const baseName =
+    String(name || '')
+      .split('(')[0]
+      .trim();
+
+  return Array.from(baseName || String(name || '').trim())
+    .slice(0, 2)
+    .join('');
+}
+
+function escapeMemberInfo(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function firstMemberProfileValue(member, keys) {
+  if (!member) return '';
+  for (let index = 0; index < keys.length; index += 1) {
+    const value = String(member[keys[index]] == null ? '' : member[keys[index]]).trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+function normalizeMemberProfile(member) {
+  if (!member) return member;
+  const grade = firstMemberProfileValue(member, [
+    'grade', 'level', 'rank', 'className', 'skillLevel'
+  ]);
+  const experience = firstMemberProfileValue(member, [
+    'experience', 'career', 'years', 'experienceText', 'playYears'
+  ]);
+  member.grade = grade;
+  member.experience = experience;
+  member.level = grade;
+  member.career = experience;
+  return member;
+}
+
+function normalizeStateMemberProfiles(state) {
+  if (!state || !Array.isArray(state.members)) return state;
+  state.members.forEach(normalizeMemberProfile);
+  return state;
+}
+
+function memberLocationInfo(member) {
+  if (!member) return '';
+  const id = String(member.id || '');
+
+  for (let courtNo = 1; courtNo <= 4; courtNo++) {
+    if ((STATE.courts[courtNo] || []).some(function(value) {
+      return String(value) === id;
+    })) {
+      return courtNo + '번코트';
+    }
+  }
+
+  for (let groupIndex = 0; groupIndex < (STATE.waitGroups || []).length; groupIndex++) {
+    if ((STATE.waitGroups[groupIndex] || []).some(function(value) {
+      return String(value) === id;
+    })) {
+      return '대기' + (groupIndex + 1);
+    }
+  }
+
+  if (member.status === 'active') return '코트배정 대기';
+  if (member.status === 'before') return '도착전';
+  if (member.status === 'rest') return '휴식';
+  if (member.status === 'away') return '귀가';
+  return '';
+}
+
+function memberInfoDetailHtml(member, locationOverride) {
+  normalizeMemberProfile(member);
+  const grade = String(member && member.grade || '').trim();
+  let experience = String(member && member.experience || '').trim();
+
+  experience = experience.replace(/^구력\s*/i, '').trim();
+
+  if (!grade && !experience) {
+    return '<span class="member-info-detail is-missing">급수·구력 미입력</span>';
+  }
+
+  const gradeText = grade || '급수 미입력';
+  const experienceText = experience ? '구력 ' + experience : '구력 미입력';
+
+  return '<span class="member-info-detail' +
+    ((!grade || !experience) ? ' is-missing' : '') + '">' +
+    escapeMemberInfo(gradeText) + ' · ' + escapeMemberInfo(experienceText) +
+    '</span>';
+}
+
+function toggleMemberInfo(memberId, event) {
+  /* 카드 정보는 항상 표시하므로 클릭 시 전체 화면을 다시 그리지 않는다. */
+  return;
+}
+
+function memberLongPressAttributes(memberId) {
+  return (
+    ' onpointerdown="startMemberLongPress(\'' + memberId + '\',event)"' +
+    ' onpointermove="moveMemberLongPress(event)"' +
+    ' onpointerup="finishMemberLongPress()"' +
+    ' onpointercancel="finishMemberLongPress()"' +
+    ' onpointerleave="finishMemberLongPress()"' +
+    ' oncontextmenu="event.preventDefault()" '
+  );
+}
+
+function startMemberLongPress(memberId, event) {
+  finishMemberLongPress();
+
+  MEMBER_LONG_PRESS_TRACK = {
+    memberId: memberId,
+    x: event ? event.clientX : 0,
+    y: event ? event.clientY : 0
+  };
+
+  MEMBER_LONG_PRESS_TIMER = setTimeout(function() {
+    MEMBER_LONG_PRESS_TIMER = null;
+    MEMBER_ACTION_IDS = [memberId];
+    MEMBER_LONG_PRESS_BLOCK_UNTIL = Date.now() + 700;
+
+    if (navigator.vibrate) {
+      navigator.vibrate(25);
+    }
+
+    document
+      .querySelectorAll('[data-member-id="' + memberId + '"]')
+      .forEach(function(element) {
+        element.classList.add('long-pressed');
+      });
+    renderQuickMoveBar();
+  }, 600);
+}
+
+function moveMemberLongPress(event) {
+  if (!MEMBER_LONG_PRESS_TRACK || !event) return;
+
+  if (
+    Math.abs(event.clientX - MEMBER_LONG_PRESS_TRACK.x) > 12 ||
+    Math.abs(event.clientY - MEMBER_LONG_PRESS_TRACK.y) > 12
+  ) {
+    finishMemberLongPress();
+  }
+}
+
+function finishMemberLongPress() {
+  if (MEMBER_LONG_PRESS_TIMER) {
+    clearTimeout(MEMBER_LONG_PRESS_TIMER);
+    MEMBER_LONG_PRESS_TIMER = null;
+  }
+  MEMBER_LONG_PRESS_TRACK = null;
+}
+
+function consumeLongPressClick(memberId, event) {
+  if (
+    Date.now() <= MEMBER_LONG_PRESS_BLOCK_UNTIL &&
+    MEMBER_ACTION_IDS.indexOf(memberId) >= 0
+  ) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    MEMBER_LONG_PRESS_BLOCK_UNTIL = 0;
+    return true;
+  }
+  return false;
+}
+
+function handleSelectableMemberClick(memberId, event) {
+  if (consumeLongPressClick(memberId, event)) return;
+  if (assignMemberToChosenEmpty(memberId, event)) return;
+  toggleSelected(memberId);
+}
+
+function assignMemberToChosenEmpty(memberId, event) {
+  if (!AUTO_ASSIGN_TARGET) return false;
+
+  const targetType = AUTO_ASSIGN_TARGET.type;
+  const targetIndex = AUTO_ASSIGN_TARGET.index;
+  const targetGroup =
+    targetType === 'court'
+      ? (STATE.courts[targetIndex] || [])
+      : (STATE.waitGroups[targetIndex] || []);
+
+  if (targetGroup.indexOf(memberId) >= 0) {
+    alert('이미 선택한 위치에 있는 멤버입니다.');
+    return true;
+  }
+
+  if (targetGroup.length >= 4) {
+    AUTO_ASSIGN_TARGET = null;
+    alert('선택한 위치에는 빈자리가 없습니다.');
+    renderState();
+    return true;
+  }
+
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (targetGroup.length === 3) {
+    AUTO_ASSIGN_TARGET = null;
+  }
+
+  QUICK_PICK = null;
+  SELECTED.delete(memberId);
+  batchAssignToTarget(
+    [memberId],
+    targetType,
+    targetIndex
+  );
+  return true;
+}
+
+function memberCard(
+  member,
+  showGames,
+  clickable
+) {
+  if (!member) {
+    return '<div class="person empty">비어 있음</div>';
+  }
+
+  const selected =
+    SELECTED.has(member.id)
+      ? ' selected'
+      : '';
+
+  const onclick = clickable
+    ? ' onclick="handleSelectableMemberClick(\'' + member.id + '\',event)"'
+    : '';
+
+  const games =
+    showGames
+      ? '<span class="meta">' +
+        (member.games || 0) +
+        '게임</span>'
+      : '';
+
+  const selfStar = isSelfMember(member)
+    ? '<span class="member-self-star" aria-label="내 이름">나</span>'
+    : '';
+
+  const selfClass = isSelfMember(member) ? ' is-self-member' : '';
+
+  return (
+    '<button class="' +
+    (clickable ? 'member ' : 'person member-info-card ') +
+    genderClass(member) +
+    selected + selfClass +
+    '" data-member-id="' +
+    member.id +
+    '"' +
+    (clickable ? memberLongPressAttributes(member.id) : '') +
+    onclick +
+    '>' +
+    selfStar +
+    '<span class="name">' +
+    escapeMemberInfo(member.name) +
+    '</span>' +
+    games +
+    memberInfoDetailHtml(member) +
+    '</button>'
+  );
+}
+
+function clearQuickPickOnly() {
+  QUICK_PICK = null;
+  document.querySelectorAll('.quick-picked').forEach(function(element) {
+    element.classList.remove('quick-picked');
+  });
+  renderQuickMoveBar();
+}
+
+function quickPickMember(type, index, memberId, event) {
+  if (event && event.target && event.target.closest('button.small')) return;
+
+  if (
+    QUICK_PICK &&
+    QUICK_PICK.type === type &&
+    QUICK_PICK.index === String(index) &&
+    QUICK_PICK.memberId === memberId
+  ) {
+    clearQuickPickOnly();
+    return;
+  }
+
+  if (!QUICK_PICK) {
+    QUICK_PICK = { type: type, index: String(index), memberId: memberId };
+    document
+      .querySelectorAll('[data-member-id="' + memberId + '"]')
+      .forEach(function(element) {
+        element.classList.add('quick-picked');
+      });
+    renderQuickMoveBar();
+    return;
+  }
+
+  const source = QUICK_PICK;
+  clearQuickPickOnly();
+
+  if (source.memberId === memberId) return;
+  quickMoveOrSwap(source.memberId, type, index, memberId);
+}
+
+function handleCourtMemberTap(courtNo, memberId, event) {
+  if (event && event.target && event.target.closest('button.small')) return;
+  if (consumeLongPressClick(memberId, event)) return;
+  if (assignMemberToChosenEmpty(memberId, event)) return;
+
+  if (
+    QUICK_PICK &&
+    QUICK_PICK.type === 'court' &&
+    QUICK_PICK.index === String(courtNo) &&
+    QUICK_PICK.memberId === memberId
+  ) {
+    LAST_COURT_MEMBER_TAP = { memberId:'', tappedAt:0 };
+    clearQuickPickOnly();
+    return;
+  }
+
+  const now = Date.now();
+  const isDoubleTap =
+    LAST_COURT_MEMBER_TAP.memberId === memberId &&
+    now - LAST_COURT_MEMBER_TAP.tappedAt <= 420;
+
+  LAST_COURT_MEMBER_TAP = isDoubleTap
+    ? { memberId:'', tappedAt:0 }
+    : { memberId:memberId, tappedAt:now };
+
+  if (isDoubleTap) {
+    cancelQuickPick();
+    quickMoveOrSwap(memberId, 'active', '', '');
+    return;
+  }
+
+  quickPickMember('court', courtNo, memberId, event);
+}
+
+function handleWaitMemberTap(groupIndex, memberId, event) {
+  if (event && event.target && event.target.closest('button.small')) return;
+  if (consumeLongPressClick(memberId, event)) return;
+  if (assignMemberToChosenEmpty(memberId, event)) return;
+
+  if (
+    QUICK_PICK &&
+    QUICK_PICK.type === 'wait' &&
+    QUICK_PICK.index === String(groupIndex) &&
+    QUICK_PICK.memberId === memberId
+  ) {
+    LAST_WAIT_MEMBER_TAP = { memberId:'', tappedAt:0 };
+    clearQuickPickOnly();
+    return;
+  }
+
+  const now = Date.now();
+  const isDoubleTap =
+    LAST_WAIT_MEMBER_TAP.memberId === memberId &&
+    now - LAST_WAIT_MEMBER_TAP.tappedAt <= 420;
+
+  LAST_WAIT_MEMBER_TAP = isDoubleTap
+    ? { memberId:'', tappedAt:0 }
+    : { memberId:memberId, tappedAt:now };
+
+  if (isDoubleTap) {
+    cancelQuickPick();
+    quickMoveOrSwap(memberId, 'active', '', '');
+    return;
+  }
+
+  quickPickMember('wait', groupIndex, memberId, event);
+}
+
+function handleEmptySlotTap(type, index, slotIndex, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  let ids = [];
+
+  if (QUICK_PICK) {
+    ids = [QUICK_PICK.memberId];
+  } else {
+    ids = Array.from(SELECTED);
+  }
+
+  if (!ids.length) {
+    const sameTarget =
+      AUTO_ASSIGN_TARGET &&
+      AUTO_ASSIGN_TARGET.type === type &&
+      AUTO_ASSIGN_TARGET.index === Number(index) &&
+      AUTO_ASSIGN_TARGET.slotIndex === Number(slotIndex);
+
+    AUTO_ASSIGN_TARGET = sameTarget
+      ? null
+      : {
+          type: type,
+          index: Number(index),
+          slotIndex: Number(slotIndex)
+        };
+    renderCourts();
+    renderWaitGroups();
+    return;
+  }
+
+  const targetGroup =
+    type === 'court'
+      ? (STATE.courts[Number(index)] || [])
+      : (STATE.waitGroups[Number(index)] || []);
+  const capacity = 4 - targetGroup.length;
+
+  if (ids.some(function(id) {
+    return targetGroup.indexOf(id) >= 0;
+  })) {
+    alert('이미 이 위치에 있는 인원은 다시 넣을 수 없습니다.');
+    return;
+  }
+
+  if (ids.length > capacity) {
+    alert(
+      '이 위치에는 ' + capacity +
+      '명만 더 들어갈 수 있습니다. 선택 인원을 줄여주세요.'
+    );
+    return;
+  }
+
+  AUTO_ASSIGN_TARGET = null;
+  cancelQuickPick();
+  batchAssignToTarget(ids, type, index);
+}
+
+function emptySlotCard(type, index, slotIndex) {
+  const autoTarget =
+    AUTO_ASSIGN_TARGET &&
+    AUTO_ASSIGN_TARGET.type === type &&
+    AUTO_ASSIGN_TARGET.index === Number(index) &&
+    AUTO_ASSIGN_TARGET.slotIndex === Number(slotIndex)
+      ? ' auto-assign-target'
+      : '';
+
+  return (
+    '<div class="person empty quick-empty-slot' +
+    autoTarget +
+    '" ' +
+    'onclick="handleEmptySlotTap(\'' + type + '\',\'' + index +
+    '\',' + slotIndex + ',event)" ' +
+    'title="선택한 사람을 넣으려면 한 번 누르세요">' +
+    '<span class="empty-slot-label">비어 있음</span>' +
+    '<small>한번 탭</small>' +
+    '</div>'
+  );
+}
+
+function locateMemberInState(memberId) {
+  for (let courtNo = 1; courtNo <= 4; courtNo++) {
+    const position = (STATE.courts[courtNo] || []).indexOf(memberId);
+    if (position >= 0) {
+      return { type:'court', index:String(courtNo), position:position };
+    }
+  }
+  for (let groupIndex = 0; groupIndex < STATE.waitGroups.length; groupIndex++) {
+    const position = (STATE.waitGroups[groupIndex] || []).indexOf(memberId);
+    if (position >= 0) {
+      return { type:'wait', index:String(groupIndex), position:position };
+    }
+  }
+  return { type:'active', index:'', position:-1 };
+}
+
+function stateGroup(location) {
+  if (location.type === 'court') return STATE.courts[Number(location.index)];
+  if (location.type === 'wait') return STATE.waitGroups[Number(location.index)];
+  return null;
+}
+
+function applyMoveOrSwapLocally(memberId, targetType, targetIndex, targetMemberId) {
+  const source = locateMemberInState(memberId);
+  const sourceGroup = stateGroup(source);
+
+  if (targetMemberId) {
+    const other = locateMemberInState(targetMemberId);
+    const otherGroup = stateGroup(other);
+    if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+    if (otherGroup) otherGroup[other.position] = memberId;
+  } else {
+    const target = { type:targetType, index:String(targetIndex), position:-1 };
+    const targetGroup = stateGroup(target);
+    if (targetGroup && targetGroup.length >= 4) {
+      throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+    }
+    if (sourceGroup) sourceGroup.splice(source.position, 1);
+    if (targetGroup) targetGroup.push(memberId);
+  }
+
+  const playing = new Set();
+  const waiting = new Set();
+  Object.keys(STATE.courts).forEach(function(key) {
+    (STATE.courts[key] || []).forEach(function(id) { playing.add(id); });
+  });
+  STATE.waitGroups.forEach(function(group) {
+    (group || []).forEach(function(id) { waiting.add(id); });
+  });
+  STATE.members.forEach(function(member) {
+    if (playing.has(member.id)) member.status = 'playing';
+    else if (waiting.has(member.id)) member.status = 'waiting';
+    else if (member.id === memberId || member.id === targetMemberId) {
+      member.status = 'active';
+    }
+  });
+}
+
+function applyBatchAssignLocally(ids, targetType, targetIndex) {
+  const moving = new Set(ids);
+
+  Object.keys(STATE.courts).forEach(function(key) {
+    STATE.courts[key] =
+      (STATE.courts[key] || []).filter(function(id) {
+        return !moving.has(id);
+      });
+
+    if (STATE.courts[key].length < 4) {
+      STATE.courtStartedAt[key] = '';
+    }
+  });
+
+  STATE.waitGroups = STATE.waitGroups.map(function(group) {
+    return (group || []).filter(function(id) {
+      return !moving.has(id);
+    });
+  });
+
+  if (targetType === 'court') {
+    const courtNo = Number(targetIndex);
+    STATE.courts[courtNo] =
+      (STATE.courts[courtNo] || []).concat(ids);
+    STATE.courtStartedAt[courtNo] =
+      STATE.courts[courtNo].length === 4
+        ? new Date().toISOString()
+        : '';
+  } else {
+    const groupIndex = Number(targetIndex);
+    STATE.waitGroups[groupIndex] =
+      (STATE.waitGroups[groupIndex] || []).concat(ids);
+  }
+
+  const playing = new Set();
+  const waiting = new Set();
+
+  Object.keys(STATE.courts).forEach(function(key) {
+    (STATE.courts[key] || []).forEach(function(id) {
+      playing.add(id);
+    });
+  });
+  STATE.waitGroups.forEach(function(group) {
+    (group || []).forEach(function(id) {
+      waiting.add(id);
+    });
+  });
+
+  STATE.members.forEach(function(member) {
+    if (playing.has(member.id)) member.status = 'playing';
+    else if (waiting.has(member.id)) member.status = 'waiting';
+    else if (moving.has(member.id)) member.status = 'active';
+  });
+}
+
+async function batchAssignToTarget(ids, targetType, targetIndex) {
+  const previousState =
+    JSON.parse(JSON.stringify(STATE));
+
+  try {
+    applyBatchAssignLocally(
+      ids,
+      targetType,
+      targetIndex
+    );
+    renderState();
+
+    const method =
+      targetType === 'court'
+        ? 'assignMembersToCourt'
+        : 'assignMembersToWaitGroup';
+
+    const state = await server(method, [
+      ADMIN_PIN_VALUE,
+      Number(targetIndex),
+      ids
+    ]);
+
+    renderState(state);
+    setUndoState(previousState);
+  } catch (error) {
+    STATE = previousState;
+    renderState();
+    alert(error.message || error);
+  }
+}
+
+async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId) {
+  const previousState = JSON.parse(JSON.stringify(STATE));
+  try {
+    applyMoveOrSwapLocally(
+      memberId,
+      targetType,
+      targetIndex,
+      targetMemberId || ''
+    );
+    renderState();
+    const state = await server('moveOrSwapMember', [
+      ADMIN_PIN_VALUE,
+      memberId,
+      targetType,
+      String(targetIndex),
+      targetMemberId || ''
+    ]);
+    renderState(state);
+    setUndoState(previousState);
+  } catch (error) {
+    STATE = previousState;
+    renderState();
+    alert(error.message || error);
+  }
+}
+
+function renderQuickMoveBar() {
+  const bar = document.getElementById('quickMoveBar');
+  if (!bar) return;
+  bar.classList.toggle(
+    'hidden',
+    MEMBER_ACTION_IDS.length === 0
+  );
+  const name = document.getElementById('quickMoveName');
+  const member =
+    MEMBER_ACTION_IDS.length === 1
+      ? memberById(MEMBER_ACTION_IDS[0])
+      : null;
+  if (name) {
+    name.textContent =
+      member
+        ? member.name
+        : MEMBER_ACTION_IDS.length
+          ? MEMBER_ACTION_IDS.length + '명 선택'
+          : '선택 인원';
+  }
+}
+
+function closeMemberActionBar() {
+  MEMBER_ACTION_IDS = [];
+  MEMBER_LONG_PRESS_BLOCK_UNTIL = 0;
+  document
+    .querySelectorAll('.long-pressed')
+    .forEach(function(element) {
+      element.classList.remove('long-pressed');
+    });
+  renderQuickMoveBar();
+}
+
+function cancelQuickPick() {
+  QUICK_PICK = null;
+  SELECTED.clear();
+  document.querySelectorAll('.quick-picked').forEach(function(element) {
+    element.classList.remove('quick-picked');
+  });
+  document.querySelectorAll('.selected').forEach(function(element) {
+    element.classList.remove('selected');
+  });
+  renderSelectionCount();
+  renderQuickRoster();
+  renderQuickMoveBar();
+}
+
+function sendQuickPickToActive() {
+  const ids = MEMBER_ACTION_IDS.slice();
+  if (!ids.length) return;
+  closeMemberActionBar();
+  runAction('setMemberStatus', [
+    ADMIN_PIN_VALUE,
+    ids,
+    'active'
+  ]);
+}
+
+function deleteQuickPickedMembers() {
+  const ids = MEMBER_ACTION_IDS.slice();
+
+  if (!ids.length) return;
+
+  const names = ids
+    .map(memberById)
+    .filter(Boolean)
+    .map(function(member) {
+      return member.name;
+    })
+    .join(', ');
+
+  if (!confirm(names + '\n\n선택한 멤버를 완전히 삭제할까요?')) {
+    return;
+  }
+
+  closeMemberActionBar();
+  runAction('deleteMembers', [
+    ADMIN_PIN_VALUE,
+    ids
+  ]);
+}
+
+function assignToQuickTarget(type, index) {
+  if (QUICK_PICK) {
+    const memberId = QUICK_PICK.memberId;
+    cancelQuickPick();
+    quickMoveOrSwap(memberId, type, index, '');
+    return;
+  }
+
+  if (!SELECTED.size) return;
+
+  const action =
+    type === 'court'
+      ? 'assignMembersToCourt'
+      : 'assignMembersToWaitGroup';
+
+  runAction(action, [
+    ADMIN_PIN_VALUE,
+    Number(index),
+    Array.from(SELECTED)
+  ]);
+}
+
+function wholeSwapLabel(type, index) {
+  return type === 'court'
+    ? COURT_LABELS[Number(index)]
+    : '대기' + (Number(index) + 1);
+}
+
+function renderWholeSwapBar() {
+  const bar =
+    document.getElementById(
+      'wholeSwapBar'
+    );
+
+  if (!bar) return;
+
+  bar.classList.toggle(
+    'hidden',
+    !WHOLE_SWAP_PICK
+  );
+
+  const text =
+    document.getElementById(
+      'wholeSwapText'
+    );
+
+  if (text && WHOLE_SWAP_PICK) {
+    text.textContent =
+      wholeSwapLabel(
+        WHOLE_SWAP_PICK.type,
+        WHOLE_SWAP_PICK.index
+      ) + ' 선택됨';
+  }
+}
+
+function refreshWholeSwapVisuals() {
+  document
+    .querySelectorAll(
+      '.whole-swap-picked'
+    )
+    .forEach(function(element) {
+      element.classList.remove(
+        'whole-swap-picked'
+      );
+    });
+
+  if (WHOLE_SWAP_PICK) {
+    const selector =
+      WHOLE_SWAP_PICK.type === 'court'
+        ? '#adminCourts .court-' +
+          WHOLE_SWAP_PICK.index +
+          ' > .head'
+        : '#adminWaitGroups .wait-' +
+          (Number(WHOLE_SWAP_PICK.index) + 1) +
+          ' > .head';
+
+    const target =
+      document.querySelector(selector);
+
+    if (target) {
+      target.classList.add(
+        'whole-swap-picked'
+      );
+    }
+  }
+
+  renderWholeSwapBar();
+}
+
+function cancelWholeSwap() {
+  if (!WHOLE_SWAP_PICK) return;
+  WHOLE_SWAP_PICK = null;
+  refreshWholeSwapVisuals();
+}
+
+function handleGroupHeaderClick(type, index, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (QUICK_PICK) {
+    assignToQuickTarget(type, index);
+    return;
+  }
+
+  if (SELECTED.size) {
+    alert(
+      '선택한 인원은 빈자리를 두 번 눌러 배치하세요. ' +
+      '전체 교환은 인원 선택을 해제한 뒤 사용하세요.'
+    );
+    return;
+  }
+
+  index = String(index);
+
+  if (!WHOLE_SWAP_PICK) {
+    WHOLE_SWAP_PICK = {
+      type: type,
+      index: index
+    };
+    refreshWholeSwapVisuals();
+    return;
+  }
+
+  const first = WHOLE_SWAP_PICK;
+
+  if (
+    first.type === type &&
+    first.index === index
+  ) {
+    cancelWholeSwap();
+    return;
+  }
+
+  if (first.type !== type) {
+    alert(
+      type === 'court'
+        ? '코트끼리만 전체 교환할 수 있습니다.'
+        : '대기조끼리만 전체 교환할 수 있습니다.'
+    );
+    WHOLE_SWAP_PICK = {
+      type: type,
+      index: index
+    };
+    refreshWholeSwapVisuals();
+    return;
+  }
+
+  WHOLE_SWAP_PICK = null;
+  quickWholeGroupSwap(
+    type,
+    first.index,
+    index
+  );
+}
+
+function applyWholeGroupSwapLocally(type, indexA, indexB) {
+  if (type === 'court') {
+    const courtA = Number(indexA);
+    const courtB = Number(indexB);
+    const players = STATE.courts[courtA];
+    const startedAt = STATE.courtStartedAt[courtA];
+
+    STATE.courts[courtA] = STATE.courts[courtB];
+    STATE.courts[courtB] = players;
+    STATE.courtStartedAt[courtA] =
+      STATE.courtStartedAt[courtB];
+    STATE.courtStartedAt[courtB] = startedAt;
+    return;
+  }
+
+  const groupA = Number(indexA);
+  const groupB = Number(indexB);
+  const players = STATE.waitGroups[groupA];
+
+  STATE.waitGroups[groupA] =
+    STATE.waitGroups[groupB];
+  STATE.waitGroups[groupB] = players;
+}
+
+async function quickWholeGroupSwap(type, indexA, indexB) {
+  const previousState =
+    JSON.parse(JSON.stringify(STATE));
+
+  try {
+    applyWholeGroupSwapLocally(
+      type,
+      indexA,
+      indexB
+    );
+    renderState();
+
+    const method =
+      type === 'court'
+        ? 'swapCourts'
+        : 'swapWaitGroups';
+
+    const state = await server(method, [
+      ADMIN_PIN_VALUE,
+      Number(indexA),
+      Number(indexB)
+    ]);
+
+    renderState(state);
+    setUndoState(previousState);
+  } catch (error) {
+    STATE = previousState;
+    renderState();
+    alert(error.message || error);
+  }
+}
+
+
+function isUnifiedMemberFrame() {
+  if (IS_ADMIN || window.parent === window) return false;
+  try {
+    return new URL(document.referrer || '').origin === UNIFIED_MEMBER_APP_ORIGIN;
+  } catch (error) {
+    return false;
+  }
+}
+
+function postUnifiedMemberMessage(type, extra) {
+  if (IS_ADMIN || window.top === window) return false;
+  try {
+    window.top.postMessage(
+      Object.assign({type: type}, extra || {}),
+      UNIFIED_MEMBER_APP_ORIGIN
+    );
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function currentMemberAuthVersion() {
+  try { return String(localStorage.getItem(MEMBER_AUTH_KEY) || ''); }
+  catch (error) { return ''; }
+}
+
+function currentMemberSessionToken() {
+  if (MEMBER_SESSION_VALUE) return String(MEMBER_SESSION_VALUE);
+  try { return String(localStorage.getItem(MEMBER_SESSION_KEY) || ''); }
+  catch (error) { return ''; }
+}
+
+function storeMemberSessionToken(token) {
+  MEMBER_SESSION_VALUE = String(token || '');
+  try {
+    if (MEMBER_SESSION_VALUE) localStorage.setItem(MEMBER_SESSION_KEY, MEMBER_SESSION_VALUE);
+    else localStorage.removeItem(MEMBER_SESSION_KEY);
+  } catch (error) {}
+}
+
+function currentStoredWebPushMember() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WEB_PUSH_SELECTED_MEMBER_KEY) || 'null');
+    return saved && saved.id && saved.name
+      ? {id: String(saved.id), name: String(saved.name)}
+      : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function memberAlertEnabled() {
+  try { return localStorage.getItem(MEMBER_ALERT_ENABLED_KEY) !== 'false'; }
+  catch (error) { return true; }
+}
+
+function memberVibrationEnabled() {
+  try { return localStorage.getItem(MEMBER_VIBRATION_ENABLED_KEY) !== 'false'; }
+  catch (error) { return true; }
+}
+
+function storedSelfMemberId() {
+  const member = currentStoredWebPushMember();
+  return member ? String(member.id) : '';
+}
+
+function isSelfMember(member) {
+  return !!member && String(member.id) === storedSelfMemberId();
+}
+
+function unlockMemberAlertAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass && !window.__jayumintonMemberAudioContext) {
+      window.__jayumintonMemberAudioContext = new AudioContextClass();
+    }
+    if (window.__jayumintonMemberAudioContext &&
+        window.__jayumintonMemberAudioContext.state === 'suspended') {
+      window.__jayumintonMemberAudioContext.resume();
+    }
+    MEMBER_ALERT_AUDIO_READY = true;
+  } catch (error) {}
+}
+
+function memberSelfSearchMatches() {
+  const input = document.getElementById('memberSelfSearchInput');
+  const query = String(input && input.value || '').trim().toLocaleLowerCase('ko-KR');
+  if (!query) return [];
+  return sortMembersByKoreanName((STATE.members || []).filter(function(member) {
+    return member && String(member.name || '').toLocaleLowerCase('ko-KR').indexOf(query) >= 0;
+  })).slice(0, 8);
+}
+
+function renderMemberSelfMatches() {
+  if (IS_ADMIN) return;
+  const container = document.getElementById('memberSelfMatches');
+  if (!container) return;
+  const matches = memberSelfSearchMatches();
+  const input = document.getElementById('memberSelfSearchInput');
+  const query = String(input && input.value || '').trim();
+  if (!query) {
+    container.innerHTML = '<span class="member-self-hint">이름을 검색해 본인을 선택하세요.</span>';
+    return;
+  }
+  container.innerHTML = matches.length
+    ? matches.map(function(member) {
+        return '<button type="button" onclick="selectMemberSelf(\'' +
+          escapeMemberInfo(member.id) + '\')">' +
+          escapeMemberInfo(member.name) + '</button>';
+      }).join('')
+    : '<span class="member-self-hint">검색 결과가 없습니다.</span>';
+}
+
+function handleMemberSelfSearchKey(event) {
+  if (!event || event.key !== 'Enter') return;
+  event.preventDefault();
+  const matches = memberSelfSearchMatches();
+  if (matches.length) selectMemberSelf(matches[0].id);
+}
+
+function selectMemberSelf(memberId) {
+  if (IS_ADMIN) return;
+  const member = (STATE.members || []).find(function(item) {
+    return item && String(item.id) === String(memberId);
+  });
+  if (!member) return;
+  try {
+    localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+      id: String(member.id),
+      name: String(member.name || '').trim()
+    }));
+    localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'true');
+  } catch (error) {}
+  unlockMemberAlertAudio();
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_SELECTED', {
+    member: {id: String(member.id), name: String(member.name || '').trim()}
+  });
+  renderCourts();
+  renderWaitGroups();
+  renderActive();
+  renderInactive();
+  renderMemberSelfSettings();
+}
+
+function clearMemberSelfSelection() {
+  if (IS_ADMIN) return;
+  try {
+    localStorage.removeItem(WEB_PUSH_SELECTED_MEMBER_KEY);
+    localStorage.removeItem(WEB_PUSH_CONNECTION_KEY);
+    localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false');
+  } catch (error) {}
+  const input = document.getElementById('memberSelfSearchInput');
+  if (input) input.value = '';
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_SELECTED', {member: null});
+  renderCourts();
+  renderWaitGroups();
+  renderActive();
+  renderInactive();
+  renderMemberSelfSettings();
+}
+
+function toggleMemberAlertSetting() {
+  const enabled = !memberAlertEnabled();
+  try { localStorage.setItem(MEMBER_ALERT_ENABLED_KEY, enabled ? 'true' : 'false'); }
+  catch (error) {}
+  if (enabled) unlockMemberAlertAudio();
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_ALERT_PREFERENCE', {enabled: enabled});
+  if (!enabled) postUnifiedMemberMessage('JAYUMINTON_PUSH_DISCONNECT_REQUEST', {member:currentStoredWebPushMember()});
+  renderMemberSelfSettings();
+}
+
+function toggleMemberVibrationSetting() {
+  const enabled = !memberVibrationEnabled();
+  try { localStorage.setItem(MEMBER_VIBRATION_ENABLED_KEY, enabled ? 'true' : 'false'); }
+  catch (error) {}
+  if (enabled && navigator.vibrate) {
+    try { navigator.vibrate(45); } catch (error) {}
+  }
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_VIBRATION_PREFERENCE', {enabled: enabled});
+  renderMemberSelfSettings();
+}
+
+let MEMBER_SETTING_MESSAGE_TIMER = null;
+
+function showMemberSettingMessage(text, isError) {
+  const message = document.getElementById('memberUnifiedSettingMessage');
+  if (!message || !text) return;
+  message.textContent = String(text);
+  message.classList.toggle('is-error', !!isError);
+  message.classList.add('is-visible');
+  if (MEMBER_SETTING_MESSAGE_TIMER) clearTimeout(MEMBER_SETTING_MESSAGE_TIMER);
+  MEMBER_SETTING_MESSAGE_TIMER = setTimeout(function() {
+    message.classList.remove('is-visible');
+  }, 2400);
+}
+
+function compactMemberSelfSettings() {
+  const selected = currentStoredWebPushMember();
+  if (!selected) {
+    const input = document.getElementById('memberSelfSearchInput');
+    if (input) input.focus();
+    showMemberSettingMessage('먼저 내 이름을 선택하세요.', true);
+    return;
+  }
+  if (memberAlertEnabled()) {
+    postUnifiedMemberMessage('JAYUMINTON_PUSH_SETUP_REQUEST', {
+      member: selected,
+      authVersion: currentMemberAuthVersion()
+    });
+  } else {
+    postUnifiedMemberMessage('JAYUMINTON_PUSH_DISCONNECT_REQUEST', {member:selected});
+  }
+  try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'true'); }
+  catch (error) {}
+  renderMemberSelfSettings();
+}
+
+function requestMemberAppInstall() {
+  if (MEMBER_PWA_STANDALONE_HINT) {
+    MEMBER_APP_INSTALL_STATE.installed = true;
+    MEMBER_APP_INSTALL_STATE.choice = 'on';
+    MEMBER_APP_INSTALL_STATE.browserContext = 'standalone';
+    renderMemberSelfSettings();
+  }
+  if (MEMBER_APP_INSTALL_STATE.installed) {
+    showMemberSettingMessage('자유민턴 코트현황 앱이 이미 설치되어 있습니다.');
+    return;
+  }
+
+  const installUrl = buildMemberInstallEntryUrl();
+  const platform = detectMemberInstallPlatform();
+  const context = detectMemberInstallBrowserContext();
+
+  // 카카오톡·당근 등 내부 브라우저에서는 iframe/메시지 중간 단계를 거치지 않는다.
+  // 사용자가 누른 바로 그 동작으로 최상위 화면을 Chrome/Safari로 넘긴다.
+  if (platform === 'android' && context === 'android-embedded') {
+    showMemberSettingMessage('Chrome에서 자유민턴 코트현황을 여는 중입니다.');
+    openMemberInstallInChrome(installUrl);
+    return;
+  }
+  if (platform === 'ios' && context === 'ios-embedded') {
+    showMemberSettingMessage('Safari에서 자유민턴 코트현황을 여는 중입니다.');
+    openMemberInstallInSafari(installUrl);
+    return;
+  }
+
+  // Apps Script 사용자 페이지를 단독으로 연 경우에는 설치 가능한 PWA 주소를
+  // 정식 Chrome에서 열어야 한다. 카카오 커스텀 탭이 Chrome UA를 쓰는 경우도 포함한다.
+  if (platform === 'android' && window.top === window) {
+    showMemberSettingMessage('Chrome에서 자유민턴 코트현황을 여는 중입니다.');
+    openMemberInstallInChrome(installUrl);
+    return;
+  }
+
+  const sent = postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {
+    platform: platform,
+    browserContext: context,
+    installUrl: installUrl
+  });
+  if (sent) return;
+
+  // 통합 사용자 PWA 밖에서 직접 열린 경우에도 설치 진입 주소로 확실히 이동한다.
+  try {
+    window.location.assign(installUrl);
+  } catch (error) {
+    window.open(installUrl, '_blank', 'noopener');
+  }
+}
+
+function buildMemberInstallEntryUrl() {
+  const target = new URL(UNIFIED_MEMBER_APP_URL);
+  target.searchParams.set('install', 'choose');
+  target.searchParams.set('external', '1');
+  target.searchParams.set('source', 'embedded');
+  target.searchParams.set('app', 'user');
+  target.searchParams.set('mode', 'user');
+  const selected = currentStoredWebPushMember();
+  if (selected && selected.id) target.searchParams.set('memberId', String(selected.id));
+  if (selected && selected.name) target.searchParams.set('memberName', String(selected.name));
+  const sessionToken = currentMemberSessionToken();
+  if (sessionToken) target.searchParams.set('memberSession', sessionToken);
+  return target.toString();
+}
+
+function detectMemberInstallPlatform() {
+  if (MEMBER_APP_INSTALL_STATE.platform === 'android' || MEMBER_APP_INSTALL_STATE.platform === 'ios') {
+    return MEMBER_APP_INSTALL_STATE.platform;
+  }
+  const ua = String(navigator.userAgent || '');
+  if (/Android/i.test(ua)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(ua) ||
+      (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1)) return 'ios';
+  return 'other';
+}
+
+function detectMemberInstallBrowserContext() {
+  const known = String(MEMBER_APP_INSTALL_STATE.browserContext || '');
+  if (known && known !== 'other') return known;
+  const ua = String(navigator.userAgent || '');
+  const ref = String(document.referrer || '');
+  const embedded = /;\s*wv\)|\bwv\b|KAKAOTALK|KakaoTalk|DaumApps|NAVER|Instagram|FBAN|FBAV|Line\/|Daangn|Danggeun|Karrot|com\.towneers|EverytimeApp|WhaleInApp/i.test(ua) ||
+    /kakao|daangn|danggeun|karrot|naver|instagram/i.test(ref) || !!window.NativeVoice;
+  const platform = detectMemberInstallPlatform();
+  if (embedded && platform === 'android') return 'android-embedded';
+  if (embedded && platform === 'ios') return 'ios-embedded';
+  if (platform === 'android') return 'android-browser';
+  if (platform === 'ios') return 'ios-safari';
+  return 'other';
+}
+
+function navigateMemberTop(url) {
+  try {
+    window.top.location.href = url;
+    return true;
+  } catch (error) {
+    try {
+      window.location.href = url;
+      return true;
+    } catch (innerError) {
+      return false;
+    }
+  }
+}
+
+function openMemberInstallInChrome(installUrl) {
+  // v1.6.40: Google Drive로 잘못 전달되던 browser_fallback_url을 제거한다.
+  // Android가 설치된 Chrome 앱(com.android.chrome)으로만 전달하도록 고정한다.
+  try {
+    const target = new URL(installUrl);
+    if (target.origin !== UNIFIED_MEMBER_APP_ORIGIN) throw new Error('invalid member app origin');
+    target.searchParams.set('install', '1');
+    target.searchParams.set('external', '1');
+    target.searchParams.set('source', 'chrome');
+    target.searchParams.set('app', 'user');
+    target.searchParams.set('mode', 'user');
+    const hostPath = target.host + target.pathname + target.search + target.hash;
+    const intentUrl = 'intent://' + hostPath +
+      '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+      'category=android.intent.category.BROWSABLE;end';
+    navigateMemberTop(intentUrl);
+    return;
+  } catch (error) {}
+  navigateMemberTop('intent://jayuminton-push.web.app/?install=1&external=1&source=chrome&app=user&mode=user' +
+    '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+    'category=android.intent.category.BROWSABLE;end');
+}
+
+function openMemberInstallInSafari(installUrl) {
+  try {
+    const target = new URL(installUrl);
+    const safariUrl = 'x-safari-https://' + target.host + target.pathname + target.search + target.hash;
+    if (navigateMemberTop(safariUrl)) return;
+  } catch (error) {}
+  navigateMemberTop(installUrl);
+}
+
+function openMemberSelfSettings() {
+  try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); }
+  catch (error) {}
+  renderMemberSelfSettings();
+  setTimeout(function() {
+    const input = document.getElementById('memberSelfSearchInput');
+    if (input) input.focus();
+  }, 0);
+}
+
+function renderMemberSelfSettings() {
+  if (IS_ADMIN) return;
+  const summary = document.getElementById('memberSelfSummary');
+  const summaryText = document.getElementById('memberSelfSummaryText');
+  const panel = document.getElementById('memberSelfPanel');
+  const alertButton = document.getElementById('memberAlertToggle');
+  const vibrationButton = document.getElementById('memberVibrationToggle');
+  const appInstallButton = document.getElementById('memberAppInstallToggle');
+  const input = document.getElementById('memberSelfSearchInput');
+  if (!summary || !panel) return;
+
+  const selected = currentStoredWebPushMember();
+  let compact = false;
+  try { compact = !!selected && localStorage.getItem(MEMBER_SELF_PANEL_COMPACT_KEY) !== 'false'; }
+  catch (error) { compact = !!selected; }
+
+  summary.classList.toggle('hidden', !compact);
+  panel.classList.toggle('hidden', compact);
+
+  if (summaryText) {
+    summaryText.textContent = selected
+      ? '🌟 ' + selected.name + ' · 알림 ' + (memberAlertEnabled() ? 'ON' : 'OFF') +
+        ' · 진동 ' + (memberVibrationEnabled() ? 'ON' : 'OFF') +
+        ' · 앱설치 ' + (MEMBER_APP_INSTALL_STATE.installed ? 'ON' : 'OFF')
+      : '🌟 내 이름·알림·앱 설정';
+  }
+  if (alertButton) {
+    alertButton.textContent = '알림 ' + (memberAlertEnabled() ? 'ON' : 'OFF');
+    alertButton.classList.toggle('is-on', memberAlertEnabled());
+  }
+  if (vibrationButton) {
+    vibrationButton.textContent = '진동 ' + (memberVibrationEnabled() ? 'ON' : 'OFF');
+    vibrationButton.classList.toggle('is-on', memberVibrationEnabled());
+  }
+  if (appInstallButton) {
+    let installLabel = '앱 설치';
+    if (MEMBER_APP_INSTALL_STATE.installed) {
+      installLabel = '앱 설치완료';
+    } else if (MEMBER_APP_INSTALL_STATE.installing) {
+      installLabel = '설치 확인';
+    } else if (MEMBER_APP_INSTALL_STATE.browserContext === 'android-embedded') {
+      installLabel = 'Chrome 열기';
+    } else if (MEMBER_APP_INSTALL_STATE.browserContext === 'ios-embedded') {
+      installLabel = 'Safari 열기';
+    } else if (MEMBER_APP_INSTALL_STATE.platform === 'android' &&
+               !MEMBER_APP_INSTALL_STATE.ready &&
+               !MEMBER_APP_INSTALL_STATE.nativeInstall) {
+      const remain = Math.max(0, Math.ceil(Number(MEMBER_APP_INSTALL_STATE.prepRemaining || 0)));
+      installLabel = remain > 0 ? '설치 준비중' : '앱 설치';
+    } else if (MEMBER_APP_INSTALL_STATE.platform === 'android' ||
+               MEMBER_APP_INSTALL_STATE.platform === 'ios') {
+      installLabel = 'PWA 설치';
+    }
+    appInstallButton.textContent = installLabel;
+    appInstallButton.classList.toggle('is-on', MEMBER_APP_INSTALL_STATE.installed);
+    appInstallButton.classList.toggle('is-installing', MEMBER_APP_INSTALL_STATE.installing);
+    appInstallButton.classList.toggle('is-preparing', MEMBER_APP_INSTALL_STATE.platform === 'android' && !MEMBER_APP_INSTALL_STATE.ready && !MEMBER_APP_INSTALL_STATE.nativeInstall && !MEMBER_APP_INSTALL_STATE.installing);
+    const prepRemain = Math.max(0, Math.min(30, Number(MEMBER_APP_INSTALL_STATE.prepRemaining || 0)));
+    appInstallButton.style.setProperty('--install-prep-progress', String(((30 - prepRemain) / 30) * 100) + '%');
+    appInstallButton.setAttribute('aria-busy', MEMBER_APP_INSTALL_STATE.installing ? 'true' : 'false');
+  }
+  if (input && selected && !input.value) input.value = selected.name;
+  if (!compact) renderMemberSelfMatches();
+  requestAnimationFrame(publishMemberAppInstallButtonRect);
+}
+
+function publishMemberAppInstallButtonRect() {
+  if (IS_ADMIN || window.top === window) return;
+  const button = document.getElementById('memberAppInstallToggle');
+  const panel = document.getElementById('memberSelfPanel');
+  if (!button || !panel) return;
+  const rect = button.getBoundingClientRect();
+  const visible = !button.classList.contains('hidden') &&
+    !panel.classList.contains('hidden') &&
+    rect.width > 0 && rect.height > 0;
+  postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_BUTTON_RECT', {
+    visible: visible,
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height
+  });
+}
+
+function currentWebPushConnection() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WEB_PUSH_CONNECTION_KEY) || 'null');
+    return saved && saved.connected && saved.memberId
+      ? saved
+      : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function applyWebPushReturn() {
+  if (IS_ADMIN) return;
+  let returned = window.JAYUMINTON_PUSH_RETURN || {};
+  try {
+    const prefix = 'JAYUMINTON_PUSH_RETURN:';
+    if ((!returned || !returned.connected) &&
+        String(window.name || '').indexOf(prefix) === 0) {
+      const rawReturn = String(window.name).slice(prefix.length);
+      try {
+        returned = JSON.parse(rawReturn);
+      } catch (parseError) {
+        returned = JSON.parse(decodeURIComponent(rawReturn));
+      }
+      window.name = '';
+    }
+  } catch (error) {
+    returned = returned || {};
+  }
+  if (!returned.connected || !returned.memberId) return;
+  const connection = {
+    connected: true,
+    memberId: String(returned.memberId),
+    memberName: String(returned.memberName || '').trim(),
+    connectedAt: Date.now()
+  };
+  try {
+    localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify(connection));
+    localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+      id: connection.memberId,
+      name: connection.memberName
+    }));
+  } catch (error) {}
+}
+
+function syncUnifiedMemberBridge() {
+  if (IS_ADMIN) return;
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_BRIDGE_READY', {
+    authVersion: currentMemberAuthVersion(),
+    member: currentStoredWebPushMember()
+  });
+}
+
+function encodeUnifiedHandoff(value) {
+  try {
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    let binary = '';
+    bytes.forEach(function(byte) { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  } catch (error) {
+    return '';
+  }
+}
+
+function webPushEscapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function isIosBrowser() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+}
+
+function selectedWebPushMember() {
+  const select = document.getElementById('webPushMemberSelect');
+  const stored = currentStoredWebPushMember();
+  const selectedId = String((select && select.value) || (stored && stored.id) || '').trim();
+  if (!selectedId) return null;
+  return (STATE.members || []).find(function(member) {
+    return member && String(member.id) === selectedId;
+  }) || null;
+}
+
+function handleWebPushMemberChange() {
+  if (IS_ADMIN) return;
+  const member = selectedWebPushMember();
+  try {
+    if (member) {
+      localStorage.setItem(
+        WEB_PUSH_SELECTED_MEMBER_KEY,
+        JSON.stringify({
+          id: String(member.id),
+          name: String(member.name || '').trim()
+        })
+      );
+    } else {
+      localStorage.removeItem(WEB_PUSH_SELECTED_MEMBER_KEY);
+    }
+  } catch (error) {}
+
+  // A user gesture unlocks a tiny Web Audio context for the iPhone foreground fallback.
+  unlockMemberAlertAudio();
+
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_SELECTED', {
+    member: member
+      ? {id: String(member.id), name: String(member.name || '').trim()}
+      : null
+  });
+  renderWebPushMemberOptions();
+}
+
+function renderWebPushMemberOptions() {
+  if (IS_ADMIN) return;
+
+  const select = document.getElementById('webPushMemberSelect');
+  const status = document.getElementById('webPushStatus');
+  const connectionBadge = document.getElementById('webPushConnectionBadge');
+  if (!select) return;
+
+  let saved = null;
+  try {
+    saved = JSON.parse(
+      localStorage.getItem(WEB_PUSH_SELECTED_MEMBER_KEY) || 'null'
+    );
+  } catch (error) {}
+
+  const selectedId = String(select.value || (saved && saved.id) || '');
+  const members = sortMembersByKoreanName(
+    (STATE.members || []).filter(function(member) {
+      return member && member.id != null && String(member.name || '').trim();
+    })
+  );
+
+  select.innerHTML =
+    '<option value="">내 이름을 선택하세요</option>' +
+    members.map(function(member) {
+      const id = String(member.id);
+      const name = String(member.name || '').trim();
+      return '<option value="' + webPushEscapeHtml(id) + '"' +
+        (id === selectedId ? ' selected' : '') + '>' +
+        webPushEscapeHtml(name) + '</option>';
+    }).join('');
+
+  const selectedMember = members.find(function(member) {
+    return String(member.id) === String(select.value);
+  });
+
+  if (status) {
+    const connection = currentWebPushConnection();
+    const setupButton = document.getElementById('webPushSetupButton');
+    if (!selectedMember) {
+      status.textContent = '알림 받을 이름이 선택되지 않았습니다.';
+      status.classList.remove('is-connected');
+      if (connectionBadge) {
+        connectionBadge.textContent = '○ 연결 OFF';
+        connectionBadge.className = 'push-connection-badge is-off';
+      }
+      if (setupButton) {
+        setupButton.textContent = '🔔 순서알람 연결';
+        setupButton.classList.remove('push-connected');
+      }
+    } else if (connection && String(connection.memberId) === String(selectedMember.id)) {
+      status.textContent = selectedMember.name + '님 알림 예정';
+      status.classList.add('is-connected');
+      if (connectionBadge) {
+        connectionBadge.textContent = '● 연결 ON';
+        connectionBadge.className = 'push-connection-badge is-on';
+      }
+      if (setupButton) {
+        setupButton.textContent = '● 연결 ON';
+        setupButton.classList.add('push-connected');
+      }
+    } else if (isIosBrowser() && !window.matchMedia('(display-mode: standalone)').matches) {
+      status.textContent = '현재 선택: ' + selectedMember.name +
+        ' — 이 화면을 열어 둔 동안 즉시 화면 알림을 받습니다. 잠금화면 알림은 홈 화면 등록 후 설정할 수 있습니다.';
+      status.classList.remove('is-connected');
+      if (connectionBadge) {
+        connectionBadge.textContent = '○ 연결 OFF';
+        connectionBadge.className = 'push-connection-badge is-off';
+      }
+    } else {
+      status.textContent = '현재 선택: ' + selectedMember.name +
+        ' — 버튼을 눌러 미리 알림과 진동을 연결하세요.';
+      status.classList.remove('is-connected');
+      if (connectionBadge) {
+        connectionBadge.textContent = '○ 연결 OFF';
+        connectionBadge.className = 'push-connection-badge is-off';
+      }
+    }
+  }
+}
+
+function requestUnifiedPushSetup() {
+  if (IS_ADMIN) return;
+  const member = selectedWebPushMember();
+  if (!member) {
+    alert('알림 받을 본인 이름을 먼저 선택하세요.');
+    return;
+  }
+
+  const selected = {
+    id: String(member.id),
+    name: String(member.name || '').trim()
+  };
+  try {
+    localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify(selected));
+  } catch (error) {}
+
+  const status = document.getElementById('webPushStatus');
+  const setupButton = document.getElementById('webPushSetupButton');
+  if (status) {
+    status.textContent = '연결 중…';
+    status.classList.remove('is-connected');
+  }
+  if (setupButton) {
+    setupButton.textContent = '연결 중…';
+    setupButton.disabled = true;
+  }
+
+  if (UNIFIED_MEMBER_BRIDGE_CONNECTED || isUnifiedMemberFrame()) {
+    postUnifiedMemberMessage('JAYUMINTON_PUSH_SETUP_REQUEST', {
+      member: selected,
+      authVersion: currentMemberAuthVersion()
+    });
+    return;
+  }
+
+  alert('알림 연결은 자유민턴 사용자 주소의 화면 맨 위에서 진행해 주세요.');
+}
+
+window.addEventListener('message', function(event) {
+  if (event.origin !== UNIFIED_MEMBER_APP_ORIGIN) return;
+  const data = event.data || {};
+
+  if (data.type === 'JAYUMINTON_UNIFIED_BOOTSTRAP') {
+    UNIFIED_MEMBER_BRIDGE_CONNECTED = true;
+    if (data.authVersion) {
+      try { localStorage.setItem(MEMBER_AUTH_KEY, String(data.authVersion)); }
+      catch (error) {}
+    }
+    if (data.authSession) storeMemberSessionToken(String(data.authSession));
+    if (data.member && data.member.id && data.member.name) {
+      try {
+        localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+          id: String(data.member.id),
+          name: String(data.member.name)
+        }));
+      } catch (error) {}
+      renderWebPushMemberOptions();
+    }
+    if (data.pushConnected && data.pushMember && data.pushMember.id) {
+      try {
+        localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify({
+          connected: true,
+          memberId: String(data.pushMember.id),
+          memberName: String(data.pushMember.name || ''),
+          connectedAt: Date.now()
+        }));
+      } catch (error) {}
+      renderWebPushMemberOptions();
+    }
+    MEMBER_APP_INSTALL_STATE = {
+      installed:MEMBER_PWA_STANDALONE_HINT || !!data.appInstalled,
+      choice:MEMBER_PWA_STANDALONE_HINT ? 'on' : String(data.appInstallChoice || ''),
+      platform:String(data.appInstallPlatform || 'other'),
+      browserContext:MEMBER_PWA_STANDALONE_HINT ? 'standalone' : String(data.appInstallBrowserContext || 'other'),
+      message:'',
+      ready:!!data.appInstallReady,
+      installing:!!data.appInstallPending,
+      armed:!!data.appInstallArmed,
+      prepRemaining:Number(data.appInstallPrepRemaining || 0),
+      nativeInstall:!!data.appInstallNative
+    };
+    renderMemberSelfSettings();
+    if (!IS_ADMIN) initialize();
+    return;
+  }
+
+  if (data.type === 'JAYUMINTON_UNIFIED_PUSH_STATUS') {
+    const status = document.getElementById('webPushStatus');
+    if (data.connected && data.member && data.member.id) {
+      try {
+        localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify({
+          connected: true,
+          memberId: String(data.member.id),
+          memberName: String(data.member.name || ''),
+          connectedAt: Date.now()
+        }));
+      } catch (error) {}
+      renderWebPushMemberOptions();
+    } else if (data.connected === false) {
+      try { localStorage.removeItem(WEB_PUSH_CONNECTION_KEY); } catch (error) {}
+      renderWebPushMemberOptions();
+    } else if (status) {
+      status.textContent = String(data.message || '개인 알림 상태가 갱신되었습니다.');
+    }
+    return;
+  }
+
+  if (data.type === 'JAYUMINTON_APP_INSTALL_STATUS') {
+    MEMBER_APP_INSTALL_STATE = {
+      installed:MEMBER_PWA_STANDALONE_HINT || !!data.installed,
+      choice:MEMBER_PWA_STANDALONE_HINT ? 'on' : String(data.choice || ''),
+      platform:String(data.platform || 'other'),
+      browserContext:MEMBER_PWA_STANDALONE_HINT ? 'standalone' : String(data.browserContext || 'other'),
+      message:String(data.message || ''),
+      ready:!!data.ready,
+      installing:!!data.installing,
+      armed:!!data.armed,
+      prepRemaining:Number(data.prepRemaining || 0),
+      nativeInstall:!!data.nativeInstall
+    };
+    renderMemberSelfSettings();
+    if (data.message) showMemberSettingMessage(String(data.message), /못|취소|오류|시작되지|준비가 되지/.test(String(data.message)));
+    return;
+  }
+
+  if (data.type === 'JAYUMINTON_PUSH_CONNECT_RESULT') {
+    showMemberSettingMessage(
+      String(data.message || (data.connected ? '알림 ON' : '알림 OFF')),
+      data.connected === false
+    );
+    if (data.connected && data.member && data.member.id) {
+      try {
+        localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify({
+          connected:true,
+          memberId:String(data.member.id),
+          memberName:String(data.member.name || ''),
+          connectedAt:Date.now()
+        }));
+      } catch (error) {}
+    } else if (data.connected === false) {
+      try { localStorage.removeItem(WEB_PUSH_CONNECTION_KEY); } catch (error) {}
+    }
+    renderMemberSelfSettings();
+    return;
+  }
+
+  if (data.type === 'JAYUMINTON_UNIFIED_REFRESH') {
+    const app = document.getElementById('memberApp');
+    if (app && !app.classList.contains('hidden')) {
+      refreshMemberState();
+    } else {
+      initialize();
+    }
+  }
+});
+
+applyWebPushReturn();
+
+if (!IS_ADMIN) {
+  document.addEventListener('click', function(event) {
+    const target = event.target && event.target.closest
+      ? event.target.closest('[data-member-id]')
+      : null;
+    if (!target) return;
+    const clickedMember = memberById(String(target.getAttribute('data-member-id') || ''));
+    if (!clickedMember) return;
+    if (window.parent !== window) {
+      window.parent.postMessage({
+        type:'JAYUMINTON_MEMBER_CLICKED',
+        member:{id:String(clickedMember.id), name:String(clickedMember.name || '')}
+      }, '*');
+    }
+  }, true);
+
+  function reportUnifiedContentHeight() {
+    if (window.parent === window) return;
+    const height = Math.max(
+      document.body ? document.body.scrollHeight : 0,
+      document.documentElement ? document.documentElement.scrollHeight : 0
+    );
+    window.parent.postMessage({type:'JAYUMINTON_CONTENT_HEIGHT', height:height}, '*');
+  }
+  window.addEventListener('load', reportUnifiedContentHeight);
+  window.addEventListener('resize', reportUnifiedContentHeight);
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(reportUnifiedContentHeight).observe(document.body);
+  }
+  setInterval(reportUnifiedContentHeight, 2500);
+}
+
+function memberLocation(state, memberId) {
+  if (!state || !memberId) return {type: 'none', index: -1};
+  const id = String(memberId);
+  for (let courtNo = 1; courtNo <= 4; courtNo += 1) {
+    if ((state.courts && state.courts[courtNo] || []).some(function(value) {
+      return String(value) === id;
+    })) return {type: 'court', index: courtNo};
+  }
+  const waits = Array.isArray(state.waitGroups) ? state.waitGroups : [];
+  for (let waitIndex = 0; waitIndex < waits.length; waitIndex += 1) {
+    if ((waits[waitIndex] || []).some(function(value) {
+      return String(value) === id;
+    })) return {type: 'wait', index: waitIndex};
+  }
+  return {type: 'other', index: -1};
+}
+
+function mostElapsedCourtNoForState(state) {
+  const candidates = [1, 2, 3, 4].filter(function(no) {
+    return state && state.courts && Array.isArray(state.courts[no]) &&
+      state.courts[no].length === 4;
+  }).map(function(no) {
+    const started = parseCourtStart(state.courtStartedAt && state.courtStartedAt[no]);
+    return {courtNo: no, startedAt: started ? started.getTime() : Number.POSITIVE_INFINITY};
+  }).sort(function(a, b) {
+    return a.startedAt - b.startedAt || a.courtNo - b.courtNo;
+  });
+  return candidates.length ? candidates[0].courtNo : 0;
+}
+
+function memberAlertRepeatCount(type) {
+  return type === 'court_assignment' ? 3 : 1;
+}
+
+function memberVibrationPattern() {
+  return [320, 170, 320, 170, 320];
+}
+
+function playSingleMemberAlertCue() {
+  try {
+    if (memberVibrationEnabled() && navigator.vibrate) {
+      navigator.vibrate(memberVibrationPattern());
+    }
+  } catch (error) {}
+  try {
+    if (!memberAlertEnabled()) return;
+    const ctx = window.__jayumintonMemberAudioContext;
+    if (!ctx || !MEMBER_ALERT_AUDIO_READY) return;
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    oscillator.connect(gain).connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.48);
+  } catch (error) {}
+}
+
+function showSingleNativeMemberNotification(title, body, eventId, repeatIndex) {
+  /* System notifications are handled by the web-push wrapper to avoid duplicates. */
+  return;
+}
+
+function playMemberAlertCue(type, title, body, eventId) {
+  const repeatCount = memberAlertRepeatCount(type);
+  for (let index = 0; index < repeatCount; index += 1) {
+    setTimeout(function() {
+      playSingleMemberAlertCue();
+      showSingleNativeMemberNotification(title, body, eventId, index + 1);
+    }, index * 1300);
+  }
+}
+
+function showMemberForegroundAlert(title, body, eventId, type) {
+  if (!eventId) return;
+  if (!memberAlertEnabled() && !memberVibrationEnabled()) return;
+  try {
+    if (localStorage.getItem(MEMBER_FOREGROUND_EVENT_KEY) === eventId) return;
+    localStorage.setItem(MEMBER_FOREGROUND_EVENT_KEY, eventId);
+  } catch (error) {}
+  const box = document.getElementById('memberForegroundAlert');
+  const titleElement = document.getElementById('memberForegroundAlertTitle');
+  const bodyElement = document.getElementById('memberForegroundAlertBody');
+  if (memberAlertEnabled() && box && titleElement && bodyElement) {
+    titleElement.textContent = title;
+    bodyElement.textContent = body;
+    box.classList.remove('hidden');
+  }
+  const connectedPush = !IS_ADMIN && window.parent !== window && currentWebPushConnection();
+  if (!connectedPush) {
+    playMemberAlertCue(type, title, body, eventId);
+  }
+}
+
+function closeMemberForegroundAlert() {
+  const box = document.getElementById('memberForegroundAlert');
+  if (box) box.classList.add('hidden');
+}
+
+function detectMemberForegroundTransition(previousState, nextState) {
+  if (IS_ADMIN || !previousState || !nextState) return;
+  normalizeStateMemberProfiles(previousState);
+  normalizeStateMemberProfiles(nextState);
+  const member = selectedWebPushMember();
+  if (!member) return;
+  const before = memberLocation(previousState, member.id);
+  const after = memberLocation(nextState, member.id);
+
+  if (before.type === 'wait' && before.index === 1 &&
+      after.type === 'wait' && after.index === 0) {
+    showMemberForegroundAlert(
+      '대기 1순위 안내',
+      '대기1순위 입니다. 라켓 들고 준비해주세요.',
+      'wait1_' + member.id + '_' + String(nextState.updatedAt || Date.now()),
+      'wait1_ready'
+    );
+  }
+
+  if (before.type === 'wait' && before.index === 0 && after.type === 'court') {
+    const courtNo = Number(after.index);
+    showMemberForegroundAlert(
+      '코트 배정 안내',
+      courtNo + '번 코트가 나왔습니다. ' + courtNo + '번코트로 이동해주세요!',
+      'court_' + courtNo + '_' + member.id + '_' +
+        String(nextState.updatedAt || Date.now()),
+      'court_assignment'
+    );
+  }
+}
+
+async function refreshMemberState() {
+  if (IS_ADMIN) return;
+  const button = document.getElementById('memberRefreshButton');
+  if (button) {
+    button.disabled = true;
+    button.textContent = '갱신 중...';
+  }
+  try {
+    await loadState();
+  } catch (error) {
+    alert(error.message || error);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '↻ 현황 갱신';
+    }
+  }
+}
+
+function renderState(state) {
+  if (state) {
+    STATE = normalizeStateMemberProfiles(state);
+  } else {
+    normalizeStateMemberProfiles(STATE);
+  }
+
+  if (!IS_ADMIN && window.parent !== window) {
+    window.parent.postMessage({
+      type:'JAYUMINTON_MEMBER_LIST',
+      members:(STATE.members || []).map(function(item) {
+        return {id:String(item.id), name:String(item.name || '')};
+      })
+    }, '*');
+  }
+
+  renderCourts();
+  renderWaitGroups();
+  renderActive();
+  renderExcluded();
+  renderInactive();
+  renderStats();
+  updateCourtTimers();
+  renderWebPushMemberOptions();
+  renderMemberSelfSettings();
+  renderSelectionCount();
+  renderQuickRoster();
+  renderQuickMoveBar();
+  renderWholeSwapBar();
+
+  if (QUICK_PICK) {
+    document
+      .querySelectorAll('[data-member-id="' + QUICK_PICK.memberId + '"]')
+      .forEach(function(element) {
+        element.classList.add('quick-picked');
+      });
+  }
+
+  const count =
+    document.getElementById(
+      'memberCount'
+    );
+
+  if (count) {
+    count.textContent =
+      STATE.members.length +
+      '/' +
+      (STATE.maxMembers || 500) +
+      '명';
+  }
+
+  const updated =
+    document.getElementById(
+      'updatedAt'
+    );
+
+  if (updated) {
+    updated.textContent =
+      '최근 반영: ' +
+      new Date()
+        .toLocaleTimeString('ko-KR');
+  }
+}
+
+
+function renderStats() {
+  const total = STATE.members.length;
+
+  const active =
+    STATE.members.filter(function(member) {
+      return member.status === 'active';
+    }).length;
+
+  const playing =
+    Object.keys(STATE.courts)
+      .reduce(function(sum, key) {
+        return sum +
+          (STATE.courts[key] || []).length;
+      }, 0);
+
+  const waiting =
+    STATE.waitGroups
+      .reduce(function(sum, group) {
+        return sum + group.length;
+      }, 0);
+
+  const values = {
+    statTotal: total,
+    statActive: active,
+    statPlaying: playing,
+    statWaiting: waiting
+  };
+
+  Object.keys(values).forEach(function(id) {
+    const element =
+      document.getElementById(id);
+
+    if (element) {
+      element.textContent = values[id];
+    }
+  });
+}
+
+function renderSelectionCount() {
+  const element =
+    document.getElementById(
+      'selectedCount'
+    );
+
+  if (element) {
+    element.textContent =
+      SELECTED.size + '명 선택';
+
+    element.classList.toggle(
+      'has-selection',
+      SELECTED.size > 0
+    );
+  }
+
+  const mobileCount =
+    document.getElementById('mobileSelectedCount');
+
+  if (mobileCount) {
+    mobileCount.textContent = SELECTED.size + '/4명 선택';
+  }
+}
+
+
+
+function setQuickFilter(filter) {
+  QUICK_FILTER = filter;
+  ['all','male','female'].forEach(function(item) {
+    const button = document.getElementById('filter' + item.charAt(0).toUpperCase() + item.slice(1) + 'Btn');
+    if (button) button.classList.toggle('active', item === filter);
+  });
+  renderQuickRoster();
+}
+
+function renderQuickRoster() {
+  const container =
+    document.getElementById(
+      'quickActiveRoster'
+    );
+
+  if (!container) {
+    return;
+  }
+
+  const searchInput =
+    document.getElementById(
+      'quickMemberSearch'
+    );
+
+  const keyword =
+    searchInput
+      ? searchInput.value.trim().toLocaleLowerCase('ko-KR')
+      : '';
+
+  const list =
+    sortMembersByKoreanName(
+      STATE.members.filter(function(member) {
+        return member.status === 'active';
+      })
+    ).filter(function(member) {
+      if (QUICK_FILTER !== 'all' && member.gender !== QUICK_FILTER) return false;
+      if (!keyword) return true;
+      return String(member.name || '').toLocaleLowerCase('ko-KR').indexOf(keyword) >= 0;
+    });
+
+  container.innerHTML =
+    list.length
+      ? list.map(function(member) {
+          return (
+            '<button class="quick-member ' +
+            genderClass(member) +
+            (
+              SELECTED.has(member.id)
+                ? ' selected'
+                : ''
+            ) +
+            '" data-member-id="' +
+            member.id +
+            '"' +
+            memberLongPressAttributes(member.id) +
+            ' onclick="handleSelectableMemberClick(\'' +
+            member.id +
+            '\',event)">' +
+            '<span class="quick-member-check">' +
+            (
+              SELECTED.has(member.id)
+                ? '✓'
+                : ''
+            ) +
+            '</span>' +
+            '<span class="quick-member-name">' +
+            compactMemberName(member.name) +
+            '</span>' +
+            '<span class="quick-member-games">' +
+            (member.games || 0) +
+            '게임</span>' +
+            memberInfoDetailHtml(member, '코트배정 대기') +
+            '</button>'
+          );
+        }).join('')
+      : '<div class="quick-empty">검색 결과가 없습니다.</div>';
+
+  const selectedCount =
+    document.getElementById(
+      'quickSelectedCount'
+    );
+
+  if (selectedCount) {
+    selectedCount.textContent =
+      SELECTED.size + '명 선택';
+
+    selectedCount.classList.toggle(
+      'has-selection',
+      SELECTED.size > 0
+    );
+  }
+}
+
+function clearQuickSelection() {
+  SELECTED.clear();
+  renderState();
+}
+
+function quickAssignToCourt(courtNo) {
+  if (!SELECTED.size) {
+    alert('먼저 코트배정 대기 인원을 선택하세요.');
+    return;
+  }
+
+  const currentCount =
+    (STATE.courts[courtNo] || []).length;
+
+  if (
+    currentCount + SELECTED.size > 4
+  ) {
+    alert(
+      '선택 인원이 많습니다. 이 코트에는 ' +
+      (4 - currentCount) +
+      '명만 더 들어갈 수 있습니다.'
+    );
+    return;
+  }
+
+  putSelectedIntoCourt(courtNo);
+}
+
+
+function openPartialCourtEdit() {
+  PARTIAL_SELECTED_A.clear();
+  PARTIAL_SELECTED_B.clear();
+
+  const modal =
+    document.getElementById(
+      'partialCourtModal'
+    );
+
+  if (modal) {
+    modal.classList.remove('hidden');
+    renderPartialCourtEditor();
+  }
+}
+
+function closePartialCourtEdit() {
+  const modal =
+    document.getElementById(
+      'partialCourtModal'
+    );
+
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+
+  PARTIAL_SELECTED_A.clear();
+  PARTIAL_SELECTED_B.clear();
+}
+
+function partialMemberButton(
+  member,
+  side,
+  selected
+) {
+  return (
+    '<button class="partial-player ' +
+    genderClass(member) +
+    (selected ? ' selected' : '') +
+    '" onclick="togglePartialPlayer(\'' +
+    side +
+    '\',\'' +
+    member.id +
+    '\')">' +
+    '<span class="partial-check">' +
+    (selected ? '✓' : '') +
+    '</span>' +
+    '<span class="partial-name">' +
+    member.name +
+    '</span>' +
+    '<span class="partial-games">' +
+    (member.games || 0) +
+    '게임</span>' +
+    '</button>'
+  );
+}
+
+function renderPartialCourtEditor() {
+  const selectA =
+    document.getElementById(
+      'partialCourtA'
+    );
+
+  const selectB =
+    document.getElementById(
+      'partialCourtB'
+    );
+
+  if (!selectA || !selectB) {
+    return;
+  }
+
+  const courtA = Number(selectA.value);
+  const courtB = Number(selectB.value);
+
+  if (courtA === courtB) {
+    const alternative =
+      [1, 2, 3, 4].find(function(no) {
+        return no !== courtA;
+      });
+
+    selectB.value = String(alternative);
+    return renderPartialCourtEditor();
+  }
+
+  const idsA =
+    STATE.courts[courtA] || [];
+
+  const idsB =
+    STATE.courts[courtB] || [];
+
+  const validA = new Set(idsA);
+  const validB = new Set(idsB);
+
+  PARTIAL_SELECTED_A =
+    new Set(
+      Array.from(PARTIAL_SELECTED_A)
+        .filter(function(id) {
+          return validA.has(id);
+        })
+    );
+
+  PARTIAL_SELECTED_B =
+    new Set(
+      Array.from(PARTIAL_SELECTED_B)
+        .filter(function(id) {
+          return validB.has(id);
+        })
+    );
+
+  const playersA =
+    document.getElementById(
+      'partialPlayersA'
+    );
+
+  const playersB =
+    document.getElementById(
+      'partialPlayersB'
+    );
+
+  playersA.innerHTML =
+    idsA.length
+      ? idsA.map(function(id) {
+          const member = memberById(id);
+
+          return partialMemberButton(
+            member,
+            'A',
+            PARTIAL_SELECTED_A.has(id)
+          );
+        }).join('')
+      : '<div class="partial-empty">비어 있는 코트입니다.</div>';
+
+  playersB.innerHTML =
+    idsB.length
+      ? idsB.map(function(id) {
+          const member = memberById(id);
+
+          return partialMemberButton(
+            member,
+            'B',
+            PARTIAL_SELECTED_B.has(id)
+          );
+        }).join('')
+      : '<div class="partial-empty">비어 있는 코트입니다.</div>';
+
+  document.getElementById(
+    'partialTitleA'
+  ).textContent = COURT_LABELS[courtA];
+
+  document.getElementById(
+    'partialTitleB'
+  ).textContent = COURT_LABELS[courtB];
+
+  document.getElementById(
+    'partialCountA'
+  ).textContent =
+    PARTIAL_SELECTED_A.size +
+    '명 선택';
+
+  document.getElementById(
+    'partialCountB'
+  ).textContent =
+    PARTIAL_SELECTED_B.size +
+    '명 선택';
+
+  renderPartialPreview(
+    courtA,
+    courtB,
+    idsA.length,
+    idsB.length
+  );
+}
+
+function togglePartialPlayer(side, id) {
+  const target =
+    side === 'A'
+      ? PARTIAL_SELECTED_A
+      : PARTIAL_SELECTED_B;
+
+  if (target.has(id)) {
+    target.delete(id);
+  } else {
+    target.add(id);
+  }
+
+  renderPartialCourtEditor();
+}
+
+function renderPartialPreview(
+  courtA,
+  courtB,
+  countA,
+  countB
+) {
+  const preview =
+    document.getElementById(
+      'partialPreview'
+    );
+
+  if (!preview) {
+    return;
+  }
+
+  const selectedA =
+    PARTIAL_SELECTED_A.size;
+
+  const selectedB =
+    PARTIAL_SELECTED_B.size;
+
+  const nextA =
+    countA - selectedA + selectedB;
+
+  const nextB =
+    countB - selectedB + selectedA;
+
+  if (!selectedA && !selectedB) {
+    preview.className =
+      'partial-preview';
+
+    preview.textContent =
+      '이동하거나 교환할 인원을 선택하세요.';
+
+    return;
+  }
+
+  const valid =
+    nextA <= 4 &&
+    nextB <= 4;
+
+  preview.className =
+    'partial-preview ' +
+    (valid ? 'valid' : 'invalid');
+
+  let actionText = '';
+
+  if (selectedA && selectedB) {
+    actionText =
+      selectedA +
+      '명 ↔ ' +
+      selectedB +
+      '명 교환';
+  } else if (selectedA) {
+    actionText =
+      selectedA +
+      '명을 ' +
+      courtB +
+      '번 코트로 이동';
+  } else {
+    actionText =
+      selectedB +
+      '명을 ' +
+      courtA +
+      '번 코트로 이동';
+  }
+
+  preview.textContent =
+    actionText +
+    ' · 적용 후 ' +
+    courtA +
+    '코트 ' +
+    nextA +
+    '명 / ' +
+    courtB +
+    '코트 ' +
+    nextB +
+    '명' +
+    (
+      valid
+        ? ''
+        : ' — 한 코트가 4명을 초과합니다.'
+    );
+}
+
+function confirmPartialCourtEdit() {
+  const courtA =
+    Number(
+      document.getElementById(
+        'partialCourtA'
+      ).value
+    );
+
+  const courtB =
+    Number(
+      document.getElementById(
+        'partialCourtB'
+      ).value
+    );
+
+  const idsA =
+    Array.from(PARTIAL_SELECTED_A);
+
+  const idsB =
+    Array.from(PARTIAL_SELECTED_B);
+
+  if (!idsA.length && !idsB.length) {
+    alert('이동하거나 교환할 인원을 선택하세요.');
+    return;
+  }
+
+  const nextA =
+    (STATE.courts[courtA] || []).length -
+    idsA.length +
+    idsB.length;
+
+  const nextB =
+    (STATE.courts[courtB] || []).length -
+    idsB.length +
+    idsA.length;
+
+  if (nextA > 4 || nextB > 4) {
+    alert(
+      '적용 후 한 코트가 4명을 초과합니다. 선택 인원을 조정하세요.'
+    );
+    return;
+  }
+
+  let message = '';
+
+  if (idsA.length && idsB.length) {
+    message =
+      idsA.length +
+      '명과 ' +
+      idsB.length +
+      '명을 서로 교환할까요?';
+  } else {
+    message =
+      '선택한 인원을 다른 코트로 이동할까요?';
+  }
+
+  if (!confirm(message)) {
+    return;
+  }
+
+  closePartialCourtEdit();
+
+  runAction(
+    'adjustCourtMembers',
+    [
+      ADMIN_PIN_VALUE,
+      courtA,
+      courtB,
+      idsA,
+      idsB
+    ]
+  );
+}
+
+function openWaitGroupEdit() {
+  WAIT_SELECTED_A.clear();
+  WAIT_SELECTED_B.clear();
+  document
+    .getElementById('waitGroupModal')
+    .classList.remove('hidden');
+  renderWaitGroupEditor();
+}
+
+function closeWaitGroupEdit() {
+  const modal = document.getElementById('waitGroupModal');
+  if (modal) modal.classList.add('hidden');
+  WAIT_SELECTED_A.clear();
+  WAIT_SELECTED_B.clear();
+}
+
+function waitMemberButton(member, side, selected) {
+  return partialMemberButton(member, side, selected)
+    .replace('togglePartialPlayer', 'toggleWaitPlayer');
+}
+
+function renderWaitGroupEditor() {
+  const selectA = document.getElementById('waitGroupA');
+  const selectB = document.getElementById('waitGroupB');
+  if (!selectA || !selectB) return;
+
+  const groupA = Number(selectA.value);
+  let groupB = Number(selectB.value);
+
+  if (groupA === groupB) {
+    groupB = [0, 1, 2, 3, 4].find(function(no) {
+      return no !== groupA;
+    });
+    selectB.value = String(groupB);
+  }
+
+  const idsA = STATE.waitGroups[groupA] || [];
+  const idsB = STATE.waitGroups[groupB] || [];
+  const validA = new Set(idsA);
+  const validB = new Set(idsB);
+
+  WAIT_SELECTED_A = new Set(
+    Array.from(WAIT_SELECTED_A).filter(function(id) {
+      return validA.has(id);
+    })
+  );
+  WAIT_SELECTED_B = new Set(
+    Array.from(WAIT_SELECTED_B).filter(function(id) {
+      return validB.has(id);
+    })
+  );
+
+  document.getElementById('waitPlayersA').innerHTML =
+    idsA.length
+      ? idsA.map(function(id) {
+          return waitMemberButton(
+            memberById(id),
+            'A',
+            WAIT_SELECTED_A.has(id)
+          );
+        }).join('')
+      : '<div class="partial-empty">비어 있는 대기조입니다.</div>';
+
+  document.getElementById('waitPlayersB').innerHTML =
+    idsB.length
+      ? idsB.map(function(id) {
+          return waitMemberButton(
+            memberById(id),
+            'B',
+            WAIT_SELECTED_B.has(id)
+          );
+        }).join('')
+      : '<div class="partial-empty">비어 있는 대기조입니다.</div>';
+
+  document.getElementById('waitTitleA').textContent =
+    '대기 ' + (groupA + 1) + '조';
+  document.getElementById('waitTitleB').textContent =
+    '대기 ' + (groupB + 1) + '조';
+  document.getElementById('waitCountA').textContent =
+    WAIT_SELECTED_A.size + '명 선택';
+  document.getElementById('waitCountB').textContent =
+    WAIT_SELECTED_B.size + '명 선택';
+
+  const nextA = idsA.length - WAIT_SELECTED_A.size + WAIT_SELECTED_B.size;
+  const nextB = idsB.length - WAIT_SELECTED_B.size + WAIT_SELECTED_A.size;
+  const preview = document.getElementById('waitPreview');
+
+  if (!WAIT_SELECTED_A.size && !WAIT_SELECTED_B.size) {
+    preview.className = 'partial-preview';
+    preview.textContent = '이동하거나 교환할 인원을 선택하세요.';
+    return;
+  }
+
+  const valid = nextA <= 4 && nextB <= 4;
+  preview.className = 'partial-preview ' + (valid ? 'valid' : 'invalid');
+  preview.textContent =
+    '적용 후 대기 ' + (groupA + 1) + '조 ' + nextA +
+    '명 / 대기 ' + (groupB + 1) + '조 ' + nextB + '명' +
+    (valid ? '' : ' — 한 대기조가 4명을 초과합니다.');
+}
+
+function toggleWaitPlayer(side, id) {
+  const target = side === 'A' ? WAIT_SELECTED_A : WAIT_SELECTED_B;
+  if (target.has(id)) target.delete(id);
+  else target.add(id);
+  renderWaitGroupEditor();
+}
+
+function confirmWaitGroupEdit() {
+  const groupA = Number(document.getElementById('waitGroupA').value);
+  const groupB = Number(document.getElementById('waitGroupB').value);
+  const idsA = Array.from(WAIT_SELECTED_A);
+  const idsB = Array.from(WAIT_SELECTED_B);
+
+  if (!idsA.length && !idsB.length) {
+    alert('이동하거나 교환할 인원을 선택하세요.');
+    return;
+  }
+
+  const nextA =
+    (STATE.waitGroups[groupA] || []).length - idsA.length + idsB.length;
+  const nextB =
+    (STATE.waitGroups[groupB] || []).length - idsB.length + idsA.length;
+
+  if (nextA > 4 || nextB > 4) {
+    alert('적용 후 한 대기조가 4명을 초과합니다.');
+    return;
+  }
+
+  if (!confirm('선택한 대기조 인원을 이동·교환할까요?')) return;
+
+  closeWaitGroupEdit();
+  runAction('adjustWaitGroupMembers', [
+    ADMIN_PIN_VALUE,
+    groupA,
+    groupB,
+    idsA,
+    idsB
+  ]);
+}
+
+function openCourtSwap() {
+  const modal =
+    document.getElementById(
+      'courtSwapModal'
+    );
+
+  if (modal) {
+    modal.classList.remove('hidden');
+  }
+}
+
+function closeCourtSwap() {
+  const modal =
+    document.getElementById(
+      'courtSwapModal'
+    );
+
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+function confirmCourtSwap() {
+  const courtA =
+    Number(
+      document.getElementById(
+        'swapCourtA'
+      ).value
+    );
+
+  const courtB =
+    Number(
+      document.getElementById(
+        'swapCourtB'
+      ).value
+    );
+
+  if (courtA === courtB) {
+    alert('서로 다른 코트를 선택하세요.');
+    return;
+  }
+
+  if (
+    !confirm(
+      COURT_LABELS[courtA] +
+      '와 ' +
+      COURT_LABELS[courtB] +
+      '의 인원을 통째로 바꿀까요?'
+    )
+  ) {
+    return;
+  }
+
+  closeCourtSwap();
+
+  runAction(
+    'swapCourts',
+    [
+      ADMIN_PIN_VALUE,
+      courtA,
+      courtB
+    ]
+  );
+}
+
+function openWaitGroupSwap() {
+  const modal =
+    document.getElementById(
+      'waitSwapModal'
+    );
+
+  if (modal) {
+    modal.classList.remove('hidden');
+  }
+}
+
+function closeWaitGroupSwap() {
+  const modal =
+    document.getElementById(
+      'waitSwapModal'
+    );
+
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+function confirmWaitGroupSwap() {
+  const groupA =
+    Number(
+      document.getElementById(
+        'swapWaitGroupA'
+      ).value
+    );
+
+  const groupB =
+    Number(
+      document.getElementById(
+        'swapWaitGroupB'
+      ).value
+    );
+
+  if (groupA === groupB) {
+    alert('서로 다른 대기조를 선택하세요.');
+    return;
+  }
+
+  if (
+    !confirm(
+      '대기 ' + (groupA + 1) +
+      '과 대기 ' + (groupB + 1) +
+      '의 인원 전체를 바꿀까요?'
+    )
+  ) {
+    return;
+  }
+
+  closeWaitGroupSwap();
+
+  runAction(
+    'swapWaitGroups',
+    [
+      ADMIN_PIN_VALUE,
+      groupA,
+      groupB
+    ]
+  );
+}
+
+function parseCourtStart(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+function courtElapsedSeconds(courtNo) {
+  const start = parseCourtStart(
+    STATE.courtStartedAt && STATE.courtStartedAt[courtNo]
+  );
+  if (!start) return 0;
+  return Math.max(0, Math.floor((Date.now() - start.getTime()) / 1000));
+}
+
+function formatElapsed(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remain = seconds % 60;
+  return minutes < 1
+    ? remain + '초'
+    : minutes + '분 ' + String(remain).padStart(2, '0') + '초';
+}
+
+function updateCourtTimers() {
+  const rankedCourts = [1, 2, 3, 4]
+    .filter(function(no) {
+      return STATE && STATE.courts && Array.isArray(STATE.courts[no]) &&
+        STATE.courts[no].length === 4 && courtElapsedSeconds(no) > 0;
+    })
+    .sort(function(a, b) {
+      return courtElapsedSeconds(b) - courtElapsedSeconds(a) || a - b;
+    });
+  const firstCourt = rankedCourts.length ? rankedCourts[0] : 0;
+  const nextSummary = ensureNextCourtSummary();
+  if (nextSummary) {
+    nextSummary.innerHTML = firstCourt
+      ? '<span class="next-court-label">⏱ 다음 종료 예상 1위</span>' +
+        '<strong>' + firstCourt + '번 코트</strong>'
+      : '<span class="next-court-label">⏱ 다음 종료 예상</span>' +
+        '<strong>경기 중인 코트 없음</strong>';
+    nextSummary.classList.toggle('no-active-court', !firstCourt);
+  }
+
+  [1, 2, 3, 4].forEach(function(no) {
+    const timer = document.querySelector('[data-court-timer="' + no + '"]');
+    const card = document.querySelector('.court-card.court-' + no);
+    const elapsed = courtElapsedSeconds(no);
+    if (timer) {
+      timer.textContent = elapsed > 0 ? formatElapsed(elapsed) : '대기';
+      timer.classList.toggle('fresh-running', elapsed > 300 && elapsed <= 600);
+      timer.classList.toggle('warning-running', elapsed > 600 && elapsed <= 900);
+      timer.classList.toggle('long-running', elapsed > 900);
+    }
+    if (card) card.classList.toggle('next-court-likely', no === firstCourt);
+  });
+}
+
+function currentCourtEntranceSide() {
+  try {
+    return localStorage.getItem(COURT_ENTRANCE_SIDE_KEY) === 'left'
+      ? 'left'
+      : 'right';
+  } catch (error) {
+    return 'right';
+  }
+}
+
+function courtDisplayOrder(side) {
+  return side === 'left' ? [4, 3, 2, 1] : [1, 2, 3, 4];
+}
+
+function courtOrientationMapHtml(side) {
+  const order = courtDisplayOrder(side);
+  const entrance = '<span class="court-orientation-edge entrance">🚪 입구</span>';
+  const inside = '<span class="court-orientation-edge">안쪽</span>';
+  const flow = '<span class="court-orientation-flow">' +
+    order.map(function(courtNo) {
+      return '<b class="' + (courtNo === 4 ? 'entrance-court' : '') + '">' +
+        courtNo + '번</b>';
+    }).join('') +
+    '</span>';
+  return side === 'left'
+    ? entrance + flow + inside
+    : inside + flow + entrance;
+}
+
+function ensureCourtOrientationPanel() {
+  const courts = document.getElementById(IS_ADMIN ? 'adminCourts' : 'memberCourts');
+  if (!courts || !courts.parentNode) return null;
+
+  let panel = document.getElementById('courtOrientationPanel');
+  if (panel) return panel;
+
+  panel = document.createElement('div');
+  panel.id = 'courtOrientationPanel';
+  panel.className = 'court-orientation-panel';
+  panel.innerHTML =
+    '<div class="court-orientation-top">' +
+    '<span class="court-orientation-title">코트 위치</span>' +
+    '<div class="court-orientation-buttons" role="group" aria-label="코트 배치 방향 선택">' +
+    '<button type="button" data-entrance-side="left">🚪 왼쪽부터</button>' +
+    '<button type="button" data-entrance-side="right">오른쪽부터 🚪</button>' +
+    '</div></div>' +
+    '<div class="court-orientation-map" aria-live="polite"></div>';
+
+  courts.parentNode.insertBefore(panel, courts);
+  panel.querySelectorAll('[data-entrance-side]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      setCourtEntranceSide(button.getAttribute('data-entrance-side'));
+    });
+  });
+  return panel;
+}
+
+function ensureNextCourtSummary() {
+  const courts = document.getElementById(IS_ADMIN ? 'adminCourts' : 'memberCourts');
+  if (!courts || !courts.parentNode) return null;
+
+  let summary = document.getElementById('nextCourtSummary');
+  if (summary) return summary;
+
+  summary = document.createElement('div');
+  summary.id = 'nextCourtSummary';
+  summary.className = 'next-court-summary no-active-court';
+  summary.setAttribute('aria-live', 'polite');
+  summary.textContent = '다음 종료 예상순위: 경기 중인 코트 없음';
+  courts.parentNode.insertBefore(summary, courts);
+  return summary;
+}
+
+function applyCourtOrientation() {
+  const side = currentCourtEntranceSide();
+  const order = courtDisplayOrder(side);
+
+  ['adminCourts', 'memberCourts'].forEach(function(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.setAttribute('data-entrance-side', side);
+    order.forEach(function(courtNo) {
+      const card = container.querySelector('.court-' + courtNo);
+      if (card) container.appendChild(card);
+    });
+  });
+
+  const panel = ensureCourtOrientationPanel();
+  ensureNextCourtSummary();
+  if (!panel) return;
+  const map = panel.querySelector('.court-orientation-map');
+  if (map) map.innerHTML = courtOrientationMapHtml(side);
+  panel.querySelectorAll('[data-entrance-side]').forEach(function(button) {
+    const active = button.getAttribute('data-entrance-side') === side;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function setCourtEntranceSide(side) {
+  side = side === 'left' ? 'left' : 'right';
+  try {
+    localStorage.setItem(COURT_ENTRANCE_SIDE_KEY, side);
+  } catch (error) {}
+  applyCourtOrientation();
+}
+
+function renderCourts() {
+  const html =
+    [1, 2, 3, 4]
+      .map(function(courtNo) {
+        const ids =
+          STATE.courts[courtNo] || [];
+
+        const slots =
+          ids
+            .concat(
+              new Array(
+                Math.max(
+                  0,
+                  4 - ids.length
+                )
+              ).fill(null)
+            )
+            .slice(0, 4);
+
+        const body =
+          slots
+            .map(function(id, slotIndex) {
+              if (!id) {
+                if (IS_ADMIN) {
+                  return emptySlotCard('court', courtNo, slotIndex);
+                }
+                return memberCard(null, false, false);
+              }
+
+              const member =
+                memberById(id);
+
+              if (!IS_ADMIN) {
+                return memberCard(
+                  member,
+                  false,
+                  false
+                );
+              }
+
+              return (
+                '<div class="person ' +
+                genderClass(member) +
+                '" data-member-id="' + id + '" ' +
+                memberLongPressAttributes(id) +
+                'title="짧게: 선택·교환 / 길게: 관리" ' +
+                'onclick="handleCourtMemberTap(' + courtNo +
+                ',\'' + id + '\',event)">' +
+                '<span>' +
+                '<span class="name">' +
+                compactMemberName(member.name) +
+                '</span>' +
+                '<span class="meta">' +
+                (member.games || 0) +
+                '게임</span>' +
+                memberInfoDetailHtml(member, courtNo + '번코트') +
+                '</span>' +
+                '<button class="small" ' +
+                'onclick="removeFromCourt(' +
+                courtNo +
+                ',\'' +
+                id +
+                '\')">' +
+                '빼기' +
+                '</button>' +
+                '</div>'
+              );
+            })
+            .join('');
+
+        const buttons =
+          IS_ADMIN
+            ? (
+              '<div class="toolbar section">' +
+              '<button class="primary" ' +
+              'onclick="putSelectedIntoCourt(' +
+              courtNo +
+              ')">' +
+              '선택 인원 넣기' +
+              '</button>' +
+              '<button onclick="finishCourt(' +
+              courtNo +
+              ')">' +
+              '경기 종료' +
+              '</button>' +
+              '</div>'
+            )
+            : '';
+
+        return (
+          '<article class="card court-card v4-court-card court-' +
+          courtNo +
+          '">' +
+          '<div class="head' +
+          (IS_ADMIN ? ' quick-target' : '') +
+          (
+            IS_ADMIN &&
+            WHOLE_SWAP_PICK &&
+            WHOLE_SWAP_PICK.type === 'court' &&
+            WHOLE_SWAP_PICK.index === String(courtNo)
+              ? ' whole-swap-picked'
+              : ''
+          ) +
+          '"' +
+          (IS_ADMIN
+            ? ' onclick="handleGroupHeaderClick(\'court\',\'' + courtNo + '\',event)"'
+            : '') +
+          '>' +
+          '<div class="court-title">' +
+          '<h2 style="margin:0">' +
+          '<span class="court-title-number">' + courtNo + '</span>' +
+          '<span class="court-title-text">' + courtNo + '번 코트</span>' +
+          '</h2>' +
+          '</div>' +
+          '<div class="court-time-zone">' +
+          '<span class="court-elapsed" data-court-timer="' + courtNo + '">' +
+          (ids.length === 4 ? formatElapsed(courtElapsedSeconds(courtNo)) : '대기') +
+          '</span>' +
+          '</div>' +
+          '</div>' +
+          '<div class="players">' +
+          body +
+          '</div>' +
+          buttons +
+          '</article>'
+        );
+      })
+      .join('');
+
+  const adminContainer =
+    document.getElementById(
+      'adminCourts'
+    );
+
+  if (adminContainer) {
+    adminContainer.innerHTML = html;
+  }
+
+  const memberContainer =
+    document.getElementById(
+      'memberCourts'
+    );
+
+  if (memberContainer) {
+    memberContainer.innerHTML = html;
+  }
+
+  applyCourtOrientation();
+}
+
+function renderWaitGroups() {
+  const html =
+    STATE.waitGroups
+      .map(function(group, groupIndex) {
+        const slots =
+          group
+            .concat(
+              new Array(
+                Math.max(
+                  0,
+                  4 - group.length
+                )
+              ).fill(null)
+            )
+            .slice(0, 4);
+
+        const body =
+          slots
+            .map(function(id, slotIndex) {
+              if (!id) {
+                if (IS_ADMIN) {
+                  return emptySlotCard('wait', groupIndex, slotIndex);
+                }
+                return memberCard(null, false, false);
+              }
+
+              const member =
+                memberById(id);
+
+              if (!IS_ADMIN) {
+                return memberCard(
+                  member,
+                  false,
+                  false
+                );
+              }
+
+              return (
+                '<div class="person ' +
+                genderClass(member) +
+                (
+                  SELECTED.has(id)
+                    ? ' selected'
+                    : ''
+                ) +
+                '" data-member-id="' + id + '" ' +
+                memberLongPressAttributes(id) +
+                'title="짧게: 선택·교환 / 길게: 관리" ' +
+                'onclick="handleWaitMemberTap(' + groupIndex +
+                ',\'' + id + '\',event)" style="cursor:pointer">' +
+                '<span>' +
+                '<span class="name">' +
+                compactMemberName(member.name) +
+                '</span>' +
+                '<span class="meta">' +
+                (member.games || 0) +
+                '게임</span>' +
+                memberInfoDetailHtml(member, '대기' + (groupIndex + 1)) +
+                '</span>' +
+                '<button class="small" ' +
+                'onclick="event.stopPropagation();' +
+                'removeFromWaitGroup(' +
+                groupIndex +
+                ',\'' +
+                id +
+                '\')">' +
+                '빼기' +
+                '</button>' +
+                '</div>'
+              );
+            })
+            .join('');
+
+        const buttons =
+          IS_ADMIN
+            ? (
+              '<div class="toolbar section">' +
+              '<button class="primary" ' +
+              'onclick="putSelectedIntoWaitGroup(' +
+              groupIndex +
+              ')">' +
+              '선택 인원 넣기' +
+              '</button>' +
+              '<button onclick="sendWaitGroupToCourt(' +
+              groupIndex +
+              ')">' +
+              '코트 배정' +
+              '</button>' +
+              '</div>'
+            )
+            : '';
+
+        return (
+          '<article class="card wait-card v4-wait-card wait-' +
+          (groupIndex + 1) +
+          '">' +
+          '<div class="head' +
+          (IS_ADMIN ? ' quick-target' : '') +
+          (
+            IS_ADMIN &&
+            WHOLE_SWAP_PICK &&
+            WHOLE_SWAP_PICK.type === 'wait' &&
+            WHOLE_SWAP_PICK.index === String(groupIndex)
+              ? ' whole-swap-picked'
+              : ''
+          ) +
+          '"' +
+          (IS_ADMIN
+            ? ' onclick="handleGroupHeaderClick(\'wait\',\'' + groupIndex + '\',event)"'
+            : '') +
+          '>' +
+          '<div class="wait-title">' +
+          '<h2>대기' +
+          (groupIndex + 1) +
+          '</h2>' +
+          '</div>' +
+          '<span class="badge">' +
+          group.length +
+          '/4명</span>' +
+          '</div>' +
+          '<div class="players">' +
+          body +
+          '</div>' +
+          buttons +
+          '</article>'
+        );
+      })
+      .join('');
+
+  const adminContainer =
+    document.getElementById(
+      'adminWaitGroups'
+    );
+
+  if (adminContainer) {
+    adminContainer.innerHTML = html;
+  }
+
+  const memberContainer =
+    document.getElementById(
+      'memberWaitGroups'
+    );
+
+  if (memberContainer) {
+    memberContainer.innerHTML = html;
+  }
+}
+
+function renderActive() {
+  const list =
+    sortMembersByKoreanName(
+      STATE.members.filter(function(member) {
+        return member.status === 'active';
+      })
+    );
+
+  const adminHtml =
+    list.length
+      ? list
+          .map(function(member) {
+            return memberCard(
+              member,
+              true,
+              true
+            );
+          })
+          .join('')
+      : '<div class="sub">현재 코트배정 대기 인원이 없습니다.</div>';
+
+  const memberHtml =
+    list.length
+      ? list
+          .map(function(member) {
+            return memberCard(
+              member,
+              false,
+              false
+            );
+          })
+          .join('')
+      : '<div class="sub">현재 코트배정 대기 인원이 없습니다.</div>';
+
+  const adminContainer =
+    document.getElementById(
+      'activeMembersAdmin'
+    );
+
+  if (adminContainer) {
+    adminContainer.innerHTML =
+      adminHtml;
+  }
+
+  const memberContainer =
+    document.getElementById(
+      'activeMembersMember'
+    );
+
+  if (memberContainer) {
+    memberContainer.innerHTML =
+      memberHtml;
+  }
+}
+
+function renderExcluded() {
+  const container =
+    document.getElementById(
+      'excludedMembers'
+    );
+
+  if (!container) {
+    return;
+  }
+
+  const list =
+    sortMembersByKoreanName(
+      STATE.members.filter(function(member) {
+        return (
+          member.status === 'before' ||
+          member.status === 'rest' ||
+          member.status === 'away'
+        );
+      })
+    );
+
+  container.innerHTML =
+    list.length
+      ? list
+          .map(function(member) {
+            const label =
+              member.status === 'before'
+                ? '도착전'
+                : (
+                  member.status === 'rest'
+                    ? '휴식'
+                    : '귀가'
+                );
+
+            return (
+              '<button class="member ' +
+              genderClass(member) +
+              (
+                SELECTED.has(member.id)
+                  ? ' selected'
+                  : ''
+              ) +
+              '" data-member-id="' +
+              member.id +
+              '"' +
+              memberLongPressAttributes(member.id) +
+              ' onclick="handleSelectableMemberClick(\'' +
+              member.id +
+              '\',event)">' +
+              '<span class="name">' +
+              member.name +
+              '</span>' +
+              '<span class="meta">' +
+              label +
+              ' · ' +
+              (member.games || 0) +
+              '게임</span>' +
+              memberInfoDetailHtml(member, label) +
+              '</button>'
+            );
+          })
+          .join('')
+      : '<div class="sub">현재 제외된 멤버가 없습니다.</div>';
+}
+
+function renderInactive() {
+  const container =
+    document.getElementById(
+      'inactiveMembers'
+    );
+
+  if (!container) {
+    return;
+  }
+
+  const list =
+    STATE.members.filter(function(member) {
+      return (
+        member.status === 'before' ||
+        member.status === 'rest' ||
+        member.status === 'away'
+      );
+    });
+
+  container.innerHTML =
+    list.length
+      ? list
+          .map(function(member) {
+            const label =
+              member.status === 'before'
+                ? '도착전'
+                : (
+                  member.status === 'rest'
+                    ? '휴식'
+                    : '귀가'
+                );
+
+            return memberCard(
+              member,
+              false,
+              false
+            );
+          })
+          .join('')
+      : '<div class="sub">해당 인원이 없습니다.</div>';
+}
+
+function toggleSelected(id) {
+  if (SELECTED.has(id)) {
+    SELECTED.delete(id);
+  } else {
+    SELECTED.add(id);
+  }
+
+  renderSelectionCount();
+  renderQuickRoster();
+  document
+    .querySelectorAll('[data-member-id="' + id + '"]')
+    .forEach(function(element) {
+      element.classList.toggle(
+        'selected',
+        SELECTED.has(id)
+      );
+    });
+  renderQuickMoveBar();
+}
+
+function applySmartAssignLocally(ids, preferredCourt) {
+  let emptyCourts = [1, 2, 3, 4].filter(function(courtNo) {
+    return (STATE.courts[courtNo] || []).length === 0;
+  });
+
+  while (emptyCourts.length) {
+    const queuedIndex = STATE.waitGroups.findIndex(function(group) {
+      return (group || []).length === 4;
+    });
+
+    if (queuedIndex < 0) break;
+
+    const courtNo = emptyCourts.shift();
+    const promoted = STATE.waitGroups[queuedIndex].slice();
+    STATE.courts[courtNo] = promoted;
+    STATE.courtStartedAt[courtNo] = new Date().toISOString();
+    STATE.waitGroups.splice(queuedIndex, 1);
+    STATE.waitGroups.push([]);
+
+    promoted.forEach(function(id) {
+      const member = memberById(id);
+      if (member) member.status = 'playing';
+    });
+  }
+
+  const targetCourt =
+    emptyCourts.length === 1
+      ? emptyCourts[0]
+      : preferredCourt
+        ? Number(preferredCourt)
+        : 0;
+
+  if (targetCourt) {
+    STATE.courts[targetCourt] = ids.slice();
+    STATE.courtStartedAt[targetCourt] = new Date().toISOString();
+    ids.forEach(function(id) {
+      const member = memberById(id);
+      if (member) member.status = 'playing';
+    });
+    return;
+  }
+
+  let lastOccupiedWait = -1;
+  STATE.waitGroups.forEach(function(group, index) {
+    if ((group || []).length > 0) {
+      lastOccupiedWait = index;
+    }
+  });
+
+  let targetWait =
+    lastOccupiedWait + 1 < STATE.waitGroups.length &&
+    (STATE.waitGroups[lastOccupiedWait + 1] || []).length === 0
+      ? lastOccupiedWait + 1
+      : STATE.waitGroups.findIndex(function(group) {
+          return (group || []).length === 0;
+        });
+
+  if (targetWait >= 0) {
+    STATE.waitGroups[targetWait] = ids.slice();
+    ids.forEach(function(id) {
+      const member = memberById(id);
+      if (member) member.status = 'waiting';
+    });
+  }
+}
+
+function isAllowedDoublesTeam(members) {
+  if (members.length !== 4) return false;
+
+  const maleCount =
+    members.filter(function(member) {
+      return member.gender === 'male';
+    }).length;
+  const femaleCount = members.length - maleCount;
+
+  return (
+    maleCount === 4 ||
+    femaleCount === 4 ||
+    (maleCount === 2 && femaleCount === 2)
+  );
+}
+
+function autoPickDoublesIds() {
+  const active = STATE.members
+    .filter(function(member) {
+      return member.status === 'active';
+    })
+    .sort(function(a, b) {
+      const gameDifference =
+        (Number(a.games) || 0) -
+        (Number(b.games) || 0);
+
+      if (gameDifference) return gameDifference;
+
+      const createdDifference =
+        String(a.createdAt || '')
+          .localeCompare(String(b.createdAt || ''));
+
+      if (createdDifference) return createdDifference;
+
+      return String(a.name || '').localeCompare(
+        String(b.name || ''),
+        'ko-KR'
+      );
+    });
+
+  const order = {};
+  active.forEach(function(member, index) {
+    order[member.id] = index;
+  });
+
+  const men = active.filter(function(member) {
+    return member.gender === 'male';
+  });
+  const women = active.filter(function(member) {
+    return member.gender === 'female';
+  });
+  const candidates = [];
+
+  if (men.length >= 4) {
+    candidates.push(men.slice(0, 4));
+  }
+  if (women.length >= 4) {
+    candidates.push(women.slice(0, 4));
+  }
+  if (men.length >= 2 && women.length >= 2) {
+    candidates.push(
+      men.slice(0, 2).concat(women.slice(0, 2))
+    );
+  }
+
+  candidates.sort(function(a, b) {
+    function score(group) {
+      const games = group.map(function(member) {
+        return Number(member.games) || 0;
+      });
+
+      return [
+        games.reduce(function(sum, game) {
+          return sum + game;
+        }, 0),
+        Math.max.apply(null, games),
+        group.reduce(function(sum, member) {
+          return sum + order[member.id];
+        }, 0)
+      ];
+    }
+
+    const scoreA = score(a);
+    const scoreB = score(b);
+
+    for (let index = 0; index < scoreA.length; index++) {
+      if (scoreA[index] !== scoreB[index]) {
+        return scoreA[index] - scoreB[index];
+      }
+    }
+
+    return 0;
+  });
+
+  return candidates.length
+    ? candidates[0].map(function(member) {
+        return member.id;
+      })
+    : [];
+}
+
+function sortedActiveMembersForAutoFill() {
+  return STATE.members
+    .filter(function(member) {
+      return member.status === 'active';
+    })
+    .sort(function(a, b) {
+      const gameDifference =
+        (Number(a.games) || 0) -
+        (Number(b.games) || 0);
+
+      if (gameDifference) return gameDifference;
+
+      const createdDifference =
+        String(a.createdAt || '')
+          .localeCompare(String(b.createdAt || ''));
+
+      if (createdDifference) return createdDifference;
+
+      return String(a.name || '').localeCompare(
+        String(b.name || ''),
+        'ko-KR'
+      );
+    });
+}
+
+function autoPickCourtFillIds(existingMembers) {
+  const needed = 4 - existingMembers.length;
+  if (needed <= 0) return [];
+
+  const active = sortedActiveMembersForAutoFill();
+  const men = active.filter(function(member) {
+    return member.gender === 'male';
+  });
+  const women = active.filter(function(member) {
+    return member.gender === 'female';
+  });
+  const existingMale =
+    existingMembers.filter(function(member) {
+      return member.gender === 'male';
+    }).length;
+  const existingFemale =
+    existingMembers.length - existingMale;
+  const candidates = [];
+
+  [4, 0, 2].forEach(function(finalMale) {
+    const finalFemale = 4 - finalMale;
+    const needMale = finalMale - existingMale;
+    const needFemale = finalFemale - existingFemale;
+
+    if (
+      needMale < 0 ||
+      needFemale < 0 ||
+      needMale + needFemale !== needed ||
+      men.length < needMale ||
+      women.length < needFemale
+    ) {
+      return;
+    }
+
+    candidates.push(
+      men.slice(0, needMale)
+        .concat(women.slice(0, needFemale))
+    );
+  });
+
+  candidates.sort(function(a, b) {
+    function score(group) {
+      const games = group.map(function(member) {
+        return Number(member.games) || 0;
+      });
+
+      return [
+        games.reduce(function(sum, game) {
+          return sum + game;
+        }, 0),
+        games.length
+          ? Math.max.apply(null, games)
+          : 0
+      ];
+    }
+
+    const scoreA = score(a);
+    const scoreB = score(b);
+
+    return (
+      scoreA[0] - scoreB[0] ||
+      scoreA[1] - scoreB[1]
+    );
+  });
+
+  return candidates.length
+    ? candidates[0].map(function(member) {
+        return member.id;
+      })
+    : [];
+}
+
+async function smartAssignSelected() {
+  if (!AUTO_ASSIGN_TARGET) {
+    alert('먼저 코트 또는 대기조의 비어 있는 자리를 한 번 누르세요.');
+    return;
+  }
+
+  const targetType = AUTO_ASSIGN_TARGET.type;
+  const targetIndex = AUTO_ASSIGN_TARGET.index;
+  const targetLabel =
+    targetType === 'court'
+      ? COURT_LABELS[targetIndex]
+      : '대기' + (targetIndex + 1);
+  const existingIds =
+    targetType === 'court'
+      ? (STATE.courts[targetIndex] || []).slice()
+      : (STATE.waitGroups[targetIndex] || []).slice();
+  const existingMembers =
+    existingIds.map(memberById).filter(Boolean);
+  const needed = 4 - existingIds.length;
+
+  if (needed <= 0) {
+    AUTO_ASSIGN_TARGET = null;
+    alert(targetLabel + '에는 빈자리가 없습니다.');
+    return;
+  }
+
+  const ids =
+    SELECTED.size
+      ? Array.from(SELECTED)
+      : autoPickCourtFillIds(existingMembers);
+
+  if (SELECTED.size && ids.length !== needed) {
+    alert(
+      targetLabel + '의 빈자리는 ' + needed + '자리입니다.\n' +
+      needed + '명을 선택하거나 선택을 모두 해제하고 자동배정하세요.'
+    );
+    return;
+  }
+
+  if (ids.length !== needed) {
+    alert(
+      '현재 인원과 남복·여복·혼복을 만들 수 있는 ' +
+      '코트배정 대기 인원이 부족합니다.'
+    );
+    return;
+  }
+
+  const finalMembers =
+    existingMembers.concat(
+      ids.map(memberById).filter(Boolean)
+    );
+
+  if (!isAllowedDoublesTeam(finalMembers)) {
+    alert(
+      '선택한 인원으로는 남복·여복·혼복을 만들 수 없습니다.'
+    );
+    return;
+  }
+
+  const previousState =
+    JSON.parse(JSON.stringify(STATE));
+
+  applyBatchAssignLocally(
+    ids,
+    targetType,
+    targetIndex
+  );
+  SELECTED.clear();
+  AUTO_ASSIGN_TARGET = null;
+  renderState();
+
+  try {
+    const method =
+      targetType === 'court'
+        ? 'autoFillCourt'
+        : 'autoFillWaitGroup';
+    const savedState = await server(method, [
+      ADMIN_PIN_VALUE,
+      targetIndex,
+      ids
+    ]);
+    renderState(savedState);
+    setUndoState(previousState);
+  } catch (error) {
+    STATE = previousState;
+    AUTO_ASSIGN_TARGET = {
+      type: targetType,
+      index: targetIndex,
+      slotIndex: 0
+    };
+    renderState();
+    alert(error.message || error);
+  }
+}
+
+async function loadState() {
+  const nextState = await server('getPublicState', []);
+  if (!IS_ADMIN && LAST_PUBLIC_STATE) {
+    detectMemberForegroundTransition(LAST_PUBLIC_STATE, nextState);
+  }
+  renderState(nextState);
+  if (!IS_ADMIN) {
+    LAST_PUBLIC_STATE = JSON.parse(JSON.stringify(nextState));
+  }
+}
+
+async function runAction(name, args) {
+  const previousState =
+    JSON.parse(JSON.stringify(STATE));
+
+  try {
+    const state =
+      await server(name, args);
+
+    SELECTED.clear();
+
+    /* 멤버 등록은 전체 코트 상태를 다시 만들지 않고 새 카드만 합친다. */
+    if (name === 'addMember' && state && state.member) {
+      const member = normalizeMemberProfile(state.member);
+      const existingIndex = STATE.members.findIndex(function(item) {
+        return String(item.id) === String(member.id);
+      });
+      if (existingIndex >= 0) STATE.members[existingIndex] = member;
+      else STATE.members.push(member);
+      STATE.updatedAt = state.updatedAt || new Date().toISOString();
+      if (state.maxMembers) STATE.maxMembers = state.maxMembers;
+      renderActive();
+      renderQuickRoster();
+      renderStats();
+      renderSelectionCount();
+      renderQuickMoveBar();
+      const count = document.getElementById('memberCount');
+      if (count) {
+        count.textContent = STATE.members.length + '/' + (STATE.maxMembers || 500) + '명';
+      }
+    } else {
+      renderState(state);
+    }
+    setUndoState(previousState);
+
+  } catch (error) {
+    alert(error.message || error);
+  }
+}
+
+function setUndoState(state) {
+  LAST_UNDO_STATE = state;
+  ['undoButton','mobileUndoButton'].forEach(function(id) {
+    const button = document.getElementById(id);
+    if (button) button.disabled = !state;
+  });
+}
+
+async function undoLastAction() {
+  if (!LAST_UNDO_STATE) {
+    alert('실행 취소할 작업이 없습니다.');
+    return;
+  }
+
+  const restoreState =
+    JSON.parse(JSON.stringify(LAST_UNDO_STATE));
+  const currentState =
+    JSON.parse(JSON.stringify(STATE));
+
+  LAST_UNDO_STATE = null;
+  ['undoButton','mobileUndoButton'].forEach(function(id) {
+    const button = document.getElementById(id);
+    if (button) button.disabled = true;
+  });
+
+  renderState(restoreState);
+
+  try {
+    const state = await server('undoLastAction', [
+      ADMIN_PIN_VALUE,
+      restoreState
+    ]);
+    renderState(state);
+  } catch (error) {
+    renderState(currentState);
+    alert(error.message || error);
+  }
+}
+
+async function adminLogin() {
+  const pin =
+    document
+      .getElementById(
+        'adminPinInput'
+      )
+      .value
+      .trim();
+
+  const result =
+    await server(
+      'createAdminSession',
+      [pin]
+    );
+
+  if (!result || !result.ok) {
+    alert('관리자 PIN이 틀렸습니다.');
+    return;
+  }
+
+  localStorage.setItem(
+    ADMIN_AUTH_KEY,
+    String(result.token)
+  );
+
+  await openAdminApp(
+    String(result.token)
+  );
+}
+
+async function openAdminApp(credential) {
+  ADMIN_PIN_VALUE = credential;
+  updateVoiceGuideButton();
+  updateReplayVoiceButton();
+  updateVoiceRepeatButton();
+  updateSoundUnlockButton();
+
+  document
+    .getElementById(
+      'adminLoginBox'
+    )
+    .classList
+    .add('hidden');
+
+  document
+    .getElementById(
+      'adminApp'
+    )
+    .classList
+    .remove('hidden');
+
+  document
+    .getElementById(
+      'currentMemberPassword'
+    )
+    .textContent =
+      await server(
+        'getCurrentMemberPassword',
+        [credential]
+      );
+
+  await loadState();
+  await loadSystemStatus();
+}
+
+async function memberLogin() {
+  const password =
+    document
+      .getElementById(
+        'memberPasswordInput'
+      )
+      .value
+      .trim();
+
+  const result =
+    await server(
+      'verifyMemberPassword',
+      [password]
+    );
+
+  if (!result.ok) {
+    alert('멤버 비밀번호가 틀렸습니다.');
+    return;
+  }
+
+  localStorage.setItem(
+    MEMBER_AUTH_KEY,
+    String(result.version)
+  );
+  storeMemberSessionToken(String(result.sessionToken || ''));
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_AUTH_READY', {
+    version: String(result.version),
+    sessionToken: currentMemberSessionToken()
+  });
+
+  const authLoading = document.getElementById('memberAuthLoading');
+  if (authLoading) authLoading.classList.add('hidden');
+
+  document
+    .getElementById(
+      'memberLoginBox'
+    )
+    .classList
+    .add('hidden');
+
+  document
+    .getElementById(
+      'memberApp'
+    )
+    .classList
+    .remove('hidden');
+
+  await loadState();
+}
+
+async function initialize() {
+  if (IS_ADMIN) {
+    const savedToken = localStorage.getItem(ADMIN_AUTH_KEY);
+    if (!savedToken) return;
+    try {
+      const valid = await server('resumeAdminSession', [savedToken]);
+      if (valid) {
+        await openAdminApp(savedToken);
+        return;
+      }
+    } catch (error) {}
+    localStorage.removeItem(ADMIN_AUTH_KEY);
+    return;
+  }
+
+  const loading = document.getElementById('memberAuthLoading');
+  const login = document.getElementById('memberLoginBox');
+  const app = document.getElementById('memberApp');
+
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const transferredSession = String(params.get('memberSession') || currentMemberSessionToken() || '');
+    if (transferredSession) {
+      const resumed = await server('resumeMemberSession', [transferredSession]);
+      if (resumed && resumed.ok) {
+        localStorage.setItem(MEMBER_AUTH_KEY, String(resumed.version));
+        storeMemberSessionToken(transferredSession);
+        if (loading) loading.classList.add('hidden');
+        if (login) login.classList.add('hidden');
+        if (app) app.classList.remove('hidden');
+        await loadState();
+        postUnifiedMemberMessage('JAYUMINTON_MEMBER_AUTH_READY', {
+          version: String(resumed.version),
+          sessionToken: transferredSession
+        });
+        syncUnifiedMemberBridge();
+        try {
+          if (params.has('memberSession')) {
+            params.delete('memberSession');
+            const clean = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+            window.history.replaceState({}, document.title, clean);
+          }
+        } catch (cleanError) {}
+        return;
+      }
+      storeMemberSessionToken('');
+    }
+
+    const version = String(await server('getMemberPasswordVersion', []));
+    const saved = localStorage.getItem(MEMBER_AUTH_KEY);
+    if (saved === version) {
+      if (loading) loading.classList.add('hidden');
+      if (login) login.classList.add('hidden');
+      if (app) app.classList.remove('hidden');
+      await loadState();
+      postUnifiedMemberMessage('JAYUMINTON_MEMBER_AUTH_READY', {
+        version: version,
+        sessionToken: currentMemberSessionToken()
+      });
+      syncUnifiedMemberBridge();
+      return;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  if (loading) loading.classList.add('hidden');
+  if (app) app.classList.add('hidden');
+  if (login) login.classList.remove('hidden');
+}
+
+async function loadSystemStatus() {
+  if (!IS_ADMIN || !ADMIN_PIN_VALUE) {
+    return;
+  }
+
+  try {
+    const status =
+      await server(
+        'getSystemStatus',
+        [ADMIN_PIN_VALUE]
+      );
+
+    const backupText =
+      document.getElementById(
+        'systemBackupText'
+      );
+
+    const updatedText =
+      document.getElementById(
+        'systemUpdatedText'
+      );
+
+    if (backupText) {
+      backupText.textContent =
+        status.lastBackupAt
+          ? '최근 백업: ' +
+            new Date(
+              status.lastBackupAt
+            ).toLocaleString('ko-KR')
+          : '최근 백업: 없음';
+    }
+
+    if (updatedText) {
+      updatedText.textContent =
+        status.updatedAt
+          ? '최근 저장: ' +
+            new Date(
+              status.updatedAt
+            ).toLocaleString('ko-KR')
+          : '최근 저장: 확인 불가';
+    }
+  } catch (error) {
+    // 상태 문구 실패가 화면 동작을 막지 않음
+  }
+}
+
+async function createBackup() {
+  if (
+    !confirm(
+      '현재 멤버·코트·대기조 상태를 백업할까요?'
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const result =
+      await server(
+        'createManualBackup',
+        [ADMIN_PIN_VALUE]
+      );
+
+    alert('백업이 저장되었습니다.');
+    await loadSystemStatus();
+  } catch (error) {
+    alert(error.message || error);
+  }
+}
+
+async function restoreBackup() {
+  if (
+    !confirm(
+      '최근 백업 상태로 복원할까요? 현재 상태는 덮어씁니다.'
+    )
+  ) {
+    return;
+  }
+
+  if (
+    !confirm(
+      '정말 백업을 복원할까요?'
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const state =
+      await server(
+        'restoreManualBackup',
+        [ADMIN_PIN_VALUE]
+      );
+
+    SELECTED.clear();
+    renderState(state);
+    alert('백업 상태로 복원했습니다.');
+    await loadSystemStatus();
+  } catch (error) {
+    alert(error.message || error);
+  }
+}
+
+async function addMember() {
+  if (ADD_MEMBER_IN_FLIGHT) return;
+
+  const nameInput = document.getElementById('newName');
+  const genderInput = document.getElementById('newGender');
+  const gradeInput = document.getElementById('newGrade');
+  const experienceInput = document.getElementById('newExperience');
+  const button = document.getElementById('addMemberButton');
+
+  const name = nameInput.value.trim();
+  const gender = genderInput.value;
+  const grade = gradeInput.value.trim();
+  const experience = experienceInput.value.trim();
+
+  if (!name) {
+    alert('이름 또는 닉네임을 입력하세요.');
+    nameInput.focus();
+    return;
+  }
+  if (!gender) {
+    alert('성별을 선택하세요.');
+    genderInput.focus();
+    return;
+  }
+
+  ADD_MEMBER_IN_FLIGHT = true;
+  if (button) {
+    button.disabled = true;
+    button.textContent = '저장 중…';
+  }
+
+  /* 서버 전체 상태를 다시 받을 때까지 기다리지 않고 카드 한 장만 즉시 추가한다. */
+  const temporaryId = 'saving_' + Date.now();
+  const temporaryMember = {
+    id: temporaryId,
+    name: name,
+    gender: gender,
+    games: 0,
+    status: 'active',
+    grade: grade,
+    experience: experience,
+    createdAt: new Date().toISOString()
+  };
+  STATE.members.push(temporaryMember);
+  renderActive();
+  renderQuickRoster();
+  renderStats();
+  const count = document.getElementById('memberCount');
+  if (count) {
+    count.textContent = STATE.members.length + '/' + (STATE.maxMembers || 500) + '명';
+  }
+
+  try {
+    const result = await new Promise(function(resolve, reject) {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        .addMember(
+          ADMIN_PIN_VALUE,
+          name,
+          gender,
+          grade,
+          experience
+        );
+    });
+
+    const index = STATE.members.findIndex(function(member) {
+      return member.id === temporaryId;
+    });
+    if (index >= 0 && result && result.member) {
+      STATE.members[index] = result.member;
+    }
+    if (result && result.updatedAt) {
+      STATE.updatedAt = result.updatedAt;
+    }
+
+    nameInput.value = '';
+    genderInput.value = '';
+    gradeInput.value = '';
+    experienceInput.value = '';
+
+    renderActive();
+    renderQuickRoster();
+    renderStats();
+  } catch (error) {
+    STATE.members = STATE.members.filter(function(member) {
+      return member.id !== temporaryId;
+    });
+    renderActive();
+    renderQuickRoster();
+    renderStats();
+    alert(error.message || error);
+  } finally {
+    ADD_MEMBER_IN_FLIGHT = false;
+    if (button) {
+      button.disabled = false;
+      button.textContent = '등록';
+    }
+    const finalCount = document.getElementById('memberCount');
+    if (finalCount) {
+      finalCount.textContent = STATE.members.length + '/' + (STATE.maxMembers || 500) + '명';
+    }
+  }
+}
+
+function setSelectedStatus(status) {
+  runAction(
+    'setMemberStatus',
+    [
+      ADMIN_PIN_VALUE,
+      Array.from(SELECTED),
+      status
+    ]
+  );
+}
+
+function deleteSelected() {
+  if (!SELECTED.size) {
+    alert('멤버를 선택하세요.');
+    return;
+  }
+
+  if (
+    confirm(
+      '선택한 멤버를 삭제할까요?'
+    )
+  ) {
+    runAction(
+      'deleteMembers',
+      [
+        ADMIN_PIN_VALUE,
+        Array.from(SELECTED)
+      ]
+    );
+  }
+}
+
+function putSelectedIntoCourt(courtNo) {
+  if (!SELECTED.size) {
+    alert('멤버를 선택하세요.');
+    return;
+  }
+
+  runAction(
+    'assignMembersToCourt',
+    [
+      ADMIN_PIN_VALUE,
+      courtNo,
+      Array.from(SELECTED)
+    ]
+  );
+}
+
+function emptyCourts() {
+  return [1, 2, 3, 4]
+    .filter(function(courtNo) {
+      return (
+        STATE.courts[courtNo] || []
+      ).length === 0;
+    });
+}
+
+function putSelectedIntoEmptyCourt() {
+  if (!SELECTED.size) {
+    alert('멤버를 선택하세요.');
+    return;
+  }
+
+  const empty = emptyCourts();
+
+  if (!empty.length) {
+    alert('비어 있는 코트가 없습니다.');
+    return;
+  }
+
+  if (empty.length === 1) {
+    putSelectedIntoCourt(empty[0]);
+    return;
+  }
+
+  const answer = prompt(
+    '배정할 코트 번호를 입력하세요.\n\n' +
+    empty
+      .map(function(courtNo) {
+        return COURT_LABELS[courtNo];
+      })
+      .join('\n')
+  );
+
+  if (answer === null) {
+    return;
+  }
+
+  const courtNo = Number(answer);
+
+  if (empty.indexOf(courtNo) < 0) {
+    alert(
+      '비어 있는 코트 번호만 입력하세요.'
+    );
+    return;
+  }
+
+  putSelectedIntoCourt(courtNo);
+}
+
+function putSelectedIntoWaitGroup(groupIndex) {
+  if (!SELECTED.size) {
+    alert('멤버를 선택하세요.');
+    return;
+  }
+
+  runAction(
+    'assignMembersToWaitGroup',
+    [
+      ADMIN_PIN_VALUE,
+      groupIndex,
+      Array.from(SELECTED)
+    ]
+  );
+}
+
+function sendWaitGroupToCourt(groupIndex) {
+  const empty = emptyCourts();
+
+  if (!empty.length) {
+    alert('비어 있는 코트가 없습니다.');
+    return;
+  }
+
+  if (empty.length === 1) {
+    runAction(
+      'assignWaitGroupToCourt',
+      [
+        ADMIN_PIN_VALUE,
+        groupIndex,
+        empty[0]
+      ]
+    );
+
+    return;
+  }
+
+  const answer = prompt(
+    '배정할 코트 번호를 입력하세요.\n\n' +
+    empty
+      .map(function(courtNo) {
+        return COURT_LABELS[courtNo];
+      })
+      .join('\n')
+  );
+
+  if (answer === null) {
+    return;
+  }
+
+  const courtNo = Number(answer);
+
+  if (empty.indexOf(courtNo) < 0) {
+    alert(
+      '비어 있는 코트 번호만 입력하세요.'
+    );
+    return;
+  }
+
+  runAction(
+    'assignWaitGroupToCourt',
+    [
+      ADMIN_PIN_VALUE,
+      groupIndex,
+      courtNo
+    ]
+  );
+}
+
+async function finishCourt(courtNo) {
+  const previousState =
+    JSON.parse(JSON.stringify(STATE));
+  const waitingMembers =
+    (STATE.waitGroups[0] || [])
+      .map(memberById)
+      .filter(Boolean);
+  let voiceStarted = false;
+
+  if (
+    VOICE_GUIDE_ENABLED &&
+    'speechSynthesis' in window &&
+    (STATE.courts[courtNo] || []).length === 4
+  ) {
+    playCourtFinishVoice(
+      Number(courtNo),
+      waitingMembers
+    );
+    voiceStarted = true;
+  }
+
+  try {
+    const state = await server(
+      'finishCourt',
+      [
+        ADMIN_PIN_VALUE,
+        courtNo
+      ]
+    );
+
+    SELECTED.clear();
+    renderState(state);
+    setUndoState(previousState);
+    rememberVoiceAnnouncement(
+      Number(courtNo),
+      waitingMembers
+    );
+  } catch (error) {
+    if (voiceStarted) {
+      window.speechSynthesis.cancel();
+      VOICE_UTTERANCES = [];
+      restorePageMediaVolume();
+    }
+    alert(error.message || error);
+  }
+}
+
+function removeFromCourt(
+  courtNo,
+  id
+) {
+  runAction(
+    'removeFromCourt',
+    [
+      ADMIN_PIN_VALUE,
+      courtNo,
+      id
+    ]
+  );
+}
+
+function removeFromWaitGroup(
+  groupIndex,
+  id
+) {
+  runAction(
+    'removeFromWaitGroup',
+    [
+      ADMIN_PIN_VALUE,
+      groupIndex,
+      id
+    ]
+  );
+}
+
+function decreaseSelectedGames() {
+  if (!SELECTED.size) {
+    alert('멤버를 선택하세요.');
+    return;
+  }
+
+  runAction(
+    'decreaseSelectedGameCounts',
+    [
+      ADMIN_PIN_VALUE,
+      Array.from(SELECTED)
+    ]
+  );
+}
+
+function resetSelectedGames() {
+  if (!SELECTED.size) {
+    alert('멤버를 선택하세요.');
+    return;
+  }
+
+  if (
+    !confirm(
+      '선택한 멤버의 게임 횟수를 0으로 초기화할까요?'
+    )
+  ) {
+    return;
+  }
+
+  runAction(
+    'resetSelectedGameCounts',
+    [
+      ADMIN_PIN_VALUE,
+      Array.from(SELECTED)
+    ]
+  );
+}
+
+function resetAllData() {
+  if (
+    !confirm(
+      '등록 멤버와 모든 배정 데이터를 전부 삭제할까요?'
+    )
+  ) {
+    return;
+  }
+
+  if (
+    !confirm(
+      '정말 전체 초기화할까요?'
+    )
+  ) {
+    return;
+  }
+
+  runAction(
+    'resetAllOperationData',
+    [ADMIN_PIN_VALUE]
+  );
+}
+
+async function changeMemberPassword() {
+  const input =
+    document.getElementById(
+      'newMemberPassword'
+    );
+
+  const value =
+    input.value.trim();
+
+  if (!value) {
+    alert('새 비밀번호를 입력하세요.');
+    return;
+  }
+
+  try {
+    const result =
+      await server(
+        'changeMemberPassword',
+        [
+          ADMIN_PIN_VALUE,
+          value
+        ]
+      );
+
+    document
+      .getElementById(
+        'currentMemberPassword'
+      )
+      .textContent =
+        result.password;
+
+    input.value = '';
+
+    alert(
+      '멤버 비밀번호가 ' +
+      result.password +
+      '(으)로 저장되었습니다.'
+    );
+  } catch (error) {
+    alert(error.message || error);
+  }
+}
+
+initialize();
+setTimeout(syncUnifiedMemberBridge, 0);
+window.addEventListener('load', syncUnifiedMemberBridge);
+document.addEventListener('visibilitychange', function() {
+  if (!IS_ADMIN && !document.hidden) {
+    const app = document.getElementById('memberApp');
+    if (app && !app.classList.contains('hidden')) refreshMemberState();
+  }
+});
+
+setInterval(updateCourtTimers, 1000);
+
+if (!IS_ADMIN) {
+  setInterval(
+    async function() {
+      const app =
+        document.getElementById(
+          'memberApp'
+        );
+
+      if (
+        !app.classList.contains(
+          'hidden'
+        )
+      ) {
+        const version =
+          String(
+            await server(
+              'getMemberPasswordVersion',
+              []
+            )
+          );
+
+        if (
+          localStorage.getItem(
+            MEMBER_AUTH_KEY
+          ) !== version
+        ) {
+          localStorage.removeItem(
+            MEMBER_AUTH_KEY
+          );
+          LAST_PUBLIC_STATE = null;
+          const authLoading = document.getElementById('memberAuthLoading');
+          if (authLoading) authLoading.classList.add('hidden');
+
+          app
+            .classList
+            .add('hidden');
+
+          document
+            .getElementById(
+              'memberLoginBox'
+            )
+            .classList
+            .remove('hidden');
+
+          return;
+        }
+
+        await loadState();
+      }
+    },
+    8000
+  );
+}
+
+
+/* v1.6.16: 코트/대기 빈자리 다중 선택. 기존 인원선택·전체교환 기능은 유지한다. */
+const EMPTY_SLOT_TARGETS = [];
+
+function emptySlotTargetKey(target) {
+  return String(target.type) + ':' + String(target.index) + ':' + String(target.slotIndex);
+}
+
+function copyEmptySlotTarget(target) {
+  return {
+    type: target.type === 'court' ? 'court' : 'wait',
+    index: Number(target.index),
+    slotIndex: Number(target.slotIndex)
+  };
+}
+
+function syncPrimaryEmptyTarget() {
+  AUTO_ASSIGN_TARGET = EMPTY_SLOT_TARGETS.length
+    ? copyEmptySlotTarget(EMPTY_SLOT_TARGETS[0])
+    : null;
+}
+
+function selectedEmptyTargetIndex(type, index, slotIndex) {
+  const key = emptySlotTargetKey({type:type, index:Number(index), slotIndex:Number(slotIndex)});
+  return EMPTY_SLOT_TARGETS.findIndex(function(target) {
+    return emptySlotTargetKey(target) === key;
+  });
+}
+
+function isEmptySlotTargetSelected(type, index, slotIndex) {
+  return selectedEmptyTargetIndex(type, index, slotIndex) >= 0;
+}
+
+function clearEmptySlotTargets() {
+  EMPTY_SLOT_TARGETS.splice(0, EMPTY_SLOT_TARGETS.length);
+  syncPrimaryEmptyTarget();
+}
+
+function removeEmptySlotTarget(type, index, slotIndex) {
+  const found = selectedEmptyTargetIndex(type, index, slotIndex);
+  if (found >= 0) EMPTY_SLOT_TARGETS.splice(found, 1);
+  syncPrimaryEmptyTarget();
+}
+
+function removeEmptyTargetsForGroup(type, index) {
+  index = Number(index);
+  for (let i = EMPTY_SLOT_TARGETS.length - 1; i >= 0; i -= 1) {
+    const target = EMPTY_SLOT_TARGETS[i];
+    if (target.type === type && Number(target.index) === index) {
+      EMPTY_SLOT_TARGETS.splice(i, 1);
+    }
+  }
+  syncPrimaryEmptyTarget();
+}
+
+function toggleEmptySlotTarget(type, index, slotIndex) {
+  index = Number(index);
+  slotIndex = Number(slotIndex);
+  const found = selectedEmptyTargetIndex(type, index, slotIndex);
+  if (found >= 0) {
+    EMPTY_SLOT_TARGETS.splice(found, 1);
+  } else {
+    EMPTY_SLOT_TARGETS.push({type:type, index:index, slotIndex:slotIndex});
+  }
+  syncPrimaryEmptyTarget();
+}
+
+function targetGroupForEmpty(target) {
+  return target.type === 'court'
+    ? (STATE.courts[Number(target.index)] || [])
+    : (STATE.waitGroups[Number(target.index)] || []);
+}
+
+function pruneEmptySlotTargets() {
+  for (let i = EMPTY_SLOT_TARGETS.length - 1; i >= 0; i -= 1) {
+    const target = EMPTY_SLOT_TARGETS[i];
+    const group = targetGroupForEmpty(target);
+    if (group.length >= 4 || Number(target.slotIndex) < group.length) {
+      EMPTY_SLOT_TARGETS.splice(i, 1);
+    }
+  }
+  syncPrimaryEmptyTarget();
+}
+
+assignMemberToChosenEmpty = function(memberId, event) {
+  pruneEmptySlotTargets();
+  if (!EMPTY_SLOT_TARGETS.length) return false;
+
+  const target = copyEmptySlotTarget(EMPTY_SLOT_TARGETS[0]);
+  const targetGroup = targetGroupForEmpty(target);
+
+  if (targetGroup.indexOf(memberId) >= 0) {
+    alert('이미 선택한 위치에 있는 멤버입니다.');
+    return true;
+  }
+
+  if (targetGroup.length >= 4) {
+    removeEmptyTargetsForGroup(target.type, target.index);
+    renderCourts();
+    renderWaitGroups();
+    return assignMemberToChosenEmpty(memberId, event);
+  }
+
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  /* 배열은 빈칸을 건너뛸 수 없으므로 현재 그룹의 첫 빈자리를 채우고,
+     사용자가 연속 선택한 다음 빈자리를 다음 대상에 남긴다. */
+  removeEmptySlotTarget(target.type, target.index, target.slotIndex);
+  if (targetGroup.length >= 3) {
+    removeEmptyTargetsForGroup(target.type, target.index);
+  }
+
+  QUICK_PICK = null;
+  SELECTED.delete(memberId);
+  batchAssignToTarget([memberId], target.type, target.index);
+  return true;
+};
+
+handleEmptySlotTap = function(type, index, slotIndex, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const ids = QUICK_PICK ? [QUICK_PICK.memberId] : Array.from(SELECTED);
+
+  if (!ids.length) {
+    toggleEmptySlotTarget(type, index, slotIndex);
+    renderCourts();
+    renderWaitGroups();
+    return;
+  }
+
+  const targetGroup = type === 'court'
+    ? (STATE.courts[Number(index)] || [])
+    : (STATE.waitGroups[Number(index)] || []);
+  const capacity = 4 - targetGroup.length;
+
+  if (ids.some(function(id) { return targetGroup.indexOf(id) >= 0; })) {
+    alert('이미 이 위치에 있는 인원은 다시 넣을 수 없습니다.');
+    return;
+  }
+
+  if (ids.length > capacity) {
+    alert('이 위치에는 ' + capacity + '명만 더 들어갈 수 있습니다. 선택 인원을 줄여주세요.');
+    return;
+  }
+
+  clearEmptySlotTargets();
+  cancelQuickPick();
+  batchAssignToTarget(ids, type, index);
+};
+
+emptySlotCard = function(type, index, slotIndex) {
+  const targetOrder = selectedEmptyTargetIndex(type, index, slotIndex);
+  const selected = targetOrder >= 0;
+  return (
+    '<div class="person empty quick-empty-slot' +
+    (selected ? ' auto-assign-target' : '') +
+    '" onclick="handleEmptySlotTap(\'' + type + '\',\'' + index + '\',' + slotIndex + ',event)" ' +
+    'title="빈자리를 연속 선택할 수 있습니다. 같은 자리를 다시 누르면 해제됩니다.">' +
+    '<span class="empty-slot-label">' + (selected ? '빈자리 선택 ' + (targetOrder + 1) : '비어 있음') + '</span>' +
+    '<small>' + (selected ? '다시 탭하면 해제' : '연속 선택 가능') + '</small>' +
+    '</div>'
+  );
+};
+
+smartAssignSelected = async function() {
+  pruneEmptySlotTargets();
+  if (!EMPTY_SLOT_TARGETS.length) {
+    alert('먼저 코트 또는 대기조의 비어 있는 자리를 한 번 누르세요. 여러 빈자리를 연속 선택할 수도 있습니다.');
+    return;
+  }
+
+  const target = copyEmptySlotTarget(EMPTY_SLOT_TARGETS[0]);
+  const targetType = target.type;
+  const targetIndex = target.index;
+  const targetLabel = targetType === 'court' ? COURT_LABELS[targetIndex] : '대기' + (targetIndex + 1);
+  const existingIds = targetType === 'court'
+    ? (STATE.courts[targetIndex] || []).slice()
+    : (STATE.waitGroups[targetIndex] || []).slice();
+  const existingMembers = existingIds.map(memberById).filter(Boolean);
+  const needed = 4 - existingIds.length;
+
+  if (needed <= 0) {
+    removeEmptyTargetsForGroup(targetType, targetIndex);
+    alert(targetLabel + '에는 빈자리가 없습니다.');
+    return;
+  }
+
+  const ids = SELECTED.size ? Array.from(SELECTED) : autoPickCourtFillIds(existingMembers);
+  if (SELECTED.size && ids.length !== needed) {
+    alert(targetLabel + '의 빈자리는 ' + needed + '자리입니다.\n' + needed + '명을 선택하거나 선택을 모두 해제하고 자동배정하세요.');
+    return;
+  }
+  if (ids.length !== needed) {
+    alert('현재 인원과 남복·여복·혼복을 만들 수 있는 코트배정 대기 인원이 부족합니다.');
+    return;
+  }
+
+  const finalMembers = existingMembers.concat(ids.map(memberById).filter(Boolean));
+  if (!isAllowedDoublesTeam(finalMembers)) {
+    alert('선택한 인원으로는 남복·여복·혼복을 만들 수 없습니다.');
+    return;
+  }
+
+  const previousState = JSON.parse(JSON.stringify(STATE));
+  const previousTargets = EMPTY_SLOT_TARGETS.map(copyEmptySlotTarget);
+  applyBatchAssignLocally(ids, targetType, targetIndex);
+  SELECTED.clear();
+  removeEmptyTargetsForGroup(targetType, targetIndex);
+  renderState();
+
+  try {
+    const method = targetType === 'court' ? 'autoFillCourt' : 'autoFillWaitGroup';
+    const savedState = await server(method, [ADMIN_PIN_VALUE, targetIndex, ids]);
+    renderState(savedState);
+    setUndoState(previousState);
+  } catch (error) {
+    STATE = previousState;
+    clearEmptySlotTargets();
+    previousTargets.forEach(function(item) { EMPTY_SLOT_TARGETS.push(copyEmptySlotTarget(item)); });
+    syncPrimaryEmptyTarget();
+    renderState();
+    alert(error.message || error);
+  }
+};
+
+</script>

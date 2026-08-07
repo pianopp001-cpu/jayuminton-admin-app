@@ -1,0 +1,3314 @@
+:root{
+  --bg:#f3f5fa;
+  --card:#ffffff;
+  --line:#dce2ee;
+  --text:#182033;
+  --muted:#6f7a90;
+  --primary:#315efb;
+  --primary-soft:#edf2ff;
+  --danger:#d92d20;
+  --male-bg:#dbeafe;
+  --male-border:#2563eb;
+  --male-text:#0f3f9c;
+  --female-bg:#fce7f3;
+  --female-border:#ec4899;
+  --female-text:#9d174d;
+  --shadow:0 14px 35px rgba(30,42,75,.09);
+  --court1:#4f46e5;
+  --court1-soft:#eef2ff;
+  --court2:#0891b2;
+  --court2-soft:#ecfeff;
+  --court3:#16a34a;
+  --court3-soft:#f0fdf4;
+  --court4:#ea580c;
+  --court4-soft:#fff7ed;
+}
+
+/* V7.10 마지막 경기 종료 음성은 숨김 메뉴 밖에서 즉시 재생 */
+.header-replay-button{
+  flex:0 0 auto!important;
+  min-height:40px!important;
+  padding:0 12px!important;
+  white-space:nowrap!important;
+  border-color:#93c5fd!important;
+  background:#eff6ff!important;
+  color:#1d4ed8!important;
+  font-weight:900!important
+}
+.header-replay-button:disabled{
+  border-color:#e2e8f0!important;
+  background:#f8fafc!important;
+  color:#94a3b8!important;
+  opacity:.72!important
+}
+@media(max-width:620px){
+  #adminApp>header .wrap{
+    flex-wrap:nowrap!important;
+    gap:5px!important
+  }
+  #adminApp>header .wrap>div:first-child{
+    flex:1 1 auto!important;
+    min-width:0!important
+  }
+  #adminApp>header h1{
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important
+  }
+  .header-replay-button{
+    width:auto!important;
+    min-width:0!important;
+    min-height:34px!important;
+    height:34px!important;
+    padding:0 7px!important;
+    border-radius:9px!important;
+    font-size:10px!important
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:
+    radial-gradient(circle at top left,rgba(49,94,251,.08),transparent 30%),
+    linear-gradient(180deg,#f8faff 0%,var(--bg) 280px);
+  font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR","Apple SD Gothic Neo",sans-serif;
+  color:var(--text)
+}
+header{
+  position:sticky;
+  top:0;
+  z-index:20;
+  background:rgba(255,255,255,.9);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(220,226,238,.9);
+  box-shadow:0 5px 20px rgba(30,42,75,.04)
+}
+.wrap{
+  max-width:1180px;
+  margin:auto;
+  padding:18px
+}
+h1{
+  font-size:24px;
+  margin:0;
+  letter-spacing:-.5px
+}
+h2{
+  font-size:19px;
+  margin:0 0 12px;
+  letter-spacing:-.3px
+}
+.sub,.meta{
+  font-size:12px;
+  color:var(--muted)
+}
+.card{
+  background:rgba(255,255,255,.97);
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:18px;
+  box-shadow:var(--shadow)
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px
+}
+.section{margin-top:18px}
+.toolbar{
+  display:flex;
+  gap:9px;
+  flex-wrap:wrap;
+  align-items:center
+}
+input,select,button{
+  min-height:43px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  font:inherit
+}
+input,select{
+  padding:0 13px;
+  background:#fff;
+  color:var(--text);
+  outline:none
+}
+input:focus,select:focus{
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(49,94,251,.12)
+}
+button{
+  padding:0 14px;
+  background:#fff;
+  color:var(--text);
+  font-weight:800;
+  cursor:pointer;
+  transition:.16s ease;
+  box-shadow:0 2px 7px rgba(30,42,75,.05)
+}
+button:hover{
+  transform:translateY(-1px);
+  border-color:#b7c2d8;
+  box-shadow:0 6px 14px rgba(30,42,75,.1)
+}
+button:active{transform:translateY(0)}
+.primary{
+  background:linear-gradient(135deg,#315efb,#2448da);
+  color:#fff;
+  border-color:#315efb
+}
+.danger{
+  color:var(--danger);
+  border-color:#f1b6b1;
+  background:#fff8f7
+}
+.small{
+  min-height:31px;
+  height:31px;
+  padding:0 9px;
+  font-size:12px;
+  border-radius:9px
+}
+.notice{
+  padding:13px 14px;
+  border-radius:14px;
+  background:linear-gradient(135deg,#edf2ff,#f7f9ff);
+  border:1px solid #dce5ff;
+  color:#304b9a;
+  margin:14px 0;
+  font-size:13px;
+  font-weight:700
+}
+.head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-bottom:12px
+}
+.badge{
+  font-size:12px;
+  background:#f0f3f8;
+  padding:6px 9px;
+  border-radius:999px;
+  color:var(--muted);
+  font-weight:800
+}
+.players{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px
+}
+.roster{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:9px
+}
+.person,.member{
+  border:1px solid var(--line);
+  border-radius:13px;
+  padding:11px;
+  background:#fbfcff;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  min-width:0
+}
+.member{
+  min-height:60px;
+  text-align:left
+}
+.person.male,.member.male{
+  background:linear-gradient(135deg,#e7f1ff,var(--male-bg));
+  border-color:var(--male-border);
+  color:var(--male-text)
+}
+.person.female,.member.female{
+  background:linear-gradient(135deg,#fff0f7,var(--female-bg));
+  border-color:var(--female-border);
+  color:var(--female-text)
+}
+.empty{
+  color:#9ba5b8;
+  border-style:dashed;
+  justify-content:center;
+  background:rgba(255,255,255,.55)
+}
+.name{
+  font-weight:900;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.selected{
+  outline:3px solid var(--primary);
+  outline-offset:1px;
+  box-shadow:0 0 0 5px rgba(49,94,251,.1)
+}
+.login{
+  max-width:430px;
+  margin:90px auto;
+  padding:24px
+}
+.login h1{margin-bottom:12px}
+.hidden{display:none!important}
+
+/* 코트 카드 */
+.court-card{
+  position:relative;
+  overflow:hidden;
+  border-width:2px
+}
+.court-card::before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:7px
+}
+.court-card .court-title{
+  display:flex;
+  align-items:center;
+  gap:9px
+}
+.court-number{
+  width:34px;
+  height:34px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:11px;
+  color:#fff;
+  font-size:16px;
+  font-weight:900;
+  flex:0 0 auto
+}
+.court-card.court-1{
+  background:linear-gradient(180deg,#fff,var(--court1-soft));
+  border-color:#c7d2fe
+}
+.court-card.court-1::before,
+.court-card.court-1 .court-number{background:var(--court1)}
+.court-card.court-2{
+  background:linear-gradient(180deg,#fff,var(--court2-soft));
+  border-color:#a5f3fc
+}
+.court-card.court-2::before,
+.court-card.court-2 .court-number{background:var(--court2)}
+.court-card.court-3{
+  background:linear-gradient(180deg,#fff,var(--court3-soft));
+  border-color:#bbf7d0
+}
+.court-card.court-3::before,
+.court-card.court-3 .court-number{background:var(--court3)}
+.court-card.court-4{
+  background:linear-gradient(180deg,#fff,var(--court4-soft));
+  border-color:#fed7aa
+}
+.court-card.court-4::before,
+.court-card.court-4 .court-number{background:var(--court4)}
+.court-location{
+  font-size:13px;
+  font-weight:800;
+  color:var(--muted)
+}
+
+/* 대기조 카드 */
+.wait-card{
+  background:linear-gradient(180deg,#fff,#fafbfe);
+  border-color:#dfe4ef
+}
+.wait-card h2{
+  display:flex;
+  align-items:center;
+  gap:8px
+}
+.wait-card h2::before{
+  content:"";
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  background:#7c8aa5;
+  box-shadow:0 0 0 5px #eef1f6
+}
+
+/* 관리자 주요 영역 */
+.admin-panel{
+  border-top:5px solid var(--primary)
+}
+.excluded-panel{
+  background:linear-gradient(180deg,#fff,#fffafb)
+}
+.queue-panel{
+  background:linear-gradient(180deg,#fff,#f7f9ff)
+}
+
+/* 모바일 */
+@media(max-width:900px){
+  .roster{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:720px){
+  .wrap{padding:12px}
+  h1{font-size:20px}
+  .grid{grid-template-columns:1fr}
+  .roster{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .card{padding:14px;border-radius:17px}
+  .head{
+    align-items:flex-start;
+    flex-direction:column
+  }
+  .head>.primary{width:100%}
+  .toolbar button{
+    flex:1 1 auto
+  }
+  input,select{
+    flex:1 1 150px;
+    min-width:0
+  }
+}
+@media(max-width:420px){
+  .players{grid-template-columns:1fr 1fr}
+  .roster{grid-template-columns:1fr 1fr}
+  .member,.person{padding:9px}
+}
+
+/* V2 premium dashboard */
+.top-actions,
+.queue-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center
+}
+.ghost-button{
+  background:rgba(255,255,255,.72);
+  border-color:#cfd8ea;
+  backdrop-filter:blur(8px)
+}
+.dashboard-shell{
+  background:
+    linear-gradient(135deg,rgba(20,30,55,.98),rgba(38,65,130,.96));
+  color:#fff;
+  border-radius:26px;
+  padding:22px;
+  box-shadow:0 22px 50px rgba(28,45,90,.22);
+  position:relative;
+  overflow:hidden
+}
+.dashboard-shell::before{
+  content:"";
+  position:absolute;
+  width:300px;
+  height:300px;
+  border-radius:50%;
+  background:rgba(102,142,255,.22);
+  right:-110px;
+  top:-170px
+}
+.dashboard-shell::after{
+  content:"";
+  position:absolute;
+  width:180px;
+  height:180px;
+  border-radius:50%;
+  background:rgba(31,212,176,.14);
+  left:-80px;
+  bottom:-110px
+}
+.dashboard-title,
+.stats-grid,
+.system-strip{
+  position:relative;
+  z-index:1
+}
+.dashboard-title{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px
+}
+.dashboard-title h2{
+  color:#fff;
+  font-size:24px;
+  margin:3px 0 0
+}
+.eyebrow{
+  display:block;
+  font-size:11px;
+  letter-spacing:1.6px;
+  font-weight:900;
+  color:#9fb9ff
+}
+.sync-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 11px;
+  border-radius:999px;
+  background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.16);
+  font-size:12px;
+  font-weight:800
+}
+.sync-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#46e69c;
+  box-shadow:0 0 0 5px rgba(70,230,156,.13);
+  animation:pulseDot 1.7s infinite
+}
+@keyframes pulseDot{
+  0%,100%{opacity:1}
+  50%{opacity:.45}
+}
+.stats-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:11px;
+  margin-top:18px
+}
+.stat-card{
+  min-height:112px;
+  padding:15px;
+  border-radius:18px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.14);
+  backdrop-filter:blur(8px)
+}
+.stat-icon{
+  font-size:22px
+}
+.stat-label{
+  font-size:12px;
+  color:#d9e3ff;
+  font-weight:800
+}
+.stat-card strong{
+  font-size:30px;
+  line-height:1
+}
+.stat-ready{background:linear-gradient(145deg,rgba(65,95,230,.35),rgba(255,255,255,.08))}
+.stat-playing{background:linear-gradient(145deg,rgba(20,185,125,.35),rgba(255,255,255,.08))}
+.stat-groups{background:linear-gradient(145deg,rgba(235,153,45,.32),rgba(255,255,255,.08))}
+.system-strip{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:13px;
+  padding-top:13px;
+  border-top:1px solid rgba(255,255,255,.13);
+  color:#cbd8f6;
+  font-size:11px
+}
+.selection-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:38px;
+  padding:0 12px;
+  border-radius:999px;
+  background:#eef1f7;
+  color:#758199;
+  font-size:12px;
+  font-weight:900;
+  transition:.18s ease
+}
+.selection-pill.has-selection{
+  background:#e7edff;
+  color:#315efb;
+  box-shadow:0 0 0 4px rgba(49,94,251,.09)
+}
+.court-status{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:6px 9px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900
+}
+.court-status.is-playing{
+  background:#dcfce7;
+  color:#15803d
+}
+.court-status.is-empty{
+  background:#f1f5f9;
+  color:#64748b
+}
+.court-status.is-forming{
+  background:#fef3c7;
+  color:#b45309
+}
+.court-progress{
+  height:6px;
+  margin:-2px 0 12px;
+  border-radius:999px;
+  background:rgba(120,135,165,.15);
+  overflow:hidden
+}
+.court-progress span{
+  display:block;
+  height:100%;
+  border-radius:inherit;
+  transition:width .25s ease
+}
+.court-1 .court-progress span{background:var(--court1)}
+.court-2 .court-progress span{background:var(--court2)}
+.court-3 .court-progress span{background:var(--court3)}
+.court-4 .court-progress span{background:var(--court4)}
+.wait-title{
+  display:flex;
+  align-items:center;
+  gap:10px
+}
+.wait-title h2{
+  margin:0
+}
+.rank-badge{
+  width:32px;
+  height:32px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:11px;
+  font-weight:950;
+  color:#fff;
+  background:#7c8aa5;
+  box-shadow:0 6px 14px rgba(70,85,115,.18)
+}
+.wait-1{
+  border-color:#f6c34a;
+  background:linear-gradient(180deg,#fff,#fffaf0)
+}
+.wait-1 .rank-badge{
+  background:linear-gradient(135deg,#f5b800,#d99100)
+}
+.wait-2 .rank-badge{
+  background:linear-gradient(135deg,#a8b2c4,#6f7b91)
+}
+.wait-3 .rank-badge{
+  background:linear-gradient(135deg,#c9844a,#955328)
+}
+.member-dashboard{
+  margin-bottom:4px
+}
+.member-stats .stat-card{
+  min-height:100px
+}
+@media(max-width:800px){
+  .stats-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+  .dashboard-title{
+    flex-direction:column
+  }
+  .system-strip{
+    flex-direction:column
+  }
+  .top-actions{
+    width:100%;
+    margin-left:0!important
+  }
+  .top-actions button{
+    flex:1 1 auto
+  }
+}
+
+
+
+.fast-operation-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 340px;
+  gap:18px;
+  align-items:start
+}
+.court-workspace{min-width:0}
+.section-heading-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-bottom:12px
+}
+.section-heading-row h2{margin:2px 0 0}
+.dark-eyebrow{color:#64748b}
+.quick-roster-panel{
+  position:sticky;
+  top:92px;
+  max-height:calc(100vh - 108px);
+  display:flex;
+  flex-direction:column;
+  background:#fff;
+  border:1px solid #d8e0ef;
+  border-radius:22px;
+  padding:16px;
+  box-shadow:0 18px 42px rgba(24,36,68,.14);
+  overflow:hidden
+}
+.quick-roster-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px
+}
+.quick-roster-header h2{margin:2px 0 0}
+.quick-search-box{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:13px;
+  padding:0 12px;
+  border:1px solid #dce2ee;
+  border-radius:13px;
+  background:#f8faff
+}
+.quick-search-box input{
+  width:100%;
+  min-height:42px;
+  padding:0;
+  border:0;
+  background:transparent;
+  box-shadow:none
+}
+.quick-search-box input:focus{box-shadow:none}
+.quick-roster-meta{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin:10px 1px 8px;
+  color:#748097;
+  font-size:11px;
+  font-weight:800
+}
+.text-button{
+  min-height:auto;
+  height:auto;
+  padding:3px 5px;
+  border:0;
+  color:#315efb;
+  background:transparent;
+  box-shadow:none;
+  font-size:11px
+}
+.text-button:hover{transform:none;box-shadow:none}
+.quick-roster-list{
+  flex:1;
+  min-height:180px;
+  overflow-y:auto;
+  display:grid;
+  grid-template-columns:1fr;
+  gap:7px;
+  padding:3px 5px 8px 2px;
+  scrollbar-width:thin
+}
+.quick-member{
+  width:100%;
+  min-height:46px;
+  display:grid;
+  grid-template-columns:28px minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+  padding:7px 9px;
+  border-radius:12px;
+  text-align:left
+}
+.quick-member-check{
+  width:25px;
+  height:25px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:8px;
+  border:2px solid rgba(70,85,115,.24);
+  background:rgba(255,255,255,.65);
+  font-size:14px;
+  font-weight:950
+}
+.quick-member.selected .quick-member-check{
+  color:#fff;
+  background:#315efb;
+  border-color:#315efb
+}
+.quick-member-name{
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  font-weight:900
+}
+.quick-member-games{
+  font-size:11px;
+  opacity:.7;
+  font-weight:800
+}
+.quick-member.male{
+  background:#dbeafe!important;
+  border:2px solid #2563eb!important;
+  color:#0b3f9c!important
+}
+.quick-member.female{
+  background:#fce7f3!important;
+  border:2px solid #ec4899!important;
+  color:#9d174d!important
+}
+.quick-member.male .quick-member-name,
+.quick-member.male .quick-member-games{color:#0b3f9c!important}
+.quick-member.female .quick-member-name,
+.quick-member.female .quick-member-games{color:#9d174d!important}
+.quick-empty{
+  padding:30px 12px;
+  text-align:center;
+  color:#8994a8;
+  font-size:13px
+}
+.quick-court-buttons{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  padding-top:12px;
+  border-top:1px solid #e4e9f2
+}
+.quick-court{
+  min-height:48px;
+  color:#fff;
+  border:0
+}
+.court-button-1{background:linear-gradient(135deg,#6256dc,#4236bd)}
+.court-button-2{background:linear-gradient(135deg,#0891b2,#06728e)}
+.court-button-3{background:linear-gradient(135deg,#22a550,#147b37)}
+.court-button-4{background:linear-gradient(135deg,#ed6b22,#c74909)}
+.modal-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  background:rgba(13,22,42,.54);
+  backdrop-filter:blur(7px)
+}
+.modal-card{
+  width:min(560px,100%);
+  padding:21px;
+  border-radius:23px;
+  background:#fff;
+  box-shadow:0 30px 80px rgba(5,15,35,.3)
+}
+.modal-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px
+}
+.modal-head h2{margin:3px 0 0}
+.modal-close{
+  width:38px;
+  min-width:38px;
+  height:38px;
+  min-height:38px;
+  padding:0;
+  border-radius:50%;
+  font-size:24px;
+  line-height:1
+}
+.modal-help{
+  margin:16px 0;
+  padding:12px 13px;
+  border-radius:13px;
+  color:#405173;
+  background:#f3f6fc;
+  font-size:13px
+}
+.swap-select-grid{
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:end;
+  gap:12px
+}
+.swap-select-grid label{
+  display:grid;
+  gap:7px;
+  color:#64748b;
+  font-size:12px;
+  font-weight:850
+}
+.swap-select-grid select{width:100%}
+.swap-arrow{
+  padding-bottom:12px;
+  color:#315efb;
+  font-size:24px;
+  font-weight:950
+}
+.modal-primary{width:100%;margin-top:16px}
+.quick-picked{
+  outline:4px solid #ffb020!important;
+  outline-offset:2px;
+  box-shadow:0 0 0 6px rgba(255,176,32,.2)!important
+}
+.smart-assign-button{
+  width:100%;
+  display:grid;
+  gap:3px;
+  padding:14px 16px
+}
+.smart-assign-button small{font-size:11px;opacity:.86}
+.mobile-quick-bar{display:none}
+@media(max-width:620px){
+  body{padding-bottom:82px}
+  .compact-admin-tools{padding:12px}
+  .compact-admin-tools .sub{display:none}
+  .compact-admin-tools .toolbar{overflow-x:auto;flex-wrap:nowrap}
+  .v4-wait-stack{
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(122px,1fr))!important;
+    gap:8px!important;
+    overflow-x:auto;
+    scroll-snap-type:x proximity;
+    padding-bottom:5px
+  }
+  .v4-wait-card{
+    min-width:122px;
+    padding:10px!important;
+    scroll-snap-align:start
+  }
+  .v4-wait-card .players{gap:4px!important}
+  .v4-wait-card .person{
+    min-height:38px!important;
+    padding:6px!important
+  }
+  .v4-wait-card .toolbar{display:none}
+  .wait-summary-head .ghost-button{display:none}
+  .mobile-quick-bar{
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:1000;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    background:rgba(255,255,255,.97);
+    border-top:1px solid #dce4f2;
+    box-shadow:0 -8px 26px rgba(20,36,70,.14)
+  }
+  .mobile-quick-bar span{font-weight:900;color:#243455}
+  .mobile-quick-bar{
+    gap:6px;
+    padding-left:8px;
+    padding-right:8px
+  }
+  .mobile-quick-bar span{
+    flex:0 1 auto;
+    min-width:0;
+    white-space:nowrap;
+    font-size:13px
+  }
+  .mobile-quick-bar button{min-width:0}
+  .mobile-quick-bar .mobile-undo-button{
+    flex:0 0 auto;
+    min-width:82px;
+    padding:0 8px;
+    font-size:11px
+  }
+  .mobile-quick-bar .mobile-assign-button{
+    flex:1 1 auto;
+    min-width:122px;
+    padding:0 10px
+  }
+  .header-undo-button{display:none!important}
+}
+@media(max-width:980px){
+  .fast-operation-layout{grid-template-columns:1fr}
+  .quick-roster-panel{
+    position:sticky;
+    top:76px;
+    max-height:62vh;
+    z-index:15
+  }
+}
+
+/* V7.5 선택 작업은 대기5를 가리지 않고, 코트 자동배정 대상을 표시 */
+#adminApp .quick-move-bar{
+  top:clamp(58px,7vw,82px)!important;
+  bottom:auto!important
+}
+#adminApp .quick-empty-slot.auto-assign-target{
+  border:3px solid #f59e0b!important;
+  background:#fff4cc!important;
+  color:#92400e!important;
+  box-shadow:
+    0 0 0 3px rgba(245,158,11,.2),
+    0 8px 20px rgba(146,64,14,.18)!important
+}
+#adminApp .quick-empty-slot.auto-assign-target .empty-slot-label::after{
+  content:" · 자동배정 대상";
+  display:block;
+  margin-top:2px;
+  font-size:clamp(8px,.65vw,11px);
+  font-weight:900
+}
+
+/* V7.7 일반 선택과 길게 누르기 메뉴 분리 + 중복 실행 방지 */
+#adminApp .member,
+#adminApp .person,
+#adminApp .quick-member{
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  -webkit-touch-callout:none!important
+}
+#adminApp .long-pressed{
+  outline:3px solid #f59e0b!important;
+  outline-offset:2px!important;
+  box-shadow:0 0 0 4px rgba(245,158,11,.18)!important
+}
+body.action-busy{
+  cursor:progress!important
+}
+body.action-busy button,
+body.action-busy summary{
+  pointer-events:none!important
+}
+
+/* 기기 폭별 자동 배율 */
+html{
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%
+}
+body{
+  width:100%;
+  min-width:0;
+  overflow-x:hidden
+}
+@media(max-width:380px){
+  #adminApp > header h1{font-size:16px!important}
+  .top-admin-menu summary{padding:7px 8px!important;font-size:12px!important}
+  .v4-court-card{padding:6px!important}
+  .v4-court-card .court-title h2{font-size:10px!important}
+  .v4-court-card .court-elapsed{padding:3px 4px!important;font-size:8px!important}
+  .v4-court-card .person .name{font-size:10px!important}
+  .v4-wait-card .person .name{font-size:11px!important}
+}
+@media(min-width:430px) and (max-width:620px){
+  .v4-court-card .court-title h2{font-size:13px!important}
+  .v4-court-card .court-elapsed{font-size:10px!important}
+  .v4-court-card .person .name{font-size:12px!important}
+  .v4-wait-card .person .name{font-size:13px!important}
+}
+@media(max-width:620px){
+  .quick-roster-panel{padding:13px;border-radius:18px}
+  .swap-select-grid{grid-template-columns:1fr}
+  .swap-arrow{
+    padding:0;
+    text-align:center;
+    transform:rotate(90deg)
+  }
+}
+
+.top-admin-menu{margin-left:auto;position:relative}
+.top-admin-menu summary,
+.admin-setup-details > summary{
+  cursor:pointer;
+  list-style:none;
+  padding:9px 12px;
+  border:1px solid #d9e1ee;
+  border-radius:11px;
+  background:#fff;
+  color:#34425f;
+  font-weight:900
+}
+.top-admin-menu summary::-webkit-details-marker,
+.admin-setup-details > summary::-webkit-details-marker{display:none}
+.top-admin-menu[open] .top-actions{
+  position:absolute;
+  right:0;
+  top:45px;
+  z-index:80;
+  width:min(330px,88vw);
+  padding:10px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:7px;
+  border:1px solid #d9e1ee;
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 18px 44px rgba(20,35,70,.22)
+}
+.admin-setup-details{
+  margin:8px 0 12px
+}
+.admin-setup-details > summary{
+  display:inline-flex;
+  margin-bottom:8px
+}
+.quick-status-actions{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:5px;
+  margin-top:7px
+}
+.quick-status-actions button{
+  min-height:32px;
+  height:32px;
+  padding:0 5px;
+  font-size:11px
+}
+.quick-target{
+  cursor:pointer;
+  border-radius:9px;
+  transition:background .14s ease,box-shadow .14s ease
+}
+.quick-target:active{
+  background:#eaf0ff;
+  box-shadow:0 0 0 3px rgba(49,94,251,.16)
+}
+.quick-target.whole-swap-picked{
+  background:#fff1c7!important;
+  outline:3px solid #f2a900!important;
+  outline-offset:2px!important;
+  box-shadow:0 0 0 6px rgba(242,169,0,.16)!important
+}
+.whole-swap-bar{
+  position:fixed;
+  left:50%;
+  bottom:74px;
+  z-index:1110;
+  width:min(620px,calc(100% - 20px));
+  transform:translateX(-50%);
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:10px 12px;
+  border:2px solid #f2a900;
+  border-radius:15px;
+  background:#fff8dd;
+  box-shadow:0 14px 38px rgba(30,38,60,.24);
+  cursor:pointer;
+  touch-action:manipulation
+}
+.whole-swap-bar strong{
+  color:#7a4900;
+  white-space:nowrap
+}
+.whole-swap-bar span{
+  color:#6d5b39;
+  font-size:11px;
+  font-weight:800
+}
+.quick-move-bar{
+  position:fixed;
+  left:50%;
+  bottom:74px;
+  z-index:1100;
+  width:min(720px,calc(100% - 20px));
+  transform:translateX(-50%);
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:9px;
+  border:1px solid #f0b54c;
+  border-radius:15px;
+  background:#fff8dd;
+  box-shadow:0 14px 38px rgba(30,38,60,.24)
+}
+.quick-move-bar strong{color:#8a4e00}
+.quick-move-bar span{flex:1;color:#6d5b39;font-size:11px;font-weight:800}
+.quick-move-bar button{min-height:34px;height:34px;padding:0 9px;font-size:11px}
+@media(max-width:620px){
+  #adminApp > header .wrap{padding:7px 10px!important}
+  #adminApp > header h1{font-size:18px!important}
+  #adminApp > header .sub{display:none!important}
+  .admin-setup-details{margin:5px 8px!important}
+  .admin-setup-details > summary{font-size:11px;padding:7px 9px}
+  .compact-admin-tools{display:none!important}
+  .v4-command-center{display:grid!important}
+  .v4-right-rail{display:contents!important}
+  .v4-quick-card{order:1!important}
+  .v4-courts-zone{order:2!important}
+  .v4-wait-summary{order:3!important}
+  .section-heading-row{
+    margin-bottom:6px!important
+  }
+  .section-heading-row .eyebrow,
+  .section-heading-row h2{display:none!important}
+  .court-edit-actions{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:5px!important
+  }
+  .court-edit-actions button{
+    min-height:31px!important;
+    height:31px!important;
+    padding:0 6px!important;
+    font-size:10px!important
+  }
+  .quick-move-bar{
+    bottom:70px;
+    display:grid;
+    grid-template-columns:1fr auto auto;
+    gap:5px
+  }
+  .quick-move-bar span{display:none}
+  .quick-move-bar strong{
+    min-width:0;
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+    font-size:12px
+  }
+  .whole-swap-bar{
+    bottom:76px;
+    justify-content:center;
+    padding:8px 10px
+  }
+  .whole-swap-bar strong{
+    font-size:12px
+  }
+  .whole-swap-bar span{
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+    font-size:9px
+  }
+}
+
+@media(max-width:620px){
+  #memberCourts,
+  .v4-courts-grid{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:6px!important
+  }
+  .v4-court-card{
+    min-width:0!important;
+    min-height:0!important;
+    padding:7px!important;
+    border-radius:13px!important
+  }
+  .v4-court-card .head{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:4px!important;
+    margin-bottom:5px!important
+  }
+  .v4-court-card .court-number,
+  .v4-court-card .court-location,
+  .v4-court-card .court-status,
+  .v4-court-card .court-progress{
+    display:none!important
+  }
+  .v4-court-card .court-title{
+    min-width:0!important;
+    flex:1 1 auto!important
+  }
+  .v4-court-card .court-title h2{
+    font-size:13px!important;
+    white-space:nowrap!important
+  }
+  .v4-court-card .court-time-zone{
+    width:auto!important;
+    flex:0 0 auto!important
+  }
+  .v4-court-card .court-elapsed{
+    min-width:0!important;
+    padding:4px 5px!important;
+    font-size:9px!important
+  }
+  .v4-court-card .players{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:4px!important
+  }
+  .v4-court-card .person{
+    min-width:0!important;
+    width:100%!important;
+    min-height:42px!important;
+    height:42px!important;
+    padding:3px!important;
+    overflow:hidden!important;
+    border-width:1.5px!important;
+    border-radius:8px!important
+  }
+  #adminApp .v4-court-card .person .small{
+    display:none!important
+  }
+  #adminApp .v4-court-card .person{
+    touch-action:manipulation;
+    user-select:none;
+    -webkit-user-select:none
+  }
+  .v4-court-card .person > span{
+    min-width:0!important;
+    width:100%!important;
+    text-align:center!important
+  }
+  .v4-court-card .person .name{
+    display:-webkit-box!important;
+    overflow:hidden!important;
+    -webkit-box-orient:vertical!important;
+    -webkit-line-clamp:2!important;
+    white-space:normal!important;
+    word-break:break-all!important;
+    font-size:11px!important;
+    line-height:1.1!important
+  }
+  .v4-court-card .person .meta{
+    display:block!important;
+    margin-top:1px!important;
+    font-size:8px!important;
+    line-height:1!important
+  }
+  #memberApp .v4-court-card .person .meta{display:none!important}
+  .v4-court-card .toolbar{
+    margin-top:5px!important;
+    padding-top:0!important;
+    gap:4px!important
+  }
+  .v4-court-card .toolbar .primary{display:none!important}
+  .v4-court-card .toolbar button{
+    width:100%!important;
+    min-height:29px!important;
+    height:29px!important;
+    padding:0 5px!important;
+    font-size:10px!important;
+  }
+}
+
+/* 관리자 코트·대기조 이름은 두 글자로 크게 표시 */
+@media(max-width:620px){
+  #adminApp .v4-court-card .person{
+    min-height:48px!important;
+    height:48px!important;
+    justify-content:center!important;
+    align-items:center!important;
+    text-align:center!important
+  }
+  #adminApp .v4-court-card .person > span{
+    width:100%!important;
+    height:auto!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:2px!important;
+    text-align:center!important
+  }
+  #adminApp .v4-court-card .person .name{
+    display:block!important;
+    white-space:nowrap!important;
+    font-size:17px!important;
+    line-height:1!important;
+    letter-spacing:.2px!important
+  }
+  #adminApp .v4-court-card .person .meta{
+    display:block!important;
+    margin:0!important;
+    font-size:11px!important;
+    line-height:1!important;
+    font-weight:850!important
+  }
+  #adminApp .v4-wait-card .person .name{
+    display:block!important;
+    white-space:nowrap!important;
+    font-size:14px!important;
+    line-height:1.05!important
+  }
+}
+
+#memberApp main{padding-top:0}
+#memberApp .member-courts-section{
+  margin-top:6px!important;
+  padding-top:0!important
+}
+#memberApp .court-status,
+#memberApp .court-progress{
+  display:none!important
+}
+#memberApp .v4-court-card .head{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:8px!important;
+  margin-bottom:7px!important
+}
+#memberApp .court-title{
+  min-width:0!important;
+  flex:1 1 auto!important
+}
+#memberApp .court-time-zone{
+  width:auto!important;
+  flex:0 0 auto!important;
+  justify-content:flex-end!important
+}
+#memberApp .court-elapsed{
+  min-width:64px!important;
+  padding:5px 7px!important
+}
+#memberApp .member-wait-section{
+  margin-top:8px!important;
+  padding-top:0!important
+}
+#memberApp .member-wait-stack{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:5px!important
+}
+@media(max-width:620px){
+  #memberApp header .sub{display:none!important}
+  #memberApp header .wrap{padding-top:8px!important;padding-bottom:8px!important}
+  #memberApp header h1{font-size:19px!important}
+  #memberApp .section{margin-bottom:8px!important}
+  #memberApp .v4-court-card{
+    padding:10px!important;
+    border-radius:14px!important
+  }
+  #memberApp .court-number{
+    width:30px!important;
+    height:30px!important;
+    min-width:30px!important
+  }
+  #memberApp .court-title h2{font-size:16px!important}
+  #memberApp .court-location{display:none!important}
+  #memberApp .v4-court-card .players{gap:5px!important}
+  #memberApp .v4-court-card .person{
+    min-height:48px!important;
+    padding:6px 4px!important
+  }
+  #memberApp .v4-court-card .person .name{
+    font-size:13px!important
+  }
+  #memberApp .member-wait-stack .v4-wait-card{
+    grid-template-columns:42px minmax(0,1fr)!important
+  }
+  #memberApp .member-wait-stack .v4-wait-card h2::after{
+    font-size:11px!important
+  }
+  #memberApp .member-wait-stack .v4-wait-card .person .name{
+    font-size:13px!important
+  }
+}
+
+#adminApp > header{
+  position:static!important;
+  top:auto!important
+}
+.v4-right-rail{
+  position:static!important;
+  max-height:none!important;
+  overflow:visible!important
+}
+.v4-quick-card{
+  position:sticky!important;
+  top:8px!important;
+  z-index:40!important;
+  max-height:calc(100vh - 88px)!important;
+  overflow:hidden!important
+}
+@media(max-width:620px){
+  .v4-quick-card{
+    top:0!important;
+    max-height:58vh!important;
+    padding:11px!important;
+    border-radius:0 0 16px 16px!important;
+    box-shadow:0 10px 24px rgba(20,36,70,.18)!important
+  }
+  .v4-quick-roster{
+    min-height:120px!important;
+    max-height:30vh!important
+  }
+}
+
+@media(max-width:620px){
+  .v4-wait-summary{padding:10px!important}
+  .wait-summary-head .eyebrow{display:none!important}
+  .wait-summary-head h2{
+    margin:0 0 6px!important;
+    font-size:19px!important
+  }
+  .v4-wait-stack{gap:5px!important}
+  .v4-wait-card{
+    grid-template-columns:48px minmax(0,1fr)!important;
+    gap:5px!important;
+    padding:5px 6px!important;
+    min-height:52px!important
+  }
+  .v4-wait-card .rank-badge,
+  .v4-wait-card .badge{
+    display:none!important
+  }
+  .v4-wait-card .wait-title{
+    display:block!important
+  }
+  .v4-wait-card h2{
+    font-size:0!important;
+    line-height:1.1!important;
+    text-align:center!important;
+    white-space:normal!important
+  }
+  .v4-wait-card h2::after{
+    font-size:11px;
+    font-weight:900
+  }
+  .v4-wait-card.wait-1 h2::after{content:"대기1"}
+  .v4-wait-card.wait-2 h2::after{content:"대기2"}
+  .v4-wait-card.wait-3 h2::after{content:"대기3"}
+  .v4-wait-card.wait-4 h2::after{content:"대기4"}
+  .v4-wait-card.wait-5 h2::after{content:"대기5"}
+  .v4-wait-card .players{gap:3px!important}
+  .v4-wait-card .person{
+    height:42px!important;
+    min-height:42px!important;
+    padding:3px 2px!important;
+    border-width:1.5px!important
+  }
+  .v4-wait-card .person .name{
+    font-size:12px!important;
+    line-height:1.12!important;
+    font-weight:900!important
+  }
+}
+
+
+.court-edit-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap
+}
+.partial-modal-card{
+  width:min(760px,100%);
+  max-height:90vh;
+  overflow-y:auto
+}
+.partial-court-selects{
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:end;
+  gap:12px
+}
+.partial-court-selects label{
+  display:grid;
+  gap:7px;
+  color:#64748b;
+  font-size:12px;
+  font-weight:850
+}
+.partial-court-selects select{
+  width:100%
+}
+.partial-player-columns{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:13px;
+  margin-top:16px
+}
+.partial-player-panel{
+  border:1px solid #dce3ef;
+  border-radius:16px;
+  padding:12px;
+  background:#f8faff
+}
+.partial-panel-title{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin-bottom:9px
+}
+.partial-panel-title strong{
+  font-size:13px
+}
+.partial-panel-title span{
+  font-size:11px;
+  color:#65738c;
+  font-weight:850
+}
+.partial-player-list{
+  display:grid;
+  gap:7px
+}
+.partial-player{
+  display:grid;
+  grid-template-columns:28px minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-height:49px;
+  padding:8px 10px;
+  text-align:left;
+  border-radius:12px
+}
+.partial-check{
+  width:25px;
+  height:25px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:2px solid rgba(70,85,115,.24);
+  border-radius:8px;
+  background:rgba(255,255,255,.65);
+  font-weight:950
+}
+.partial-player.selected .partial-check{
+  color:#fff;
+  background:#315efb;
+  border-color:#315efb
+}
+.partial-name{
+  min-width:0;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  font-weight:900
+}
+.partial-games{
+  font-size:11px;
+  font-weight:800;
+  opacity:.7
+}
+.partial-empty{
+  padding:25px 10px;
+  text-align:center;
+  color:#8a95a9;
+  font-size:12px
+}
+.partial-preview{
+  margin-top:14px;
+  padding:13px;
+  border-radius:13px;
+  background:#f1f5f9;
+  color:#64748b;
+  font-size:13px;
+  font-weight:850;
+  text-align:center
+}
+.partial-preview.valid{
+  color:#166534;
+  background:#dcfce7;
+  border:1px solid #86efac
+}
+.partial-preview.invalid{
+  color:#b42318;
+  background:#fff1f0;
+  border:1px solid #f4b2ac
+}
+@media(max-width:680px){
+  .court-edit-actions{
+    width:100%
+  }
+  .court-edit-actions button{
+    flex:1 1 auto
+  }
+  .partial-court-selects,
+  .partial-player-columns{
+    grid-template-columns:1fr
+  }
+  .partial-court-selects .swap-arrow{
+    transform:rotate(90deg);
+    padding:0;
+    text-align:center
+  }
+}
+
+
+.v4-command-center{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(330px,.85fr);gap:18px;align-items:start}
+.v4-courts-zone{min-width:0}.v4-courts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.v4-court-card{min-height:300px;display:flex;flex-direction:column}.v4-court-card .players{flex:1}.v4-court-card .toolbar{margin-top:auto}
+.v4-right-rail{position:sticky;top:86px;display:grid;gap:14px;max-height:calc(100vh - 100px);overflow:hidden}
+.v4-quick-card,.v4-wait-summary{background:#fff;border:1px solid #dbe3f0;border-radius:22px;padding:15px;box-shadow:0 18px 44px rgba(24,36,68,.13)}
+.v4-quick-card{display:flex;flex-direction:column;min-height:0}.quick-filter-row{display:flex;gap:7px;align-items:center;margin:9px 0}
+.filter-chip{min-height:32px;height:32px;padding:0 10px;border-radius:999px;font-size:11px;box-shadow:none}.filter-chip.active{color:#fff;background:#315efb;border-color:#315efb}.quick-filter-row .text-button{margin-left:auto}
+.v4-quick-roster{min-height:220px;max-height:36vh;overflow-y:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:2px 3px 8px 1px}
+.v4-quick-roster .quick-member{grid-template-columns:24px minmax(0,1fr);min-height:48px;padding:8px;gap:7px}.v4-quick-roster .quick-member-games{grid-column:2;font-size:10px;margin-top:-4px}
+.v4-court-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding-top:11px;border-top:1px solid #e4e9f2}
+.v4-court-action-grid .quick-court{min-height:58px;display:flex;align-items:center;justify-content:center;gap:8px;flex-direction:column}.v4-court-action-grid .quick-court span{font-size:20px;font-weight:950;line-height:1}.v4-court-action-grid .quick-court small{font-size:10px;opacity:.9}
+.v4-wait-summary{min-height:0;overflow:hidden}.wait-summary-head h2{margin:2px 0 10px}.v4-wait-stack{display:grid;gap:8px;max-height:31vh;overflow-y:auto}
+.v4-wait-card{padding:10px 11px;border-radius:14px;box-shadow:none}.v4-wait-card .head{margin-bottom:7px}.v4-wait-card .players{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.v4-wait-card .person{min-height:38px;padding:6px;justify-content:center}.v4-wait-card .person .name{font-size:11px}.v4-wait-card .person .meta,.v4-wait-card .small{display:none}.v4-wait-card .toolbar{margin-top:7px}.v4-wait-card .toolbar button{min-height:32px;height:32px;padding:0 8px;font-size:11px}.v4-wait-card .rank-badge{width:27px;height:27px;border-radius:9px;font-size:12px}.v4-wait-card h2{font-size:14px}
+@media(max-width:1050px){.v4-command-center{grid-template-columns:1fr}.v4-right-rail{position:static;max-height:none;grid-template-columns:1fr 1fr}.v4-quick-roster,.v4-wait-stack{max-height:420px}}
+@media(max-width:760px){.v4-courts-grid{grid-template-columns:1fr}.v4-right-rail{grid-template-columns:1fr}.v4-quick-roster{grid-template-columns:repeat(2,minmax(0,1fr));max-height:330px}.v4-court-card{min-height:auto}}
+
+.court-time-zone{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.court-elapsed{min-width:72px;padding:6px 9px;border-radius:999px;background:#eef2f7;color:#536178;font-size:11px;font-weight:950;text-align:center;font-variant-numeric:tabular-nums}
+.court-elapsed.warning-running{color:#a15c00;background:#fff1c7;box-shadow:0 0 0 4px rgba(245,174,35,.08)}
+.court-elapsed.long-running{color:#b42318;background:#ffe8e5;box-shadow:0 0 0 4px rgba(217,45,32,.09)}
+@media(max-width:560px){.court-time-zone{width:100%;justify-content:flex-start}}
+
+.v4-court-card .person.male,
+.v4-wait-card .person.male{
+  background:#dbeafe!important;
+  border:2px solid #2563eb!important;
+  color:#0b3f9c!important
+}
+.v4-court-card .person.female,
+.v4-wait-card .person.female{
+  background:#fce7f3!important;
+  border:2px solid #ec4899!important;
+  color:#9d174d!important
+}
+.v4-court-card .person.male .name,
+.v4-wait-card .person.male .name{color:#0b3f9c!important}
+.v4-court-card .person.female .name,
+.v4-wait-card .person.female .name{color:#9d174d!important}
+.undo-button:not(:disabled){
+  color:#1746b0;
+  border-color:#7295eb;
+  background:#edf3ff
+}
+.undo-button:disabled{opacity:.42}
+
+@media(max-width:620px){
+  .v4-court-action-grid{display:none!important}
+  .v4-wait-summary{
+    padding:12px!important;
+    border-radius:17px!important
+  }
+  .wait-summary-head h2{margin-bottom:8px!important}
+  .v4-wait-stack{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:7px!important;
+    max-height:none!important;
+    overflow:visible!important;
+    padding:0!important
+  }
+  .v4-wait-card{
+    width:100%!important;
+    min-width:0!important;
+    min-height:0!important;
+    padding:8px 9px!important;
+    display:grid!important;
+    grid-template-columns:88px minmax(0,1fr)!important;
+    align-items:center!important;
+    gap:8px!important;
+    border-radius:12px!important
+  }
+  .v4-wait-card .head{
+    margin:0!important;
+    min-width:0!important
+  }
+  .v4-wait-card .wait-title{gap:5px!important}
+  .v4-wait-card .rank-badge{
+    width:25px!important;
+    height:25px!important;
+    min-width:25px!important
+  }
+  .v4-wait-card h2{
+    margin:0!important;
+    font-size:12px!important;
+    white-space:nowrap!important
+  }
+  .v4-wait-card .badge{
+    margin-top:4px!important;
+    padding:3px 6px!important;
+    font-size:10px!important
+  }
+  .v4-wait-card .players{
+    min-width:0!important;
+    display:grid!important;
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:4px!important
+  }
+  .v4-wait-card .person{
+    min-width:0!important;
+    width:100%!important;
+    min-height:45px!important;
+    height:45px!important;
+    padding:4px 3px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    overflow:hidden!important;
+    border-radius:9px!important;
+    line-height:1.15!important;
+    text-align:center!important
+  }
+  .v4-wait-card .person > span{
+    min-width:0!important;
+    width:100%!important
+  }
+  .v4-wait-card .person .name{
+    display:-webkit-box!important;
+    overflow:hidden!important;
+    -webkit-box-orient:vertical!important;
+    -webkit-line-clamp:2!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+    word-break:break-all!important;
+    font-size:10px!important;
+    line-height:1.15!important
+  }
+  .v4-wait-card .toolbar{display:none!important}
+}
+
+/* V5 관리자 모바일 밀도·가독성 보정 */
+.v4-wait-card .wait-title h2::before{display:none!important}
+
+@media(max-width:620px){
+  #adminApp > header{
+    position:relative!important;
+    z-index:1500!important
+  }
+  .top-admin-menu{
+    position:relative!important;
+    z-index:1600!important
+  }
+  .top-admin-menu[open] .top-actions{
+    position:fixed!important;
+    top:76px!important;
+    right:10px!important;
+    left:auto!important;
+    width:min(360px,calc(100vw - 20px))!important;
+    max-height:calc(100dvh - 96px)!important;
+    overflow-y:auto!important;
+    z-index:2000!important;
+    grid-template-columns:1fr 1fr!important
+  }
+  .top-admin-menu[open] .top-actions button{
+    min-width:0!important;
+    width:100%!important
+  }
+
+  .v4-quick-card{
+    max-height:none!important;
+    position:relative!important;
+    top:auto!important
+  }
+  .quick-status-actions{
+    order:2;
+    margin:7px 0 8px!important
+  }
+  .quick-search-box{order:3}
+  .quick-filter-row{order:4}
+  .v4-quick-roster{
+    order:5;
+    min-height:0!important;
+    max-height:30vh!important
+  }
+  .v4-court-action-grid{order:6}
+  .v4-quick-roster .quick-empty{
+    min-height:0!important;
+    padding:10px 4px!important
+  }
+
+  .v4-court-card .head{
+    min-width:0!important
+  }
+  .v4-court-card .court-title h2{
+    font-size:11px!important;
+    letter-spacing:-.5px!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important
+  }
+  .v4-court-card .court-elapsed{
+    font-size:9px!important;
+    white-space:nowrap!important
+  }
+
+  .v4-wait-card{
+    grid-template-columns:38px minmax(0,1fr)!important
+  }
+  .v4-wait-card .wait-title h2{
+    font-size:11px!important;
+    line-height:1.1!important;
+    text-align:center!important;
+    white-space:nowrap!important
+  }
+  .v4-wait-card .wait-title h2::after{
+    content:none!important;
+    display:none!important
+  }
+}
+
+/* V6 모바일 빠른 배정: 최대 40명을 5열로 한눈에 표시 */
+@media(max-width:620px){
+  #adminApp .v4-quick-roster{
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    gap:4px!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    padding:2px 0 5px!important
+  }
+  #adminApp .v4-quick-roster .quick-member{
+    position:relative!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:44px!important;
+    height:44px!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:2px!important;
+    padding:3px 2px!important;
+    border-radius:9px!important;
+    text-align:center!important
+  }
+  #adminApp .v4-quick-roster .quick-member-check{
+    position:absolute!important;
+    top:2px!important;
+    right:2px!important;
+    width:13px!important;
+    height:13px!important;
+    border-width:1px!important;
+    border-radius:4px!important;
+    font-size:9px!important;
+    line-height:1!important
+  }
+  #adminApp .v4-quick-roster .quick-member:not(.selected) .quick-member-check{
+    opacity:0!important
+  }
+  #adminApp .v4-quick-roster .quick-member-name{
+    width:100%!important;
+    overflow:visible!important;
+    white-space:nowrap!important;
+    text-overflow:clip!important;
+    font-size:14px!important;
+    line-height:1!important;
+    font-weight:950!important;
+    text-align:center!important
+  }
+  #adminApp .v4-quick-roster .quick-member-games{
+    width:100%!important;
+    margin:0!important;
+    grid-column:auto!important;
+    font-size:9px!important;
+    line-height:1!important;
+    font-weight:850!important;
+    text-align:center!important
+  }
+}
+
+/* 선택 인원을 코트·대기조 빈칸에 더블탭으로 즉시 배치 */
+#adminApp .quick-empty-slot{
+  cursor:pointer;
+  touch-action:manipulation;
+  user-select:none;
+  -webkit-user-select:none;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:2px!important;
+  text-align:center!important;
+  border:2px dashed #9db2d8!important;
+  background:#f8fbff!important
+}
+#adminApp .quick-empty-slot:active{
+  color:#1746b0!important;
+  border-color:#315efb!important;
+  background:#eaf1ff!important
+}
+#adminApp .quick-empty-slot .empty-slot-label{
+  font-size:10px;
+  line-height:1;
+  font-weight:950;
+  white-space:nowrap
+}
+#adminApp .quick-empty-slot small{
+  font-size:8px;
+  line-height:1;
+  font-weight:850;
+  color:#71809b
+}
+@media(max-width:620px){
+  #adminApp .v4-court-card .quick-empty-slot,
+  #adminApp .v4-wait-card .quick-empty-slot{
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:center!important
+  }
+}
+
+/* V7 모든 화면 공통 반응형 구성: 모바일 배치를 유지하고 크기만 유동 확대 */
+:root{
+  --ui-gap:clamp(6px,calc(4px + .45vw),14px);
+  --ui-pad:clamp(8px,calc(6px + .65vw),18px);
+  --ui-title:clamp(17px,calc(14px + .65vw),27px);
+  --ui-body:clamp(12px,calc(10px + .35vw),17px)
+}
+
+#adminApp .wrap,
+#memberApp .wrap{
+  width:min(96vw,1500px)!important;
+  max-width:1500px!important;
+  padding:var(--ui-pad)!important
+}
+
+#adminApp h1,
+#memberApp h1{
+  font-size:clamp(18px,calc(15px + .75vw),30px)!important
+}
+
+#adminApp .v4-command-center{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:var(--ui-gap)!important
+}
+#adminApp .v4-right-rail{
+  display:contents!important;
+  position:static!important;
+  max-height:none!important;
+  overflow:visible!important
+}
+#adminApp .v4-quick-card{
+  order:1!important;
+  position:relative!important;
+  top:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding:var(--ui-pad)!important;
+  border-radius:clamp(15px,1.5vw,24px)!important
+}
+#adminApp .v4-courts-zone{order:2!important}
+#adminApp .v4-wait-summary{
+  order:3!important;
+  padding:var(--ui-pad)!important;
+  border-radius:clamp(15px,1.5vw,24px)!important
+}
+
+/* 관리자 배정대기: 모든 화면에서 5열 고정 */
+#adminApp .v4-quick-roster{
+  display:grid!important;
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;
+  gap:var(--ui-gap)!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding:3px 0 6px!important
+}
+#adminApp .v4-quick-roster .quick-member{
+  position:relative!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:clamp(44px,calc(38px + 1.5vw),68px)!important;
+  height:clamp(44px,calc(38px + 1.5vw),68px)!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:clamp(2px,.3vw,5px)!important;
+  padding:4px 3px!important;
+  border-radius:clamp(9px,.8vw,14px)!important;
+  text-align:center!important
+}
+#adminApp .v4-quick-roster .quick-member-name{
+  width:100%!important;
+  overflow:visible!important;
+  white-space:nowrap!important;
+  text-overflow:clip!important;
+  font-size:clamp(14px,calc(11px + .65vw),21px)!important;
+  line-height:1!important;
+  font-weight:950!important;
+  text-align:center!important
+}
+#adminApp .v4-quick-roster .quick-member-games{
+  width:100%!important;
+  margin:0!important;
+  grid-column:auto!important;
+  font-size:clamp(9px,calc(7px + .4vw),13px)!important;
+  line-height:1!important;
+  text-align:center!important
+}
+
+/* 관리자·사용자 코트는 휴대폰부터 프로젝터까지 항상 2×2 */
+#adminApp .v4-courts-grid,
+#memberApp #memberCourts{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:var(--ui-gap)!important
+}
+#adminApp .v4-court-card,
+#memberApp .v4-court-card{
+  min-width:0!important;
+  min-height:0!important;
+  padding:var(--ui-pad)!important;
+  border-radius:clamp(13px,1.2vw,22px)!important
+}
+#adminApp .v4-court-card .head,
+#memberApp .v4-court-card .head{
+  display:flex!important;
+  flex-flow:row nowrap!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:var(--ui-gap)!important;
+  margin-bottom:var(--ui-gap)!important
+}
+#adminApp .v4-court-card .court-title,
+#memberApp .v4-court-card .court-title{
+  min-width:0!important;
+  flex:1 1 auto!important
+}
+#adminApp .v4-court-card .court-title h2,
+#memberApp .v4-court-card .court-title h2{
+  overflow:hidden!important;
+  white-space:nowrap!important;
+  text-overflow:ellipsis!important;
+  font-size:clamp(11px,calc(8px + .7vw),20px)!important;
+  letter-spacing:-.45px!important
+}
+#adminApp .v4-court-card .court-time-zone,
+#memberApp .v4-court-card .court-time-zone{
+  width:auto!important;
+  flex:0 0 auto!important;
+  justify-content:flex-end!important
+}
+#adminApp .v4-court-card .court-elapsed,
+#memberApp .v4-court-card .court-elapsed{
+  min-width:0!important;
+  padding:clamp(4px,.55vw,8px) clamp(5px,.7vw,11px)!important;
+  font-size:clamp(9px,calc(7px + .35vw),13px)!important;
+  white-space:nowrap!important
+}
+#adminApp .v4-court-card .players,
+#memberApp .v4-court-card .players{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:var(--ui-gap)!important
+}
+#adminApp .v4-court-card .person,
+#memberApp .v4-court-card .person{
+  min-width:0!important;
+  width:100%!important;
+  min-height:clamp(48px,calc(40px + 2vw),78px)!important;
+  height:clamp(48px,calc(40px + 2vw),78px)!important;
+  padding:clamp(3px,.45vw,7px)!important;
+  border-radius:clamp(8px,.8vw,14px)!important;
+  overflow:hidden!important
+}
+#adminApp .v4-court-card .person .name{
+  font-size:clamp(17px,calc(13px + .8vw),25px)!important
+}
+#adminApp .v4-court-card .person .meta{
+  font-size:clamp(10px,calc(8px + .4vw),14px)!important
+}
+#memberApp .v4-court-card .person .name{
+  font-size:clamp(13px,calc(10px + .65vw),20px)!important;
+  line-height:1.12!important
+}
+#adminApp .v4-court-card .toolbar .primary,
+#adminApp .v4-wait-card .toolbar{
+  display:none!important
+}
+#adminApp .v4-court-card .toolbar button{
+  min-height:clamp(31px,calc(27px + 1vw),44px)!important;
+  height:auto!important;
+  font-size:clamp(11px,calc(9px + .35vw),14px)!important
+}
+
+/* 대기조 역시 모든 화면에서 모바일형 한 줄 카드 유지 */
+#adminApp .v4-wait-stack,
+#memberApp .member-wait-stack{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:var(--ui-gap)!important;
+  max-height:none!important;
+  overflow:visible!important
+}
+#adminApp .v4-wait-card,
+#memberApp .v4-wait-card{
+  width:100%!important;
+  min-width:0!important;
+  min-height:clamp(52px,calc(44px + 1.8vw),78px)!important;
+  padding:clamp(5px,.65vw,10px)!important;
+  display:grid!important;
+  grid-template-columns:clamp(38px,6vw,82px) minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:var(--ui-gap)!important;
+  border-radius:clamp(11px,1vw,17px)!important
+}
+#adminApp .v4-wait-card .head,
+#memberApp .v4-wait-card .head{
+  margin:0!important;
+  min-width:0!important
+}
+#adminApp .v4-wait-card .rank-badge,
+#adminApp .v4-wait-card .badge,
+#memberApp .v4-wait-card .rank-badge,
+#memberApp .v4-wait-card .badge{
+  display:none!important
+}
+#adminApp .v4-wait-card .wait-title,
+#memberApp .v4-wait-card .wait-title{
+  display:block!important
+}
+#adminApp .v4-wait-card .wait-title h2,
+#memberApp .v4-wait-card .wait-title h2{
+  margin:0!important;
+  font-size:clamp(11px,calc(9px + .45vw),16px)!important;
+  line-height:1.05!important;
+  text-align:center!important;
+  white-space:nowrap!important
+}
+#adminApp .v4-wait-card .wait-title h2::after,
+#memberApp .v4-wait-card .wait-title h2::after{
+  content:none!important;
+  display:none!important
+}
+#adminApp .v4-wait-card .players,
+#memberApp .v4-wait-card .players{
+  min-width:0!important;
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:var(--ui-gap)!important
+}
+#adminApp .v4-wait-card .person,
+#memberApp .v4-wait-card .person{
+  min-width:0!important;
+  width:100%!important;
+  min-height:clamp(42px,calc(36px + 1.5vw),62px)!important;
+  height:clamp(42px,calc(36px + 1.5vw),62px)!important;
+  padding:3px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border-radius:clamp(8px,.75vw,13px)!important;
+  overflow:hidden!important;
+  text-align:center!important
+}
+#adminApp .v4-wait-card .person .name,
+#memberApp .v4-wait-card .person .name{
+  font-size:clamp(12px,calc(9px + .65vw),19px)!important;
+  line-height:1.05!important
+}
+
+/* 사용자 명단도 화면 크기가 달라도 열 수가 바뀌지 않게 고정 */
+#memberApp #activeMembersMember,
+#memberApp #inactiveMembers{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:var(--ui-gap)!important
+}
+#memberApp #activeMembersMember .member,
+#memberApp #inactiveMembers .person{
+  min-width:0!important;
+  min-height:clamp(46px,calc(39px + 1.5vw),68px)!important;
+  font-size:var(--ui-body)!important
+}
+
+/* V7.1 숨김 관리 메뉴 음성 안내 토글 */
+.voice-guide-toggle{
+  border-color:#cbd5e1!important;
+  background:#f8fafc!important;
+  color:#64748b!important
+}
+.voice-guide-toggle.active{
+  border-color:#60a5fa!important;
+  background:#eaf2ff!important;
+  color:#174ea6!important;
+  box-shadow:0 0 0 2px rgba(59,130,246,.12)!important
+}
+
+/* V7.2 관리자 운영 현황 압축 */
+#adminApp .dashboard-shell{
+  padding:clamp(10px,1.2vw,16px)!important
+}
+#adminApp .dashboard-title h2{
+  font-size:clamp(17px,1.5vw,22px)!important
+}
+#adminApp .stats-grid{
+  gap:clamp(5px,.7vw,9px)!important;
+  margin-top:clamp(7px,.8vw,11px)!important
+}
+#adminApp .stat-card{
+  min-height:clamp(56px,6vw,74px)!important;
+  padding:clamp(7px,.7vw,10px)!important;
+  border-radius:clamp(10px,.8vw,14px)!important;
+  display:grid!important;
+  grid-template-columns:auto 1fr auto!important;
+  align-items:center!important;
+  gap:clamp(4px,.5vw,8px)!important
+}
+#adminApp .stat-icon{
+  font-size:clamp(14px,1.3vw,19px)!important
+}
+#adminApp .stat-label{
+  font-size:clamp(9px,.75vw,12px)!important;
+  line-height:1.1!important
+}
+#adminApp .stat-card strong{
+  font-size:clamp(18px,1.7vw,25px)!important
+}
+#adminApp .system-strip{
+  margin-top:8px!important;
+  padding-top:8px!important
+}
+
+.quick-move-bar .danger{
+  background:#fff1f2!important;
+  border-color:#fda4af!important;
+  color:#be123c!important
+}
+
+/* V7.10 코트 바로 옆의 작은 음성 재생·반복·정지 조작 */
+.court-voice-controls{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:4px!important;
+  margin-left:auto!important;
+  white-space:nowrap!important
+}
+.court-voice-controls button{
+  min-width:0!important;
+  min-height:30px!important;
+  height:30px!important;
+  padding:0 8px!important;
+  border-radius:9px!important;
+  font-size:11px!important;
+  font-weight:900!important
+}
+.court-voice-controls button.active{
+  border-color:#2563eb!important;
+  background:#2563eb!important;
+  color:#fff!important
+}
+.court-voice-controls button:disabled{
+  opacity:.48!important
+}
+.court-voice-controls .sound-unlock-button{
+  border-color:#f59e0b!important;
+  background:#fff7d6!important;
+  color:#92400e!important
+}
+@media(max-width:620px){
+  .v4-courts-zone .section-heading-row{
+    display:flex!important;
+    align-items:center!important;
+    gap:5px!important
+  }
+  .v4-courts-zone .section-heading-row h2{
+    font-size:15px!important;
+    white-space:nowrap!important
+  }
+  .court-voice-controls{
+    gap:3px!important
+  }
+  .court-voice-controls button{
+    min-height:27px!important;
+    height:27px!important;
+    padding:0 5px!important;
+    border-radius:7px!important;
+    font-size:9px!important
+  }
+}
+@media(max-width:620px){
+  .quick-move-bar{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important
+  }
+  .quick-move-bar strong{
+    grid-column:1/-1!important;
+    text-align:center!important
+  }
+  .quick-move-bar button{
+    width:100%!important;
+    min-width:0!important;
+    padding:0 4px!important;
+    font-size:10px!important
+  }
+}
+
+.member-push-card {
+  display:none!important;
+  border: 2px solid #cfe3ff;
+  background: linear-gradient(180deg, #f7fbff, #ffffff);
+}
+.member-push-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.member-push-heading h2{margin:0}
+.push-connection-badge{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:950}
+.push-connection-badge.is-on{color:#08783c;background:#e7f8ed;border:1px solid #91d8aa;box-shadow:0 0 0 4px rgba(20,160,80,.08)}
+.push-connection-badge.is-off{color:#697386;background:#f1f3f6;border:1px solid #d4d9e1}
+.member-push-help {
+  margin: 6px 0 12px;
+  line-height: 1.5;
+}
+.member-push-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.member-push-controls select {
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  border: 1px solid #c8d3e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #172033;
+  padding: 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.member-push-controls button {
+  min-height: 46px;
+  white-space: nowrap;
+}
+.member-push-status {
+  margin-top: 10px;
+  color: #31557f;
+  font-weight: 700;
+}
+.member-push-status.is-connected{
+  color:#137a3d!important;
+  background:#eafaf0;
+  border:1px solid #a7e3bb;
+  border-radius:10px;
+  padding:9px 11px;
+  font-weight:900;
+}
+.member-push-controls button.push-connected{
+  background:linear-gradient(135deg,#19a857,#11783d)!important;
+  border-color:#11783d!important;
+  color:#fff!important;
+}
+@media (max-width: 560px) {
+  .member-push-controls {
+    grid-template-columns: 1fr;
+  }
+  .member-push-controls button {
+    width: 100%;
+  }
+}
+
+
+
+/* v1.5.1 integrated member notification, persistent refresh and court-time states */
+.auth-loading{max-width:520px;margin:48px auto;text-align:center}
+.member-header-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.member-refresh-button{min-height:40px;padding:0 13px;border-radius:10px;white-space:nowrap;font-size:13px;font-weight:900}
+.member-push-ios-note{margin-top:10px;padding:9px 10px;border-radius:9px;background:#fff8e8;color:#7c5700;line-height:1.45}
+.court-elapsed.fresh-running{color:#126b34!important;background:#e6f8ec!important;box-shadow:0 0 0 4px rgba(32,151,73,.08)!important}
+.court-elapsed.warning-running{color:#9a4f00!important;background:#fff0c9!important;box-shadow:0 0 0 4px rgba(245,174,35,.10)!important}
+.court-elapsed.long-running{color:#b42318!important;background:#ffe8e5!important;box-shadow:0 0 0 4px rgba(217,45,32,.11)!important}
+.court-next-rank{display:inline-flex;align-items:center;justify-content:center;padding:4px 7px;border-radius:999px;background:#172b4d;color:#fff;font-size:9px;font-weight:950;white-space:nowrap}
+.next-court-likely{box-shadow:0 0 0 3px rgba(23,43,77,.16),0 10px 24px rgba(18,32,58,.10)!important}
+.member-foreground-alert{position:fixed;z-index:100000;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92vw,430px);padding:22px;border-radius:18px;background:#fff;box-shadow:0 24px 90px rgba(0,0,0,.34);border:3px solid #2457d6;text-align:center;font-size:17px;line-height:1.55}
+.member-foreground-alert::before{content:'';position:fixed;inset:-100vh -100vw;background:rgba(9,17,32,.52);z-index:-1}
+.member-foreground-alert-title{font-size:22px;font-weight:950;margin-bottom:10px;color:#1747bd}
+.member-foreground-alert button{width:100%;min-height:46px;margin-top:16px;background:#2457d6;color:#fff;font-weight:900}
+@media(max-width:560px){.member-header-row{align-items:flex-start}.member-refresh-button{font-size:11px;padding:0 9px}.court-time-zone{flex-wrap:wrap;justify-content:flex-end}.court-next-rank{font-size:8px}}
+
+/* v1.5.8 member layout safety only — original design and colors are unchanged. */
+#memberApp,
+#memberApp .wrap,
+#memberApp .grid,
+#memberApp .players,
+#memberApp .roster,
+#memberApp .court-card,
+#memberApp .wait-card,
+#memberApp .person,
+#memberApp .member{
+  min-width:0;
+  max-width:100%;
+}
+#memberApp .court-card,
+#memberApp .wait-card,
+#memberApp .person,
+#memberApp .member{
+  overflow:hidden;
+}
+#memberApp .players{
+  width:100%;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+#memberApp .person>span,
+#memberApp .member>span{
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+}
+#memberApp .name{
+  display:block;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+#memberApp .meta{
+  display:block;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+@media(max-width:380px){
+  #memberApp .wrap{padding-left:8px;padding-right:8px}
+  #memberApp .court-card,
+  #memberApp .wait-card{padding-left:10px;padding-right:10px}
+  #memberApp .players{gap:6px}
+  #memberApp .person,
+  #memberApp .member{padding-left:7px;padding-right:7px}
+  #memberApp .name{font-size:clamp(11px,3.5vw,14px)}
+}
+
+
+/* v1.6.8 compact member information — always visible, no popup or redraw */
+#adminApp .member-info-detail,
+#memberApp .member-info-detail{
+  display:block!important;
+  width:100%;
+  min-width:0;
+  margin-top:2px;
+  padding:0;
+  border:0;
+  font-size:clamp(7px,1.7vw,9px)!important;
+  font-weight:800;
+  line-height:1.15!important;
+  letter-spacing:-.25px;
+  white-space:normal!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis;
+  overflow-wrap:anywhere;
+  word-break:keep-all;
+  color:#657087!important;
+  opacity:.92;
+}
+#adminApp .member-info-detail.is-empty,
+#memberApp .member-info-detail.is-empty{
+  visibility:hidden;
+  height:0;
+  margin:0;
+}
+#adminApp .member-info-card,
+#memberApp .member-info-card{
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:center;
+  text-align:center;
+}
+#adminApp .quick-member .member-info-detail{
+  grid-column:2;
+  margin-top:-2px;
+  font-size:8px!important;
+}
+#adminApp .v4-court-card .person>span,
+#adminApp .v4-wait-card .person>span{
+  display:block!important;
+  width:100%!important;
+  min-width:0!important;
+  text-align:center;
+}
+
+/* v1.6.7 four vertical courts and entrance-side switching */
+.court-orientation-panel{
+  margin:8px 0 12px;
+  padding:10px;
+  border:1px solid #dbe3f0;
+  border-radius:15px;
+  background:#fff;
+  box-shadow:0 7px 20px rgba(24,36,68,.07);
+}
+.court-orientation-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:9px;
+  flex-wrap:wrap;
+  margin-bottom:8px;
+}
+.court-orientation-title{font-size:12px;font-weight:950;color:#27344a}
+.court-orientation-buttons{
+  display:flex;
+  gap:5px;
+  padding:3px;
+  border-radius:12px;
+  background:#eef2f8;
+}
+.court-orientation-buttons button{
+  min-height:34px;
+  height:34px;
+  padding:0 10px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#68758b;
+  font-size:11px;
+  font-weight:900;
+  box-shadow:none;
+}
+.court-orientation-buttons button.active{
+  background:#315efb;
+  color:#fff;
+  box-shadow:0 4px 12px rgba(49,94,251,.25);
+}
+.court-orientation-map{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:7px;
+  padding:8px;
+  border-radius:12px;
+  background:#f6f8fc;
+}
+.court-orientation-edge{font-size:10px;font-weight:950;color:#536178;white-space:nowrap}
+.court-orientation-edge.entrance{color:#b55b00}
+.court-orientation-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.court-orientation-flow b{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:28px;
+  border-radius:8px;
+  background:#e7ecf5;
+  color:#334155;
+  font-size:11px;
+}
+.court-orientation-flow b.entrance-court{
+  background:#fff1d6;
+  color:#9a4f00;
+  box-shadow:inset 0 0 0 1px #f4bd66;
+}
+#adminApp .v4-courts-grid,
+#memberApp #memberCourts{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:4px!important;
+  align-items:stretch!important;
+}
+#adminApp .v4-court-card,
+#memberApp .v4-court-card{
+  min-width:0!important;
+  min-height:0!important;
+  padding:4px!important;
+  border-radius:10px!important;
+}
+#adminApp .v4-court-card .head,
+#memberApp .v4-court-card .head{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  gap:2px!important;
+  margin-bottom:4px!important;
+  min-width:0!important;
+}
+#adminApp .v4-court-card .court-title h2,
+#memberApp .v4-court-card .court-title h2{
+  font-size:clamp(8px,2.2vw,11px)!important;
+  line-height:1.1!important;
+  letter-spacing:-.5px!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  word-break:keep-all!important;
+}
+#adminApp .v4-court-card .court-time-zone,
+#memberApp .v4-court-card .court-time-zone{
+  width:100%!important;
+  min-width:0!important;
+  display:flex!important;
+  justify-content:flex-start!important;
+  gap:2px!important;
+  flex-wrap:wrap!important;
+}
+#adminApp .v4-court-card .court-elapsed,
+#memberApp .v4-court-card .court-elapsed{
+  min-width:0!important;
+  padding:2px 3px!important;
+  font-size:clamp(7px,1.9vw,9px)!important;
+  line-height:1.05!important;
+  white-space:normal!important;
+}
+#adminApp .v4-court-card .players,
+#memberApp .v4-court-card .players{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  grid-template-rows:repeat(4,minmax(38px,auto))!important;
+  gap:3px!important;
+}
+#adminApp .v4-court-card .person,
+#memberApp .v4-court-card .person{
+  width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  min-height:38px!important;
+  padding:2px!important;
+  border-radius:7px!important;
+  overflow:hidden!important;
+}
+#adminApp .v4-court-card .person .name,
+#memberApp .v4-court-card .person .name{
+  font-size:clamp(11px,3.2vw,16px)!important;
+  line-height:1.05!important;
+  display:block!important;
+  white-space:normal!important;
+  overflow:visible!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+}
+#adminApp .v4-court-card .person .meta,
+#memberApp .v4-court-card .person .meta{
+  font-size:clamp(7px,1.8vw,9px)!important;
+  line-height:1!important;
+  white-space:normal!important;
+}
+#adminApp .v4-court-card .person .small{display:none!important}
+@media(max-width:420px){
+  .court-orientation-panel{padding:8px}
+  .court-orientation-top{align-items:stretch}
+  .court-orientation-buttons{width:100%}
+  .court-orientation-buttons button{flex:1;padding:0 6px}
+  .court-orientation-map{gap:4px}
+  .court-orientation-edge{font-size:9px}
+  .court-orientation-flow b{font-size:10px}
+}
+
+
+/* v1.6.9 compact self selection, star, alert and vibration settings */
+.member-self-settings{
+  margin:0 0 8px;
+  padding:0;
+}
+.member-self-summary{
+  display:inline-flex;
+  align-items:center;
+  max-width:100%;
+  min-height:26px;
+  padding:3px 8px;
+  border:1px solid #d7deea;
+  border-radius:999px;
+  background:#fff;
+  color:#43506a;
+  font-size:10px;
+  font-weight:850;
+  line-height:1.2;
+  box-shadow:0 2px 7px rgba(20,35,65,.05);
+}
+.member-self-panel{
+  padding:8px;
+  border:1px solid #dce3ed;
+  border-radius:10px;
+  background:#fff;
+  box-shadow:0 3px 12px rgba(24,42,75,.05);
+}
+.member-self-search-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:6px;
+}
+.member-self-search-row input{
+  width:100%;
+  min-width:0;
+  height:34px;
+  padding:0 9px;
+  border:1px solid #cfd8e5;
+  border-radius:8px;
+  font-size:13px;
+}
+.member-self-clear{
+  min-height:34px!important;
+  padding:0 9px!important;
+  font-size:10px!important;
+}
+.member-self-matches{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  min-height:20px;
+  margin-top:6px;
+}
+.member-self-matches button{
+  min-height:27px!important;
+  padding:3px 8px!important;
+  border-radius:999px!important;
+  font-size:11px!important;
+  font-weight:800!important;
+}
+.member-self-hint{
+  color:#7c8798;
+  font-size:10px;
+  line-height:20px;
+}
+.member-self-toggle-row{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:5px;
+  margin-top:7px;
+}
+.member-self-toggle-row button{
+  min-width:0;
+  min-height:31px!important;
+  padding:3px 5px!important;
+  font-size:10px!important;
+  white-space:nowrap;
+}
+.member-self-toggle-row button.is-on{
+  background:#e9f8ee!important;
+  border-color:#9bd7ae!important;
+  color:#11723a!important;
+}
+.member-self-star{
+  display:inline-flex;
+  flex:0 0 auto;
+  margin-right:2px;
+  font-size:10px;
+  line-height:1;
+  vertical-align:middle;
+}
+.is-self-member{
+  box-shadow:inset 0 0 0 2px rgba(245,178,0,.48)!important;
+}
+#memberApp .person.is-self-member .name,
+#memberApp .member.is-self-member .name{
+  display:inline-block;
+  width:auto;
+  max-width:calc(100% - 18px);
+  vertical-align:middle;
+}
+@media(max-width:560px){
+  .member-self-settings{margin-bottom:6px}
+  .member-self-panel{padding:6px}
+  .member-self-summary{font-size:9px;min-height:24px;padding:2px 7px}
+}
+
+
+/* v1.6.11 reliable grade/experience line on every member card */
+#adminApp .member-info-detail,
+#memberApp .member-info-detail{
+  display:block!important;
+  visibility:visible!important;
+  height:auto!important;
+  min-height:11px!important;
+  margin-top:3px!important;
+  font-size:clamp(8px,2vw,10px)!important;
+  font-weight:850!important;
+  line-height:1.15!important;
+  color:#5f6d83!important;
+  opacity:1!important;
+  text-align:center!important;
+  white-space:normal!important;
+  overflow:visible!important;
+}
+#adminApp .member-info-detail.is-missing,
+#memberApp .member-info-detail.is-missing{
+  color:#9aa3b2!important;
+  font-weight:700!important;
+}
+#adminApp .v4-court-card .person,
+#memberApp .v4-court-card .person,
+#adminApp .v4-wait-card .person,
+#memberApp .v4-wait-card .person,
+#memberApp .member-info-card,
+#adminApp .member-info-card{
+  min-height:52px!important;
+  height:auto!important;
+  padding-top:5px!important;
+  padding-bottom:5px!important;
+}
+#adminApp .v4-court-card .person>span,
+#memberApp .v4-court-card .person>span,
+#adminApp .v4-wait-card .person>span,
+#memberApp .v4-wait-card .person>span{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-width:0!important;
+}
+
+
+/* v1.6.12 layout corrections: contained profile text, visible court numbers,
+   user-selectable court direction, and a global next-finish rank above courts */
+.court-card::before{
+  width:4px!important;
+  pointer-events:none!important;
+}
+#adminApp .v4-court-card,
+#memberApp .v4-court-card{
+  padding-left:calc(var(--ui-pad, 6px) + 7px)!important;
+}
+#adminApp .v4-court-card .court-title h2,
+#memberApp .v4-court-card .court-title h2{
+  display:flex!important;
+  align-items:center!important;
+  gap:3px!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  white-space:nowrap!important;
+}
+.court-title-number{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  width:clamp(18px,4.5vw,27px);
+  height:clamp(18px,4.5vw,27px);
+  border-radius:7px;
+  background:#24324c;
+  color:#fff;
+  font-size:clamp(11px,2.9vw,16px);
+  font-weight:950;
+  line-height:1;
+}
+.court-title-text{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:clamp(8px,2vw,12px);
+  font-weight:950;
+}
+#memberApp .court-orientation-panel,
+#adminApp .court-orientation-panel{
+  margin:5px 0 5px!important;
+  padding:6px 7px!important;
+  border-radius:11px!important;
+  box-shadow:none!important;
+}
+#memberApp .court-orientation-top,
+#adminApp .court-orientation-top{
+  flex-wrap:nowrap!important;
+  margin-bottom:4px!important;
+  gap:5px!important;
+}
+#memberApp .court-orientation-title,
+#adminApp .court-orientation-title{
+  flex:0 0 auto;
+  font-size:10px!important;
+}
+#memberApp .court-orientation-buttons,
+#adminApp .court-orientation-buttons{
+  min-width:0;
+  margin-left:auto;
+}
+#memberApp .court-orientation-buttons button,
+#adminApp .court-orientation-buttons button{
+  min-height:27px!important;
+  height:27px!important;
+  padding:0 7px!important;
+  font-size:9px!important;
+}
+#memberApp .court-orientation-map,
+#adminApp .court-orientation-map{
+  padding:4px 5px!important;
+  gap:4px!important;
+}
+#memberApp .court-orientation-flow b,
+#adminApp .court-orientation-flow b{
+  min-height:22px!important;
+  font-size:9px!important;
+}
+.next-court-summary{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  min-height:28px;
+  margin:0 0 5px;
+  padding:4px 8px;
+  border:1px solid #f3bd56;
+  border-radius:9px;
+  background:#fff6dd;
+  color:#8a4b00;
+  font-size:10px;
+  font-weight:950;
+  line-height:1.2;
+  text-align:center;
+}
+.next-court-summary.no-active-court{
+  border-color:#dbe2ec;
+  background:#f5f7fa;
+  color:#778296;
+  font-weight:800;
+}
+#adminApp .court-next-rank,
+#memberApp .court-next-rank{display:none!important;}
+
+/* Court-assignment waiting cards: keep the small grade/experience line inside. */
+#memberApp #activeMembersMember .person.member-info-card{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-width:0!important;
+  min-height:62px!important;
+  height:auto!important;
+  padding:6px 4px!important;
+  overflow:hidden!important;
+  text-align:center!important;
+}
+#memberApp #activeMembersMember .person.member-info-card .name{
+  width:100%!important;
+  min-width:0!important;
+  line-height:1.05!important;
+}
+#memberApp #activeMembersMember .member-info-detail,
+#adminApp .v4-quick-roster .member-info-detail{
+  display:block!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  min-height:10px!important;
+  margin-top:3px!important;
+  padding:0 1px!important;
+  font-size:clamp(7px,1.85vw,9px)!important;
+  line-height:1.05!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+}
+#adminApp .v4-quick-roster .quick-member{
+  min-height:57px!important;
+  height:auto!important;
+  overflow:hidden!important;
+}
+#adminApp .v4-quick-roster .member-info-detail{
+  grid-column:2!important;
+  align-self:start!important;
+}
+
+/* Four court columns stay visible while preventing the colored edge from covering players. */
+#adminApp .v4-courts-grid,
+#memberApp #memberCourts{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:4px!important;
+}
+#adminApp .v4-court-card .players,
+#memberApp .v4-court-card .players{
+  grid-template-columns:1fr!important;
+  grid-template-rows:repeat(4,minmax(45px,auto))!important;
+  gap:3px!important;
+}
+#adminApp .v4-court-card .person,
+#memberApp .v4-court-card .person{
+  height:auto!important;
+  min-height:45px!important;
+  padding:4px 2px!important;
+}
+#adminApp .v4-court-card .member-info-detail,
+#memberApp .v4-court-card .member-info-detail{
+  font-size:clamp(6.5px,1.55vw,8.5px)!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+@media(max-width:420px){
+  .court-title-text{font-size:8px!important;}
+  .court-title-number{width:19px;height:19px;font-size:11px;}
+  #memberApp .court-orientation-map,
+  #adminApp .court-orientation-map{display:none!important;}
+  #memberApp .court-orientation-panel,
+  #adminApp .court-orientation-panel{padding:5px!important;}
+  #memberApp .court-orientation-buttons button,
+  #adminApp .court-orientation-buttons button{padding:0 5px!important;font-size:8px!important;}
+}
+
+
+/* v1.6.13: selection toggle, clearer priority and self marker */
+.next-court-summary{
+  min-height:40px!important;
+  gap:8px!important;
+  margin:2px 0 7px!important;
+  padding:6px 9px!important;
+  border:2px solid #e8590c!important;
+  border-radius:12px!important;
+  background:linear-gradient(135deg,#fff3bf,#ffd43b)!important;
+  color:#5f2b00!important;
+  box-shadow:0 5px 14px rgba(230,119,0,.22)!important;
+  font-size:12px!important;
+  letter-spacing:-.2px;
+}
+.next-court-summary .next-court-label{
+  font-weight:900!important;
+  white-space:nowrap;
+}
+.next-court-summary strong{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:27px;
+  padding:3px 10px;
+  border-radius:999px;
+  background:#c92a2a;
+  color:#fff;
+  font-size:14px;
+  font-weight:950;
+  white-space:nowrap;
+  box-shadow:0 2px 7px rgba(120,0,0,.24);
+}
+.next-court-summary.no-active-court{
+  border-color:#cbd5e1!important;
+  background:#f1f5f9!important;
+  color:#64748b!important;
+  box-shadow:none!important;
+}
+.next-court-summary.no-active-court strong{
+  background:#64748b;
+  font-size:11px;
+}
+.next-court-likely{
+  border-color:#f76707!important;
+  box-shadow:0 0 0 3px rgba(247,103,7,.24),0 10px 24px rgba(230,119,0,.18)!important;
+}
+.next-court-likely .court-title-number{
+  background:#d9480f!important;
+  box-shadow:0 0 0 3px rgba(255,255,255,.72)!important;
+}
+
+#memberApp .is-self-member{
+  position:relative!important;
+  border:3px solid #f59f00!important;
+  background:linear-gradient(135deg,#fff9db,#ffe066)!important;
+  color:#4d3200!important;
+  box-shadow:0 0 0 3px rgba(255,193,7,.25),0 5px 13px rgba(181,120,0,.22)!important;
+  z-index:2;
+}
+#memberApp .is-self-member .name{
+  color:#3d2900!important;
+  font-weight:950!important;
+  text-shadow:0 1px 0 rgba(255,255,255,.75);
+}
+#memberApp .member-self-star{
+  position:absolute!important;
+  top:2px!important;
+  right:2px!important;
+  z-index:5!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:1px!important;
+  min-width:28px!important;
+  height:20px!important;
+  margin:0!important;
+  padding:0 4px!important;
+  border:2px solid #fff!important;
+  border-radius:999px!important;
+  background:#e03131!important;
+  color:#fff!important;
+  font-size:11px!important;
+  line-height:1!important;
+  box-shadow:0 2px 7px rgba(120,0,0,.28)!important;
+}
+#memberApp .member-self-star b{
+  color:#ffe066;
+  font-size:12px;
+  line-height:1;
+}
+#memberApp .member-self-star small{
+  color:#fff;
+  font-size:9px;
+  font-weight:950;
+  line-height:1;
+}
+#memberApp .is-self-member .member-info-detail{
+  color:#674500!important;
+  font-weight:900!important;
+}
+
+/* Exact empty slot only is highlighted; a second tap removes this state. */
+#adminApp .quick-empty-slot.auto-assign-target{
+  animation:none!important;
+}
+
+/* Saving still prevents conflicting writes, but the page no longer looks frozen. */
+body.action-busy{
+  cursor:progress!important;
+}
+body.action-busy::after{
+  content:"저장 중";
+  position:fixed;
+  right:10px;
+  bottom:calc(10px + env(safe-area-inset-bottom));
+  z-index:10050;
+  padding:5px 9px;
+  border-radius:999px;
+  background:rgba(24,39,75,.92);
+  color:#fff;
+  font-size:10px;
+  font-weight:900;
+  box-shadow:0 4px 12px rgba(0,0,0,.18);
+  pointer-events:none;
+}
+@media(max-width:560px){
+  .next-court-summary{min-height:38px!important;gap:5px!important;font-size:10px!important;padding:5px 6px!important}
+  .next-court-summary strong{font-size:12px;padding:3px 7px}
+  #memberApp .member-self-star{min-width:25px!important;height:18px!important;font-size:10px!important}
+}
+
+
+/* v1.6.16 빈자리 다중 선택 */
+.quick-empty-slot.auto-assign-target{
+  border:2px solid #7c3aed!important;
+  background:linear-gradient(135deg,#f5f0ff,#e9ddff)!important;
+  box-shadow:0 0 0 4px rgba(124,58,237,.14),0 8px 18px rgba(94,45,170,.16)!important;
+}
+.quick-empty-slot.auto-assign-target .empty-slot-label{color:#5b21b6!important;font-weight:950!important}
+.quick-empty-slot.auto-assign-target small{color:#6d28d9!important;font-weight:900!important}
+
+
+/* v1.6.18: one unified member settings card appears only after password authentication. */
+.member-self-unified-toggle-row{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+}
+.member-unified-setting-message{
+  margin-top:6px;
+  padding:6px 8px;
+  border-radius:8px;
+  background:#f5f7fb;
+  color:#667085;
+  font-size:10px;
+  font-weight:800;
+  line-height:1.35;
+}
+#memberApp #memberAppInstallToggle.is-on{
+  background:#e8f5ff!important;
+  border-color:#88c7f5!important;
+  color:#075985!important;
+}
+@media(max-width:560px){
+  .member-self-unified-toggle-row{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .member-self-unified-toggle-row button{min-height:34px!important;font-size:10px!important}
+}
+
+
+/* v1.6.31: password screen stays clean; post-login settings use one compact line. */
+.member-self-panel{padding:5px 6px!important;border-radius:9px!important}
+.member-self-search-row{gap:4px!important}
+.member-self-search-row input{height:30px!important;font-size:12px!important;padding:0 8px!important}
+.member-self-clear{min-height:30px!important;height:30px!important;padding:0 7px!important;font-size:9px!important}
+.member-self-matches{min-height:0!important;margin-top:4px!important;gap:4px!important}
+.member-self-unified-toggle-row{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:4px!important;
+  margin-top:5px!important;
+}
+.member-self-unified-toggle-row button{
+  min-width:0!important;
+  min-height:29px!important;
+  height:29px!important;
+  padding:0 2px!important;
+  border-radius:8px!important;
+  font-size:10px!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+}
+.member-unified-setting-message{
+  position:fixed!important;
+  left:50%!important;
+  bottom:calc(16px + env(safe-area-inset-bottom))!important;
+  z-index:5000!important;
+  transform:translate(-50%,12px)!important;
+  width:max-content!important;
+  max-width:90vw!important;
+  margin:0!important;
+  padding:8px 11px!important;
+  border-radius:999px!important;
+  background:#25324a!important;
+  color:#fff!important;
+  box-shadow:0 8px 26px rgba(0,0,0,.24)!important;
+  font-size:11px!important;
+  font-weight:850!important;
+  line-height:1.2!important;
+  opacity:0!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+  transition:opacity .16s ease,transform .16s ease,visibility .16s ease!important;
+}
+.member-unified-setting-message.is-visible{opacity:1!important;visibility:visible!important;transform:translate(-50%,0)!important}
+.member-unified-setting-message.is-error{background:#b42318!important}
+#memberLoginBox~#memberApp.hidden + script + .member-unified-setting-message{display:none!important}
+@media(max-width:560px){
+  .member-self-panel{padding:4px 5px!important}
+  .member-self-unified-toggle-row{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:3px!important}
+  .member-self-unified-toggle-row button{min-height:28px!important;height:28px!important;font-size:9px!important;padding:0 1px!important}
+}
+
+
+/* v1.6.31: preserve male/female card colors and mark only with a clear border + small '나' badge. */
+#memberApp .is-self-member{
+  position:relative!important;
+  background:inherit!important;
+  color:inherit!important;
+  border-color:inherit!important;
+  outline:3px solid #ffb000!important;
+  outline-offset:-3px!important;
+  box-shadow:0 0 0 2px rgba(255,255,255,.95),0 0 0 5px rgba(255,176,0,.78),0 6px 16px rgba(120,75,0,.2)!important;
+  padding-right:25px!important;
+  z-index:2;
+}
+#memberApp .is-self-member .name{
+  color:inherit!important;
+  text-shadow:none!important;
+  max-width:100%!important;
+}
+#memberApp .member-self-star{
+  position:absolute!important;
+  top:3px!important;
+  right:3px!important;
+  z-index:5!important;
+  display:grid!important;
+  place-items:center!important;
+  width:19px!important;
+  min-width:19px!important;
+  height:19px!important;
+  margin:0!important;
+  padding:0!important;
+  border:1px solid #fff!important;
+  border-radius:999px!important;
+  background:#172b4d!important;
+  color:#fff!important;
+  font-size:9px!important;
+  font-weight:950!important;
+  line-height:1!important;
+  box-shadow:0 2px 6px rgba(0,0,0,.28)!important;
+}
+#memberApp .member-self-star b,#memberApp .member-self-star small{display:none!important}
+#memberApp .is-self-member .member-info-detail{color:inherit!important}
+
+/* One short Korean label per button; all four stay on a single line. */
+.member-self-unified-toggle-row{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:3px!important}
+.member-self-unified-toggle-row button{min-height:29px!important;height:29px!important;padding:0 2px!important;font-size:9px!important;letter-spacing:-.35px!important}
+@media(max-width:380px){.member-self-unified-toggle-row button{font-size:8px!important;padding:0 1px!important}}
+/* v1.6.31 gender colors explicitly preserved after the self marker override. */
+#memberApp .is-self-member.male{
+  background:#dbeafe!important;
+  border-color:#2563eb!important;
+  color:#0b3f9c!important;
+}
+#memberApp .is-self-member.female{
+  background:#fce7f3!important;
+  border-color:#ec4899!important;
+  color:#9d174d!important;
+}
+#memberApp .is-self-member.male .name{color:#0b3f9c!important}
+#memberApp .is-self-member.female .name{color:#9d174d!important}
+
+/* v1.6.31: compact indeterminate install confirmation line; shown only after the browser accepted installation. */
+#memberApp #memberAppInstallToggle.is-installing{
+  position:relative!important;
+  overflow:hidden!important;
+}
+#memberApp #memberAppInstallToggle.is-installing::after{
+  content:"";
+  position:absolute;
+  left:-45%;
+  bottom:0;
+  width:45%;
+  height:2px;
+  border-radius:2px;
+  background:rgba(255,255,255,.95);
+  animation:jayumintonInstallCheck 1.05s linear infinite;
+}
+@keyframes jayumintonInstallCheck{
+  from{left:-45%}
+  to{left:100%}
+}
+
+/* v1.6.31: real Chrome install-readiness progress, not fake installation progress. */
+#memberApp #memberAppInstallToggle.is-preparing{position:relative;overflow:hidden}
+#memberApp #memberAppInstallToggle.is-preparing::after{
+  content:"";position:absolute;left:0;bottom:0;height:3px;width:var(--install-prep-progress,0%);
+  background:currentColor;opacity:.5;transition:width .3s linear;animation:none;
+}

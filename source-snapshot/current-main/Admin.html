@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+<?!= include('Style'); ?>
+</style>
+</head>
+<body>
+
+<div id="adminLoginBox" class="card login">
+  <h1>자유민턴 코트배정 관리자</h1>
+  <div class="toolbar section">
+    <input
+      id="adminPinInput"
+      type="password"
+      inputmode="text"
+      autocomplete="off"
+      placeholder="관리자 PIN"
+    >
+    <button
+      class="primary"
+      onclick="adminLogin()"
+    >
+      로그인
+    </button>
+  </div>
+</div>
+
+<div id="adminApp" class="hidden">
+<header>
+  <div class="wrap toolbar">
+    <div>
+      <h1>🏸 자유민턴 코트배정 관리자</h1>
+      <div class="sub">빠른 자동 배정과 클릭 교환을 지원합니다.</div>
+    </div>
+
+    <button
+      id="undoButton"
+      class="ghost-button undo-button header-undo-button"
+      onclick="undoLastAction()"
+      disabled
+    >
+      ↶ 실행 취소
+    </button>
+
+    <details class="top-admin-menu">
+      <summary>관리·설정</summary>
+      <div class="top-actions">
+      <button
+        id="voiceGuideToggle"
+        class="ghost-button voice-guide-toggle active"
+        type="button"
+        onclick="toggleVoiceGuide()"
+        aria-pressed="true"
+      >
+        🔊 음성 안내 켜짐
+      </button>
+
+      <button
+        class="ghost-button"
+        type="button"
+        onclick="testVoiceGuide()"
+      >
+        ▶ 음성 테스트
+      </button>
+
+      <button
+        class="ghost-button"
+        onclick="createBackup()"
+      >
+        백업 저장
+      </button>
+
+      <button
+        class="ghost-button"
+        onclick="restoreBackup()"
+      >
+        백업 복원
+      </button>
+
+      <button
+        class="danger"
+        onclick="resetAllData()"
+      >
+        전체 초기화
+      </button>
+      </div>
+    </details>
+  </div>
+</header>
+
+<main class="wrap">
+  <details class="admin-setup-details">
+    <summary>멤버 등록·비밀번호·제외 인원 관리</summary>
+  <section class="dashboard-shell section">
+    <div class="dashboard-title">
+      <div>
+        <span class="eyebrow">LIVE COURT CONTROL</span>
+        <h2>오늘의 운영 현황</h2>
+      </div>
+      <div class="sync-pill">
+        <span class="sync-dot"></span>
+        실시간 저장 중
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card stat-total">
+        <span class="stat-icon">👥</span>
+        <span class="stat-label">전체 등록</span>
+        <strong id="statTotal">0</strong>
+      </div>
+      <div class="stat-card stat-ready">
+        <span class="stat-icon">⏳</span>
+        <span class="stat-label">코트배정 대기</span>
+        <strong id="statActive">0</strong>
+      </div>
+      <div class="stat-card stat-playing">
+        <span class="stat-icon">🏸</span>
+        <span class="stat-label">경기 중</span>
+        <strong id="statPlaying">0</strong>
+      </div>
+      <div class="stat-card stat-groups">
+        <span class="stat-icon">📋</span>
+        <span class="stat-label">대기조 인원</span>
+        <strong id="statWaiting">0</strong>
+      </div>
+    </div>
+
+    <div class="system-strip">
+      <span id="systemBackupText">최근 백업: 없음</span>
+      <span id="systemUpdatedText">최근 저장: 확인 중</span>
+    </div>
+  </section>
+
+  <section class="card admin-panel">
+    <h2>멤버 등록</h2>
+
+    <div class="toolbar">
+      <input
+        id="newName"
+        maxlength="20"
+        placeholder="이름 또는 닉네임(20자 이내)"
+      >
+
+      <select id="newGender">
+        <option value="">성별 선택</option>
+        <option value="male">남자</option>
+        <option value="female">여자</option>
+      </select>
+
+      <input
+        id="newGrade"
+        maxlength="12"
+        placeholder="급수(선택, 예: A급·초급)"
+      >
+
+      <input
+        id="newExperience"
+        maxlength="20"
+        placeholder="구력(선택, 예: 3년)"
+      >
+
+      <button
+        id="addMemberButton"
+        class="primary"
+        onclick="addMember()"
+      >
+        등록
+      </button>
+
+      <span
+        id="memberCount"
+        class="meta"
+      ></span>
+    </div>
+
+    <div class="notice">
+      등록한 멤버는 자동으로 코트배정 대기에 들어갑니다.
+    </div>
+
+    <div
+      class="card"
+      style="box-shadow:none;margin-bottom:12px"
+    >
+      <h2>멤버 열람 비밀번호</h2>
+
+      <div
+        style="padding:12px;border-radius:10px;background:#fff7d6;border:1px solid #f4c542;margin-bottom:10px"
+      >
+        <span class="meta">현재 비밀번호</span>
+        <div
+          id="currentMemberPassword"
+          style="font-size:24px;font-weight:900;letter-spacing:2px;margin-top:3px"
+        >
+          확인 중...
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <input
+          id="newMemberPassword"
+          type="text"
+          inputmode="text"
+          autocomplete="off"
+          maxlength="20"
+          placeholder="새 비밀번호 4~20자"
+        >
+
+        <button onclick="changeMemberPassword()">
+          비밀번호 변경
+        </button>
+      </div>
+    </div>
+
+    <div
+      class="card excluded-panel"
+      style="box-shadow:none;margin-top:12px"
+    >
+      <div class="head">
+        <div>
+          <h2>코트배정 제외</h2>
+          <div class="sub">
+            도착전·휴식·귀가 인원만 표시됩니다.
+          </div>
+        </div>
+      </div>
+
+      <div
+        id="excludedMembers"
+        class="roster"
+      ></div>
+
+      <div class="toolbar section">
+        <button
+          class="primary"
+          onclick="setSelectedStatus('active')"
+        >
+          코트배정 대기로 복귀
+        </button>
+
+        <button onclick="decreaseSelectedGames()">
+          게임횟수 -1
+        </button>
+
+        <button onclick="resetSelectedGames()">
+          게임횟수 모두 0
+        </button>
+      </div>
+    </div>
+  </section>
+  </details>
+
+  <section class="card section queue-panel compact-admin-tools">
+    <div class="head">
+      <div>
+        <h2>선택 인원 상태 관리</h2>
+        <div class="sub">
+          배정대기 명단은 아래 빠른 배정에서 한 번만 표시됩니다. 이동·교환은 사람 두 명을 차례로 누르세요.
+        </div>
+      </div>
+
+      <div class="queue-actions">
+        <span
+          id="selectedCount"
+          class="selection-pill"
+        >
+          0명 선택
+        </span>
+
+        <button class="primary" onclick="smartAssignSelected()">선택 위치 자동배정</button>
+      </div>
+    </div>
+
+    <div class="toolbar section">
+      <button onclick="setSelectedStatus('before')">도착전</button>
+      <button onclick="setSelectedStatus('rest')">휴식</button>
+      <button onclick="setSelectedStatus('away')">귀가</button>
+      <button onclick="decreaseSelectedGames()">게임횟수 -1</button>
+      <button onclick="resetSelectedGames()">게임횟수 모두 0</button>
+    </div>
+  </section>
+
+  
+  <section class="section v4-command-center">
+    <div class="v4-courts-zone">
+      <div class="section-heading-row">
+        <div><span class="eyebrow dark-eyebrow">LIVE COURTS</span><h2>코트 실시간 운영</h2></div>
+        <div class="court-voice-controls" aria-label="경기 종료 음성 조작">
+          <button id="soundUnlockButton" class="sound-unlock-button" type="button" onclick="unlockVoiceSound()">🔊 소리 켜기</button>
+          <button id="replayVoiceButton" type="button" onclick="replayLastVoiceAnnouncement()" disabled>▶ 재생</button>
+          <button id="repeatVoiceButton" type="button" onclick="toggleVoiceRepeat()" aria-pressed="false">🔁 반복</button>
+          <button type="button" onclick="stopVoiceAnnouncement()">■ 멈춤</button>
+        </div>
+      </div>
+      <div id="adminCourts" class="v4-courts-grid"></div>
+    </div>
+
+    <aside class="v4-right-rail">
+      <section class="v4-quick-card">
+        <div class="quick-roster-header">
+          <div><span class="eyebrow dark-eyebrow">QUICK ASSIGN</span><h2>빠른 코트배정</h2></div>
+          <span id="quickSelectedCount" class="selection-pill">0명 선택</span>
+        </div>
+        <div class="quick-status-actions">
+          <button onclick="setSelectedStatus('rest')">휴식</button>
+          <button onclick="setSelectedStatus('away')">귀가</button>
+          <button onclick="setSelectedStatus('before')">도착전</button>
+        </div>
+        <div class="quick-search-box"><span>🔎</span><input id="quickMemberSearch" type="search" placeholder="이름·닉네임 검색" oninput="renderQuickRoster()"></div>
+        <div class="quick-filter-row">
+          <button id="filterAllBtn" class="filter-chip active" onclick="setQuickFilter('all')">전체</button>
+          <button id="filterMaleBtn" class="filter-chip" onclick="setQuickFilter('male')">남자</button>
+          <button id="filterFemaleBtn" class="filter-chip" onclick="setQuickFilter('female')">여자</button>
+          <button class="text-button" onclick="clearQuickSelection()">선택 해제</button>
+        </div>
+        <div id="quickActiveRoster" class="v4-quick-roster"></div>
+        <div class="v4-court-action-grid">
+          <button class="primary smart-assign-button" onclick="smartAssignSelected()">
+            <span>선택 위치 자동배정</span>
+            <small>코트·대기 빈자리 한 번 누르기 · 선택 없으면 남복·여복·혼복 자동 구성</small>
+          </button>
+        </div>
+      </section>
+
+      <section class="v4-wait-summary">
+        <div class="wait-summary-head">
+          <div><span class="eyebrow dark-eyebrow">NEXT GROUPS</span><h2>대기 1~5조</h2></div>
+        </div>
+        <div id="adminWaitGroups" class="v4-wait-stack"></div>
+      </section>
+    </aside>
+  </section>
+
+  <div class="mobile-quick-bar">
+    <span id="mobileSelectedCount">0명 선택</span>
+    <button
+      id="mobileUndoButton"
+      class="ghost-button undo-button mobile-undo-button"
+      onclick="undoLastAction()"
+      disabled
+    >↶ 실행 취소</button>
+    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>
+  </div>
+
+  <div id="quickMoveBar" class="quick-move-bar hidden">
+    <strong id="quickMoveName">선택 인원</strong>
+    <span>길게 누른 멤버 관리</span>
+    <button onclick="sendQuickPickToActive()">배정대기로 빼기</button>
+    <button class="ghost-button" onclick="closeMemberActionBar()">취소</button>
+    <button class="danger" onclick="deleteQuickPickedMembers()">삭제</button>
+  </div>
+
+  <div
+    id="wholeSwapBar"
+    class="whole-swap-bar hidden"
+    onclick="cancelWholeSwap()"
+  >
+    <strong id="wholeSwapText">교환할 위치 선택</strong>
+    <span>바꿀 다른 제목을 누르세요 · 여기를 누르면 취소</span>
+  </div>
+
+  
+  <div id="partialCourtModal" class="modal-backdrop hidden">
+    <div class="modal-card partial-modal-card">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow dark-eyebrow">PLAYER MOVE / SWAP</span>
+          <h2>코트 일부 인원 이동·교환</h2>
+        </div>
+        <button
+          class="modal-close"
+          onclick="closePartialCourtEdit()"
+        >
+          ×
+        </button>
+      </div>
+
+      <p class="modal-help">
+        한쪽만 선택하면 다른 코트로 이동하고, 양쪽에서 선택하면 서로 맞바뀝니다.
+      </p>
+
+      <div class="partial-court-selects">
+        <label>
+          첫 번째 코트
+          <select
+            id="partialCourtA"
+            onchange="renderPartialCourtEditor()"
+          >
+            <option value="1">1번코트(안쪽 코트)</option>
+            <option value="2">2번코트(중앙안쪽)</option>
+            <option value="3">3번코트(중앙바깥쪽)</option>
+            <option value="4">4번코트(입구쪽 코트)</option>
+          </select>
+        </label>
+
+        <div class="swap-arrow">↔</div>
+
+        <label>
+          두 번째 코트
+          <select
+            id="partialCourtB"
+            onchange="renderPartialCourtEditor()"
+          >
+            <option value="1">1번코트(안쪽 코트)</option>
+            <option value="2" selected>2번코트(중앙안쪽)</option>
+            <option value="3">3번코트(중앙바깥쪽)</option>
+            <option value="4">4번코트(입구쪽 코트)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="partial-player-columns">
+        <section class="partial-player-panel">
+          <div class="partial-panel-title">
+            <strong id="partialTitleA">1번 코트</strong>
+            <span id="partialCountA">0명 선택</span>
+          </div>
+          <div
+            id="partialPlayersA"
+            class="partial-player-list"
+          ></div>
+        </section>
+
+        <section class="partial-player-panel">
+          <div class="partial-panel-title">
+            <strong id="partialTitleB">2번 코트</strong>
+            <span id="partialCountB">0명 선택</span>
+          </div>
+          <div
+            id="partialPlayersB"
+            class="partial-player-list"
+          ></div>
+        </section>
+      </div>
+
+      <div id="partialPreview" class="partial-preview">
+        이동하거나 교환할 인원을 선택하세요.
+      </div>
+
+      <button
+        class="primary modal-primary"
+        onclick="confirmPartialCourtEdit()"
+      >
+        선택 인원 적용
+      </button>
+    </div>
+  </div>
+
+  <div id="courtSwapModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow dark-eyebrow">COURT SWAP</span>
+          <h2>코트 전체 인원 교환</h2>
+        </div>
+        <button class="modal-close" onclick="closeCourtSwap()">×</button>
+      </div>
+
+      <p class="modal-help">
+        잘못 배정한 두 코트를 선택하면 4명 전체가 한 번에 서로 바뀝니다.
+      </p>
+
+      <div class="swap-select-grid">
+        <label>
+          첫 번째 코트
+          <select id="swapCourtA">
+            <option value="1">1번코트(안쪽 코트)</option>
+            <option value="2">2번코트(중앙안쪽)</option>
+            <option value="3">3번코트(중앙바깥쪽)</option>
+            <option value="4">4번코트(입구쪽 코트)</option>
+          </select>
+        </label>
+
+        <div class="swap-arrow">↔</div>
+
+        <label>
+          두 번째 코트
+          <select id="swapCourtB">
+            <option value="1">1번코트(안쪽 코트)</option>
+            <option value="2" selected>2번코트(중앙안쪽)</option>
+            <option value="3">3번코트(중앙바깥쪽)</option>
+            <option value="4">4번코트(입구쪽 코트)</option>
+          </select>
+        </label>
+      </div>
+
+      <button class="primary modal-primary" onclick="confirmCourtSwap()">
+        두 코트 인원 교환
+      </button>
+    </div>
+  </div>
+
+  <div id="waitSwapModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow dark-eyebrow">WAIT GROUP SWAP</span>
+          <h2>대기조 전체 교환</h2>
+        </div>
+        <button class="modal-close" onclick="closeWaitGroupSwap()">×</button>
+      </div>
+      <p class="modal-help">
+        선택한 두 대기조의 인원 전체가 한 번에 서로 바뀝니다.
+      </p>
+      <div class="swap-select-grid">
+        <label>첫 번째 대기조
+          <select id="swapWaitGroupA">
+            <option value="0">대기 1</option><option value="1">대기 2</option>
+            <option value="2">대기 3</option><option value="3">대기 4</option>
+            <option value="4">대기 5</option>
+          </select>
+        </label>
+        <div class="swap-arrow">↔</div>
+        <label>두 번째 대기조
+          <select id="swapWaitGroupB">
+            <option value="0">대기 1</option><option value="1" selected>대기 2</option>
+            <option value="2">대기 3</option><option value="3">대기 4</option>
+            <option value="4">대기 5</option>
+          </select>
+        </label>
+      </div>
+      <button class="primary modal-primary" onclick="confirmWaitGroupSwap()">
+        두 대기조 전체 교환
+      </button>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+const IS_ADMIN = true;
+</script>
+<?!= include('Script'); ?>
+</body>
+</html>
