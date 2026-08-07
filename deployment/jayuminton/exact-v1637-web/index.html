@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#315efb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="자유민턴 코트현황">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>자유민턴 코트현황</title>
+  <meta name="jayuminton-build" content="1.6.37">
+  <link rel="manifest" href="/manifest.webmanifest?v=205">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png?v=205">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-198.png?v=205">
+  <link rel="stylesheet" href="/setup-v205.css?v=1637">
+  <script>
+  (() => {
+    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
+    window.__JAYUMINTON_EARLY_APP_INSTALLED = false;
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      window.__JAYUMINTON_EARLY_INSTALL_PROMPT = event;
+      window.dispatchEvent(new CustomEvent('jayuminton:installpromptready'));
+    });
+    window.addEventListener('appinstalled', () => {
+      window.__JAYUMINTON_EARLY_APP_INSTALLED = true;
+    });
+  })();
+  </script>
+</head>
+<body>
+  <section id="setupPanel" class="setup-panel is-collapsed hidden-infrastructure" hidden aria-hidden="true" style="display:none!important" aria-label="숨김 알림 및 설치 처리 영역">
+    <button id="setupToggle" class="setup-toggle" type="button" aria-expanded="false" aria-controls="setupBody">
+      <span class="setup-toggle-title">🔔 알림 설정 및 앱 설치</span>
+      <span class="setup-toggle-status">
+        <span id="alarmSummaryBadge" class="mini-state is-off">알림 OFF</span>
+        <span id="installSummaryBadge" class="mini-state is-off">앱설치 OFF</span>
+        <span class="setup-chevron" aria-hidden="true">⌄</span>
+      </span>
+    </button>
+
+    <div id="setupBody" class="setup-body">
+      <div class="setting-card alarm-setting-card">
+        <div class="setting-card-heading">
+          <div>
+            <strong>내 순서 알림·진동</strong>
+            <span>본인 이름을 입력하고 완료를 누르세요.</span>
+          </div>
+          <span id="alarmState" class="state-pill is-off">💡 OFF</span>
+        </div>
+        <div class="alarm-row">
+          <label class="alarm-name">
+            <span>내 이름</span>
+            <input id="alarmNameInput" type="text" maxlength="30" autocomplete="off" placeholder="이름 입력">
+          </label>
+          <button id="alarmConnectButton" type="button">완료</button>
+        </div>
+        <div id="alarmMessage" class="setting-message">직접 입력하거나 명단에서 이름을 누르세요. 앞 두 글자로 찾습니다.</div>
+      </div>
+
+      <div class="setting-card install-setting-card">
+        <div class="install-logo"><img src="/icon-198.png?v=205" alt="자유민턴 강아지 로고"></div>
+        <div class="install-copy">
+          <strong id="installTitle">앱설치</strong>
+          <span id="installHint">홈 화면에서 자유민턴 코트현황을 바로 열 수 있습니다.</span>
+          <div id="installMessage" class="setting-message">설치는 선택사항입니다. OFF를 선택하면 다시 자동으로 묻지 않습니다.</div>
+        </div>
+        <div class="install-actions">
+          <button id="appInstallButton" class="primary-install-button" type="button">앱설치</button>
+          <button id="appInstallOffButton" class="secondary-install-button" type="button">앱설치 OFF</button>
+          <span id="appInstallState" class="state-pill is-off">앱설치 OFF</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <main class="court-shell">
+    <iframe id="courtFrame" title="자유민턴 코트현황" scrolling="no" allow="clipboard-read; clipboard-write"></iframe>
+  </main>
+
+  <button id="appInstallClickProxy" class="app-install-click-proxy" type="button" hidden aria-label="자유민턴 앱 설치"></button>
+  <a id="appInstallChromeLink" class="app-install-click-proxy" hidden aria-label="Chrome에서 자유민턴 앱 설치" rel="noopener"></a>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <script src="/config-v204.js?v=1637"></script>
+  <script src="/setup-v205.js?v=1637"></script>
+</body>
+</html>
