@@ -1,0 +1,172 @@
+name: Deploy Jayuminton PWA Hotfix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-pwa-hotfix.yml'
+      - 'deployment/jayuminton/web-push-overrides/index.html'
+      - 'deployment/jayuminton/web-push-overrides/runtime-fix-v209.js'
+      - 'deployment/jayuminton/web-push-overrides/firebase-messaging-sw.js'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-pwa-hotfix-v209
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy web-only hotfix
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      STABLE_MEMBER_URL: https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON" || { echo 'JAYUMINTON_DEPLOY_CONFIG_JSON is missing.'; exit 1; }
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || { echo 'FIREBASE_SERVICE_ACCOUNT_JSON is missing.'; exit 1; }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Read Firebase deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG_FILE="$RUNNER_TEMP/jayuminton-deploy-config.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG_FILE"
+          jq -e '.firebaseProjectId and .hostingUrl' "$CONFIG_FILE" >/dev/null
+          {
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG_FILE")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG_FILE")"
+            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-hotfix-build"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify stable court screen endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY="$RUNNER_TEMP/member-page.html"
+          FINAL="$RUNNER_TEMP/member-final-url.txt"
+          curl --fail --location --retry 3 --max-time 60 \
+            --output "$BODY" --write-out '%{url_effective}' \
+            "$STABLE_MEMBER_URL?mode=user&app=user&source=github-hotfix" > "$FINAL"
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then
+            echo 'Stable member page redirected to Google Drive.'
+            cat "$FINAL"
+            exit 1
+          fi
+          if grep -Eiq 'file you have requested does not exist|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$BODY"; then
+            echo 'Stable member page returned a missing-file page.'
+            exit 1
+          fi
+          test -s "$BODY"
+
+      - name: Build web-only PWA hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$BUILD_ROOT"
+          mkdir -p "$BUILD_ROOT/web-push"
+          cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
+          BASE="${HOSTING_URL%/}"
+
+          REQUIRED_LIVE=(
+            manifest.webmanifest
+            setup-v208.css
+            setup-v208.js
+            config-v203.js
+            icon-198.png
+            icon-512.png
+            apple-touch-icon-180.png
+            badge-96.png
+          )
+          for asset in "${REQUIRED_LIVE[@]}"; do
+            curl --fail --location --retry 3 --max-time 60 -H 'Cache-Control: no-cache' \
+              "$BASE/$asset?hotfix=$GITHUB_RUN_ID" \
+              --output "$BUILD_ROOT/web-push/$asset"
+            test -s "$BUILD_ROOT/web-push/$asset"
+          done
+
+          for optional in icon.svg badge.svg; do
+            curl --fail --location --retry 1 --max-time 30 \
+              "$BASE/$optional?hotfix=$GITHUB_RUN_ID" \
+              --output "$BUILD_ROOT/web-push/$optional" || rm -f "$BUILD_ROOT/web-push/$optional"
+          done
+
+          cp deployment/jayuminton/web-push-overrides/index.html "$BUILD_ROOT/web-push/index.html"
+          cp deployment/jayuminton/web-push-overrides/runtime-fix-v209.js "$BUILD_ROOT/web-push/runtime-fix-v209.js"
+          cp deployment/jayuminton/web-push-overrides/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+
+          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208; do
+            cat > "$BUILD_ROOT/web-push/firebase-messaging-sw-v${version}.js" <<'EOF'
+          /* Legacy service-worker migration shim. */
+          importScripts('/firebase-messaging-sw.js');
+          self.addEventListener('install', () => self.skipWaiting());
+          self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+          EOF
+          done
+
+          grep -F 'runtime-fix-v209.js' "$BUILD_ROOT/web-push/index.html"
+          grep -F "$STABLE_MEMBER_URL" "$BUILD_ROOT/web-push/runtime-fix-v209.js"
+          grep -F 'jayuminton-shell-v209' "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+          node --check "$BUILD_ROOT/web-push/runtime-fix-v209.js"
+          node --check "$BUILD_ROOT/web-push/setup-v208.js"
+
+      - name: Deploy Firebase Hosting
+        working-directory: ${{ env.BUILD_ROOT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive \
+            --message "PWA v209 install-state and member URL hotfix ${GITHUB_SHA::7}"
+
+      - name: Verify live hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          BUST="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/?verify=$BUST" > "$RUNNER_TEMP/live-index.html"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/runtime-fix-v209.js?verify=$BUST" > "$RUNNER_TEMP/live-fix.js"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/firebase-messaging-sw.js?verify=$BUST" > "$RUNNER_TEMP/live-worker.js"
+          grep -F 'runtime-fix-v209.js' "$RUNNER_TEMP/live-index.html"
+          grep -F "$STABLE_MEMBER_URL" "$RUNNER_TEMP/live-fix.js"
+          grep -F 'jayuminton-shell-v209' "$RUNNER_TEMP/live-worker.js"
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo '## 자유민턴 PWA v209 긴급수정 배포 완료'
+            echo
+            echo '- 삭제된 앱을 설치 완료로 오판하던 저장값 초기화'
+            echo '- 설치 버튼 재활성화'
+            echo '- 코트현황 MAIN 주소를 원래 정상 배포 주소로 고정'
+            echo '- Firebase 웹만 배포하며 Apps Script는 변경하지 않음'
+          } >> "$GITHUB_STEP_SUMMARY"
