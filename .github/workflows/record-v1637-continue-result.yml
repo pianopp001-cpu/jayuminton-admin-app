@@ -1,0 +1,43 @@
+name: Record v1.6.37 continuation result
+
+on:
+  workflow_run:
+    workflows: ['Continue exact Jayuminton v1.6.37 restore']
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    if: ${{ github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Record result
+        shell: bash
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/jayuminton
+          {
+            echo "conclusion=$CONCLUSION"
+            echo "run_id=$RUN_ID"
+            echo "head_sha=$HEAD_SHA"
+            echo "run_url=$RUN_URL"
+            echo "recorded_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > deployment/jayuminton/CONTINUE_V1637_STATUS.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add deployment/jayuminton/CONTINUE_V1637_STATUS.txt
+          git diff --cached --quiet && exit 0
+          git commit -m "Record v1.6.37 continuation result: $CONCLUSION"
+          git pull --rebase origin main
+          git push origin HEAD:main
