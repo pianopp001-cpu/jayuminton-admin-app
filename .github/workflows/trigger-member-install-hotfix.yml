@@ -15,15 +15,14 @@ jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch hotfix workflow
+      - name: Dispatch definitive v3 hotfix workflow
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # retrigger marker: member-install-hotfix-2
           curl --fail-with-body -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
-            https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/hotfix-member-install-loop.yml/dispatches \
+            https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/hotfix-member-install-v3.yml/dispatches \
             -d '{"ref":"main"}'
