@@ -1,4 +1,4 @@
-name: Deploy Jayuminton PWA Hotfix
+name: Deploy Jayuminton PWA Recovery
 
 on:
   workflow_dispatch:
@@ -6,36 +6,36 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/deploy-pwa-hotfix.yml'
-      - 'deployment/jayuminton/web-push-overrides/index.html'
-      - 'deployment/jayuminton/web-push-overrides/runtime-fix-v209.js'
-      - 'deployment/jayuminton/web-push-overrides/firebase-messaging-sw.js'
 
 permissions:
   contents: read
 
 concurrency:
-  group: jayuminton-pwa-hotfix-v209
+  group: jayuminton-pwa-recovery-v210
   cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Deploy web-only hotfix
+    name: Restore design and deploy working member page
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      STABLE_MEMBER_URL: https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Check deployment secrets
         shell: bash
         run: |
           set -euo pipefail
           test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON" || { echo 'JAYUMINTON_DEPLOY_CONFIG_JSON is missing.'; exit 1; }
+          test -n "$CLASPRC_JSON" || { echo 'CLASPRC_JSON is missing.'; exit 1; }
           test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || { echo 'FIREBASE_SERVICE_ACCOUNT_JSON is missing.'; exit 1; }
 
       - name: Set up Node.js
@@ -43,48 +43,74 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools@latest
+      - name: Install deployment tools
+        run: npm install --global firebase-tools@latest @google/clasp@latest
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Read Firebase deployment configuration
+      - name: Read deployment configuration
         shell: bash
         run: |
           set -euo pipefail
+          umask 077
           CONFIG_FILE="$RUNNER_TEMP/jayuminton-deploy-config.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG_FILE"
-          jq -e '.firebaseProjectId and .hostingUrl' "$CONFIG_FILE" >/dev/null
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG_FILE" >/dev/null
+          PUSH_ID="$(jq -r '.pushDeploymentId' "$CONFIG_FILE")"
+          [[ "$PUSH_ID" =~ ^[A-Za-z0-9_-]+$ ]] || { echo 'Invalid PUSH deployment ID.'; exit 1; }
           {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG_FILE")"
+            echo "PUSH_URL=https://script.google.com/macros/s/$PUSH_ID/exec"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG_FILE")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG_FILE")"
-            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-hotfix-build"
+            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-recovery-build"
           } >> "$GITHUB_ENV"
 
-      - name: Verify stable court screen endpoint
+      - name: Create a fresh MAIN web-app deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/apps-script-main-recovery"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          DEPLOY_OUTPUT="$(clasp deploy --description "Jayuminton PWA recovery ${GITHUB_SHA::7}" 2>&1)"
+          printf '%s\n' "$DEPLOY_OUTPUT"
+          MAIN_DEPLOYMENT_ID="$(printf '%s\n' "$DEPLOY_OUTPUT" | grep -Eo 'AKfy[A-Za-z0-9_-]+' | tail -n 1 || true)"
+          if [[ -z "$MAIN_DEPLOYMENT_ID" ]]; then
+            LIST_OUTPUT="$(clasp deployments 2>&1)"
+            printf '%s\n' "$LIST_OUTPUT"
+            MAIN_DEPLOYMENT_ID="$(printf '%s\n' "$LIST_OUTPUT" | grep -Eo 'AKfy[A-Za-z0-9_-]+' | tail -n 1 || true)"
+          fi
+          test -n "$MAIN_DEPLOYMENT_ID" || { echo 'Could not determine the new MAIN deployment ID.'; exit 1; }
+          echo "MAIN_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+
+      - name: Verify fresh MAIN court screen
         shell: bash
         run: |
           set -euo pipefail
           BODY="$RUNNER_TEMP/member-page.html"
           FINAL="$RUNNER_TEMP/member-final-url.txt"
-          curl --fail --location --retry 3 --max-time 60 \
+          curl --fail --location --retry 4 --retry-delay 3 --max-time 90 \
             --output "$BODY" --write-out '%{url_effective}' \
-            "$STABLE_MEMBER_URL?mode=user&app=user&source=github-hotfix" > "$FINAL"
+            "$MAIN_URL?mode=user&app=user&source=github-recovery" > "$FINAL"
+          test -s "$BODY"
           if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then
-            echo 'Stable member page redirected to Google Drive.'
+            echo 'Fresh MAIN deployment redirected to Google Drive.'
             cat "$FINAL"
             exit 1
           fi
           if grep -Eiq 'file you have requested does not exist|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$BODY"; then
-            echo 'Stable member page returned a missing-file page.'
+            echo 'Fresh MAIN deployment returned a missing-file page.'
             exit 1
           fi
-          test -s "$BODY"
 
-      - name: Build web-only PWA hotfix
+      - name: Build original-design PWA with behavior fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -93,34 +119,146 @@ jobs:
           cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
           BASE="${HOSTING_URL%/}"
 
-          REQUIRED_LIVE=(
-            manifest.webmanifest
-            setup-v208.css
-            setup-v208.js
-            config-v203.js
-            icon-198.png
-            icon-512.png
-            apple-touch-icon-180.png
-            badge-96.png
-          )
-          for asset in "${REQUIRED_LIVE[@]}"; do
+          for asset in manifest.webmanifest config-v203.js icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
             curl --fail --location --retry 3 --max-time 60 -H 'Cache-Control: no-cache' \
-              "$BASE/$asset?hotfix=$GITHUB_RUN_ID" \
+              "$BASE/$asset?recovery=$GITHUB_RUN_ID" \
               --output "$BUILD_ROOT/web-push/$asset"
             test -s "$BUILD_ROOT/web-push/$asset"
           done
 
           for optional in icon.svg badge.svg; do
             curl --fail --location --retry 1 --max-time 30 \
-              "$BASE/$optional?hotfix=$GITHUB_RUN_ID" \
+              "$BASE/$optional?recovery=$GITHUB_RUN_ID" \
               --output "$BUILD_ROOT/web-push/$optional" || rm -f "$BUILD_ROOT/web-push/$optional"
           done
 
-          cp deployment/jayuminton/web-push-overrides/index.html "$BUILD_ROOT/web-push/index.html"
-          cp deployment/jayuminton/web-push-overrides/runtime-fix-v209.js "$BUILD_ROOT/web-push/runtime-fix-v209.js"
+          git fetch --no-tags --depth=1 origin 2543b5269aa80f3fe563eb9bfd6b99301000cb07
+          git show FETCH_HEAD:deployment/jayuminton/web-push-overrides/index.html > "$BUILD_ROOT/web-push/index.html"
+
+          git fetch --no-tags --depth=1 origin agent/github-auto-deploy
+          git show FETCH_HEAD:deployment/jayuminton/web-push/setup-v208.css > "$BUILD_ROOT/web-push/setup-v208.css"
+          : > "$BUILD_ROOT/web-push/setup-v208.js"
+          for number in $(seq -w 1 16); do
+            git show "FETCH_HEAD:deployment/jayuminton/web-push/setup-v208.js.part-$number" >> "$BUILD_ROOT/web-push/setup-v208.js"
+          done
+
           cp deployment/jayuminton/web-push-overrides/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
 
-          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208; do
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+          setup_path = root / 'setup-v208.js'
+          setup = setup_path.read_text(encoding='utf-8')
+
+          install_anchor = "  const directInstallMode = androidDevice && installationEntryRequested && !isStandaloneApp();\n"
+          install_fix = """  const directInstallMode = androidDevice && installationEntryRequested && !isStandaloneApp();
+  // Chrome keeps site storage after uninstall. Do not treat the stale stored flag as a real installation.
+  if (!isStandaloneApp()) {
+    try {
+      localStorage.removeItem(STORAGE.installConfirmed);
+      if (localStorage.getItem(STORAGE.installChoice) === 'on') {
+        localStorage.removeItem(STORAGE.installChoice);
+      }
+    } catch (_) {}
+  }
+"""
+          if install_anchor not in setup:
+              raise SystemExit('Install-state patch anchor was not found')
+          setup = setup.replace(install_anchor, install_fix, 1)
+
+          listener_anchor = "  connectButton.addEventListener('click', handleAlarmButton);\n"
+          listener_fix = """  connectButton.addEventListener('click', handleAlarmButton);
+  nameInput.addEventListener('input', () => {
+    const typed = firstTwoSearchChars(nameInput.value);
+    const saved = member && member.name ? firstTwoSearchChars(member.name) : '';
+    if (member && typed && typed !== saved) {
+      member = null;
+      try { localStorage.removeItem(STORAGE.member); } catch (_) {}
+      isConnected = false;
+      setOff('새 이름을 입력한 뒤 아래에 뜨는 이름 말풍선을 눌러 주세요.');
+      sendBootstrap();
+    }
+  });
+"""
+          if listener_anchor not in setup:
+              raise SystemExit('Name-input patch anchor was not found')
+          setup = setup.replace(listener_anchor, listener_fix, 1)
+
+          old_match = """    const exactSelected = member && member.id
+      ? members.find((item) => String(item.id) === String(member.id))
+      : null;
+    const matches = exactSelected
+      ? [exactSelected]
+      : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+"""
+          new_match = """    const typedMatchesSavedMember = Boolean(
+      member && member.id && firstTwoSearchChars(member.name) === typed
+    );
+    const exactSelected = typedMatchesSavedMember
+      ? members.find((item) => String(item.id) === String(member.id))
+      : null;
+    const matches = exactSelected
+      ? [exactSelected]
+      : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+"""
+          if old_match not in setup:
+              raise SystemExit('Saved-member priority patch anchor was not found')
+          setup = setup.replace(old_match, new_match, 1)
+
+          branch_marker = "} else if (data.type === 'JAYUMINTON_MEMBER_SELECTED' || data.type === 'JAYUMINTON_MEMBER_CLICKED') {"
+          branch_start = setup.find(branch_marker)
+          if branch_start < 0:
+              raise SystemExit('Member selection branch was not found')
+          assignment = """        member = {id:String(data.member.id), name:String(data.member.name)};
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+"""
+          assignment_pos = setup.find(assignment, branch_start)
+          if assignment_pos < 0 or assignment_pos > branch_start + 1200:
+              raise SystemExit('Member replacement assignment was not found')
+          replacement = """        const nextMember = {id:String(data.member.id), name:String(data.member.name)};
+        const memberChanged = Boolean(member && String(member.id) !== String(nextMember.id));
+        member = nextMember;
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+        if (memberChanged) {
+          try { localStorage.removeItem(STORAGE.token); } catch (_) {}
+          isConnected = false;
+          setOff(member.name + '님으로 변경했습니다. 완료를 눌러 알림을 다시 연결해 주세요.');
+        }
+"""
+          setup = setup[:assignment_pos] + replacement + setup[assignment_pos + len(assignment):]
+          setup_path.write_text(setup, encoding='utf-8')
+
+          config_path = root / 'config-v203.js'
+          config = config_path.read_text(encoding='utf-8')
+          main_url = os.environ['MAIN_URL']
+          push_url = os.environ['PUSH_URL']
+          override = (
+              "\n;window.JAYUMINTON_PUSH_SETUP_CONFIG = Object.freeze(Object.assign({}, "
+              "window.JAYUMINTON_PUSH_SETUP_CONFIG || {}, {"
+              f"memberPageUrl:{json.dumps(main_url)},"
+              f"relayUrl:{json.dumps(push_url)}"
+              "}));\n"
+          )
+          config_path.write_text(config.rstrip() + override, encoding='utf-8')
+
+          index_path = root / 'index.html'
+          index = index_path.read_text(encoding='utf-8')
+          index = index.replace('/config-v203.js?v=1641', '/config-v203.js?v=1641-recovery2')
+          index = index.replace('/setup-v208.js?v=1641', '/setup-v208.js?v=1641-recovery2')
+          index_path.write_text(index, encoding='utf-8')
+
+          worker_path = root / 'firebase-messaging-sw.js'
+          worker = worker_path.read_text(encoding='utf-8')
+          worker = worker.replace("jayuminton-shell-v209", "jayuminton-shell-v210")
+          worker_path.write_text(worker, encoding='utf-8')
+          PY
+
+          for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209; do
             cat > "$BUILD_ROOT/web-push/firebase-messaging-sw-v${version}.js" <<'EOF'
           /* Legacy service-worker migration shim. */
           importScripts('/firebase-messaging-sw.js');
@@ -129,11 +267,14 @@ jobs:
           EOF
           done
 
-          grep -F 'runtime-fix-v209.js' "$BUILD_ROOT/web-push/index.html"
-          grep -F "$STABLE_MEMBER_URL" "$BUILD_ROOT/web-push/runtime-fix-v209.js"
-          grep -F 'jayuminton-shell-v209' "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
-          node --check "$BUILD_ROOT/web-push/runtime-fix-v209.js"
           node --check "$BUILD_ROOT/web-push/setup-v208.js"
+          grep -F '이 설치 화면은 Google Drive나 코트현황 화면과 관계없이 Firebase 최상위 화면에서 직접 작동합니다.' "$BUILD_ROOT/web-push/index.html"
+          grep -F '앱설치' "$BUILD_ROOT/web-push/index.html"
+          grep -F '설치하지 않고 계속' "$BUILD_ROOT/web-push/index.html"
+          ! grep -F 'runtime-fix-v209.js' "$BUILD_ROOT/web-push/index.html"
+          grep -F "$MAIN_URL" "$BUILD_ROOT/web-push/config-v203.js"
+          grep -F 'typedMatchesSavedMember' "$BUILD_ROOT/web-push/setup-v208.js"
+          grep -F 'jayuminton-shell-v210' "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
 
       - name: Deploy Firebase Hosting
         working-directory: ${{ env.BUILD_ROOT }}
@@ -141,32 +282,34 @@ jobs:
         run: |
           set -euo pipefail
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive \
-            --message "PWA v209 install-state and member URL hotfix ${GITHUB_SHA::7}"
+            --message "Restore original design and member replacement ${GITHUB_SHA::7}"
 
-      - name: Verify live hotfix
+      - name: Verify live recovery
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
           BUST="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
-            "$BASE/?verify=$BUST" > "$RUNNER_TEMP/live-index.html"
-          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
-            "$BASE/runtime-fix-v209.js?verify=$BUST" > "$RUNNER_TEMP/live-fix.js"
-          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
-            "$BASE/firebase-messaging-sw.js?verify=$BUST" > "$RUNNER_TEMP/live-worker.js"
-          grep -F 'runtime-fix-v209.js' "$RUNNER_TEMP/live-index.html"
-          grep -F "$STABLE_MEMBER_URL" "$RUNNER_TEMP/live-fix.js"
-          grep -F 'jayuminton-shell-v209' "$RUNNER_TEMP/live-worker.js"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$BUST" > "$RUNNER_TEMP/live-index.html"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/config-v203.js?verify=$BUST" > "$RUNNER_TEMP/live-config.js"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/setup-v208.js?verify=$BUST" > "$RUNNER_TEMP/live-setup.js"
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$BUST" > "$RUNNER_TEMP/live-worker.js"
+          grep -F '설치하지 않고 계속' "$RUNNER_TEMP/live-index.html"
+          grep -F '앱설치' "$RUNNER_TEMP/live-index.html"
+          ! grep -F 'runtime-fix-v209.js' "$RUNNER_TEMP/live-index.html"
+          grep -F "$MAIN_URL" "$RUNNER_TEMP/live-config.js"
+          grep -F 'typedMatchesSavedMember' "$RUNNER_TEMP/live-setup.js"
+          grep -F 'jayuminton-shell-v210' "$RUNNER_TEMP/live-worker.js"
 
       - name: Deployment summary
         shell: bash
         run: |
           {
-            echo '## 자유민턴 PWA v209 긴급수정 배포 완료'
+            echo '## 자유민턴 원래 디자인 복원 및 기능 수정 완료'
             echo
-            echo '- 삭제된 앱을 설치 완료로 오판하던 저장값 초기화'
-            echo '- 설치 버튼 재활성화'
-            echo '- 코트현황 MAIN 주소를 원래 정상 배포 주소로 고정'
-            echo '- Firebase 웹만 배포하며 Apps Script는 변경하지 않음'
+            echo '- 정상 v1.6.41 설치 화면 HTML/CSS 그대로 복원'
+            echo '- 임의로 추가된 화면용 긴급수정 스크립트 제거'
+            echo '- 앱 삭제 후 남는 가짜 설치 완료 기록 제거'
+            echo '- 새 MAIN 웹앱 배포 주소로 Google Drive 오류 제거'
+            echo '- 이름 입력 후 말풍선 선택 시 기존 회원을 새 회원으로 교체'
           } >> "$GITHUB_STEP_SUMMARY"
