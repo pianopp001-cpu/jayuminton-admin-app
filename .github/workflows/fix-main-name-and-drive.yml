@@ -1,0 +1,239 @@
+name: Fix MAIN name editing and Drive-safe install
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-main-name-and-drive.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-main-name-drive-fix
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+
+      - name: Read config
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+          } >> "$GITHUB_ENV"
+
+      - name: Patch only MAIN Script behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+
+          # Hard safety: visible v1.6.37 design files must remain untouched.
+          printf '%s  %s\n' \
+            '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
+            'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+
+          # 1) Drive-safe Chrome handoff: exact v1.6.40 behavior, no browser_fallback_url.
+          a=s.find('function openMemberInstallInChrome(installUrl) {')
+          b=s.find('function openMemberInstallInSafari(installUrl) {', a)
+          if a < 0 or b < 0:
+              raise SystemExit('Chrome install function not found')
+          chrome="""function openMemberInstallInChrome(installUrl) {
+            // Drive-safe Chrome handoff. Never use browser_fallback_url.
+            try {
+              const target = new URL(installUrl);
+              if (target.origin !== UNIFIED_MEMBER_APP_ORIGIN) throw new Error('invalid member app origin');
+              target.searchParams.set('install', '1');
+              target.searchParams.set('external', '1');
+              target.searchParams.set('source', 'chrome');
+              target.searchParams.set('app', 'user');
+              target.searchParams.set('mode', 'user');
+              const hostPath = target.host + target.pathname + target.search + target.hash;
+              navigateMemberTop('intent://' + hostPath +
+                '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+                'category=android.intent.category.BROWSABLE;end');
+              return;
+            } catch (error) {}
+            navigateMemberTop('intent://jayuminton-push.web.app/?install=1&external=1&source=chrome&app=user&mode=user' +
+              '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+              'category=android.intent.category.BROWSABLE;end');
+          }
+
+          """
+          s=s[:a]+chrome+s[b:]
+
+          # 2) Track when the user is actively editing the visible MAIN name field.
+          marker='function memberSelfSearchMatches() {'
+          if 'let MEMBER_SELF_NAME_EDITING = false;' not in s:
+              pos=s.find(marker)
+              if pos < 0: raise SystemExit('memberSelfSearchMatches not found')
+              s=s[:pos]+"let MEMBER_SELF_NAME_EDITING = false;\n\n"+s[pos:]
+
+          # 3) When opening settings, bind input events once. Clearing/typing must NOT restore old name.
+          open_marker="""function openMemberSelfSettings() {
+            try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); }
+            catch (error) {}
+            renderMemberSelfSettings();
+            setTimeout(function() {
+              const input = document.getElementById('memberSelfSearchInput');
+              if (input) input.focus();
+            }, 0);
+          }
+          """
+          open_fixed="""function openMemberSelfSettings() {
+            try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); }
+            catch (error) {}
+            renderMemberSelfSettings();
+            setTimeout(function() {
+              const input = document.getElementById('memberSelfSearchInput');
+              if (input) {
+                if (!input.__jayumintonEditBound) {
+                  input.__jayumintonEditBound = true;
+                  input.addEventListener('input', function() {
+                    MEMBER_SELF_NAME_EDITING = true;
+                    renderMemberSelfMatches();
+                  });
+                  input.addEventListener('focus', function() {
+                    MEMBER_SELF_NAME_EDITING = true;
+                  });
+                }
+                input.focus();
+                input.select();
+              }
+            }, 0);
+          }
+          """
+          if open_marker in s:
+              s=s.replace(open_marker,open_fixed,1)
+          elif 'input.__jayumintonEditBound' not in s:
+              raise SystemExit('openMemberSelfSettings anchor changed')
+
+          # 4) The exact line causing old-name auto-fill. Allow it only before the user starts editing.
+          old="  if (input && selected && !input.value) input.value = selected.name;"
+          new="  if (input && selected && !input.value && !MEMBER_SELF_NAME_EDITING) input.value = selected.name;"
+          if old in s:
+              s=s.replace(old,new,1)
+          elif new not in s:
+              raise SystemExit('auto-fill line not found')
+
+          # 5) Selecting a speech-bubble result ends editing and makes the new member authoritative.
+          select_anchor="""function selectMemberSelf(memberId) {
+            if (IS_ADMIN) return;
+          """
+          select_fixed="""function selectMemberSelf(memberId) {
+            if (IS_ADMIN) return;
+            MEMBER_SELF_NAME_EDITING = false;
+          """
+          if select_anchor in s:
+              s=s.replace(select_anchor,select_fixed,1)
+          elif 'MEMBER_SELF_NAME_EDITING = false;' not in s[s.find('function selectMemberSelf'):s.find('function clearMemberSelfSelection')]:
+              raise SystemExit('selectMemberSelf anchor changed')
+
+          # 6) Clearing selection must stay cleared and ready for typing.
+          clear_anchor="""function clearMemberSelfSelection() {
+            if (IS_ADMIN) return;
+          """
+          clear_fixed="""function clearMemberSelfSelection() {
+            if (IS_ADMIN) return;
+            MEMBER_SELF_NAME_EDITING = true;
+          """
+          if clear_anchor in s:
+              s=s.replace(clear_anchor,clear_fixed,1)
+
+          # 7) Parent bootstrap must not re-save the old member while the user is editing.
+          boot_old="""    if (data.member && data.member.id && data.member.name) {
+              try {
+                localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+                  id: String(data.member.id),
+                  name: String(data.member.name)
+                }));
+              } catch (error) {}
+              renderWebPushMemberOptions();
+            }
+          """
+          boot_new="""    if (!MEMBER_SELF_NAME_EDITING && data.member && data.member.id && data.member.name) {
+              try {
+                localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+                  id: String(data.member.id),
+                  name: String(data.member.name)
+                }));
+              } catch (error) {}
+              renderWebPushMemberOptions();
+            }
+          """
+          if boot_old in s:
+              s=s.replace(boot_old,boot_new,1)
+          elif '!MEMBER_SELF_NAME_EDITING && data.member' not in s:
+              raise SystemExit('bootstrap member anchor not found')
+
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          grep -F 'MEMBER_SELF_NAME_EDITING' Script.html >/dev/null
+          grep -F '!MEMBER_SELF_NAME_EDITING && data.member' Script.html >/dev/null
+          grep -F "target.searchParams.set('source', 'chrome')" Script.html >/dev/null
+          grep -F 'category=android.intent.category.BROWSABLE;end' Script.html >/dev/null
+          if grep -F 'S.browser_fallback_url' Script.html >/dev/null; then
+            echo 'Drive-risk browser_fallback_url still present'; exit 1
+          fi
+
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "Name edit + Drive-safe install ${GITHUB_SHA::7}"
+
+      - name: Verify live MAIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 7
+          curl --fail --location --retry 5 --retry-delay 3 --max-time 90 \
+            "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F 'MEMBER_SELF_NAME_EDITING' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F '!MEMBER_SELF_NAME_EDITING && data.member' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'category=android.intent.category.BROWSABLE;end' "$RUNNER_TEMP/live.html" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/live.html" >/dev/null; then exit 1; fi
+          for key in memberSelfSearchInput memberSelfMatches memberAlertToggle memberVibrationToggle memberAppInstallToggle memberSelfDone; do
+            grep -F "$key" "$RUNNER_TEMP/live.html" >/dev/null
+          done
+
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          STATUS='${{ job.status }}'
+          printf 'status=%s\ncommit=%s\nrun=%s\n' "$STATUS" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/jayuminton/MAIN_NAME_DRIVE_FIX_RESULT.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/MAIN_NAME_DRIVE_FIX_RESULT.txt
+          git commit -m "Record MAIN name/Drive fix: $STATUS" || exit 0
+          git pull --rebase origin main || true
+          git push
