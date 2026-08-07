@@ -1,0 +1,77 @@
+name: Inspect PUSH token registration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-push-register.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Pull and inspect PUSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          test -n "$PUSH_SCRIPT_ID" && test "$PUSH_SCRIPT_ID" != null
+          WORK="$RUNNER_TEMP/push"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          python3 - "$GITHUB_WORKSPACE/deployment/jayuminton/PUSH_REGISTER_DIAGNOSTIC.txt" <<'PY'
+          from pathlib import Path
+          import re,sys
+          out=Path(sys.argv[1])
+          files=list(Path('.').glob('*.js'))+list(Path('.').glob('*.gs'))
+          text='\n'.join(p.read_text(encoding='utf-8',errors='ignore') for p in files)
+          keys=['register_web_token','unregister_web_token']
+          lines=text.splitlines()
+          picked=[]
+          for i,line in enumerate(lines):
+              if any(k in line for k in keys):
+                  a=max(0,i-12); b=min(len(lines),i+45)
+                  picked.extend(lines[a:b]); picked.append('---CUT---')
+          raw='\n'.join(picked)
+          # redact URLs, emails and long opaque literals while retaining control-flow/Sheet operations
+          raw=re.sub(r'https?://[^\s\"\']+','<URL>',raw)
+          raw=re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}','<EMAIL>',raw)
+          raw=re.sub(r'([\"\'])[A-Za-z0-9_\-]{32,}\1',r'\1<OPAQUE>\1',raw)
+          report=[]
+          report.append('files='+','.join(p.name for p in files))
+          report.append('register_occurrences='+str(text.count('register_web_token')))
+          report.append('unregister_occurrences='+str(text.count('unregister_web_token')))
+          report.append('has_appendRow='+str('appendRow' in raw))
+          report.append('has_setValue='+str('setValue' in raw or 'setValues' in raw))
+          report.append('has_deleteRow='+str('deleteRow' in raw))
+          report.append('has_token_lookup='+str(bool(re.search(r'token.*(?:find|index|===|==)|(?:find|index).*token',raw,re.I))))
+          report.append('---SANITIZED_CONTEXT---')
+          report.append(raw[:16000])
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text('\n'.join(report),encoding='utf-8')
+          PY
+          cd "$GITHUB_WORKSPACE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '4189822+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/PUSH_REGISTER_DIAGNOSTIC.txt
+          git commit -m 'Record PUSH token registration diagnostic' || exit 0
+          git pull --rebase origin main || true
+          git push
