@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "자유민턴 코트현황",
+  "short_name": "자유민턴 코트현황",
+  "description": "자유민턴 사용자용 코트현황과 내 순서 알림·진동",
+  "scope": "/",
+  "start_url": "/?app=user&mode=user&source=pwa",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#f3f5fa",
+  "theme_color": "#315efb",
+  "icons": [
+    {"src":"/icon-198.png?v=208","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/icon-512.png?v=208","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"/icon-198.png?v=208","sizes":"192x192","type":"image/png","purpose":"maskable"},
+    {"src":"/icon-512.png?v=208","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ],
+  "lang": "ko-KR",
+  "dir": "ltr",
+  "orientation": "any",
+  "prefer_related_applications": false,
+  "categories": ["sports", "utilities"],
+  "launch_handler": {"client_mode":"navigate-existing"}
+}
