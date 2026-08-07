@@ -1,0 +1,84 @@
+name: Snapshot current MAIN source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/snapshot-current-main-source.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-main-source-snapshot
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clasp and jq
+        run: npm install --global @google/clasp@latest
+
+      - name: Pull current MAIN Apps Script
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON"
+          test -n "$CLASPRC_JSON"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainScriptId')"
+          test -n "$MAIN_SCRIPT_ID"
+          rm -rf source-snapshot/current-main
+          mkdir -p source-snapshot/current-main
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > source-snapshot/current-main/.clasp.json
+          cd source-snapshot/current-main
+          clasp pull
+          rm -f .clasp.json
+          sha256sum * | sort > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Compare with uploaded v1.6.37 hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd source-snapshot/current-main
+          cat > EXPECTED_V1637_SHA256.txt <<'EOF'
+          34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0  Admin.html
+          7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b  Code.gs
+          6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c  Index.html
+          05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441  Script.html
+          f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625  Style.html
+          EOF
+          if sha256sum --check EXPECTED_V1637_SHA256.txt; then
+            echo 'MATCHES_V1637=true' > SOURCE_COMPARISON.txt
+          else
+            echo 'MATCHES_V1637=false' > SOURCE_COMPARISON.txt
+          fi
+          cat SOURCE_COMPARISON.txt
+
+      - name: Commit snapshot for exact inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add source-snapshot/current-main
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Snapshot current MAIN Apps Script source'
+          git push origin HEAD:main
