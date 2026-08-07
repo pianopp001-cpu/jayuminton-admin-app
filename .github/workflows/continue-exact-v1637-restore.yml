@@ -586,6 +586,18 @@ jobs:
           curl --fail --location --retry 5 --retry-delay 3 --max-time 90 --output "$BODY" --write-out '%{url_effective}' "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" > "$FINAL"
           if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then echo 'Drive redirect'; cat "$FINAL"; exit 1; fi
           for key in memberSelfSearchInput memberSelfMatches memberAlertToggle memberVibrationToggle memberAppInstallToggle memberSelfDone; do grep -F "$key" "$BODY" >/dev/null; done
+
+          # The android-embedded install flow was switched from an automatic Chrome
+          # intent attempt (the source of the Google Drive error) to a plain
+          # copy-the-link message. Verify that actually deployed instead of assuming it.
+          if ! grep -F '길게 눌러 복사한 뒤 Chrome' "$BODY" >/dev/null; then
+            echo 'Copy-link install message missing from live user page'
+            exit 1
+          fi
+          if grep -F "openMemberInstallInChrome(installUrl);" "$BODY" >/dev/null; then
+            echo 'Old automatic Chrome intent call still present in live user page'
+            exit 1
+          fi
           if grep -E '// v1637-final[0-9]+-main' "$BODY" >/dev/null; then echo 'Visible debug marker still live'; exit 1; fi
 
           # Admin mode was never actually verified before - only user mode was checked,
