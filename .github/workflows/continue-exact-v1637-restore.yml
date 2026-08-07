@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Restore original controls and deploy
+    name: Keep v1.6.37 design and fix behavior only
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -64,10 +64,10 @@ jobs:
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
             echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
             echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
-            echo "BUILD_ROOT=$RUNNER_TEMP/v1637-build"
+            echo "BUILD_ROOT=$RUNNER_TEMP/v1637-behavior-fix"
           } >> "$GITHUB_ENV"
 
-      - name: Verify and redeploy exact v1.6.37 MAIN
+      - name: Patch MAIN install function only and redeploy
         shell: bash
         run: |
           set -euo pipefail
@@ -77,25 +77,62 @@ jobs:
           cd "$WORK"
           clasp pull
 
+          # Visible v1.6.37 UI must stay byte-for-byte unchanged.
           printf '%s  %s\n' \
             '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
             '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
             '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
-            '05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441' Script.html \
             'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
 
-          grep -F 'id="memberSelfSearchInput"' Index.html
-          grep -F 'id="memberSelfMatches"' Index.html
-          grep -F 'id="memberAlertToggle"' Index.html
-          grep -F 'id="memberVibrationToggle"' Index.html
-          grep -F 'id="memberAppInstallToggle"' Index.html
-          grep -F 'id="memberSelfDone"' Index.html
-          grep -F '>알림 ON</button>' Index.html
-          grep -F '>진동 ON</button>' Index.html
-          grep -F '>앱/웹</button>' Index.html
-          grep -F '>완료</button>' Index.html
+          python3 - <<'PY'
+          from pathlib import Path
 
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "Exact v1.6.37 controls ${GITHUB_SHA::7}"
+          path = Path('Script.html')
+          text = path.read_text(encoding='utf-8')
+          start_marker = 'function openMemberInstallInChrome(installUrl) {'
+          next_marker = 'function openMemberInstallInSafari(installUrl) {'
+          start = text.find(start_marker)
+          end = text.find(next_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('Could not locate MAIN Chrome install function')
+
+          fixed = """function openMemberInstallInChrome(installUrl) {
+            // Keep the v1.6.37 UI, but use the proven v1.6.39 direct-Chrome flow
+            // with the v1.6.40 Google-Drive fix: no browser_fallback_url.
+            try {
+              const target = new URL(installUrl);
+              if (target.origin !== UNIFIED_MEMBER_APP_ORIGIN) throw new Error('invalid member app origin');
+              target.searchParams.set('install', '1');
+              target.searchParams.set('external', '1');
+              target.searchParams.set('source', 'chrome');
+              target.searchParams.set('app', 'user');
+              target.searchParams.set('mode', 'user');
+              const hostPath = target.host + target.pathname + target.search + target.hash;
+              const intentUrl = 'intent://' + hostPath +
+                '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+                'category=android.intent.category.BROWSABLE;end';
+              navigateMemberTop(intentUrl);
+              return;
+            } catch (error) {}
+            navigateMemberTop('intent://jayuminton-push.web.app/?install=1&external=1&source=chrome&app=user&mode=user' +
+              '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+              'category=android.intent.category.BROWSABLE;end');
+          }
+
+          """
+          text = text[:start] + fixed + text[end:]
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F "target.searchParams.set('source', 'chrome')" Script.html >/dev/null
+          grep -F 'category=android.intent.category.BROWSABLE;end' Script.html >/dev/null
+          if grep -F 'S.browser_fallback_url' Script.html >/dev/null; then
+            echo 'MAIN still contains unsafe browser_fallback_url'
+            exit 1
+          fi
+
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v1.6.37 design + install behavior fix ${GITHUB_SHA::7}"
 
       - name: Refresh PUSH deployment
         shell: bash
@@ -106,9 +143,9 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "v1.6.37 ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "v1.6.37 behavior fix ${GITHUB_SHA::7}"
 
-      - name: Verify live MAIN by control IDs
+      - name: Verify live MAIN design and install path
         shell: bash
         run: |
           set -euo pipefail
@@ -117,22 +154,19 @@ jobs:
           FINAL="$RUNNER_TEMP/live-main-url.txt"
           curl --fail --location --retry 5 --retry-delay 3 --max-time 90 \
             --output "$BODY" --write-out '%{url_effective}' \
-            "$MAIN_URL?mode=user&app=user&source=exact-v1637-$GITHUB_RUN_ID" > "$FINAL"
-
+            "$MAIN_URL?mode=user&app=user&source=behavior-fix-$GITHUB_RUN_ID" > "$FINAL"
           if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then
-            echo 'MAIN actually redirected to Google Drive'; cat "$FINAL"; exit 1
+            echo 'MAIN redirected to Google Drive'; cat "$FINAL"; exit 1
+          fi
+          for key in memberSelfSearchInput memberSelfMatches memberAlertToggle memberVibrationToggle memberAppInstallToggle memberSelfDone; do
+            grep -F "$key" "$BODY" >/dev/null || { echo "Missing original UI marker: $key"; exit 1; }
+          done
+          grep -F 'category=android.intent.category.BROWSABLE;end' "$BODY" >/dev/null || { echo 'Fixed MAIN Chrome intent is not live'; exit 1; }
+          if grep -F 'S.browser_fallback_url' "$BODY" >/dev/null; then
+            echo 'Unsafe MAIN browser fallback is live'; exit 1
           fi
 
-          python3 - "$BODY" <<'PY'
-          import sys
-          s=open(sys.argv[1],encoding='utf-8').read()
-          for key in ['memberSelfSearchInput','memberSelfMatches','memberAlertToggle','memberVibrationToggle','memberAppInstallToggle','memberSelfDone','queue-panel']:
-              if key not in s:
-                  raise SystemExit('Original live UI marker missing: '+key)
-          print('Live MAIN original control IDs verified.')
-          PY
-
-      - name: Build exact v1.6.37 PWA with install fixes
+      - name: Build exact v1.6.37 design with fixed member and install behavior
         shell: bash
         run: |
           set -euo pipefail
@@ -145,43 +179,125 @@ jobs:
           cp deployment/jayuminton/exact-v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
           cp deployment/jayuminton/exact-v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
 
-          # Do not block deployment on an obsolete hard-coded checksum. Validate the actual required fix.
-          ! grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js"
-          grep -F 'category=android.intent.category.BROWSABLE;end' "$BUILD_ROOT/web-push/setup-v205.js"
-          grep -F 'function buildAndroidChromeIntent()' "$BUILD_ROOT/web-push/setup-v205.js"
-
           python3 - <<'PY'
           import os
           from pathlib import Path
 
-          root=Path(os.environ['BUILD_ROOT'])/'web-push'
-          config_path=root/'config-v204.js'
-          config=config_path.read_text(encoding='utf-8')
-          config=config.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
-          if '__MEMBER_PAGE_URL__' in config or '__RELAY_URL__' in config:
-              raise SystemExit('URL injection failed')
-          config_path.write_text(config,encoding='utf-8')
+          root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+          setup_path = root / 'setup-v205.js'
+          setup = setup_path.read_text(encoding='utf-8')
 
-          setup_path=root/'setup-v205.js'
-          setup=setup_path.read_text(encoding='utf-8')
-          anchor="  const externalBrowserEntry = query.get('source') === 'embedded' || query.get('external') === '1';\n"
-          fix=anchor+"""  // 앱 삭제 후 Chrome 사이트 저장값만 남아 설치완료로 오인하는 것을 막는다.
+          # Clear stale installed state only when not actually running standalone.
+          anchor = "  syncStandaloneInstallState();\n  frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';\n"
+          if anchor in setup and 'name-install-final2' not in setup:
+              setup = setup.replace(anchor, """  syncStandaloneInstallState();
           if (!isStandaloneApp()) {
             try {
               localStorage.removeItem(STORAGE.installConfirmed);
-              if (localStorage.getItem(STORAGE.installChoice) === 'on') {
-                localStorage.removeItem(STORAGE.installChoice);
-              }
+              if (localStorage.getItem(STORAGE.installChoice) === 'on') localStorage.removeItem(STORAGE.installChoice);
             } catch (_) {}
           }
+          frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
+          """, 1)
+
+          # Typing a different name must stop the old saved member from winning.
+          listener_anchor = "  connectButton.addEventListener('click', handleAlarmButton);\n"
+          if 'typedMatchesSavedMember' not in setup:
+              if listener_anchor not in setup:
+                  raise SystemExit('Name input listener anchor missing')
+              setup = setup.replace(listener_anchor, """  connectButton.addEventListener('click', handleAlarmButton);
+          nameInput.addEventListener('input', () => {
+            const typed = firstTwoSearchChars(nameInput.value);
+            const saved = member && member.name ? firstTwoSearchChars(member.name) : '';
+            if (member && typed && typed !== saved) {
+              member = null;
+              try { localStorage.removeItem(STORAGE.member); } catch (_) {}
+              isConnected = false;
+              setOff('새 이름을 입력한 뒤 아래 말풍선에서 본인을 눌러 주세요.');
+              sendBootstrap();
+            }
+          });
+          """, 1)
+
+              old_match = """    const exactSelected = member && member.id
+              ? members.find((item) => String(item.id) === String(member.id))
+              : null;
+            const matches = exactSelected
+              ? [exactSelected]
+              : members.filter((item) => firstTwoSearchChars(item.name) === typed);
           """
-          if anchor not in setup:
-              raise SystemExit('Install-state fix anchor missing')
-          setup=setup.replace(anchor,fix,1)
-          setup_path.write_text(setup,encoding='utf-8')
+              new_match = """    const typedMatchesSavedMember = Boolean(
+              member && member.id && firstTwoSearchChars(member.name) === typed
+            );
+            const exactSelected = typedMatchesSavedMember
+              ? members.find((item) => String(item.id) === String(member.id))
+              : null;
+            const matches = exactSelected
+              ? [exactSelected]
+              : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+          """
+              if old_match not in setup:
+                  raise SystemExit('Saved member match anchor missing')
+              setup = setup.replace(old_match, new_match, 1)
+
+          # Clicking a new name bubble must replace the old member and old token.
+          if 'const memberChanged = Boolean' not in setup:
+              branch = "} else if (data.type === 'JAYUMINTON_MEMBER_SELECTED' || data.type === 'JAYUMINTON_MEMBER_CLICKED') {"
+              branch_start = setup.find(branch)
+              assignment = """        member = {id:String(data.member.id), name:String(data.member.name)};
+                saveJson(STORAGE.member, member);
+                nameInput.value = shortName(member.name);
+          """
+              pos = setup.find(assignment, branch_start)
+              if branch_start < 0 or pos < 0 or pos > branch_start + 1400:
+                  raise SystemExit('Member replacement anchor missing')
+              replacement = """        const nextMember = {id:String(data.member.id), name:String(data.member.name)};
+                const memberChanged = Boolean(member && String(member.id) !== String(nextMember.id));
+                member = nextMember;
+                saveJson(STORAGE.member, member);
+                nameInput.value = shortName(member.name);
+                if (memberChanged) {
+                  try { localStorage.removeItem(STORAGE.token); } catch (_) {}
+                  isConnected = false;
+                  setOff(member.name + '님으로 변경했습니다. 완료를 눌러 알림을 다시 연결해 주세요.');
+                }
+          """
+              setup = setup[:pos] + replacement + setup[pos + len(assignment):]
+
+          setup += "\n// name-install-final2\n"
+          setup_path.write_text(setup, encoding='utf-8')
+
+          # Force phones to load the new behavior JS. Visible HTML structure is unchanged.
+          index_path = root / 'index.html'
+          index = index_path.read_text(encoding='utf-8')
+          index = index.replace('/setup-v205.js?v=1637', '/setup-v205.js?v=1637-final2')
+          index = index.replace('/config-v204.js?v=1637', '/config-v204.js?v=1637-final2')
+          index_path.write_text(index, encoding='utf-8')
+
+          # Inject real live endpoints.
+          config_path = root / 'config-v204.js'
+          config = config_path.read_text(encoding='utf-8')
+          config = config.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
+          config_path.write_text(config, encoding='utf-8')
+
+          worker_path = root / 'firebase-messaging-sw.js'
+          worker = worker_path.read_text(encoding='utf-8')
+          worker = worker.replace("const JAYUMINTON_SW_VERSION = '1.6.37-fix1';", "const JAYUMINTON_SW_VERSION = '1.6.37-final2';")
+          worker = worker.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v211';", "const JAYUMINTON_CACHE = 'jayuminton-shell-v212';")
+          worker_path.write_text(worker, encoding='utf-8')
           PY
 
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
+          grep -F 'typedMatchesSavedMember' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'const memberChanged = Boolean' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'promptResult = promptEvent.prompt()' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'appInstallChromeLink.href = links.intentUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then
+            echo 'Unsafe PWA browser fallback remains'; exit 1
+          fi
+          if grep -F 'window.location.href = links.targetUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then
+            echo 'Refresh-loop fallback remains'; exit 1
+          fi
 
           BASE="${HOSTING_URL%/}"
           for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
@@ -195,20 +311,29 @@ jobs:
         run: |
           set -euo pipefail
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive \
-            --message "Exact v1.6.37 controls and Drive fix ${GITHUB_SHA::7}"
+            --message "v1.6.37 design unchanged, install and name behavior fixed ${GITHUB_SHA::7}"
 
-      - name: Verify live Firebase
+      - name: Verify live Firebase behavior
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
           BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/?verify=$BUST" > "$RUNNER_TEMP/index.html"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$BUST" > "$RUNNER_TEMP/setup.js"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/config-v204.js?verify=$BUST" > "$RUNNER_TEMP/config.js"
-          ! grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup.js"
-          grep -F '앱 삭제 후 Chrome 사이트 저장값만 남아 설치완료로 오인하는 것을 막는다.' "$RUNNER_TEMP/setup.js"
-          grep -F "$MAIN_URL" "$RUNNER_TEMP/config.js"
-          grep -F "$PUSH_URL" "$RUNNER_TEMP/config.js"
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$BUST" > "$RUNNER_TEMP/sw.js"
+          grep -F 'setup-v205.js?v=1637-final2' "$RUNNER_TEMP/index.html" >/dev/null
+          grep -F 'typedMatchesSavedMember' "$RUNNER_TEMP/setup.js" >/dev/null
+          grep -F 'const memberChanged = Boolean' "$RUNNER_TEMP/setup.js" >/dev/null
+          grep -F 'promptResult = promptEvent.prompt()' "$RUNNER_TEMP/setup.js" >/dev/null
+          grep -F 'appInstallChromeLink.href = links.intentUrl' "$RUNNER_TEMP/setup.js" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup.js" >/dev/null; then exit 1; fi
+          if grep -F 'window.location.href = links.targetUrl' "$RUNNER_TEMP/setup.js" >/dev/null; then exit 1; fi
+          grep -F "$MAIN_URL" "$RUNNER_TEMP/config.js" >/dev/null
+          grep -F "$PUSH_URL" "$RUNNER_TEMP/config.js" >/dev/null
+          grep -F 'jayuminton-shell-v212' "$RUNNER_TEMP/sw.js" >/dev/null
+          echo 'Install and member-name behavior fix is live without design changes.'
 
       - name: Record live restore result
         if: always()
@@ -220,6 +345,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/jayuminton/EXACT_V1637_LIVE_RESULT.txt
-          git commit -m "Record exact v1.6.37 live restore: $STATUS" || exit 0
+          git commit -m "Record exact v1.6.37 behavior fix: $STATUS" || exit 0
           git pull --rebase origin main || true
           git push
