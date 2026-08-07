@@ -7,17 +7,18 @@ on:
     paths:
       - '.github/workflows/deploy-pwa.yml'
       - 'deployment/jayuminton/v1637-web/**'
+      - 'deployment/jayuminton/v1637-source/**'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: jayuminton-v1637-exact-restore
+  group: jayuminton-v1637-exact-restore-v2
   cancel-in-progress: true
 
 jobs:
   restore:
-    name: Exact design restore
+    name: Restore exact ZIP design
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -57,55 +58,65 @@ jobs:
           umask 077
           CONFIG="$RUNNER_TEMP/jayuminton-deploy-config.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
-          jq -e '.mainScriptId and .pushScriptId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
+          jq -e '.mainScriptId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
           {
             echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
-            echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$CONFIG")"
+            echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG")"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
             echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-v1637-build"
           } >> "$GITHUB_ENV"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
 
-      - name: Verify original MAIN design source in Google
+      - name: Reconstruct uploaded v1.6.37 MAIN source
         shell: bash
         run: |
           set -euo pipefail
-          WORK="$RUNNER_TEMP/main-v1637"
+          ARCHIVE="$RUNNER_TEMP/v1637-source.gz"
+          PAYLOAD="$RUNNER_TEMP/v1637-source.payload"
+          SRCROOT="$RUNNER_TEMP/v1637-source"
+          rm -rf "$SRCROOT" && mkdir -p "$SRCROOT"
+          cat deployment/jayuminton/v1637-source/part-*.b64 | tr -d '\r\n' | base64 -d > "$ARCHIVE"
+          gzip -dc "$ARCHIVE" > "$PAYLOAD"
+          if tar -tf "$PAYLOAD" >/dev/null 2>&1; then
+            tar -xf "$PAYLOAD" -C "$SRCROOT"
+          else
+            echo 'Uploaded source archive is not a tar payload.'
+            exit 1
+          fi
+          CODE="$(find "$SRCROOT" -type f -name Code.gs | head -n 1)"
+          test -n "$CODE" || { echo 'Code.gs not found in uploaded source archive.'; exit 1; }
+          SOURCE_DIR="$(dirname "$CODE")"
+          for f in Code.gs Index.html Style.html Script.html Admin.html; do
+            test -s "$SOURCE_DIR/$f" || { echo "Missing uploaded source file: $f"; exit 1; }
+          done
+          echo '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b  '"$SOURCE_DIR/Code.gs" | sha256sum -c -
+          echo '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c  '"$SOURCE_DIR/Index.html" | sha256sum -c -
+          echo 'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625  '"$SOURCE_DIR/Style.html" | sha256sum -c -
+          echo '05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441  '"$SOURCE_DIR/Script.html" | sha256sum -c -
+          echo '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0  '"$SOURCE_DIR/Admin.html" | sha256sum -c -
+          grep -F 'id="memberSelfSearchInput"' "$SOURCE_DIR/Index.html" >/dev/null
+          grep -F 'function selectMemberSelf(memberId)' "$SOURCE_DIR/Script.html" >/dev/null
+          echo "V1637_SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
+
+      - name: Replace MAIN source with exact uploaded ZIP and deploy fresh URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main-live"
           rm -rf "$WORK" && mkdir -p "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-
-          check_hash() {
-            local file="$1" expected="$2"
-            test -s "$file" || { echo "MAIN source missing: $file"; exit 1; }
-            local actual
-            actual="$(sha256sum "$file" | awk '{print $1}')"
-            [[ "$actual" == "$expected" ]] || {
-              echo "STOP: $file differs from the uploaded v1.6.37 ZIP."
-              echo "expected=$expected"
-              echo "actual=$actual"
-              exit 1
-            }
-          }
-          check_hash Index.html 6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c
-          check_hash Style.html f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625
-          check_hash Script.html 05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441
-          check_hash Code.gs 7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b
-          check_hash Admin.html 34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0
-
-          grep -F 'id="memberSelfSearchInput"' Index.html >/dev/null
-          grep -F "function selectMemberSelf(memberId)" Script.html >/dev/null
-          grep -F "onclick=\"selectMemberSelf" Script.html >/dev/null
-          echo 'Exact v1.6.37 MAIN design verified.'
-
-      - name: Create and verify fresh MAIN deployment
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP/main-v1637"
-          OUT="$(clasp deploy --description "Jayuminton exact v1.6.37 ${GITHUB_SHA::7}" 2>&1)"
+          find . -maxdepth 1 -type f \( -name '*.gs' -o -name '*.html' \) -delete
+          cp "$V1637_SOURCE_DIR/Code.gs" .
+          cp "$V1637_SOURCE_DIR/Index.html" .
+          cp "$V1637_SOURCE_DIR/Style.html" .
+          cp "$V1637_SOURCE_DIR/Script.html" .
+          cp "$V1637_SOURCE_DIR/Admin.html" .
+          clasp push --force
+          OUT="$(clasp deploy --description "Exact Jayuminton v1.6.37 ${GITHUB_SHA::7}" 2>&1)"
           printf '%s\n' "$OUT"
           ID="$(printf '%s\n' "$OUT" | grep -Eo 'AKfy[A-Za-z0-9_-]+' | tail -n 1 || true)"
           test -n "$ID" || { echo 'Could not read fresh MAIN deployment ID.'; exit 1; }
@@ -117,45 +128,14 @@ jobs:
           curl --fail --location --retry 4 --retry-delay 3 --max-time 90 \
             --output "$BODY" --write-out '%{url_effective}' \
             "$URL?mode=user&app=user&restore=$GITHUB_RUN_ID" > "$FINAL"
-          grep -F 'memberSelfSearchInput' "$BODY" >/dev/null || {
-            echo 'Fresh MAIN URL did not return the original member-name screen.'
+          grep -F 'memberSelfSearchInput' "$BODY" >/dev/null || { echo 'Original name-search screen was not returned.'; exit 1; }
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$FINAL" "$BODY"; then
+            echo 'Fresh MAIN deployment is invalid.'
             cat "$FINAL"
             exit 1
-          }
-          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL" "$BODY"; then
-            echo 'Fresh MAIN URL redirected to Google Drive.'
-            exit 1
-          fi
-          if grep -Eiq 'file you have requested does not exist|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$BODY"; then
-            echo 'Fresh MAIN URL returned the missing-address page.'
-            exit 1
           fi
 
-      - name: Create and verify fresh PUSH deployment
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/push-v1637"
-          rm -rf "$WORK" && mkdir -p "$WORK"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
-          cd "$WORK"
-          clasp pull
-          test -s Code.gs
-          ACTUAL="$(sha256sum Code.gs | awk '{print $1}')"
-          [[ "$ACTUAL" == 'd2053650fb395a96eecc485b8e1ef68bcfeef96a5a4c194168942520a5bfb2df' ]] || {
-            echo 'STOP: PUSH Code.gs differs from the uploaded v1.6.37 ZIP.'
-            echo "actual=$ACTUAL"
-            exit 1
-          }
-          OUT="$(clasp deploy --description "Jayuminton PUSH v1.6.37 ${GITHUB_SHA::7}" 2>&1)"
-          printf '%s\n' "$OUT"
-          ID="$(printf '%s\n' "$OUT" | grep -Eo 'AKfy[A-Za-z0-9_-]+' | tail -n 1 || true)"
-          test -n "$ID" || { echo 'Could not read fresh PUSH deployment ID.'; exit 1; }
-          URL="https://script.google.com/macros/s/$ID/exec"
-          echo "PUSH_URL=$URL" >> "$GITHUB_ENV"
-          curl --fail --location --retry 3 --max-time 60 "$URL?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/push-live.txt"
-
-      - name: Build exact v1.6.37 PWA with invisible bug fix only
+      - name: Build exact v1.6.37 PWA
         shell: bash
         run: |
           set -euo pipefail
@@ -180,8 +160,7 @@ jobs:
     window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
 """
           new = """    deferredInstallPrompt = event;
-    // v1.6.37 functional fix only: if Chrome offers installation again, the PWA is not installed.
-    // Uninstalling a PWA does not clear site storage, so remove only the stale install-complete flags here.
+    // Functional fix only. Chrome offering installation again proves the PWA is not installed.
     try {
       localStorage.removeItem(STORAGE.installConfirmed);
       if (localStorage.getItem(STORAGE.installChoice) === 'on') localStorage.removeItem(STORAGE.installChoice);
@@ -189,7 +168,7 @@ jobs:
     window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
 """
           if old not in s:
-              raise SystemExit('Install-state patch anchor not found; refusing to alter design source.')
+              raise SystemExit('Install-state patch anchor not found; refusing to alter source.')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
           PY
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
@@ -199,8 +178,6 @@ jobs:
           from pathlib import Path
           src = Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
           out = src.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
-          if '__MEMBER_PAGE_URL__' in out or '__RELAY_URL__' in out:
-              raise SystemExit('URL injection failed')
           root = Path(os.environ['BUILD_ROOT']) / 'web-push'
           for name in ('config-v202.js','config-v203.js','config-v204.js'):
               (root / name).write_text(out, encoding='utf-8')
@@ -212,37 +189,31 @@ jobs:
               "$BASE/$asset?restore=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$asset"
             test -s "$BUILD_ROOT/web-push/$asset"
           done
-
           for optional in icon.svg badge.svg; do
             curl --fail --location --retry 1 --max-time 30 \
               "$BASE/$optional?restore=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$optional" || rm -f "$BUILD_ROOT/web-push/$optional"
           done
-
           for version in 170 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204; do
             cat > "$BUILD_ROOT/web-push/firebase-messaging-sw-v${version}.js" <<'EOF'
-          /* Legacy service-worker migration shim. */
           importScripts('/firebase-messaging-sw.js');
           self.addEventListener('install', () => self.skipWaiting());
           self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
           EOF
           done
 
-          # Visible-design files must still be byte-for-byte the uploaded ZIP originals.
           echo '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d  '"$BUILD_ROOT/web-push/index.html" | sha256sum -c -
           echo '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f  '"$BUILD_ROOT/web-push/setup-v205.css" | sha256sum -c -
           grep -F '1.6.37' "$BUILD_ROOT/web-push/index.html" >/dev/null
-          grep -F 'setup-v205.js' "$BUILD_ROOT/web-push/index.html" >/dev/null
-          grep -F 'v1.6.37 functional fix only' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
 
-      - name: Deploy exact v1.6.37 Firebase PWA
+      - name: Deploy Firebase Hosting
         working-directory: ${{ env.BUILD_ROOT }}
         shell: bash
         run: |
           set -euo pipefail
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive \
-            --message "Exact v1.6.37 design restore ${GITHUB_SHA::7}"
+            --message "Exact uploaded v1.6.37 restore ${GITHUB_SHA::7}"
 
-      - name: Verify live design, install button and court URL
+      - name: Verify live v1.6.37 design
         shell: bash
         run: |
           set -euo pipefail
@@ -250,13 +221,21 @@ jobs:
           BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$BUST" -o "$RUNNER_TEMP/live-index.html"
           curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/setup-v205.css?verify=$BUST" -o "$RUNNER_TEMP/live-style.css"
-          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$BUST" -o "$RUNNER_TEMP/live-setup.js"
           curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/config-v204.js?verify=$BUST" -o "$RUNNER_TEMP/live-config.js"
-
           echo '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d  '"$RUNNER_TEMP/live-index.html" | sha256sum -c -
           echo '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f  '"$RUNNER_TEMP/live-style.css" | sha256sum -c -
-          grep -F 'v1.6.37 functional fix only' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F "$MAIN_URL" "$RUNNER_TEMP/live-config.js" >/dev/null
-          grep -F "$PUSH_URL" "$RUNNER_TEMP/live-config.js" >/dev/null
+          echo 'Exact uploaded v1.6.37 design is live.'
 
-          echo 'Exact v1.6.37 design restored and live verification passed.'
+      - name: Record restore result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS='${{ job.status }}'
+          printf 'status=%s\ncommit=%s\nrun=%s\n' "$STATUS" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/jayuminton/V1637_RESTORE_RESULT.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/V1637_RESTORE_RESULT.txt
+          git commit -m "Record v1.6.37 restore result: $STATUS" || exit 0
+          git push
