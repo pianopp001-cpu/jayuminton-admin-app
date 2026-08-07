@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application'
+    id 'com.google.gms.google-services'
+}
+
+android {
+    namespace 'com.jayuminton.member'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.jayuminton.member'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.5'
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../signing/jayuminton-release.jks')
+            storePassword 'JayuMinton14!'
+            keyAlias 'jayuminton'
+            keyPassword 'JayuMinton14!'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation platform('com.google.firebase:firebase-bom:34.16.0')
+    implementation 'com.google.firebase:firebase-messaging'
+}

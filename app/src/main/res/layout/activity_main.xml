@@ -9,4 +9,23 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:overScrollMode="never" />
+
+    <Button
+        android:id="@+id/refreshButton"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="10dp"
+        android:backgroundTint="#E8EDF7"
+        android:elevation="8dp"
+        android:gravity="center"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:padding="0dp"
+        android:text="↻"
+        android:textAllCaps="false"
+        android:textColor="#1F2A44"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:contentDescription="관리자 화면 새로고침" />
 </FrameLayout>

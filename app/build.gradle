@@ -1,6 +1,26 @@
+import java.net.URLEncoder
+
 plugins {
     id 'com.android.application'
 }
+
+def escapeBuildConfig = { String value ->
+    return (value ?: '')
+            .replace('\\', '\\\\')
+            .replace('"', '\\"')
+}
+
+def rawPushSharedSecret = System.getenv('JAYUMINTON_PUSH_SHARED_SECRET') ?: ''
+def rawAppsScriptUrl = System.getenv('JAYUMINTON_PUSH_APPS_SCRIPT_URL') ?: ''
+def pushEndpoint = rawAppsScriptUrl
+if (!rawAppsScriptUrl.isEmpty() && !rawPushSharedSecret.isEmpty()) {
+    String separator = rawAppsScriptUrl.contains('?') ? '&' : '?'
+    pushEndpoint = rawAppsScriptUrl + separator +
+            'key=' + URLEncoder.encode(rawPushSharedSecret, 'UTF-8')
+}
+
+def pushFunctionUrl = escapeBuildConfig(pushEndpoint)
+def pushSharedSecret = escapeBuildConfig(rawPushSharedSecret)
 
 android {
     namespace 'com.jayuminton.admin'
@@ -10,8 +30,13 @@ android {
         applicationId 'com.jayuminton.admin'
         minSdk 24
         targetSdk 34
-        versionCode 14
-        versionName '1.4'
+        versionCode 20
+        versionName '1.5'
+
+        // Existing native bridge field names are retained for compatibility.
+        // The endpoint is a free Google Apps Script relay.
+        buildConfigField 'String', 'PUSH_FUNCTION_URL', '"' + pushFunctionUrl + '"'
+        buildConfigField 'String', 'PUSH_SHARED_SECRET', '"' + pushSharedSecret + '"'
     }
 
     signingConfigs {
@@ -30,6 +55,10 @@ android {
             signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     compileOptions {

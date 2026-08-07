@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "자유민턴 코트배정 현황",
+  "short_name": "자유민턴",
+  "description": "자유민턴 코트배정 현황과 개인 배정 알림",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f7fb",
+  "theme_color": "#2457d6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

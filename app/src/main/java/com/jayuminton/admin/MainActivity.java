@@ -18,10 +18,20 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity implements TextToSpeech.OnInitListener {
@@ -32,12 +42,154 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     private static final String KEY_MEDIA_VOLUME = "media_volume";
     private static final String KEY_ALARM_VOLUME = "alarm_volume";
 
+    private static final String PUSH_HOOK_SCRIPT = """
+            (function installJayumintonAssignmentPushHook(){
+              if (window.__jayumintonAssignmentPushHookInstalled) return;
+              var attempts = 0;
+
+              function normalizeMembers(members){
+                return Array.isArray(members)
+                  ? members.filter(function(member){
+                      return member && member.id != null &&
+                        String(member.name || '').trim();
+                    }).map(function(member){
+                      return {
+                        id: String(member.id),
+                        name: String(member.name || '').trim()
+                      };
+                    })
+                  : [];
+              }
+
+              function membersFromIds(ids){
+                if (!Array.isArray(ids)) return [];
+                return normalizeMembers(ids.map(function(id){
+                  try {
+                    if (typeof memberById === 'function') {
+                      return memberById(id);
+                    }
+                    return Array.isArray(STATE.members)
+                      ? STATE.members.find(function(member){
+                          return member && String(member.id) === String(id);
+                        })
+                      : null;
+                  } catch (error) {
+                    return null;
+                  }
+                }));
+              }
+
+              function mostElapsedCourtNo(){
+                try {
+                  var fullCourts = [1,2,3,4].filter(function(courtNo){
+                    return STATE && STATE.courts &&
+                      Array.isArray(STATE.courts[courtNo]) &&
+                      STATE.courts[courtNo].length === 4;
+                  });
+                  if (!fullCourts.length) return 0;
+
+                  var timed = fullCourts.map(function(courtNo){
+                    var raw = STATE.courtStartedAt &&
+                      (STATE.courtStartedAt[courtNo] ||
+                       STATE.courtStartedAt[String(courtNo)] || '');
+                    var startedAt = Date.parse(String(raw || ''));
+                    return {
+                      courtNo: courtNo,
+                      startedAt: Number.isFinite(startedAt)
+                        ? startedAt
+                        : Number.POSITIVE_INFINITY
+                    };
+                  }).sort(function(left, right){
+                    return left.startedAt - right.startedAt ||
+                      left.courtNo - right.courtNo;
+                  });
+
+                  if (Number.isFinite(timed[0].startedAt)) {
+                    return timed[0].courtNo;
+                  }
+                  return fullCourts.sort(function(a,b){ return a-b; })[0];
+                } catch (error) {
+                  return 0;
+                }
+              }
+
+              function makeEventId(prefix, courtNo, members){
+                var ids = members.map(function(member){
+                  return member.id;
+                }).sort();
+                return prefix + '_' + Date.now().toString(36) + '_' +
+                  String(courtNo || 0) + '_' + ids.join('_');
+              }
+
+              function publish(payload){
+                try {
+                  window.NativePush.publishAssignment(
+                    JSON.stringify(payload)
+                  );
+                } catch (error) {}
+              }
+
+              function installHook(){
+                if (window.__jayumintonAssignmentPushHookInstalled) return true;
+                if (!window.NativePush) return false;
+                if (typeof rememberVoiceAnnouncement !== 'function') return false;
+
+                var originalRememberVoiceAnnouncement = rememberVoiceAnnouncement;
+                rememberVoiceAnnouncement = function(courtNo, members){
+                  var result = originalRememberVoiceAnnouncement.apply(this, arguments);
+                  try {
+                    var assigned = normalizeMembers(members);
+                    if (assigned.length === 4) {
+                      publish({
+                        type: 'court_assignment',
+                        assignmentId: makeEventId(
+                          'court', Number(courtNo), assigned
+                        ),
+                        courtNo: Number(courtNo),
+                        members: assigned
+                      });
+
+                      var promoted = membersFromIds(
+                        STATE && Array.isArray(STATE.waitGroups)
+                          ? (STATE.waitGroups[0] || [])
+                          : []
+                      );
+                      if (promoted.length > 0 && promoted.length <= 4) {
+                        var expectedCourtNo = mostElapsedCourtNo();
+                        if (expectedCourtNo >= 1 && expectedCourtNo <= 4) {
+                          publish({
+                            type: 'wait1_ready',
+                            assignmentId: makeEventId(
+                              'wait1', expectedCourtNo, promoted
+                            ),
+                            expectedCourtNo: expectedCourtNo,
+                            members: promoted
+                          });
+                        }
+                      }
+                    }
+                  } catch (error) {}
+                  return result;
+                };
+                window.__jayumintonAssignmentPushHookInstalled = true;
+                return true;
+              }
+
+              if (installHook()) return;
+              var timer = setInterval(function(){
+                attempts += 1;
+                if (installHook() || attempts >= 300) clearInterval(timer);
+              }, 100);
+            })();
+            """;
+
     private WebView webView;
     private TextToSpeech tts;
     private AudioManager audioManager;
     private final AtomicBoolean ttsReady = new AtomicBoolean(false);
     private final AtomicBoolean speaking = new AtomicBoolean(false);
     private final Object audioLock = new Object();
+    private final ExecutorService pushExecutor = Executors.newSingleThreadExecutor();
     private boolean ducking;
     private int originalMediaVolume = -1;
     private int originalAlarmVolume = -1;
@@ -61,6 +213,14 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         recoverAudioIfNeeded();
         tts = new TextToSpeech(this, this);
         configureWebView();
+        findViewById(R.id.refreshButton).setOnClickListener(view -> refreshPage());
+    }
+
+    private void refreshPage() {
+        if (tts != null) tts.stop();
+        speaking.set(false);
+        restoreAudio();
+        if (webView != null) webView.reload();
     }
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
@@ -78,13 +238,14 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.4");
+        settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.5");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
         webView.addJavascriptInterface(new VoiceBridge(), "NativeVoice");
+        webView.addJavascriptInterface(new PushBridge(), "NativePush");
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -101,9 +262,10 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                 super.onPageFinished(view, url);
                 view.evaluateJavascript(
                         "window.__JAYUMINTON_NATIVE_APP__=true;" +
-                        "document.documentElement.setAttribute('data-native-app','1');",
+                                "document.documentElement.setAttribute('data-native-app','1');",
                         null
                 );
+                view.evaluateJavascript(PUSH_HOOK_SCRIPT, null);
             }
         });
         webView.loadUrl(ADMIN_URL);
@@ -229,7 +391,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                     .apply();
 
             int maxMedia = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-            int minimumMusic = maxMedia > 0 ? 1 : 0;
+            int minimumMusic = maxMedia > 0 ? Math.min(6, maxMedia) : 0;
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, minimumMusic, 0);
 
             int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
@@ -268,6 +430,72 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().clear().apply();
     }
 
+    private void publishAssignment(String payloadJson) {
+        if (BuildConfig.PUSH_FUNCTION_URL.trim().isEmpty() ||
+                BuildConfig.PUSH_SHARED_SECRET.trim().isEmpty()) {
+            return;
+        }
+
+        pushExecutor.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                JSONObject payload = new JSONObject(payloadJson == null ? "{}" : payloadJson);
+                String type = payload.optString("type", "court_assignment").trim();
+                String assignmentId = payload.optString("assignmentId", "").trim();
+                JSONArray members = payload.optJSONArray("members");
+                int memberCount = members == null ? 0 : members.length();
+
+                boolean validCourtAssignment =
+                        "court_assignment".equals(type) &&
+                                payload.optInt("courtNo", 0) >= 1 &&
+                                payload.optInt("courtNo", 0) <= 4 &&
+                                memberCount == 4;
+                boolean validWaitOneReady =
+                        "wait1_ready".equals(type) &&
+                                payload.optInt("expectedCourtNo", 0) >= 1 &&
+                                payload.optInt("expectedCourtNo", 0) <= 4 &&
+                                memberCount >= 1 && memberCount <= 4;
+
+                if (assignmentId.isEmpty() ||
+                        (!validCourtAssignment && !validWaitOneReady)) {
+                    return;
+                }
+
+                URL url = new URL(BuildConfig.PUSH_FUNCTION_URL);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(12000);
+                connection.setRequestMethod("POST");
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                connection.setRequestProperty("X-Jayuminton-Key", BuildConfig.PUSH_SHARED_SECRET);
+
+                byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(body.length);
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(body);
+                }
+
+                int status = connection.getResponseCode();
+                InputStream response = status >= 200 && status < 300
+                        ? connection.getInputStream()
+                        : connection.getErrorStream();
+                if (response != null) {
+                    try (InputStream input = response) {
+                        byte[] buffer = new byte[512];
+                        while (input.read(buffer) != -1) {
+                            // Drain the response so the HTTP connection can close cleanly.
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                // Notification failure must never interrupt court operation or TTS.
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
+    }
+
     @Override
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
@@ -290,8 +518,10 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
             tts.shutdown();
         }
         restoreAudio();
+        pushExecutor.shutdownNow();
         if (webView != null) {
             webView.removeJavascriptInterface("NativeVoice");
+            webView.removeJavascriptInterface("NativePush");
             webView.destroy();
         }
         super.onDestroy();
@@ -338,6 +568,13 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         @JavascriptInterface
         public boolean isSpeaking() {
             return speaking.get() || (tts != null && tts.isSpeaking());
+        }
+    }
+
+    public final class PushBridge {
+        @JavascriptInterface
+        public void publishAssignment(String payloadJson) {
+            MainActivity.this.publishAssignment(payloadJson);
         }
     }
 }

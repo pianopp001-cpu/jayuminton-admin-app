@@ -1,0 +1,107 @@
+name: Build v1.5 Firebase APKs
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ v1.5-firebase ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+      JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Restore signing key
+        run: |
+          mkdir -p signing
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+
+      - name: Check admin push configuration
+        shell: bash
+        run: |
+          test -n "$JAYUMINTON_PUSH_SHARED_SECRET"
+          test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
+
+      - name: Restore v199 design and PIN session bridge
+        run: |
+          python3 scripts/prepare_v199_firebase_build.py
+          test -s app/src/main/assets/admin-runtime.js
+          test -s app/src/main/assets/court-orientation.js
+          test -s app/src/main/assets/frame-repair.js
+          test -s app/src/main/assets/page-repair.js
+          grep -F '__JAYUMINTON_ADMIN_CREDENTIAL__' app/src/main/assets/admin-runtime.js
+          grep -F 'jayuminton_admin_session_v1' app/src/main/assets/court-orientation.js
+          grep -F 'V199RuntimeBridge.install' app/src/main/java/com/jayuminton/admin/MainActivity.java
+
+      - name: Validate unified web files
+        run: |
+          node --check web-push/app.js
+          node --check web-push/firebase-messaging-sw.js
+          node --check < apps-script-push/Code.gs
+
+      - name: Build signed Firebase admin APK
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Verify signed APK and embedded v199 runtime
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          unzip -t "$APK"
+          unzip -l "$APK" | grep -F 'assets/admin-runtime.js'
+          unzip -l "$APK" | grep -F 'assets/court-orientation.js'
+          unzip -l "$APK" | grep -F 'assets/frame-repair.js'
+          unzip -l "$APK" | grep -F 'assets/page-repair.js'
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose "$APK"
+          ls -lh "$APK"
+
+      - name: Prepare deliverables
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/release/app-release.apk artifacts/jayuminton-admin-v199-firebase-pinfix-reinstall.apk
+          zip -r artifacts/jayuminton-v1.5-hosting-and-relay.zip \
+            apps-script-push web-push firebase.json \
+            deploy-web-push.bat V1_5_UNIFIED_MEMBER_SETUP.md
+
+      - name: Upload admin APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-admin-v199-firebase-pinfix-reinstall
+          path: artifacts/jayuminton-admin-v199-firebase-pinfix-reinstall.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload hosting and relay setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-v1.5-hosting-and-relay
+          path: artifacts/jayuminton-v1.5-hosting-and-relay.zip
+          if-no-files-found: error
+          retention-days: 30
