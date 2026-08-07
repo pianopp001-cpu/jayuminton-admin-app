@@ -588,6 +588,19 @@ jobs:
           for key in memberSelfSearchInput memberSelfMatches memberAlertToggle memberVibrationToggle memberAppInstallToggle memberSelfDone; do grep -F "$key" "$BODY" >/dev/null; done
           if grep -E '// v1637-final[0-9]+-main' "$BODY" >/dev/null; then echo 'Visible debug marker still live'; exit 1; fi
 
+          # Admin mode was never actually verified before - only user mode was checked,
+          # so a broken/missing admin push could report overall success. Check it directly.
+          ADMIN_BODY="$RUNNER_TEMP/admin.html"
+          curl --fail --location --retry 5 --retry-delay 3 --max-time 90 --output "$ADMIN_BODY" "$MAIN_URL?mode=admin&verify=$GITHUB_RUN_ID"
+          if ! grep -F 'onclick="startMemberEdit()"' "$ADMIN_BODY" >/dev/null; then
+            echo 'Admin 편집 button missing from live admin page'
+            exit 1
+          fi
+          if ! grep -F 'function updateMemberSelfProfile' "$ADMIN_BODY" >/dev/null; then
+            echo 'updateMemberSelfProfile client wiring missing from live admin page'
+            exit 1
+          fi
+
       - name: Build from the real v1.6.37 PWA source
         shell: bash
         run: |
