@@ -101,19 +101,51 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sleep 8
+
           BODY="$RUNNER_TEMP/main.html"
           FINAL="$RUNNER_TEMP/main-url.txt"
-          curl --fail --location --retry 4 --max-time 90 --output "$BODY" --write-out '%{url_effective}' "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" > "$FINAL"
-          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then exit 1; fi
-          grep -F 'member-complete-auto-select-v12' "$BODY" >/dev/null
+          MAIN_OK=0
+          for attempt in $(seq 1 12); do
+            : > "$BODY"
+            : > "$FINAL"
+            if curl --fail --location --max-time 90 --output "$BODY" --write-out '%{url_effective}' \
+              "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID-$attempt" > "$FINAL"; then
+              if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then
+                echo "MAIN attempt $attempt redirected to Google Drive/Docs"
+              elif grep -F 'member-complete-auto-select-v12' "$BODY" >/dev/null; then
+                echo "MAIN live marker verified on attempt $attempt"
+                MAIN_OK=1
+                break
+              else
+                echo "MAIN attempt $attempt still serving previous deployment"
+              fi
+            else
+              echo "MAIN attempt $attempt request failed"
+            fi
+            sleep 10
+          done
+          test "$MAIN_OK" = '1'
+
           BASE="${HOSTING_URL%/}"
-          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/?v=$GITHUB_RUN_ID" > "$RUNNER_TEMP/index"
-          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?v=$GITHUB_RUN_ID" > "$RUNNER_TEMP/setup"
-          grep -F 'setup-v205.js?v=1637-actualfix12' "$RUNNER_TEMP/index" >/dev/null
-          grep -F 'auto-install-prompt-v12' "$RUNNER_TEMP/setup" >/dev/null
-          grep -F 'shouldAutoPrompt' "$RUNNER_TEMP/setup" >/dev/null
-          if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
+          FIREBASE_OK=0
+          for attempt in $(seq 1 8); do
+            if curl --fail --location -H 'Cache-Control: no-cache' \
+              "$BASE/?v=$GITHUB_RUN_ID-$attempt" > "$RUNNER_TEMP/index" && \
+               curl --fail --location -H 'Cache-Control: no-cache' \
+              "$BASE/setup-v205.js?v=$GITHUB_RUN_ID-$attempt" > "$RUNNER_TEMP/setup"; then
+              if grep -F 'setup-v205.js?v=1637-actualfix12' "$RUNNER_TEMP/index" >/dev/null && \
+                 grep -F 'auto-install-prompt-v12' "$RUNNER_TEMP/setup" >/dev/null && \
+                 grep -F 'shouldAutoPrompt' "$RUNNER_TEMP/setup" >/dev/null && \
+                 ! grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup" >/dev/null; then
+                echo "Firebase live PWA verified on attempt $attempt"
+                FIREBASE_OK=1
+                break
+              fi
+            fi
+            echo "Firebase attempt $attempt not ready yet"
+            sleep 5
+          done
+          test "$FIREBASE_OK" = '1'
 
       - name: Record result
         if: always()
