@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/inspect-push-register.yml'
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -32,7 +32,7 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Read deployment config
+      - name: Read config
         shell: bash
         run: |
           set -euo pipefail
@@ -47,86 +47,33 @@ jobs:
             echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$C")/exec"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")"
-            echo "BUILD_ROOT=$RUNNER_TEMP/actual-member-install-fix"
+            echo "BUILD_ROOT=$RUNNER_TEMP/actual-fix-v12"
           } >> "$GITHUB_ENV"
 
-      - name: Fix MAIN completion to use typed name
+      - name: Patch and deploy MAIN
         shell: bash
         run: |
           set -euo pipefail
-          W="$RUNNER_TEMP/main"; rm -rf "$W"; mkdir -p "$W"
+          W="$RUNNER_TEMP/main"
+          rm -rf "$W" && mkdir -p "$W"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
-          cd "$W"; clasp pull
+          cd "$W"
+          clasp pull
           printf '%s  %s\n' \
             '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
             '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
             '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
             'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('Script.html'); s=p.read_text(encoding='utf-8')
-          end=s.rfind('</script>')
-          if end<0: raise SystemExit('Script closing tag missing')
-          s=s[:end+len('</script>')]+'\n'
-
-          a=s.find('function compactMemberSelfSettings() {')
-          b=s.find('function requestMemberAppInstall() {',a)
-          if a<0 or b<0: raise SystemExit('compactMemberSelfSettings block missing')
-          s=s[:a]+"""function compactMemberSelfSettings() {
-  let selected = currentStoredWebPushMember();
-  const input = document.getElementById('memberSelfSearchInput');
-  const typed = String(input && input.value || '').trim();
-
-  // member-complete-auto-select-v11
-  // 사용자가 설정창에서 새 이름을 입력했다면 예전에 저장된 사용자를 그대로 쓰지 않는다.
-  if (input && input.dataset.userEditing === '1' && typed) {
-    const matches = memberSelfSearchMatches();
-    const typedLower = typed.toLocaleLowerCase('ko-KR');
-    const exact = matches.find(function(member) {
-      return member && String(member.name || '').trim().toLocaleLowerCase('ko-KR') === typedLower;
-    });
-    const candidate = exact || (matches.length === 1 ? matches[0] : null);
-    if (candidate) {
-      selectMemberSelf(candidate.id);
-      selected = {id:String(candidate.id), name:String(candidate.name || '').trim()};
-    } else {
-      showMemberSettingMessage('검색 결과에서 본인 이름을 선택하세요.', true);
-      if (input) input.focus();
-      return;
-    }
-  }
-
-  if (!selected) {
-    if (input) input.focus();
-    showMemberSettingMessage('먼저 내 이름을 선택하세요.', true);
-    return;
-  }
-  if (memberAlertEnabled()) {
-    postUnifiedMemberMessage('JAYUMINTON_PUSH_SETUP_REQUEST', {
-      member: selected,
-      authVersion: currentMemberAuthVersion()
-    });
-  } else {
-    postUnifiedMemberMessage('JAYUMINTON_PUSH_DISCONNECT_REQUEST', {member:selected});
-  }
-  if (input) input.dataset.userEditing = '0';
-  try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'true'); }
-  catch (error) {}
-  renderMemberSelfSettings();
-}
-
-"""+s[b:]
-          p.write_text(s,encoding='utf-8')
-          PY
-          grep -F 'member-complete-auto-select-v11' Script.html >/dev/null
+          python3 "$GITHUB_WORKSPACE/deployment/jayuminton/actual_member_install_fix_v12.py" main Script.html
+          grep -F 'member-complete-auto-select-v12' Script.html >/dev/null
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member complete actual fix ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "actual member fix v12 ${GITHUB_SHA::7}"
 
-      - name: Build genuine v1.6.37 PWA with one-tap Chrome install
+      - name: Build PWA
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf "$BUILD_ROOT"; mkdir -p "$BUILD_ROOT/web-push"
+          rm -rf "$BUILD_ROOT" && mkdir -p "$BUILD_ROOT/web-push"
           cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
           cp deployment/jayuminton/v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
           cp deployment/jayuminton/v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
@@ -134,125 +81,49 @@ jobs:
           cp deployment/jayuminton/v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
           cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
           gzip -dc "$RUNNER_TEMP/setup.gz" > "$BUILD_ROOT/web-push/setup-v205.js"
-          printf '%s  %s\n' \
-            '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d' "$BUILD_ROOT/web-push/index.html" \
-            '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f' "$BUILD_ROOT/web-push/setup-v205.css" \
-            '53828f38565e057b865750b9fbf66737b8841451ac4afebc34150b0f93d8fd9b' "$BUILD_ROOT/web-push/setup-v205.js" | sha256sum --check
-          python3 - <<'PY'
-          import os,re
-          from pathlib import Path
-          root=Path(os.environ['BUILD_ROOT'])/'web-push'; p=root/'setup-v205.js'; s=p.read_text(encoding='utf-8')
-
-          # Remove the Google-Drive-risk fallback from the real Android Chrome intent.
-          s,n=re.subn(
-            r"'category=android\.intent\.category\.BROWSABLE;S\.browser_fallback_url='\s*\+\s*encodeURIComponent\(targetUrl\)\s*\+\s*';end'",
-            "'category=android.intent.category.BROWSABLE;end'",
-            s,count=1
-          )
-          if n!=1: raise SystemExit('Android browser fallback block missing')
-
-          # If the user already tapped install while Chrome was preparing, remember that tap.
-          old="""      setInstallIntentArmed(true);
-      ensureChromeInstallControl();
-      const detail = '설치창을 준비 중입니다. 잠시 뒤 다시 누르거나 Chrome ⋮ 메뉴의 앱 설치를 선택하세요.';
-"""
-          new="""      // auto-install-prompt-v11
-      installAttemptPending = true;
-      setInstallIntentArmed(true);
-      ensureChromeInstallControl();
-      const detail = '설치창을 준비 중입니다. 준비되는 즉시 시스템 설치창을 엽니다.';
-"""
-          if old not in s: raise SystemExit('Chrome no-prompt branch missing')
-          s=s.replace(old,new,1)
-
-          # When beforeinstallprompt finally arrives after that tap, open the native prompt automatically.
-          old="""    deferredInstallPrompt = event;
-    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
-    installAttemptPending = false;
-"""
-          new="""    const shouldAutoPrompt = Boolean(installAttemptPending || installIntentArmed);
-    deferredInstallPrompt = event;
-    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
-    installAttemptPending = false;
-"""
-          if old not in s: raise SystemExit('beforeinstallprompt capture state missing')
-          s=s.replace(old,new,1)
-          old="""    refreshInstallState();
-    showToast('설치 준비 완료: PWA 설치 버튼을 눌러 주세요.');
-"""
-          new="""    refreshInstallState();
-    if (shouldAutoPrompt) {
-      setTimeout(function() { installAndroidUserApp(true); }, 0);
-    } else {
-      showToast('설치 준비 완료: PWA 설치 버튼을 눌러 주세요.');
-    }
-"""
-          if old not in s: raise SystemExit('beforeinstallprompt completion block missing')
-          s=s.replace(old,new,1)
-
-          # When MAIN selects a different member, overwrite the PWA member before reconnecting.
-          marker="} else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {"
-          start=s.find(marker); stop=s.find("} else if (data.type === 'JAYUMINTON_PUSH_DISCONNECT_REQUEST')",start)
-          if start<0 or stop<0: raise SystemExit('PUSH setup branch missing')
-          replacement="""} else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {
-      if (data.member && data.member.id && data.member.name) {
-        member = {id:String(data.member.id), name:String(data.member.name)};
-        saveJson(STORAGE.member, member);
-        nameInput.value = shortName(member.name);
-        isConnected = false;
-      }
-      connectAlarm();
-    """
-          s=s[:start]+replacement+s[stop:]
-          p.write_text(s,encoding='utf-8')
-
-          idx=root/'index.html'
-          t=idx.read_text(encoding='utf-8').replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-actualfix11').replace('/config-v204.js?v=1637','/config-v204.js?v=1637-actualfix11')
-          idx.write_text(t,encoding='utf-8')
-          tpl=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
-          cfg=tpl.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
-          for name in ('config-v202.js','config-v203.js','config-v204.js'): (root/name).write_text(cfg,encoding='utf-8')
-          sw=root/'firebase-messaging-sw.js'
-          w=sw.read_text(encoding='utf-8').replace("const JAYUMINTON_SW_VERSION = '1.6.37';","const JAYUMINTON_SW_VERSION = '1.6.37-actualfix11';").replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';","const JAYUMINTON_CACHE = 'jayuminton-shell-v223';")
-          sw.write_text(w,encoding='utf-8')
-          PY
+          printf '%s  %s\n' '53828f38565e057b865750b9fbf66737b8841451ac4afebc34150b0f93d8fd9b' "$BUILD_ROOT/web-push/setup-v205.js" | sha256sum --check
+          python3 deployment/jayuminton/actual_member_install_fix_v12.py pwa "$BUILD_ROOT/web-push" --main-url "$MAIN_URL" --push-url "$PUSH_URL"
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
-          grep -F 'auto-install-prompt-v11' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'auto-install-prompt-v12' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
           grep -F 'shouldAutoPrompt' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
-          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then echo 'Drive fallback remains'; exit 1; fi
+          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then exit 1; fi
           BASE="${HOSTING_URL%/}"
-          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do curl --fail --location --retry 3 --max-time 60 "$BASE/$a?x=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"; test -s "$BUILD_ROOT/web-push/$a"; done
+          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 3 --max-time 60 "$BASE/$a?x=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"
+            test -s "$BUILD_ROOT/web-push/$a"
+          done
 
       - name: Deploy Firebase Hosting
         working-directory: ${{ env.BUILD_ROOT }}
-        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "actual member install fix ${GITHUB_SHA::7}"
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "actual member/install fix v12 ${GITHUB_SHA::7}"
 
-      - name: Verify MAIN and Firebase live
+      - name: Verify live
         shell: bash
         run: |
           set -euo pipefail
           sleep 8
-          BODY="$RUNNER_TEMP/main.html"; FINAL="$RUNNER_TEMP/main-url.txt"
+          BODY="$RUNNER_TEMP/main.html"
+          FINAL="$RUNNER_TEMP/main-url.txt"
           curl --fail --location --retry 4 --max-time 90 --output "$BODY" --write-out '%{url_effective}' "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" > "$FINAL"
           if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then exit 1; fi
-          grep -F 'member-complete-auto-select-v11' "$BODY" >/dev/null
+          grep -F 'member-complete-auto-select-v12' "$BODY" >/dev/null
           BASE="${HOSTING_URL%/}"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/?v=$GITHUB_RUN_ID" > "$RUNNER_TEMP/index"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?v=$GITHUB_RUN_ID" > "$RUNNER_TEMP/setup"
-          grep -F 'setup-v205.js?v=1637-actualfix11' "$RUNNER_TEMP/index" >/dev/null
-          grep -F 'auto-install-prompt-v11' "$RUNNER_TEMP/setup" >/dev/null
+          grep -F 'setup-v205.js?v=1637-actualfix12' "$RUNNER_TEMP/index" >/dev/null
+          grep -F 'auto-install-prompt-v12' "$RUNNER_TEMP/setup" >/dev/null
           grep -F 'shouldAutoPrompt' "$RUNNER_TEMP/setup" >/dev/null
           if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
 
-      - name: Record actual fix result
+      - name: Record result
         if: always()
         shell: bash
         run: |
           STATUS='${{ job.status }}'
-          printf 'status=%s\ncommit=%s\nrun=%s\n' "$STATUS" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/jayuminton/ACTUAL_MEMBER_INSTALL_FIX_RESULT.txt
+          printf 'status=%s\ncommit=%s\nrun=%s\n' "$STATUS" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/jayuminton/ACTUAL_MEMBER_INSTALL_FIX_V12_RESULT.txt
           git config user.name 'github-actions[bot]'
           git config user.email '4189822+github-actions[bot]@users.noreply.github.com'
-          git add deployment/jayuminton/ACTUAL_MEMBER_INSTALL_FIX_RESULT.txt
-          git commit -m "Record actual member/install fix: $STATUS" || exit 0
+          git add deployment/jayuminton/ACTUAL_MEMBER_INSTALL_FIX_V12_RESULT.txt
+          git commit -m "Record actual member/install v12: $STATUS" || exit 0
           git pull --rebase origin main || true
           git push
