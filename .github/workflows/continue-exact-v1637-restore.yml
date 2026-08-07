@@ -203,6 +203,40 @@ jobs:
           if 'publishMemberAppInstallButtonRect();' not in after:
               s=s[:brace+1]+"\n  publishMemberAppInstallButtonRect();"+s[brace+1:]
 
+          # Diagnostic (temporary): show immediately, without waiting for a parent reply,
+          # whether postUnifiedMemberMessage actually attempted the send and what
+          # window.top/window.parent look like from inside this frame. This splits the
+          # "no reaction at all" symptom into send-side vs receive-side.
+          a=s.find('function openMemberInstallInChrome(installUrl) {')
+          if a<0:
+              raise SystemExit('openMemberInstallInChrome missing')
+          ofn_block,ofn_start,ofn_end=extract_block(s,a)
+          old_inner='\n'.join([
+            '  if (isUnifiedMemberFrame()) {',
+            "    postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {",
+            "      platform: 'android',",
+            '      browserContext: detectMemberInstallBrowserContext(),',
+            '      installUrl: installUrl',
+            '    });',
+            '    return;',
+            '  }',
+          ])
+          if old_inner not in ofn_block:
+              raise SystemExit('openMemberInstallInChrome inner block mismatch')
+          new_inner='\n'.join([
+            '  if (isUnifiedMemberFrame()) {',
+            "    var __sendOk = postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {",
+            "      platform: 'android',",
+            '      browserContext: detectMemberInstallBrowserContext(),',
+            '      installUrl: installUrl',
+            '    });',
+            "    showMemberSettingMessage('[진단A] 전송=' + __sendOk + ' top!=window:' + (window.top !== window) + ' top!=parent:' + (window.top !== window.parent));",
+            '    return;',
+            '  }',
+          ])
+          ofn_block=ofn_block.replace(old_inner,new_inner,1)
+          s=s[:ofn_start]+ofn_block+s[ofn_end:]
+
           p.write_text(s,encoding='utf-8')
           PY
 
