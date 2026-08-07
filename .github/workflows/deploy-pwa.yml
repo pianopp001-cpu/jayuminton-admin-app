@@ -20,16 +20,17 @@ on:
 permissions:
   contents: read
 
+# v2 그룹은 장애 때 굳어버린 기존 큐와 완전히 분리됩니다.
+# 새 실행이 생기면 같은 v2 그룹의 오래된 실행은 자동 취소합니다.
 concurrency:
-  group: jayuminton-production-deploy
-  cancel-in-progress: false
+  group: jayuminton-production-deploy-v2-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
     name: Deploy production
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: production
     env:
       DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'all' }}
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
