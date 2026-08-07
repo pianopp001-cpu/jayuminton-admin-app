@@ -1,0 +1,260 @@
+name: Hotfix member reassignment and Chrome install loop
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-member-install-loop.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-member-install-hotfix
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Read config
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
+            echo "BUILD_ROOT=$RUNNER_TEMP/member-install-hotfix"
+          } >> "$GITHUB_ENV"
+
+      - name: Fix MAIN member editing behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          printf '%s  %s\n' \
+            '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
+            '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
+            '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
+            'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          end=s.rfind('</script>')
+          if end < 0: raise SystemExit('Script closing tag missing')
+          s=s[:end+len('</script>')]+'\n'
+
+          a=s.find('function openMemberSelfSettings() {')
+          b=s.find('function renderMemberSelfSettings() {',a)
+          if a<0 or b<0: raise SystemExit('member settings function missing')
+          s=s[:a]+"""function openMemberSelfSettings() {
+            try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); } catch (error) {}
+            const input = document.getElementById('memberSelfSearchInput');
+            if (input) {
+              input.dataset.userEditing = '1';
+              input.value = '';
+            }
+            renderMemberSelfSettings();
+            setTimeout(function() {
+              const currentInput = document.getElementById('memberSelfSearchInput');
+              if (currentInput) {
+                currentInput.dataset.userEditing = '1';
+                currentInput.value = '';
+                currentInput.focus();
+              }
+            }, 0);
+          }
+
+          """+s[b:]
+
+          # Any saved-name render while actively editing is forbidden.
+          s=re.sub(
+            r"(?m)^(?P<i>\s*)if \(input && selected && !input\.value[^\n]*\) input\.value = selected\.name;\s*$",
+            lambda m: m.group('i')+"if (input && selected && !input.value && input.dataset.userEditing !== '1') input.value = selected.name;",
+            s
+          )
+          s=re.sub(
+            r"(?m)^(?P<i>\s*)input\.value\s*=\s*selected\.name;\s*$",
+            lambda m: m.group('i')+"if (input.dataset.userEditing !== '1') input.value = selected.name;",
+            s
+          )
+
+          a=s.find('function selectMemberSelf(memberId) {')
+          b=s.find('function clearMemberSelfSelection() {',a)
+          if a<0 or b<0: raise SystemExit('select member function missing')
+          block=s[a:b]
+          if "dataset.userEditing = '0'" not in block:
+            block,n=re.subn(
+              r"(?m)^(?P<i>\s*)if \(!member\) return;\s*$",
+              lambda m:m.group(0)+"\n"+m.group('i')+"const memberInput = document.getElementById('memberSelfSearchInput');\n"+m.group('i')+"if (memberInput) { memberInput.dataset.userEditing = '0'; memberInput.value = String(member.name || '').trim(); }",
+              block,count=1
+            )
+            if n!=1: raise SystemExit('select member insertion failed')
+            s=s[:a]+block+s[b:]
+          p.write_text(s,encoding='utf-8')
+          PY
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member edit hotfix ${GITHUB_SHA::7}"
+
+      - name: Build PWA behavior hotfix from genuine v1.6.37
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$BUILD_ROOT" && mkdir -p "$BUILD_ROOT/web-push"
+          cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
+          cp deployment/jayuminton/v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
+          cp deployment/jayuminton/v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
+          cp deployment/jayuminton/v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
+          cp deployment/jayuminton/v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+          cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup-v205.js.gz"
+          gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$BUILD_ROOT/web-push/setup-v205.js"
+          printf '%s  %s\n' \
+            '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d' "$BUILD_ROOT/web-push/index.html" \
+            '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f' "$BUILD_ROOT/web-push/setup-v205.css" \
+            '53828f38565e057b865750b9fbf66737b8841451ac4afebc34150b0f93d8fd9b' "$BUILD_ROOT/web-push/setup-v205.js" | sha256sum --check
+
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          root=Path(os.environ['BUILD_ROOT'])/'web-push'
+          p=root/'setup-v205.js'
+          s=p.read_text(encoding='utf-8')
+
+          # Chrome intent target must identify itself as Chrome, never embedded.
+          s,n=re.subn(
+            r"target\.searchParams\.set\('source',\s*'embedded'\);",
+            "target.searchParams.set('source', 'chrome');",
+            s,count=1
+          )
+          if n!=1: raise SystemExit('Chrome source marker not found')
+
+          # Chrome page must never be classified as embedded, even with stale referrer/UA clues.
+          a=s.find('function isEmbeddedBrowser() {')
+          if a<0: raise SystemExit('isEmbeddedBrowser missing')
+          b=s.find('function ',a+10)
+          block=s[a:b if b>0 else len(s)]
+          if "source === 'chrome'" not in block:
+            needle="const source = String(new URLSearchParams(window.location.search).get('source') || '').toLowerCase();"
+            if needle not in block: raise SystemExit('embedded source parser missing')
+            block=block.replace(needle,needle+"\n    if (source === 'chrome' || source === 'pwa') return false;",1)
+            s=s[:a]+block+s[(b if b>0 else len(s)):]
+
+          # Remove Drive-risk fallback from Android intent.
+          s=re.sub(
+            r"'category=android\.intent\.category\.BROWSABLE;S\.browser_fallback_url='\s*\+\s*encodeURIComponent\(targetUrl\)\s*\+\s*';end'",
+            "'category=android.intent.category.BROWSABLE;end'",
+            s,count=1
+          )
+
+          # When MAIN selects/requests another member, overwrite stale member and re-register token to new member.
+          marker="} else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {"
+          pos=s.find(marker)
+          if pos<0: raise SystemExit('PUSH_SETUP_REQUEST branch missing')
+          end=s.find("} else if (data.type === 'JAYUMINTON_PUSH_DISCONNECT_REQUEST')",pos)
+          if end<0: raise SystemExit('PUSH_SETUP_REQUEST end missing')
+          old=s[pos:end]
+          new="""} else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {
+      if (data.member && data.member.id && data.member.name) {
+        const nextMember = {id:String(data.member.id), name:String(data.member.name)};
+        const previousMember = member && member.id ? {id:String(member.id), name:String(member.name || '')} : null;
+        const changed = Boolean(previousMember && String(previousMember.id) !== String(nextMember.id));
+        member = nextMember;
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+        if (changed) {
+          isConnected = false;
+          const existingToken = localStorage.getItem(STORAGE.token) || '';
+          if (existingToken) {
+            submitRelay('register_web_token', existingToken).catch(() => null);
+          }
+        }
+      }
+      connectAlarm();
+    """
+          s=s[:pos]+new+s[end:]
+
+          # Chrome must never execute another Chrome intent after arrival.
+          a=s.find('function handleAppInstallButton(')
+          b=s.find('function ',a+10)
+          if a<0 or b<0: raise SystemExit('handleAppInstallButton missing')
+          block=s[a:b]
+          block=block.replace("if (androidDevice && embeddedBrowser) {","if (androidDevice && embeddedBrowser && String(new URLSearchParams(window.location.search).get('source') || '').toLowerCase() !== 'chrome') {",1)
+          s=s[:a]+block+s[b:]
+
+          # User typing a new name invalidates the stale saved member immediately.
+          listener="connectButton.addEventListener('click', handleAlarmButton);"
+          if listener in s and "jayuminton-name-change-hotfix" not in s:
+            s=s.replace(listener,listener+"\n  // jayuminton-name-change-hotfix\n  nameInput.addEventListener('input', () => {\n    const typed = firstTwoSearchChars(nameInput.value);\n    const saved = member && member.name ? firstTwoSearchChars(member.name) : '';\n    if (member && typed && typed !== saved) {\n      member = null;\n      try { localStorage.removeItem(STORAGE.member); } catch (_) {}\n      isConnected = false;\n    }\n  });",1)
+
+          p.write_text(s,encoding='utf-8')
+
+          idx=root/'index.html'
+          t=idx.read_text(encoding='utf-8').replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-hotfix10').replace('/config-v204.js?v=1637','/config-v204.js?v=1637-hotfix10')
+          idx.write_text(t,encoding='utf-8')
+          template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          cfg=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          for name in ('config-v202.js','config-v203.js','config-v204.js'):
+            (root/name).write_text(cfg,encoding='utf-8')
+          sw=root/'firebase-messaging-sw.js'
+          wt=sw.read_text(encoding='utf-8').replace("const JAYUMINTON_SW_VERSION = '1.6.37';","const JAYUMINTON_SW_VERSION = '1.6.37-hotfix10';").replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';","const JAYUMINTON_CACHE = 'jayuminton-shell-v220';")
+          sw.write_text(wt,encoding='utf-8')
+          PY
+
+          node --check "$BUILD_ROOT/web-push/setup-v205.js"
+          grep -F "target.searchParams.set('source', 'chrome');" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F "source === 'chrome'" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F 'jayuminton-name-change-hotfix' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then exit 1; fi
+          BASE="${HOSTING_URL%/}"
+          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 3 --max-time 60 "$BASE/$a?src=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"
+          done
+
+      - name: Deploy Firebase Hosting
+        working-directory: ${{ env.BUILD_ROOT }}
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "member/install hotfix ${GITHUB_SHA::7}"
+
+      - name: Verify live hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          BASE="${HOSTING_URL%/}"
+          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/?v=$BUST" > "$RUNNER_TEMP/index"
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?v=$BUST" > "$RUNNER_TEMP/setup"
+          grep -F 'setup-v205.js?v=1637-hotfix10' "$RUNNER_TEMP/index" >/dev/null
+          grep -F "target.searchParams.set('source', 'chrome');" "$RUNNER_TEMP/setup" >/dev/null
+          grep -F "source === 'chrome'" "$RUNNER_TEMP/setup" >/dev/null
+          grep -F 'jayuminton-name-change-hotfix' "$RUNNER_TEMP/setup" >/dev/null
+          if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
+          echo 'HOTFIX_LIVE_OK'
