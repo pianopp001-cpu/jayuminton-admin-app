@@ -1,5 +1,5 @@
-const JAYUMINTON_SW_VERSION = '1.6.41';
-const JAYUMINTON_CACHE = 'jayuminton-shell-v208';
+const JAYUMINTON_SW_VERSION = '1.6.41-v209';
+const JAYUMINTON_CACHE = 'jayuminton-shell-v209';
 const JAYUMINTON_SHELL = [
   '/',
   '/index.html',
@@ -7,6 +7,7 @@ const JAYUMINTON_SHELL = [
   '/setup-v208.css',
   '/setup-v208.js',
   '/config-v203.js',
+  '/runtime-fix-v209.js',
   '/icon-198.png',
   '/icon-512.png',
   '/apple-touch-icon-180.png',
@@ -38,7 +39,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        const response = await fetch(event.request);
+        const response = await fetch(event.request, {cache:'no-store'});
         const cache = await caches.open(JAYUMINTON_CACHE);
         cache.put('/index.html', response.clone()).catch(() => {});
         return response;
