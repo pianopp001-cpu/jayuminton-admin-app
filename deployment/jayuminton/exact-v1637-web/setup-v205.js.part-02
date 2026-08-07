@@ -58,6 +58,9 @@
       return;
     }
     if (androidDevice) {
+      // The prompt may have fired before this visible button was tapped.
+      // Consume it again now so this same user gesture can open the real system install UI.
+      consumeEarlyInstallPrompt();
       if (deferredInstallPrompt) {
         installAndroidUserApp(Boolean(fromDirectUserTap));
         return;
@@ -215,8 +218,7 @@
     const targetUrl = target.toString();
     const hostAndPath = target.host + target.pathname + target.search + target.hash;
     // A real href intent is required in Kakao/Daangn WebView. JavaScript location changes
-    // are often treated as a same-page refresh. The HTTPS fallback keeps source=chrome
-    // so the destination is never classified as embedded again.
+    // are often treated as a same-page refresh. Do not add a browser_fallback_url here.
     const intentUrl = 'intent://' + hostAndPath +
       '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
       'category=android.intent.category.BROWSABLE;end';
@@ -227,9 +229,12 @@
     const links = buildAndroidChromeIntent();
     const hasActivation = !navigator.userActivation || navigator.userActivation.isActive;
     if (!hasActivation) {
-      // Never auto-run an Android intent from a timer/message event. It is blocked by Chrome
-      // and was the path that produced the Google Drive error page.
-      window.location.href = links.targetUrl;
+      // A message/timer callback has no trusted user activation. The old fallback navigated
+      // to the same Firebase URL and caused the install button to look like a refresh loop.
+      // Stay on this exact page and wait for the user's next direct tap instead.
+      const detail = 'Chrome 열기는 앱설치 버튼을 직접 눌렀을 때만 실행합니다.';
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus('설치 버튼 직접 터치 대기');
       return;
     }
     window.location.href = links.intentUrl;
