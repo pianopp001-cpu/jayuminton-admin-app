@@ -1,0 +1,91 @@
+name: Fix Jayuminton saved-name autofill only
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-main-name-autofill.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-exact-v1637-direct-live
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    name: Keep design and stop old-name refill
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Read config
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec" >> "$GITHUB_ENV"
+      - name: Remove old-name autofill behavior only
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+
+          # Visible design must remain exactly v1.6.37.
+          printf '%s  %s\n' \
+            '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
+            'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          old="  if (input && selected && !input.value) input.value = selected.name;\n"
+          new="  // Do not refill the old saved name while the user is editing the search field.\n"
+          if old in s:
+              s=s.replace(old,new,1)
+          elif 'Do not refill the old saved name while the user is editing the search field.' not in s:
+              raise SystemExit('old-name autofill line not found')
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          ! grep -F 'if (input && selected && !input.value) input.value = selected.name;' Script.html >/dev/null
+          grep -F 'Do not refill the old saved name while the user is editing the search field.' Script.html >/dev/null
+
+          # Google Drive error must stay removed from the Android Chrome intent.
+          grep -F 'category=android.intent.category.BROWSABLE;end' Script.html >/dev/null
+          ! grep -F 'S.browser_fallback_url' Script.html >/dev/null
+
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "Keep v1.6.37 design, stop old-name autofill ${GITHUB_SHA::7}"
+      - name: Verify live MAIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 7
+          curl --fail --location --retry 5 --retry-delay 2 --max-time 90 "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F 'memberSelfSearchInput' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'memberAlertToggle' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'memberVibrationToggle' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'memberAppInstallToggle' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'Do not refill the old saved name while the user is editing the search field.' "$RUNNER_TEMP/live.html" >/dev/null
+          ! grep -F 'if (input && selected && !input.value) input.value = selected.name;' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'category=android.intent.category.BROWSABLE;end' "$RUNNER_TEMP/live.html" >/dev/null
+          ! grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/live.html" >/dev/null
