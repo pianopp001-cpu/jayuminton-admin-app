@@ -1,0 +1,27 @@
+name: Actions Trigger Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/actions-trigger-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record that Actions actually started
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'started=%s\ncommit=%s\nrun=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_SHA" "$GITHUB_RUN_ID" > ACTIONS_TRIGGER_OK.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ACTIONS_TRIGGER_OK.txt
+          git commit -m 'Confirm GitHub Actions trigger works'
+          git push
