@@ -1,0 +1,50 @@
+name: Kick v1.6.37 restore now
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kick-v1637-now.yml'
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  kick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dispatch real restore workflow and wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          WF='continue-exact-v1637-restore.yml'
+          BEFORE="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run "$WF" --repo "$GITHUB_REPOSITORY" --ref main
+          RUN_ID=''
+          for i in $(seq 1 60); do
+            sleep 5
+            RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ -n "$RUN_ID" ] && [ "$RUN_ID" != '0' ] && [ "$RUN_ID" != "$BEFORE" ]; then break; fi
+          done
+          test -n "$RUN_ID" && [ "$RUN_ID" != '0' ] && [ "$RUN_ID" != "$BEFORE" ] || { echo 'Restore run was not created'; exit 1; }
+          set +e
+          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          RC=$?
+          set -e
+          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json databaseId,status,conclusion,url,headSha > /tmp/restore-result.json
+          cat /tmp/restore-result.json
+          CONCLUSION="$(jq -r '.conclusion // .status // "unknown"' /tmp/restore-result.json)"
+          URL="$(jq -r '.url // ""' /tmp/restore-result.json)"
+          SHA="$(jq -r '.headSha // ""' /tmp/restore-result.json)"
+          printf 'run_id=%s\nconclusion=%s\nhead_sha=%s\nurl=%s\n' "$RUN_ID" "$CONCLUSION" "$SHA" "$URL" > V1637_LIVE_RESTORE_RESULT.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add V1637_LIVE_RESTORE_RESULT.txt
+          git commit -m "Record live v1.6.37 restore result: $CONCLUSION" || true
+          git push || true
+          exit "$RC"
