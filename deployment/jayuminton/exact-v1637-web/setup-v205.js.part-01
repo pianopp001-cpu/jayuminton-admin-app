@@ -1,3 +1,42 @@
+    stateBadge.className = 'state-pill is-connecting';
+    try {
+      const instance = await initializeMessaging();
+      const token = localStorage.getItem(STORAGE.token) || await instance.getToken({vapidKey:cfg.vapidKey, serviceWorkerRegistration:registration});
+      if (token && member) await submitRelay('unregister_web_token', token);
+      if (token) await instance.deleteToken().catch(() => false);
+      localStorage.removeItem(STORAGE.token);
+      isConnected = false;
+      setOff('순서알람 연결을 해지했습니다.');
+      sendCourtMessage('JAYUMINTON_UNIFIED_PUSH_STATUS', {connected:false, member, message:'연결 OFF'});
+      showToast('순서알람 연결 해지 완료');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, member, message:'알림 OFF'});
+      collapseSetupAfterSuccess();
+    } catch (error) {
+      setMessage(error && error.message ? error.message : String(error), 'error');
+    } finally {
+      connectButton.disabled = false;
+      connectButton.textContent = '연결';
+    }
+  }
+
+  async function refreshConnectionState() {
+    const token = localStorage.getItem(STORAGE.token);
+    if (member && token && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const instance = await initializeMessaging();
+        const currentToken = await instance.getToken({vapidKey:cfg.vapidKey, serviceWorkerRegistration:registration});
+        if (!currentToken) throw new Error('알림 연결이 끊어졌습니다.');
+        if (currentToken !== token) {
+          await submitRelay('register_web_token', currentToken);
+          localStorage.setItem(STORAGE.token, currentToken);
+        }
+        setConnected();
+      } catch (_) {
+        setOff('알림 연결이 끊어졌습니다. 완료를 눌러 다시 연결해 주세요.');
+      }
+    } else {
+      setOff(member ? '알림 연결이 꺼져 있습니다.' : '직접 입력하거나 명단에서 이름을 누르세요.');
+    }
   }
 
   function setConnecting() {
@@ -211,90 +250,13 @@
 
   function startEngagementClock() {
     if (!androidDevice || embeddedBrowser || isStandaloneApp() || document.hidden || deferredInstallPrompt) return;
+    if (MIN_INSTALL_ENGAGEMENT_SECONDS <= 0) {
+      scheduleInstallabilityRecheck();
+      return;
+    }
     if (engagementSeconds >= MIN_INSTALL_ENGAGEMENT_SECONDS) scheduleInstallabilityRecheck();
     if (engagementTimer) return;
     engagementTimer = window.setInterval(() => {
       if (document.hidden || deferredInstallPrompt || isStandaloneApp()) return;
       if (engagementSeconds < MIN_INSTALL_ENGAGEMENT_SECONDS) {
         engagementSeconds += 1;
-        persistEngagementSeconds();
-        refreshInstallState();
-        if (engagementSeconds >= MIN_INSTALL_ENGAGEMENT_SECONDS) scheduleInstallabilityRecheck();
-      }
-    }, 1000);
-  }
-
-  function stopEngagementClock() {
-    if (!engagementTimer) return;
-    clearInterval(engagementTimer);
-    engagementTimer = null;
-  }
-
-  function persistEngagementSeconds() {
-    try { localStorage.setItem(STORAGE.engagementSeconds, String(Math.max(0, Math.min(MIN_INSTALL_ENGAGEMENT_SECONDS, engagementSeconds)))); } catch (_) {}
-  }
-
-  function installPreparationRemaining() {
-    return Math.max(0, MIN_INSTALL_ENGAGEMENT_SECONDS - Math.floor(engagementSeconds));
-  }
-
-
-  function setInstallIntentArmed(value) {
-    installIntentArmed = Boolean(value);
-    try {
-      if (installIntentArmed) sessionStorage.setItem('jayuminton_pwa_install_armed_v204', '1');
-      else sessionStorage.removeItem('jayuminton_pwa_install_armed_v204');
-    } catch (_) {}
-  }
-
-  function scheduleInstallabilityRecheck() {
-    if (!androidDevice || embeddedBrowser || deferredInstallPrompt || isStandaloneApp()) return;
-    if (!installIntentArmed || installPreparationRemaining() > 0) return;
-    // Never reload or reopen Chrome here. Chrome dispatches beforeinstallprompt when
-    // the current top-level page becomes installable. Reloading destroyed the pending
-    // state and made the visible OFF button loop forever.
-    consumeEarlyInstallPrompt();
-    setInstallMessage('Chrome 설치 가능 신호를 기다리고 있습니다.', 'success');
-    sendAppInstallStatus('설치 가능 신호 대기');
-    refreshInstallState();
-  }
-
-  function supportsNativeInstallElement() {
-    // The <install> element is an origin-trial feature. This site does not rely on it.
-    return false;
-  }
-
-  function supportsNavigatorInstall() {
-    // navigator.install() is also an origin-trial feature. Use the stable
-    // beforeinstallprompt flow so the button never reports false readiness.
-    return false;
-  }
-
-  function handleNativeInstallAction() {
-    installAttemptPending = true;
-    setInstallIntentArmed(false);
-    setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
-    sendAppInstallStatus('설치 확인중');
-    refreshInstallState();
-  }
-
-  function handleNativeInstallDismiss() {
-    installAttemptPending = false;
-    setInstallIntentArmed(false);
-    const detail = '앱 설치가 취소되었습니다.';
-    setInstallMessage(detail);
-    sendAppInstallStatus(detail);
-    refreshInstallState();
-  }
-
-  function handleNativeInstallValidation(event) {
-    const reason = String((event && event.target && event.target.invalidReason) || '');
-    if (!reason) return;
-    installAttemptPending = false;
-    sendAppInstallStatus('설치 준비 확인 중');
-    refreshInstallState();
-  }
-
-  async function ensureChromeInstallControl() {
-    if (!androidDevice || embeddedBrowser || isStandaloneApp()) return;
-    try {
