@@ -1,0 +1,513 @@
+=== MAIN ===
+
+function openMemberSelfSettings() {
+  try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); }
+  catch (error) {}
+  const input = document.getElementById('memberSelfSearchInput');
+  if (input) {
+    input.value = '';
+    input.dataset.userEditing = '1';
+  }
+  renderMemberSelfSettings();
+  setTimeout(function() {
+    const currentInput = document.getElementById('memberSelfSearchInput');
+    if (currentInput) currentInput.focus();
+  }, 0);
+}
+
+function renderMemberSelfSettings() {
+  if (IS_ADMIN) return;
+  const summary = document.getElementById('memberSelfSummary');
+  const summaryText = document.getElementById('memberSelfSummaryText');
+  const panel = document.getElementById('memberSelfPanel');
+  const alertButton = document.getElementById('memberAlertToggle');
+  const vibrationButton = document.getElementById('memberVibrationToggle');
+  const appInstallButton = document.getElementById('memberAppInstallToggle');
+  const input = document.getElementById('memberSelfSearchInput');
+  if (!summary || !panel) return;
+
+  const selected = currentStoredWebPushMember();
+  let compact = false;
+  try { compact = !!selected && localStorage.getItem(MEMBER_SELF_PANEL_COMPACT_KEY) !== 'false'; }
+  catch (error) { compact = !!selected; }
+
+  summary.classList.toggle('hidden', !compact);
+  panel.classList.toggle('hidden', compact);
+
+  if (summaryText) {
+    summaryText.textContent = selected
+      ? '🌟 ' + selected.name + ' · 알림 ' + (memberAlertEnabled() ? 'ON' : 'OFF') +
+        ' · 진동 ' + (memberVibrationEnabled() ? 'ON' : 'OFF') +
+        ' · 앱설치 ' + (MEMBER_APP_INSTALL_STATE.installed ? 'ON' : 'OFF')
+      : '🌟 내 이름·알림·앱 설정';
+  }
+  if (alertButton) {
+    alertButton.textContent = '알림 ' + (memberAlertEnabled() ? 'ON' : 'OFF');
+    alertButton.classList.toggle('is-on', memberAlertEnabled());
+  }
+  if (vibrationButton) {
+    vibrationButton.textContent = '진동 ' + (memberVibrationEnabled() ? 'ON' : 'OFF');
+    vibrationButton.classList.toggle('is-on', memberVibrationEnabled());
+  }
+  if (appInstallButton) {
+    let installLabel = '앱 설치';
+    if (MEMBER_APP_INSTALL_STATE.installed) {
+      installLabel = '앱 설치완료';
+    } else if (MEMBER_APP_INSTALL_STATE.installing) {
+      installLabel = '설치 확인';
+    } else if (MEMBER_APP_INSTALL_STATE.browserContext === 'android-embedded') {
+      installLabel = 'Chrome 열기';
+    } else if (MEMBER_APP_INSTALL_STATE.browserContext === 'ios-embedded') {
+      installLabel = 'Safari 열기';
+    } else if (MEMBER_APP_INSTALL_STATE.platform === 'android' &&
+               !MEMBER_APP_INSTALL_STATE.ready &&
+               !MEMBER_APP_INSTALL_STATE.nativeInstall) {
+      const remain = Math.max(0, Math.ceil(Number(MEMBER_APP_INSTALL_STATE.prepRemaining || 0)));
+      installLabel = remain > 0 ? '설치 준비 ' + remain + '초' : '설치 확인 중';
+    } else if (MEMBER_APP_INSTALL_STATE.platform === 'android' ||
+               MEMBER_APP_INSTALL_STATE.platform === 'ios') {
+      installLabel = 'PWA 설치';
+    }
+    appInstallButton.textContent = installLabel;
+    appInstallButton.classList.toggle('is-on', MEMBER_APP_INSTALL_STATE.installed);
+    appInstallButton.classList.toggle('is-installing', MEMBER_APP_INSTALL_STATE.installing);
+    appInstallButton.classList.toggle('is-preparing', MEMBER_APP_INSTALL_STATE.platform === 'android' && !MEMBER_APP_INSTALL_STATE.ready && !MEMBER_APP_INSTALL_STATE.nativeInstall && !MEMBER_APP_INSTALL_STATE.installing);
+    const prepRemain = Math.max(0, Math.min(30, Number(MEMBER_APP_INSTALL_STATE.prepRemaining || 0)));
+    appInstallButton.style.setProperty('--install-prep-progress', String(((30 - prepRemain) / 30) * 100) + '%');
+    appInstallButton.setAttribute('aria-busy', MEMBER_APP_INSTALL_STATE.installing ? 'true' : 'false');
+  }
+  if (input && selected && !input.value && input.dataset.userEditing !== '1') input.value = selected.name;
+  if (!compact) renderMemberSelfMatches();
+  requestAnimationFrame(publishMemberAppInstallButtonRect);
+}
+
+function selectMemberSelf(memberId) {
+  if (IS_ADMIN) return;
+  const member = (STATE.members || []).find(function(item) {
+    return item && String(item.id) === String(memberId);
+  });
+  if (!member) return;
+  const memberInput = document.getElementById('memberSelfSearchInput');
+  if (memberInput) {
+    memberInput.dataset.userEditing = '0';
+    memberInput.value = String(member.name || '').trim();
+  }
+  try {
+    localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+      id: String(member.id),
+      name: String(member.name || '').trim()
+    }));
+    localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'true');
+  } catch (error) {}
+  unlockMemberAlertAudio();
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_SELECTED', {
+    member: {id: String(member.id), name: String(member.name || '').trim()}
+  });
+  renderCourts();
+  renderWaitGroups();
+  renderActive();
+  renderInactive();
+  renderMemberSelfSettings();
+}
+
+function clearMemberSelfSelection() {
+  if (IS_ADMIN) return;
+  try {
+    localStorage.removeItem(WEB_PUSH_SELECTED_MEMBER_KEY);
+    localStorage.removeItem(WEB_PUSH_CONNECTION_KEY);
+    localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false');
+  } catch (error) {}
+  const input = document.getElementById('memberSelfSearchInput');
+  if (input) input.value = '';
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_SELECTED', {member: null});
+  renderCourts();
+  renderWaitGroups();
+  renderActive();
+  renderInactive();
+  renderMemberSelfSettings();
+}
+
+completeMemberSelfSettings: NOT_FOUND
+
+handleMemberSelfSearchInput: NOT_FOUND
+
+handleMemberSelfDone: NOT_FOUND
+
+=== MAIN INPUT OCCURRENCES ===
+
+ || window.parent === window) return false;
+  try {
+    return new URL(document.referrer || '').origin === UNIFIED_MEMBER_APP_ORIGIN;
+  } catch (error) {
+    return false;
+  }
+}
+
+function postUnifiedMemberMessage(type, extra) {
+  if (IS_ADMIN || window.top === window) return false;
+  try {
+    window.top.postMessage(
+      Object.assign({type: type}, extra || {}),
+      UNIFIED_MEMBER_APP_ORIGIN
+    );
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function currentMemberAuthVersion() {
+  try { return String(localStorage.getItem(MEMBER_AUTH_KEY) || ''); }
+  catch (error) { return ''; }
+}
+
+function currentMemberSessionToken() {
+  if (MEMBER_SESSION_VALUE) return String(MEMBER_SESSION_VALUE);
+  try { return String(localStorage.getItem(MEMBER_SESSION_KEY) || ''); }
+  catch (error) { return ''; }
+}
+
+function storeMemberSessionToken(token) {
+  MEMBER_SESSION_VALUE = String(token || '');
+  try {
+    if (MEMBER_SESSION_VALUE) localStorage.setItem(MEMBER_SESSION_KEY, MEMBER_SESSION_VALUE);
+    else localStorage.removeItem(MEMBER_SESSION_KEY);
+  } catch (error) {}
+}
+
+function currentStoredWebPushMember() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WEB_PUSH_SELECTED_MEMBER_KEY) || 'null');
+    return saved && saved.id && saved.name
+      ? {id: String(saved.id), name: String(saved.name)}
+      : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function memberAlertEnabled() {
+  try { return localStorage.getItem(MEMBER_ALERT_ENABLED_KEY) !== 'false'; }
+  catch (error) { return true; }
+}
+
+function memberVibrationEnabled() {
+  try { return localStorage.getItem(MEMBER_VIBRATION_ENABLED_KEY) !== 'false'; }
+  catch (error) { return true; }
+}
+
+function storedSelfMemberId() {
+  const member = currentStoredWebPushMember();
+  return member ? String(member.id) : '';
+}
+
+function isSelfMember(member) {
+  return !!member && String(member.id) === storedSelfMemberId();
+}
+
+function unlockMemberAlertAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass && !window.__jayumintonMemberAudioContext) {
+      window.__jayumintonMemberAudioContext = new AudioContextClass();
+    }
+    if (window.__jayumintonMemberAudioContext &&
+        window.__jayumintonMemberAudioContext.state === 'suspended') {
+      window.__jayumintonMemberAudioContext.resume();
+    }
+    MEMBER_ALERT_AUDIO_READY = true;
+  } catch (error) {}
+}
+
+function memberSelfSearchMatches() {
+  const input = document.getElementById('memberSelfSearchInput');
+  const query = String(input && input.value || '').trim().toLocaleLowerCase('ko-KR');
+  if (!query) return [];
+  return sortMembersByKoreanName((STATE.members || []).filter(function(member) {
+    return member && String(member.name || '').toLocaleLowerCase('ko-KR').indexOf(query) >= 0;
+  })).slice(0, 8);
+}
+
+function renderMemberSelfMatches() {
+  if (IS_ADMIN) return;
+  const container = document.getElementById('memberSelfMatches');
+  if (!container) return;
+  const matches = memberSelfSearchMatches();
+  const input = document.getElementById('memberSelfSearchInput');
+  const query = String(input && input.value || '').trim();
+  if (!query) {
+    container.innerHTML = '<span class="member-self-hint">이름을 검색해 본인을 선택하세요.</span>';
+    return;
+  }
+  container.innerHTML = matches.length
+    ? matches.map(function(member) {
+        return '<button type="button" onclick="selectMemberSelf(\'' +
+          escapeMemberInfo(member.id) + '\')">' +
+          escapeMemberInfo(member.name) + '</button>';
+      }).join('')
+    : '<span class="member-self-hint">검색 결과가 없습니다.</span>';
+}
+
+function handleMemberSelfSearchKey(event) {
+  if (!event || event.key !== 'Enter') return;
+  event.preventDefault();
+  const matches = memberSelfSearchMatches();
+  if (matches.length) selectMemberSelf(matches[0].id);
+}
+
+function selectMemberSelf(memberId) {
+  if (IS_ADMIN) return;
+  const member = (STATE.members || []).find(function(item) {
+    return item && String(item.id) === String(memberId);
+  });
+  if (!member) return;
+  const memberInput = document.getElementById('memberSelfSearchInput');
+  if (memberInput) {
+    memberInput.dataset.userEditing = '0';
+    memberInput.value = String(member.name || '').trim();
+  }
+  try {
+    localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+      id: String(member.id),
+      name: String(member.name || '').trim()
+    }));
+    localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'true');
+  } catch (error) {}
+  unlockMemberAlertAudio();
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_SELECTED', {
+    member: {id: String(member.id), name: String(member.name || '').trim()}
+  });
+  renderCourts();
+  renderWaitGroups();
+  renderActive();
+  renderInactive();
+  renderMemberSelfSettings();
+}
+
+function clearMemberSelfSelection() {
+  if (IS_ADMIN) return;
+  try {
+    localStorage.removeItem(WEB_PUSH_SELECTED_MEMBER_KEY);
+    localStorage.removeItem(WEB_PUSH_CONNECTION_KEY);
+    localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY
+
+=== PWA ===
+
+function isEmbeddedBrowser() {
+    const ua = String(navigator.userAgent || '');
+    const source = String(new URLSearchParams(window.location.search).get('source') || '').toLowerCase();
+    // The Chrome intent target explicitly uses source=chrome. Never classify that page
+    // as embedded merely because document.referrer still contains Kakao or Daangn.
+    if (source === 'chrome' || source === 'pwa') return false;
+    if (source === 'embedded') return true;
+    return /;\s*wv\)|\bwv\b|KAKAOTALK|KakaoTalk|DaumApps|NAVER|Instagram|FBAN|FBAV|Line\/|Daangn|Danggeun|Karrot|com\.towneers|EverytimeApp|WhaleInApp/i.test(ua) ||
+      !!window.NativeVoice;
+  }
+
+function buildAndroidChromeIntent() {
+    const target = buildChromeUserTarget();
+    const targetUrl = target.toString();
+    const hostAndPath = target.host + target.pathname + target.search + target.hash;
+    // A real href intent is required in Kakao/Daangn WebView. JavaScript location changes
+    // are often treated as a same-page refresh. The HTTPS fallback keeps source=chrome
+    // so the destination is never classified as embedded again.
+    const intentUrl = 'intent://' + hostAndPath +
+      '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+      'category=android.intent.category.BROWSABLE;S.browser_fallback_url=' +
+      encodeURIComponent(targetUrl) + ';end';
+    return { targetUrl, intentUrl };
+  }
+
+function buildChromeUserTarget() {
+    const target = new URL('<URL>');
+    target.searchParams.set('install', 'choose');
+    target.searchParams.set('external', '1');
+    target.searchParams.set('source', 'chrome');
+    target.searchParams.set('app', 'user');
+    target.searchParams.set('mode', 'user');
+    if (member && member.id) target.searchParams.set('memberId', String(member.id));
+    if (member && member.name) target.searchParams.set('memberName', String(member.name));
+    const authSession = String(localStorage.getItem(STORAGE.authSession) || transferredMemberSession || '');
+    if (authSession) target.searchParams.set('memberSession', authSession);
+    return target;
+  }
+
+function handleAppInstallButton(fromDirectUserTap) {
+    if (isUserAppInstalledState()) {
+      markAppDownloadOn();
+      showToast('자유민턴 코트현황 앱이 이미 설치되어 있습니다.');
+      collapseSetupAfterSuccess();
+      return;
+    }
+
+    if (androidDevice && embeddedBrowser) {
+      const detail = 'Chrome에서 설치 화면을 준비합니다.';
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus(detail);
+      showToast('Chrome으로 이동합니다.');
+      openInAndroidChrome();
+      return;
+    }
+
+    if (iosDevice && embeddedBrowser) {
+      const detail = 'Safari에서 설치 화면을 엽니다.';
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus(detail);
+      showToast('Safari로 이동합니다.');
+      openInIOSSafari();
+      return;
+    }
+
+    if (iosDevice) {
+      showIOSInstallGuide();
+      return;
+    }
+    if (androidDevice) {
+      if (deferredInstallPrompt) {
+        installAndroidUserApp(Boolean(fromDirectUserTap));
+        return;
+      }
+      if (supportsNavigatorInstall()) {
+        installWithNavigatorApi(Boolean(fromDirectUserTap));
+        return;
+      }
+      if (supportsNativeInstallElement()) {
+        setInstallIntentArmed(true);
+        refreshInstallState();
+        return;
+      }
+      // Chrome has not emitted beforeinstallprompt yet. Never refresh or reopen this page.
+      // Register the service worker and wait on this same screen. If Chrome suppresses
+      // the event, the user can still use Chrome menu > 앱 설치.
+      setInstallIntentArmed(true);
+      ensureChromeInstallControl();
+      const detail = '설치창을 준비 중입니다. 잠시 뒤 다시 누르거나 Chrome ⋮ 메뉴의 앱 설치를 선택하세요.';
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus(detail);
+      showToast(detail);
+      refreshInstallState();
+      return;
+    }
+    const detail = '현재 브라우저 메뉴에서 앱 설치 또는 홈 화면에 추가를 선택해 주세요.';
+    setInstallMessage(detail, 'error');
+    sendAppInstallStatus(detail);
+  }
+
+function handleEmbeddedChromeLinkClick() {
+    setInstallMessage('Chrome으로 이동합니다. 열린 Chrome 화면에서 앱설치를 한 번 눌러 주세요.', 'success');
+    sendAppInstallStatus('Chrome으로 이동');
+  }
+
+function connectAlarm() {
+    if (iosDevice && !isStandaloneApp()) {
+      setSetupCollapsed(false, true);
+      setMessage('아이폰은 먼저 아이폰 전용앱 다운 버튼을 눌러 홈 화면에 설치한 뒤, 설치된 앱에서 완료를 눌러 주세요.', 'error');
+      showIOSInstallGuide();
+      return;
+    }
+    if (!members.length) {
+      setMessage('회원 명단을 불러오는 중입니다. 잠시 후 다시 눌러 주세요.', 'error');
+      return;
+    }
+    const typed = firstTwoSearchChars(nameInput.value);
+    if (Array.from(typed).length < 2) {
+      setMessage('이름을 두 글자 이상 입력해 주세요.', 'error');
+      return;
+    }
+    const exactSelected = member && member.id
+      ? members.find((item) => String(item.id) === String(member.id))
+      : null;
+    const matches = exactSelected
+      ? [exactSelected]
+      : members.filter((item) => firstTwoSearchChars(item.name) === typed);
+    if (!matches.length) {
+      setMessage('등록된 회원 중 ' + typed + ' 이름을 찾지 못했습니다.', 'error');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:'이름을 찾지 못했습니다.'});
+      return;
+    }
+    if (matches.length > 1) {
+      setMessage('앞 두 글자가 같은 회원이 여러 명입니다. 관리자에게 이름 구분을 요청해 주세요.', 'error');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:'동일 이름이 여러 명입니다.'});
+      return;
+    }
+
+    member = {id: String(matches[0].id), name: String(matches[0].name)};
+    saveJson(STORAGE.member, member);
+    setConnecting();
+    try {
+      const instance = await initializeMessaging();
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        throw new Error(iosDevice ? '아이폰 설정에서 자유민턴 코트현황 알림을 허용해 주세요.' : '브라우저 알림을 허용해 주세요.');
+      }
+      const token = await instance.getToken({vapidKey: cfg.vapidKey, serviceWorkerRegistration: registration});
+      if (!token) throw new Error('알림 연결 정보를 만들지 못했습니다.');
+      await submitRelay('register_web_token', token);
+      localStorage.setItem(STORAGE.token, token);
+      setConnected();
+      sendCourtMessage('JAYUMINTON_UNIFIED_PUSH_STATUS', {
+        connected: true,
+        member,
+        message: member.name + '님 알림 예정'
+      });
+      showToast(member.name + '님 알림·진동 설정 완료');
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:true, member, message:member.name + '님 알림 예정'});
+      collapseSetupAfterSuccess();
+    } catch (error) {
+      const failureMessage = error && error.message ? error.message : String(error);
+      setOff(failureMessage);
+      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, message:failureMessage});
+    } finally {
+      connectButton.disabled = false;
+      connectButton.textContent = isConnected ? '해지' : (member ? '연결' : '완료');
+    }
+  }
+
+function submitRelay(action, token) {
+    const body = new URLSearchParams();
+    body.set('payload', JSON.stringify({action, memberId:member.id, memberName:member.name, token, userAgent:navigator.userAgent}));
+    await fetch(cfg.relayUrl, {method:'POST', mode:'no-cors', headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}, body:body.toString(), keepalive:true});
+  }
+
+function handleCourtMessage(event) {
+    if (event.source !== frame.contentWindow) return;
+    const data = event.data || {};
+    if (data.type === 'JAYUMINTON_MEMBER_BRIDGE_READY') {
+      sendBootstrap();
+    } else if (data.type === 'JAYUMINTON_MEMBER_AUTH_READY') {
+      localStorage.setItem(STORAGE.auth, String(data.version || ''));
+      if (data.sessionToken) localStorage.setItem(STORAGE.authSession, String(data.sessionToken));
+      sendBootstrap();
+    } else if (data.type === 'JAYUMINTON_MEMBER_LIST') {
+      members = Array.isArray(data.members) ? data.members : [];
+    } else if (data.type === 'JAYUMINTON_MEMBER_SELECTED' || data.type === 'JAYUMINTON_MEMBER_CLICKED') {
+      if (data.member && data.member.id && data.member.name) {
+        member = {id:String(data.member.id), name:String(data.member.name)};
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+      } else if (data.type === 'JAYUMINTON_MEMBER_SELECTED') {
+        member = null;
+        localStorage.removeItem(STORAGE.member);
+        nameInput.value = '';
+      }
+      sendBootstrap();
+    } else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {
+      if (data.member && data.member.id && data.member.name) {
+        member = {id:String(data.member.id), name:String(data.member.name)};
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+      }
+      connectAlarm();
+    } else if (data.type === 'JAYUMINTON_PUSH_DISCONNECT_REQUEST') {
+      if (isConnected || localStorage.getItem(STORAGE.token)) disconnectAlarm();
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_BUTTON_RECT') {
+      updateInstallClickProxy(data);
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {
+      handleAppInstallButton(true);
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_OFF') {
+      setAppDownloadOff();
+    } else if (data.type === 'JAYUMINTON_CONTENT_HEIGHT') {
+      const height = Math.max(500, Math.ceil(Number(data.height || 0)));
+      frame.style.height = height + 'px';
+    }
+  }
