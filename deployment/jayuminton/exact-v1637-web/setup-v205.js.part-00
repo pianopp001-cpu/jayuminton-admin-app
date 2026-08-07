@@ -1,6 +1,7 @@
 (() => {
   'use strict';
-  // v1.6.37: embedded browsers use a real top-level intent link; Chrome uses the native beforeinstallprompt event without reload loops.
+  // v1.6.40: Kakao/Daangn uses a real top-level intent link on the user's tap.
+  // JavaScript location.replace/iframe navigation is never used for the embedded-browser Chrome handoff.
 
   const cfg = window.JAYUMINTON_PUSH_SETUP_CONFIG || {};
   const frame = document.getElementById('courtFrame');
@@ -31,10 +32,10 @@
     authSession: 'jayuminton_member_session_token_v1',
     installChoice: 'jayuminton_user_app_download_choice_v170',
     installGuideSeen: 'jayuminton_ios_install_guide_seen_v170',
-    installConfirmed: 'jayuminton_user_app_installed_confirmed_v204',
-    setupCollapsed: 'jayuminton_setup_panel_collapsed_v204',
-    engagementSeconds: 'jayuminton_pwa_chrome_visible_seconds_v204',
-    installRecheck: 'jayuminton_pwa_installability_recheck_v204'
+    installConfirmed: 'jayuminton_user_app_installed_confirmed_v206',
+    setupCollapsed: 'jayuminton_setup_panel_collapsed_v206',
+    engagementSeconds: 'jayuminton_pwa_chrome_visible_seconds_v206',
+    installRecheck: 'jayuminton_pwa_installability_recheck_v206'
   });
 
   let members = [];
@@ -50,7 +51,7 @@
   let installAttemptTimer = null;
   let lastInstallButtonRect = null;
   let installIntentArmed = false;
-  try { installIntentArmed = sessionStorage.getItem('jayuminton_pwa_install_armed_v204') === '1'; } catch (_) {}
+  try { installIntentArmed = sessionStorage.getItem('jayuminton_pwa_install_armed_v206') === '1'; } catch (_) {}
   let engagementTimer = null;
   let engagementSeconds = (() => {
     try {
@@ -89,19 +90,29 @@
   syncStandaloneInstallState();
   frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
 
+  // Chrome으로 넘어온 뒤에는 설치창을 자동 호출하지 않는다.
+  // beforeinstallprompt.prompt()는 최상위 문서의 실제 사용자 터치에서 실행해야 하므로,
+  // iframe 위에 정렬된 투명 버튼이 다음 터치를 직접 받아 시스템 설치창을 연다.
+  function announceChromeInstallEntry() {
+    if (!androidDevice || embeddedBrowser || !installationEntryRequested || isStandaloneApp()) return;
+    consumeEarlyInstallPrompt();
+    if (deferredInstallPrompt) {
+      setInstallMessage('설치 준비가 완료되었습니다. 앱설치를 한 번 눌러 주세요.', 'success');
+      sendAppInstallStatus('PWA 설치 가능');
+    } else {
+      setInstallMessage('Chrome에서 설치 준비 중입니다. 버튼이 PWA 설치로 바뀌면 한 번 눌러 주세요.', 'success');
+      sendAppInstallStatus('설치 준비 중');
+    }
+    refreshInstallState();
+  }
+  window.addEventListener('jayuminton:installpromptready', announceChromeInstallEntry);
+  window.setTimeout(announceChromeInstallEntry, 900);
 
   setupToggle.addEventListener('click', () => setSetupCollapsed(!setupPanel.classList.contains('is-collapsed'), true));
   connectButton.addEventListener('click', handleAlarmButton);
   appInstallButton.addEventListener('click', handleAppInstallButton);
   appInstallOffButton.addEventListener('click', setAppDownloadOff);
-  appInstallClickProxy.addEventListener('click', handleDirectInstallProxyClick);
-  appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);
-  appInstallChromeLink.addEventListener('touchstart', () => {
-    if (androidDevice && embeddedBrowser) appInstallChromeLink.href = buildAndroidChromeIntent().intentUrl;
-  }, {passive:true});
-  appInstallClickProxy.removeAttribute('href');
-  appInstallClickProxy.removeAttribute('target');
-  appInstallChromeLink.setAttribute('target', '_top');
+  if (appInstallClickProxy) appInstallClickProxy.addEventListener('click', handleDirectInstallProxyClick);
   if (nativeInstallControl) {
     nativeInstallControl.addEventListener('promptaction', handleNativeInstallAction);
     nativeInstallControl.addEventListener('promptdismiss', handleNativeInstallDismiss);
@@ -259,42 +270,3 @@
     connectButton.disabled = true;
     connectButton.textContent = '해지 중…';
     stateBadge.textContent = '💡 해지 중';
-    stateBadge.className = 'state-pill is-connecting';
-    try {
-      const instance = await initializeMessaging();
-      const token = localStorage.getItem(STORAGE.token) || await instance.getToken({vapidKey:cfg.vapidKey, serviceWorkerRegistration:registration});
-      if (token && member) await submitRelay('unregister_web_token', token);
-      if (token) await instance.deleteToken().catch(() => false);
-      localStorage.removeItem(STORAGE.token);
-      isConnected = false;
-      setOff('순서알람 연결을 해지했습니다.');
-      sendCourtMessage('JAYUMINTON_UNIFIED_PUSH_STATUS', {connected:false, member, message:'연결 OFF'});
-      showToast('순서알람 연결 해지 완료');
-      sendCourtMessage('JAYUMINTON_PUSH_CONNECT_RESULT', {connected:false, member, message:'알림 OFF'});
-      collapseSetupAfterSuccess();
-    } catch (error) {
-      setMessage(error && error.message ? error.message : String(error), 'error');
-    } finally {
-      connectButton.disabled = false;
-      connectButton.textContent = '연결';
-    }
-  }
-
-  async function refreshConnectionState() {
-    const token = localStorage.getItem(STORAGE.token);
-    if (member && token && 'Notification' in window && Notification.permission === 'granted') {
-      try {
-        const instance = await initializeMessaging();
-        const currentToken = await instance.getToken({vapidKey:cfg.vapidKey, serviceWorkerRegistration:registration});
-        if (!currentToken) throw new Error('알림 연결이 끊어졌습니다.');
-        if (currentToken !== token) {
-          await submitRelay('register_web_token', currentToken);
-          localStorage.setItem(STORAGE.token, currentToken);
-        }
-        setConnected();
-      } catch (_) {
-        setOff('알림 연결이 끊어졌습니다. 완료를 눌러 다시 연결해 주세요.');
-      }
-    } else {
-      setOff(member ? '알림 연결이 꺼져 있습니다.' : '직접 입력하거나 명단에서 이름을 누르세요.');
-    }
