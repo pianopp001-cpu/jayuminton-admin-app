@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: jayuminton-production-deploy-v3-${{ github.ref }}
+  group: jayuminton-production-deploy-v4-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -64,26 +64,35 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Read existing deployment IDs and URLs
+      - name: Read deployment IDs and build canonical URLs
         shell: bash
         run: |
           set -euo pipefail
           umask 077
           CONFIG_FILE="$RUNNER_TEMP/jayuminton-deploy-config.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG_FILE"
-          jq -e '.mainScriptId and .mainDeploymentId and .mainUrl and .pushScriptId and .pushDeploymentId and .pushUrl and .firebaseProjectId and .hostingUrl' "$CONFIG_FILE" >/dev/null
+
+          jq -e '.mainScriptId and .mainDeploymentId and .pushScriptId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG_FILE" >/dev/null
+
+          MAIN_DEPLOYMENT_ID_VALUE="$(jq -r '.mainDeploymentId' "$CONFIG_FILE")"
+          PUSH_DEPLOYMENT_ID_VALUE="$(jq -r '.pushDeploymentId' "$CONFIG_FILE")"
+
+          [[ "$MAIN_DEPLOYMENT_ID_VALUE" =~ ^[A-Za-z0-9_-]+$ ]] || { echo 'Invalid MAIN deployment ID.'; exit 1; }
+          [[ "$PUSH_DEPLOYMENT_ID_VALUE" =~ ^[A-Za-z0-9_-]+$ ]] || { echo 'Invalid PUSH deployment ID.'; exit 1; }
+
           {
             echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG_FILE")"
-            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG_FILE")"
-            echo "MAIN_URL=$(jq -r '.mainUrl' "$CONFIG_FILE")"
+            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID_VALUE"
+            echo "MAIN_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID_VALUE/exec"
             echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$CONFIG_FILE")"
-            echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG_FILE")"
-            echo "PUSH_URL=$(jq -r '.pushUrl' "$CONFIG_FILE")"
+            echo "PUSH_DEPLOYMENT_ID=$PUSH_DEPLOYMENT_ID_VALUE"
+            echo "PUSH_URL=https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID_VALUE/exec"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG_FILE")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG_FILE")"
             echo "RELEASE_VERSION=$(tr -d '\r\n ' < deployment/jayuminton/RELEASE_VERSION)"
             echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-build"
           } >> "$GITHUB_ENV"
+
           if [[ "$DEPLOY_TARGET" == 'all' ]]; then
             printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           fi
@@ -116,13 +125,29 @@ jobs:
           clasp push --force
           clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "GitHub Actions ${GITHUB_SHA::7}"
 
-      - name: Verify Apps Script URLs
+      - name: Verify Apps Script endpoints
         if: env.DEPLOY_TARGET == 'all'
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --location --retry 3 --max-time 60 "$MAIN_URL?verify=$GITHUB_RUN_ID" >/dev/null
-          curl --fail --location --retry 3 --max-time 60 "$PUSH_URL?verify=$GITHUB_RUN_ID" >/dev/null
+          for pair in "main:$MAIN_URL" "push:$PUSH_URL"; do
+            name="${pair%%:*}"
+            url="${pair#*:}"
+            body="$RUNNER_TEMP/${name}-app.html"
+            final="$RUNNER_TEMP/${name}-final-url.txt"
+            curl --fail --location --retry 3 --max-time 60 \
+              --output "$body" --write-out '%{url_effective}' \
+              "$url?verify=$GITHUB_RUN_ID" > "$final"
+            if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$final"; then
+              echo "$name Apps Script redirected to Google Drive."
+              cat "$final"
+              exit 1
+            fi
+            if grep -Eiq 'file you have requested does not exist|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$body"; then
+              echo "$name Apps Script returned a missing-file page."
+              exit 1
+            fi
+          done
 
       - name: Build fixed v1.6.41 PWA source
         shell: bash
@@ -140,7 +165,6 @@ jobs:
             test -s "$BUILD_ROOT/web-push/$asset"
           done
 
-          # v1.6.41의 setup-v208 원본은 이전 보존 브랜치에 16개 조각으로 남아 있다.
           git fetch --no-tags --depth=1 origin agent/github-auto-deploy
           git show FETCH_HEAD:deployment/jayuminton/web-push/setup-v208.css > "$BUILD_ROOT/web-push/setup-v208.css"
           : > "$BUILD_ROOT/web-push/setup-v208.js"
@@ -160,11 +184,25 @@ jobs:
           done
 
           python3 - <<'PY'
+          import json
           import os
-          import re
           from pathlib import Path
 
           root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+          config_path = root / 'config-v203.js'
+          text = config_path.read_text(encoding='utf-8')
+          main_url = os.environ['MAIN_URL']
+          push_url = os.environ['PUSH_URL']
+
+          override = (
+              "\n;window.JAYUMINTON_PUSH_SETUP_CONFIG = Object.freeze(Object.assign({}, "
+              "window.JAYUMINTON_PUSH_SETUP_CONFIG || {}, {"
+              f"memberPageUrl:{json.dumps(main_url)},"
+              f"relayUrl:{json.dumps(push_url)}"
+              "}));\n"
+          )
+          config_path.write_text(text.rstrip() + override, encoding='utf-8')
+
           required = [
               'index.html', 'manifest.webmanifest', 'setup-v208.css', 'setup-v208.js',
               'config-v203.js', 'firebase-messaging-sw.js', 'icon-198.png', 'icon-512.png',
@@ -175,19 +213,22 @@ jobs:
               raise SystemExit('Required PWA files are missing: ' + ', '.join(missing))
 
           index = (root / 'index.html').read_text(encoding='utf-8')
+          setup = (root / 'setup-v208.js').read_text(encoding='utf-8')
+          worker = (root / 'firebase-messaging-sw.js').read_text(encoding='utf-8')
+          config = config_path.read_text(encoding='utf-8')
+
           if '/setup-v208.js' not in index or '/setup-v208.css' not in index:
               raise SystemExit('index.html does not reference setup-v208 assets')
-          version = os.environ['RELEASE_VERSION']
-          combined = '\n'.join([
-              index,
-              (root / 'setup-v208.js').read_text(encoding='utf-8'),
-              (root / 'firebase-messaging-sw.js').read_text(encoding='utf-8'),
-          ])
-          if version != '1.6.41' or version not in combined:
-              raise SystemExit(f'Expected v1.6.41 source, got RELEASE_VERSION={version}')
-          if 'directInstallScreen' not in index or 'direct-install-mode' not in combined:
+          if os.environ['RELEASE_VERSION'] != '1.6.41':
+              raise SystemExit('Unexpected release version')
+          if '1.6.41' not in (index + '\n' + setup + '\n' + worker):
+              raise SystemExit('v1.6.41 marker is missing')
+          if 'directInstallScreen' not in index or 'direct-install-mode' not in setup:
               raise SystemExit('v1.6.41 direct install screen is missing')
-          print('Validated complete Jayuminton v1.6.41 PWA source')
+          if main_url not in config or push_url not in config:
+              raise SystemExit('Canonical Apps Script URLs were not injected into config-v203.js')
+
+          print('Validated PWA source with canonical MAIN/PUSH URLs')
           PY
 
       - name: Deploy Firebase Hosting
@@ -198,16 +239,25 @@ jobs:
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive \
             --message "GitHub Actions v${RELEASE_VERSION} ${GITHUB_SHA::7}"
 
-      - name: Verify live PWA version
+      - name: Verify live PWA and canonical URLs
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
           CACHE_BUST="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-index.html"
+
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-index.html"
           grep -F '1.6.41' "$RUNNER_TEMP/live-index.html"
           grep -F 'setup-v208.js' "$RUNNER_TEMP/live-index.html"
-          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-worker.js"
+
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/config-v203.js?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-config.js"
+          grep -F "$MAIN_URL" "$RUNNER_TEMP/live-config.js"
+          grep -F "$PUSH_URL" "$RUNNER_TEMP/live-config.js"
+
+          curl --fail --location --max-time 60 -H 'Cache-Control: no-cache' \
+            "$BASE/firebase-messaging-sw.js?verify=$CACHE_BUST" > "$RUNNER_TEMP/live-worker.js"
           grep -F '1.6.41' "$RUNNER_TEMP/live-worker.js"
 
       - name: Deployment summary
@@ -219,4 +269,5 @@ jobs:
             echo "- Version: $RELEASE_VERSION"
             echo "- Target: $DEPLOY_TARGET"
             echo "- Firebase Hosting: $HOSTING_URL"
+            echo '- MAIN/PUSH URL: Deployment ID에서 다시 생성해 주입'
           } >> "$GITHUB_STEP_SUMMARY"
