@@ -67,7 +67,7 @@ jobs:
             echo "BUILD_ROOT=$RUNNER_TEMP/v1637-build"
           } >> "$GITHUB_ENV"
 
-      - name: Restore exact v1.6.37 MAIN Script and original top controls
+      - name: Verify and redeploy exact v1.6.37 MAIN
         shell: bash
         run: |
           set -euo pipefail
@@ -77,15 +77,13 @@ jobs:
           cd "$WORK"
           clasp pull
 
-          # The current MAIN already has the exact v1.6.37 HTML/CSS. Verify that before touching anything.
           printf '%s  %s\n' \
             '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
             '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
             '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
+            '05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441' Script.html \
             'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
 
-          grep -F 'id="memberSelfSearchInput"' Index.html
-          grep -F 'id="memberSelfMatches"' Index.html
           grep -F 'id="memberAlertToggle"' Index.html
           grep -F 'id="memberVibrationToggle"' Index.html
           grep -F 'id="memberAppInstallToggle"' Index.html
@@ -95,64 +93,7 @@ jobs:
           grep -F '>앱/웹</button>' Index.html
           grep -F '>완료</button>' Index.html
 
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib
-
-          path = Path('Script.html')
-          text = path.read_text(encoding='utf-8')
-          expected = '05163359efbcc64c4308bcb8cd42a490441f2012eaa84ea01eae128dd67a5441'
-          current = hashlib.sha256(text.encode('utf-8')).hexdigest()
-
-          if current != expected:
-              start_marker = 'function openMemberInstallInChrome(installUrl) {'
-              next_marker = 'function openMemberInstallInSafari(installUrl) {'
-              start = text.find(start_marker)
-              end = text.find(next_marker, start)
-              if start < 0 or end < 0:
-                  raise SystemExit('Could not locate the v1.6.40 Chrome install function in Script.html')
-
-              original_function = """function openMemberInstallInChrome(installUrl) {
-            // Google Apps Script의 샌드박스 안에서 intent://를 직접 실행하면
-            // Google Drive 문서 링크로 잘못 해석되는 기기가 있다.
-            // 고정된 Firebase 사용자 페이지로 이동한다. Chrome 실행은 최상위 직접 클릭 링크가 담당한다.
-            try {
-              const target = new URL(installUrl);
-              if (target.origin !== UNIFIED_MEMBER_APP_ORIGIN) {
-                throw new Error('invalid member app origin');
-              }
-              target.searchParams.set('external', '1');
-              target.searchParams.set('source', 'embedded');
-              navigateMemberTop(target.toString());
-              return;
-            } catch (error) {}
-            navigateMemberTop(UNIFIED_MEMBER_APP_URL + '?install=choose&external=1&source=embedded&app=user&mode=user');
-          }
-
-          """
-              text = text[:start] + original_function + text[end:]
-
-              text = text.replace(
-                  "installLabel = remain > 0 ? '설치 준비중' : '앱 설치';",
-                  "installLabel = remain > 0 ? '설치 준비 ' + remain + '초' : '설치 확인 중';",
-                  1
-              )
-              path.write_text(text, encoding='utf-8')
-
-          restored = hashlib.sha256(path.read_bytes()).hexdigest()
-          print('Script.html restored hash:', restored)
-          if restored != expected:
-              raise SystemExit('Script.html is still not the exact v1.6.37 source: ' + restored)
-          PY
-
-          # Exact source markers for the original compact top row.
-          grep -F 'memberSelfSummary' Index.html
-          grep -F 'member-self-unified-toggle-row' Index.html
-          grep -F 'function openMemberSelfSettings()' Script.html
-          grep -F 'function renderMemberSelfSettings()' Script.html
-
-          clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "Exact v1.6.37 top controls ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "Exact v1.6.37 controls ${GITHUB_SHA::7}"
 
       - name: Refresh PUSH deployment
         shell: bash
@@ -165,19 +106,23 @@ jobs:
           clasp pull
           clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "v1.6.37 ${GITHUB_SHA::7}"
 
-      - name: Verify live MAIN original controls
+      - name: Verify live MAIN by actual UI markers
         shell: bash
         run: |
           set -euo pipefail
-          sleep 5
+          sleep 7
           BODY="$RUNNER_TEMP/live-main.html"
           FINAL="$RUNNER_TEMP/live-main-url.txt"
           curl --fail --location --retry 5 --retry-delay 3 --max-time 90 \
             --output "$BODY" --write-out '%{url_effective}' \
             "$MAIN_URL?mode=user&app=user&source=exact-v1637-$GITHUB_RUN_ID" > "$FINAL"
-          if grep -Eiq 'drive\.google\.com|docs\.google\.com|주소를 확인한 다음 다시 시도|요청한 파일이 존재하지' "$FINAL" "$BODY"; then
-            echo 'MAIN endpoint is invalid'; cat "$FINAL"; exit 1
+
+          # Only the effective URL is used for redirect detection. The app source itself contains
+          # defensive Google Drive text, so scanning the whole HTML creates a false failure.
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then
+            echo 'MAIN actually redirected to Google Drive'; cat "$FINAL"; exit 1
           fi
+
           python3 - "$BODY" <<'PY'
           import sys
           s=open(sys.argv[1],encoding='utf-8').read()
@@ -190,10 +135,10 @@ jobs:
           for label in ['알림 ON','진동 ON','앱/웹','완료']:
               if label not in s:
                   raise SystemExit('Original label missing: '+label)
-          print('Live MAIN original top controls verified.')
+          print('Live MAIN original controls verified.')
           PY
 
-      - name: Build and deploy exact v1.6.37 PWA
+      - name: Build exact v1.6.37 PWA with install fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -209,18 +154,39 @@ jobs:
           printf '%s  %s\n' 'ca0b8d7fbb11179638abe211af282100731cd1ad4246c66f561472dfddc238f0' "$BUILD_ROOT/web-push/setup-v205.js" | sha256sum --check
           ! grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js"
           grep -F 'category=android.intent.category.BROWSABLE;end' "$BUILD_ROOT/web-push/setup-v205.js"
-          node --check "$BUILD_ROOT/web-push/setup-v205.js"
 
           python3 - <<'PY'
           import os
           from pathlib import Path
-          p=Path(os.environ['BUILD_ROOT'])/'web-push'/'config-v204.js'
-          s=p.read_text(encoding='utf-8')
-          s=s.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
-          if '__MEMBER_PAGE_URL__' in s or '__RELAY_URL__' in s:
+
+          root=Path(os.environ['BUILD_ROOT'])/'web-push'
+          config_path=root/'config-v204.js'
+          config=config_path.read_text(encoding='utf-8')
+          config=config.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          if '__MEMBER_PAGE_URL__' in config or '__RELAY_URL__' in config:
               raise SystemExit('URL injection failed')
-          p.write_text(s,encoding='utf-8')
+          config_path.write_text(config,encoding='utf-8')
+
+          setup_path=root/'setup-v205.js'
+          setup=setup_path.read_text(encoding='utf-8')
+          anchor="  const externalBrowserEntry = query.get('source') === 'embedded' || query.get('external') === '1';\n"
+          fix=anchor+"""  // 앱 삭제 후 Chrome 사이트 저장값만 남아 설치완료로 오인하는 것을 막는다.
+          if (!isStandaloneApp()) {
+            try {
+              localStorage.removeItem(STORAGE.installConfirmed);
+              if (localStorage.getItem(STORAGE.installChoice) === 'on') {
+                localStorage.removeItem(STORAGE.installChoice);
+              }
+            } catch (_) {}
+          }
+          """
+          if anchor not in setup:
+              raise SystemExit('Install-state fix anchor missing')
+          setup=setup.replace(anchor,fix,1)
+          setup_path.write_text(setup,encoding='utf-8')
           PY
+
+          node --check "$BUILD_ROOT/web-push/setup-v205.js"
 
           BASE="${HOSTING_URL%/}"
           for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
@@ -228,11 +194,15 @@ jobs:
             test -s "$BUILD_ROOT/web-push/$a"
           done
 
-          cd "$BUILD_ROOT"
+      - name: Deploy Firebase Hosting
+        working-directory: ${{ env.BUILD_ROOT }}
+        shell: bash
+        run: |
+          set -euo pipefail
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive \
-            --message "Exact v1.6.37 top controls ${GITHUB_SHA::7}"
+            --message "Exact v1.6.37 controls and Drive fix ${GITHUB_SHA::7}"
 
-      - name: Verify Firebase Drive fix
+      - name: Verify live Firebase
         shell: bash
         run: |
           set -euo pipefail
@@ -241,6 +211,7 @@ jobs:
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$BUST" > "$RUNNER_TEMP/setup.js"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/config-v204.js?verify=$BUST" > "$RUNNER_TEMP/config.js"
           ! grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup.js"
+          grep -F '앱 삭제 후 Chrome 사이트 저장값만 남아 설치완료로 오인하는 것을 막는다.' "$RUNNER_TEMP/setup.js"
           grep -F "$MAIN_URL" "$RUNNER_TEMP/config.js"
           grep -F "$PUSH_URL" "$RUNNER_TEMP/config.js"
 
