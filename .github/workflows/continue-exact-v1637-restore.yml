@@ -65,7 +65,6 @@ jobs:
 
           # Visible v1.6.37 UI files must stay byte-for-byte unchanged.
           printf '%s  %s\n' \
-            '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
             '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
             'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
 
@@ -76,6 +75,15 @@ jobs:
           if [ "$CODE_HASH" != '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' ] && \
              ! grep -qF 'function updateMemberSelfProfile(' Code.js; then
             echo 'Code.js is neither the known v1.6.37 baseline nor already patched' >&2
+            exit 1
+          fi
+
+          # Admin.html now needs one extra 편집 button in the existing quick-move bar,
+          # so the same baseline-or-already-patched check applies here too.
+          ADMIN_HASH=$(sha256sum Admin.html | awk '{print $1}')
+          if [ "$ADMIN_HASH" != '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' ] && \
+             ! grep -qF 'onclick="startMemberEdit()"' Admin.html; then
+            echo 'Admin.html is neither the known v1.6.37 baseline nor already patched' >&2
             exit 1
           fi
 
@@ -293,104 +301,126 @@ jobs:
           if 'publishMemberAppInstallButtonRect();' not in after:
               s=s[:brace+1]+"\n  publishMemberAppInstallButtonRect();"+s[brace+1:]
 
-          # Diagnostic code from earlier debugging is no longer needed now that the
-          # embedded-Android install flow uses a plain copy-the-link message instead of
-          # the automatic Chrome intent handoff (see the requestMemberAppInstall patch
-          # above) - openMemberInstallInChrome is no longer called from that path.
+          # (Earlier user-facing self-edit button was replaced: the person only wants
+          # the admin long-press menu's existing 배정대기로 빼기/취소/삭제 to also get
+          # an 편집 option, using the existing add-member toolbar inputs.)
 
-          # Member self-service edit: a small toggle button + inline form for gender,
-          # grade, and experience, appended next to the existing alarm/message area.
-          # Name changes still use the existing search/bubble flow untouched.
-          anchor2='function requestMemberAppInstall() {'
-          if anchor2 not in s:
-              raise SystemExit('requestMemberAppInstall entry point missing')
-          if 'function ensureMemberProfileEditor()' not in s:
-              editor_fn='\n'.join([
-                'function ensureMemberProfileEditor() {',
-                "  const message = document.getElementById('memberUnifiedSettingMessage');",
-                '  if (!message || !message.parentNode) return;',
+          # 1) global state for "currently editing this member id"
+          old_g='let MEMBER_ACTION_IDS = [];'
+          if old_g not in s:
+              raise SystemExit('MEMBER_ACTION_IDS declaration missing')
+          if 'let EDIT_MEMBER_ID' not in s:
+              s=s.replace(old_g,old_g+'\nlet EDIT_MEMBER_ID = null;',1)
+
+          # 2) addMember() delegates to saveMemberEdit() while an edit is in progress
+          old_fn='async function addMember() {\n  if (ADD_MEMBER_IN_FLIGHT) return;\n'
+          new_fn='async function addMember() {\n  if (EDIT_MEMBER_ID) return saveMemberEdit();\n  if (ADD_MEMBER_IN_FLIGHT) return;\n'
+          if new_fn not in s:
+              if old_fn not in s:
+                  raise SystemExit('addMember start changed unexpectedly')
+              s=s.replace(old_fn,new_fn,1)
+
+          # 3) startMemberEdit / cancelMemberEdit / saveMemberEdit, reusing the existing
+          # add-member toolbar (#newName/#newGender/#newGrade/#newExperience/#addMemberButton)
+          if 'function startMemberEdit()' not in s:
+              edit_block='\n'.join([
+                'function startMemberEdit() {',
+                '  if (MEMBER_ACTION_IDS.length !== 1) {',
+                "    alert('편집은 한 명만 선택했을 때 가능합니다.');",
+                '    return;',
+                '  }',
+                '  const member = memberById(MEMBER_ACTION_IDS[0]);',
+                '  if (!member) return;',
+                '  EDIT_MEMBER_ID = member.id;',
+                "  const nameInput = document.getElementById('newName');",
+                "  const genderInput = document.getElementById('newGender');",
+                "  const gradeInput = document.getElementById('newGrade');",
+                "  const experienceInput = document.getElementById('newExperience');",
+                "  const button = document.getElementById('addMemberButton');",
+                "  if (nameInput) nameInput.value = member.name || '';",
+                "  if (genderInput) genderInput.value = member.gender === 'female' ? 'female' : 'male';",
+                "  if (gradeInput) gradeInput.value = member.grade || '';",
+                "  if (experienceInput) experienceInput.value = member.experience || '';",
+                "  if (button) button.textContent = '수정 저장';",
+                '  closeMemberActionBar();',
+                '  if (nameInput) nameInput.focus();',
+                '}',
                 '',
-                "  let toggle = document.getElementById('memberProfileEditToggle');",
-                "  let form = document.getElementById('memberProfileEditForm');",
+                'function cancelMemberEdit() {',
+                '  EDIT_MEMBER_ID = null;',
+                "  const button = document.getElementById('addMemberButton');",
+                "  if (button) button.textContent = '등록';",
+                "  const nameInput = document.getElementById('newName');",
+                "  const genderInput = document.getElementById('newGender');",
+                "  const gradeInput = document.getElementById('newGrade');",
+                "  const experienceInput = document.getElementById('newExperience');",
+                "  if (nameInput) nameInput.value = '';",
+                "  if (genderInput) genderInput.value = '';",
+                "  if (gradeInput) gradeInput.value = '';",
+                "  if (experienceInput) experienceInput.value = '';",
+                '}',
                 '',
-                '  if (!toggle) {',
-                "    toggle = document.createElement('button');",
-                "    toggle.type = 'button';",
-                "    toggle.id = 'memberProfileEditToggle';",
-                "    toggle.textContent = '내 정보 수정';",
-                "    toggle.style.cssText = 'margin-top:6px;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid #d0d5dd;background:#fff;color:#333;cursor:pointer;';",
-                '    message.parentNode.insertBefore(toggle, message.nextSibling);',
+                'async function saveMemberEdit() {',
+                '  if (ADD_MEMBER_IN_FLIGHT) return;',
+                "  const nameInput = document.getElementById('newName');",
+                "  const genderInput = document.getElementById('newGender');",
+                "  const gradeInput = document.getElementById('newGrade');",
+                "  const experienceInput = document.getElementById('newExperience');",
+                "  const button = document.getElementById('addMemberButton');",
+                '',
+                '  const name = nameInput.value.trim();',
+                '  const gender = genderInput.value;',
+                '  const grade = gradeInput.value.trim();',
+                '  const experience = experienceInput.value.trim();',
+                '',
+                '  if (!name) {',
+                "    alert('이름 또는 닉네임을 입력하세요.');",
+                '    nameInput.focus();',
+                '    return;',
+                '  }',
+                '  if (!gender) {',
+                "    alert('성별을 선택하세요.');",
+                '    genderInput.focus();',
+                '    return;',
                 '  }',
                 '',
-                '  if (!form) {',
-                "    form = document.createElement('div');",
-                "    form.id = 'memberProfileEditForm';",
-                "    form.style.cssText = 'display:none;margin-top:6px;gap:6px;flex-wrap:wrap;align-items:center;';",
-                '    form.innerHTML =',
-                '      \'<label style="font-size:12px;display:flex;align-items:center;gap:3px;"><input type="radio" name="memberProfileGender" value="male">남</label>\' +',
-                '      \'<label style="font-size:12px;display:flex;align-items:center;gap:3px;"><input type="radio" name="memberProfileGender" value="female">여</label>\' +',
-                '      \'<input id="memberProfileGradeInput" type="text" maxlength="12" placeholder="급수(예: A급)" style="flex:1;min-width:90px;padding:5px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;">\' +',
-                '      \'<input id="memberProfileExperienceInput" type="text" maxlength="20" placeholder="구력(예: 3년)" style="flex:1;min-width:90px;padding:5px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;">\' +',
-                '      \'<button type="button" id="memberProfileSaveButton" style="padding:5px 12px;border-radius:6px;border:0;background:#315efb;color:#fff;font-size:12px;">저장</button>\';',
-                '    toggle.parentNode.insertBefore(form, toggle.nextSibling);',
+                '  const memberId = EDIT_MEMBER_ID;',
+                '  ADD_MEMBER_IN_FLIGHT = true;',
+                '  if (button) {',
+                '    button.disabled = true;',
+                "    button.textContent = '저장 중…';",
+                '  }',
                 '',
-                "    toggle.addEventListener('click', function() {",
-                "      const visible = form.style.display !== 'none';",
-                "      form.style.display = visible ? 'none' : 'flex';",
-                '      if (!visible) {',
-                '        const genderMale = form.querySelector(\'input[name="memberProfileGender"][value="male"]\');',
-                '        const genderFemale = form.querySelector(\'input[name="memberProfileGender"][value="female"]\');',
-                "        const isFemale = !!member && member.gender === 'female';",
-                '        if (genderMale) genderMale.checked = !isFemale;',
-                '        if (genderFemale) genderFemale.checked = isFemale;',
-                "        const gradeInput = document.getElementById('memberProfileGradeInput');",
-                "        const experienceInput = document.getElementById('memberProfileExperienceInput');",
-                "        if (gradeInput) gradeInput.value = String((member && member.grade) || '');",
-                "        if (experienceInput) experienceInput.value = String((member && member.experience) || '');",
-                '      }',
-                '    });',
-                '',
-                "    document.getElementById('memberProfileSaveButton').addEventListener('click', function() {",
-                '      if (!member || !member.id) {',
-                "        showMemberSettingMessage('먼저 내 이름을 선택해 주세요.', true);",
-                '        return;',
-                '      }',
-                '      const genderChecked = form.querySelector(\'input[name="memberProfileGender"]:checked\');',
-                "      const gradeInput = document.getElementById('memberProfileGradeInput');",
-                "      const experienceInput = document.getElementById('memberProfileExperienceInput');",
-                "      const gender = genderChecked ? genderChecked.value : (member.gender === 'female' ? 'female' : 'male');",
-                "      const grade = gradeInput ? gradeInput.value.trim() : '';",
-                "      const experience = experienceInput ? experienceInput.value.trim() : '';",
-                "      showMemberSettingMessage('저장 중입니다...');",
+                '  try {',
+                '    const result = await new Promise(function(resolve, reject) {',
                 '      google.script.run',
-                '        .withSuccessHandler(function(result) {',
-                "          member.gender = String((result && result.gender) || gender);",
-                "          member.grade = String((result && result.grade) || grade);",
-                "          member.experience = String((result && result.experience) || experience);",
-                "          showMemberSettingMessage('내 정보가 저장되었습니다.');",
-                "          form.style.display = 'none';",
-                '          renderMemberSelfSettings();',
-                '        })',
-                '        .withFailureHandler(function(error) {',
-                "          showMemberSettingMessage(String((error && error.message) || '저장에 실패했습니다.'), true);",
-                '        })',
-                '        .updateMemberSelfProfile(member.id, gender, grade, experience);',
+                '        .withSuccessHandler(resolve)',
+                '        .withFailureHandler(reject)',
+                '        .updateMemberSelfProfile(ADMIN_PIN_VALUE, memberId, name, gender, grade, experience);',
                 '    });',
+                '    const index = STATE.members.findIndex(function(m) {',
+                '      return String(m.id) === String(memberId);',
+                '    });',
+                '    if (index >= 0 && result) {',
+                '      STATE.members[index].name = result.name;',
+                '      STATE.members[index].gender = result.gender;',
+                '      STATE.members[index].grade = result.grade;',
+                '      STATE.members[index].experience = result.experience;',
+                '    }',
+                '    renderActive();',
+                '    renderQuickRoster();',
+                '    cancelMemberEdit();',
+                '  } catch (error) {',
+                "    alert(String((error && error.message) || '수정에 실패했습니다.'));",
+                '  } finally {',
+                '    ADD_MEMBER_IN_FLIGHT = false;',
+                '    if (button) button.disabled = false;',
                 '  }',
                 '}',
                 '',
                 '',
               ])
-              s=s.replace(anchor2,editor_fn+anchor2,1)
-
-          rerender_anchor='\n'.join([
-            '  if (!compact) renderMemberSelfMatches();',
-            '  requestAnimationFrame(publishMemberAppInstallButtonRect);',
-          ])
-          if rerender_anchor not in s:
-              raise SystemExit('renderMemberSelfSettings tail changed unexpectedly')
-          if 'ensureMemberProfileEditor();' not in s:
-              s=s.replace(rerender_anchor,rerender_anchor+'\n  ensureMemberProfileEditor();',1)
+              s=s.replace('async function addMember() {',edit_block+'async function addMember() {',1)
 
           p.write_text(s,encoding='utf-8')
           PY
@@ -417,70 +447,129 @@ jobs:
           p=Path('Code.js')
           s=p.read_text(encoding='utf-8')
 
+          new_fn='\n'.join([
+            'function updateMemberSelfProfileUnlocked_(pin, memberId, name, gender, grade, experience) {',
+            '  auth_(pin);',
+            '',
+            "  memberId = String(memberId == null ? '' : memberId).trim();",
+            "  name = String(name == null ? '' : name).trim();",
+            "  gender = gender === 'female' ? 'female' : 'male';",
+            "  grade = String(grade == null ? '' : grade).trim();",
+            "  experience = String(experience == null ? '' : experience).trim();",
+            '',
+            '  if (!memberId) {',
+            "    throw new Error('회원 정보가 없습니다.');",
+            '  }',
+            '  if (name.length > 20) {',
+            "    throw new Error('이름은 20자 이내로 입력하세요.');",
+            '  }',
+            '  if (grade.length > 12) {',
+            "    throw new Error('급수는 12자 이내로 입력하세요.');",
+            '  }',
+            '  if (experience.length > 20) {',
+            "    throw new Error('구력은 20자 이내로 입력하세요.');",
+            '  }',
+            '',
+            '  const members = readMembers_();',
+            '  let found = null;',
+            '  for (let i = 0; i < members.length; i++) {',
+            '    if (String(members[i].id) === memberId) {',
+            '      found = members[i];',
+            '      break;',
+            '    }',
+            '  }',
+            '  if (!found) {',
+            "    throw new Error('회원을 찾을 수 없습니다.');",
+            '  }',
+            '',
+            '  if (name) found.name = name;',
+            '  found.gender = gender;',
+            '  found.grade = grade;',
+            '  found.experience = experience;',
+            '  writeMembers_(members);',
+            '',
+            '  return {',
+            '    id: found.id,',
+            '    name: found.name,',
+            '    gender: gender,',
+            '    grade: grade,',
+            '    experience: experience',
+            '  };',
+            '}',
+            '',
+            'function updateMemberSelfProfile(pin, memberId, name, gender, grade, experience) {',
+            '  return withDocumentLock_(',
+            "    '내 정보 수정',",
+            '    function() {',
+            '      return updateMemberSelfProfileUnlocked_(',
+            '        pin,',
+            '        memberId,',
+            '        name,',
+            '        gender,',
+            '        grade,',
+            '        experience',
+            '      );',
+            '    }',
+            '  );',
+            '}',
+            '',
+            '',
+          ])
+
           if 'function updateMemberSelfProfile(' not in s:
               anchor='function addMember(pin, name, gender, grade, experience) {'
               if anchor not in s:
                   raise SystemExit('addMember anchor missing in Code.js')
-              new_fn='\n'.join([
-                'function updateMemberSelfProfileUnlocked_(memberId, gender, grade, experience) {',
-                "  memberId = String(memberId == null ? '' : memberId).trim();",
-                "  gender = gender === 'female' ? 'female' : 'male';",
-                "  grade = String(grade == null ? '' : grade).trim();",
-                "  experience = String(experience == null ? '' : experience).trim();",
-                '',
-                '  if (!memberId) {',
-                "    throw new Error('회원 정보가 없습니다.');",
-                '  }',
-                '  if (grade.length > 12) {',
-                "    throw new Error('급수는 12자 이내로 입력하세요.');",
-                '  }',
-                '  if (experience.length > 20) {',
-                "    throw new Error('구력은 20자 이내로 입력하세요.');",
-                '  }',
-                '',
-                '  const members = readMembers_();',
-                '  let found = null;',
-                '  for (let i = 0; i < members.length; i++) {',
-                '    if (String(members[i].id) === memberId) {',
-                '      found = members[i];',
-                '      break;',
-                '    }',
-                '  }',
-                '  if (!found) {',
-                "    throw new Error('회원을 찾을 수 없습니다.');",
-                '  }',
-                '',
-                '  found.gender = gender;',
-                '  found.grade = grade;',
-                '  found.experience = experience;',
-                '  writeMembers_(members);',
-                '',
-                '  return {',
-                '    id: found.id,',
-                '    name: found.name,',
-                '    gender: gender,',
-                '    grade: grade,',
-                '    experience: experience',
-                '  };',
-                '}',
-                '',
-                'function updateMemberSelfProfile(memberId, gender, grade, experience) {',
-                '  return withDocumentLock_(',
-                "    '내 정보 수정',",
-                '    function() {',
-                '      return updateMemberSelfProfileUnlocked_(',
-                '        memberId,',
-                '        gender,',
-                '        grade,',
-                '        experience',
-                '      );',
-                '    }',
-                '  );',
-                '}',
-                '',
-                '',
-              ])
               s=s.replace(anchor,new_fn+anchor,1)
+              p.write_text(s,encoding='utf-8')
+          elif 'updateMemberSelfProfileUnlocked_(pin, memberId, name, gender, grade, experience)' not in s:
+              # Upgrade an already-deployed 4-arg version to the 5-arg (with name) version.
+              start=s.find('function updateMemberSelfProfileUnlocked_(')
+              wrapper_start=s.find('function updateMemberSelfProfile(memberId')
+              if start<0 or wrapper_start<0:
+                  raise SystemExit('could not locate existing updateMemberSelfProfile functions to upgrade')
+              brace_open=s.find('{',wrapper_start)
+              depth=0
+              i=brace_open
+              end=-1
+              while i<len(s):
+                  if s[i]=='{':
+                      depth+=1
+                  elif s[i]=='}':
+                      depth-=1
+                      if depth==0:
+                          end=i+1
+                          break
+                  i+=1
+              if end<0:
+                  raise SystemExit('unbalanced braces while upgrading updateMemberSelfProfile')
+              s=s[:start]+new_fn+s[end:]
+              p.write_text(s,encoding='utf-8')
+          PY
+
+          # Add the 편집 button to the existing quick-move bar (배정대기로 빼기/취소/삭제
+          # already existed in real v1.6.37 - this just adds one more button to that
+          # same bar, wired to the startMemberEdit() function added above).
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Admin.html')
+          s=p.read_text(encoding='utf-8')
+
+          if 'onclick="startMemberEdit()"' not in s:
+              old='\n'.join([
+                '    <button onclick="sendQuickPickToActive()">배정대기로 빼기</button>',
+                '    <button class="ghost-button" onclick="closeMemberActionBar()">취소</button>',
+                '    <button class="danger" onclick="deleteQuickPickedMembers()">삭제</button>',
+              ])
+              if old not in s:
+                  raise SystemExit('quickMoveBar buttons changed unexpectedly')
+              new='\n'.join([
+                '    <button onclick="sendQuickPickToActive()">배정대기로 빼기</button>',
+                '    <button onclick="startMemberEdit()">편집</button>',
+                '    <button class="ghost-button" onclick="closeMemberActionBar()">취소</button>',
+                '    <button class="danger" onclick="deleteQuickPickedMembers()">삭제</button>',
+              ])
+              s=s.replace(old,new,1)
               p.write_text(s,encoding='utf-8')
           PY
 
