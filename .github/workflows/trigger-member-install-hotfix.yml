@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/trigger-member-install-hotfix.yml'
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   actions: write
