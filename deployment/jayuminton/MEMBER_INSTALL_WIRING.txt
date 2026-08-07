@@ -1,0 +1,1253 @@
+=== MAIN WIRING ===
+--- memberSelfSearchInput ---
+w.top.postMessage(
+      Object.assign({type: type}, extra || {}),
+      UNIFIED_MEMBER_APP_ORIGIN
+    );
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function currentMemberAuthVersion() {
+  try { return String(localStorage.getItem(MEMBER_AUTH_KEY) || ''); }
+  catch (error) { return ''; }
+}
+
+function currentMemberSessionToken() {
+  if (MEMBER_SESSION_VALUE) return String(MEMBER_SESSION_VALUE);
+  try { return String(localStorage.getItem(MEMBER_SESSION_KEY) || ''); }
+  catch (error) { return ''; }
+}
+
+function storeMemberSessionToken(token) {
+  MEMBER_SESSION_VALUE = String(token || '');
+  try {
+    if (MEMBER_SESSION_VALUE) localStorage.setItem(MEMBER_SESSION_KEY, MEMBER_SESSION_VALUE);
+    else localStorage.removeItem(MEMBER_SESSION_KEY);
+  } catch (error) {}
+}
+
+function currentStoredWebPushMember() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WEB_PUSH_SELECTED_MEMBER_KEY) || 'null');
+    return saved && saved.id && saved.name
+      ? {id: String(saved.id), name: String(saved.name)}
+      : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function memberAlertEnabled() {
+  try { return localStorage.getItem(MEMBER_ALERT_ENABLED_KEY) !== 'false'; }
+  catch (error) { return true; }
+}
+
+function memberVibrationEnabled() {
+  try { return localStorage.getItem(MEMBER_VIBRATION_ENABLED_KEY) !== 'false'; }
+  catch (error) { return true; }
+}
+
+function storedSelfMemberId() {
+  const member = currentStoredWebPushMember();
+  return member ? String(member.id) : '';
+}
+
+function isSelfMember(member) {
+  return !!member && String(member.id) === storedSelfMemberId();
+}
+
+function unlockMemberAlertAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass && !window.__jayumintonMemberAudioContext) {
+      window.__jayumintonMemberAudioContext = new AudioContextClass();
+    }
+    if (window.__jayumintonMemberAudioContext &&
+        window.__jayumintonMemberAudioContext.state === 'suspended') {
+      window.__jayumintonMemberAudioContext.resume();
+    }
+    MEMBER_ALERT_AUDIO_READY = true;
+  } catch (error) {}
+}
+
+function memberSelfSearchMatches() {
+  const input = document.getElementById('memberSelfSearchInput');
+  const query = String(input && input.value || '').trim().toLocaleLowerCase('ko-KR');
+  if (!query) return [];
+  return sortMembersByKoreanName((STATE.members || []).filter(function(member) {
+    return member && String(member.name || '').toLocaleLowerCase('ko-KR').indexOf(query) >= 0;
+  })).slice(0, 8);
+}
+
+function renderMemberSelfMatches() {
+  if (IS_ADMIN) return;
+  const container = document.getElementById('memberSelfMatches');
+  if (!container) return;
+  const matches = memberSelfSearchMatches();
+  const input = document.getElementById('memberSelfSearchInput');
+  const query = String(input && input.value || '').trim();
+  if (!query) {
+    container.innerHTML = '<span class="member-self-hint">이름을 검색해 본인을 선택하세요.</span>';
+    return;
+  }
+  container.innerHTML = matches.length
+    ? matches.map(function(member) {
+        return '<button type="button" onclick="selectMemberSelf(\'' +
+          escapeMemberInfo(member.id) + '\')">' +
+          escapeMemberInfo(member.name) + '</button>';
+      }).join('')
+    : '<span class="member-self-hint">검색 결과가 없습니다.</span>';
+}
+
+function handleMemberSelfSearchKey(event) {
+  if (!event || event.key !== 'Enter') return;
+  event.preventDefault();
+  const matches = memberSelfSearchMatches();
+  if (matches.length) selectMemberSelf(matches[0].id);
+}
+
+function selectMemberSelf(memberId) {
+  if (IS_ADMIN) return;
+  const member = (STATE.members || []).find(function(item) {
+    return item && String(item.id) === String(memberId);
+  });
+  if (!member) return;
+  const memberInput = document.getElementById('memberSelfSearchInput');
+  if (memberInput) {
+    memberInput.dataset.userEditing = '0';
+    memberInput.value = String(member.name || '').trim();
+  }
+  try {
+    localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+      id: String(member.id),
+      name: String(member.name || '').trim()
+    }));
+    localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'true');
+  } catch (error) {}
+  unlockMemberAlertAudio();
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_SELECTED', {
+    member: {id: String(member.id), name: String(member.name || '').trim()}
+  });
+  renderCourts();
+  renderWaitGroups();
+  render
+--- JAYUMINTON_PUSH_SETUP_REQUEST ---
+emoveItem(WEB_PUSH_SELECTED_MEMBER_KEY);
+    localStorage.removeItem(WEB_PUSH_CONNECTION_KEY);
+    localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false');
+  } catch (error) {}
+  const input = document.getElementById('memberSelfSearchInput');
+  if (input) input.value = '';
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_SELECTED', {member: null});
+  renderCourts();
+  renderWaitGroups();
+  renderActive();
+  renderInactive();
+  renderMemberSelfSettings();
+}
+
+function toggleMemberAlertSetting() {
+  const enabled = !memberAlertEnabled();
+  try { localStorage.setItem(MEMBER_ALERT_ENABLED_KEY, enabled ? 'true' : 'false'); }
+  catch (error) {}
+  if (enabled) unlockMemberAlertAudio();
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_ALERT_PREFERENCE', {enabled: enabled});
+  if (!enabled) postUnifiedMemberMessage('JAYUMINTON_PUSH_DISCONNECT_REQUEST', {member:currentStoredWebPushMember()});
+  renderMemberSelfSettings();
+}
+
+function toggleMemberVibrationSetting() {
+  const enabled = !memberVibrationEnabled();
+  try { localStorage.setItem(MEMBER_VIBRATION_ENABLED_KEY, enabled ? 'true' : 'false'); }
+  catch (error) {}
+  if (enabled && navigator.vibrate) {
+    try { navigator.vibrate(45); } catch (error) {}
+  }
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_VIBRATION_PREFERENCE', {enabled: enabled});
+  renderMemberSelfSettings();
+}
+
+let MEMBER_SETTING_MESSAGE_TIMER = null;
+
+function showMemberSettingMessage(text, isError) {
+  const message = document.getElementById('memberUnifiedSettingMessage');
+  if (!message || !text) return;
+  message.textContent = String(text);
+  message.classList.toggle('is-error', !!isError);
+  message.classList.add('is-visible');
+  if (MEMBER_SETTING_MESSAGE_TIMER) clearTimeout(MEMBER_SETTING_MESSAGE_TIMER);
+  MEMBER_SETTING_MESSAGE_TIMER = setTimeout(function() {
+    message.classList.remove('is-visible');
+  }, 2400);
+}
+
+function compactMemberSelfSettings() {
+  const selected = currentStoredWebPushMember();
+  if (!selected) {
+    const input = document.getElementById('memberSelfSearchInput');
+    if (input) input.focus();
+    showMemberSettingMessage('먼저 내 이름을 선택하세요.', true);
+    return;
+  }
+  if (memberAlertEnabled()) {
+    postUnifiedMemberMessage('JAYUMINTON_PUSH_SETUP_REQUEST', {
+      member: selected,
+      authVersion: currentMemberAuthVersion()
+    });
+  } else {
+    postUnifiedMemberMessage('JAYUMINTON_PUSH_DISCONNECT_REQUEST', {member:selected});
+  }
+  try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'true'); }
+  catch (error) {}
+  renderMemberSelfSettings();
+}
+
+function requestMemberAppInstall() {
+  if (MEMBER_PWA_STANDALONE_HINT) {
+    MEMBER_APP_INSTALL_STATE.installed = true;
+    MEMBER_APP_INSTALL_STATE.choice = 'on';
+    MEMBER_APP_INSTALL_STATE.browserContext = 'standalone';
+    renderMemberSelfSettings();
+  }
+  if (MEMBER_APP_INSTALL_STATE.installed) {
+    showMemberSettingMessage('자유민턴 코트현황 앱이 이미 설치되어 있습니다.');
+    return;
+  }
+
+  const installUrl = buildMemberInstallEntryUrl();
+  const platform = detectMemberInstallPlatform();
+  const context = detectMemberInstallBrowserContext();
+
+  // 카카오톡·당근 등 내부 브라우저에서는 iframe/메시지 중간 단계를 거치지 않는다.
+  // 사용자가 누른 바로 그 동작으로 최상위 화면을 Chrome/Safari로 넘긴다.
+  if (platform === 'android' && context === 'android-embedded') {
+    showMemberSettingMessage('Chrome에서 자유민턴 코트현황을 여는 중입니다.');
+    openMemberInstallInChrome(installUrl);
+    return;
+  }
+  if (platform === 'ios' && context === 'ios-embedded') {
+    showMemberSettingMessage('Safari에서 자유민턴 코트현황을 여는 중입니다.');
+    openMemberInstallInSafari(installUrl);
+    return;
+  }
+
+  // Apps Script 사용자 페이지를 단독으로 연 경우에는 설치 가능한 PWA 주소를
+  // 정식 Chrome에서 열어야 한다. 카카오 커스텀 탭이 Chrome UA를 쓰는 경우도 포함한다.
+  if (platform === 'android' && window.top === window) {
+    showMemberSettingMessage('Chrome에서 자유민턴 코트현황을 여는 중입니다.');
+    openMemberInstallInChrome(installUrl);
+    return;
+  }
+
+  const sent = postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {
+    platform: platform,
+    browserContext: context,
+    installUrl: installUrl
+  });
+  if (sent) return;
+
+  // 통합 사용자 PWA 밖에서 직접 열린 경우에도 설치 진입 주소로 확실히 이동한다.
+  try {
+    window.location.assign(installUrl);
+  } catch (error) {
+    window.open(installUrl, '_blank', 'noopener');
+  }
+}
+
+function buildMemberInstallEntryUrl() {
+  const target = new URL(UNIFIED_MEMBER_APP_URL);
+  target.searchParams.set('install', 'choose');
+  target.searchParams.set('external', '1');
+  target.searchParam
+--- memberSelfSearchInput ---
+or.userAgent || '');
+  const ref = String(document.referrer || '');
+  const embedded = /;\s*wv\)|\bwv\b|KAKAOTALK|KakaoTalk|DaumApps|NAVER|Instagram|FBAN|FBAV|Line\/|Daangn|Danggeun|Karrot|com\.towneers|EverytimeApp|WhaleInApp/i.test(ua) ||
+    /kakao|daangn|danggeun|karrot|naver|instagram/i.test(ref) || !!window.NativeVoice;
+  const platform = detectMemberInstallPlatform();
+  if (embedded && platform === 'android') return 'android-embedded';
+  if (embedded && platform === 'ios') return 'ios-embedded';
+  if (platform === 'android') return 'android-browser';
+  if (platform === 'ios') return 'ios-safari';
+  return 'other';
+}
+
+function navigateMemberTop(url) {
+  try {
+    window.top.location.href = url;
+    return true;
+  } catch (error) {
+    try {
+      window.location.href = url;
+      return true;
+    } catch (innerError) {
+      return false;
+    }
+  }
+}
+
+function openMemberInstallInChrome(installUrl) {
+  if (isUnifiedMemberFrame()) {
+    postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {
+      platform: 'android',
+      browserContext: detectMemberInstallBrowserContext(),
+      installUrl: installUrl
+    });
+    return;
+  }
+  try {
+    const target = new URL(installUrl);
+    if (target.origin !== UNIFIED_MEMBER_APP_ORIGIN) throw new Error('invalid member app origin');
+    target.searchParams.set('install', 'choose');
+    target.searchParams.set('external', '1');
+    target.searchParams.set('source', 'embedded');
+    target.searchParams.set('app', 'user');
+    target.searchParams.set('mode', 'user');
+    navigateMemberTop(target.toString());
+    return;
+  } catch (error) {}
+  navigateMemberTop(UNIFIED_MEMBER_APP_URL + '?install=choose&external=1&source=embedded&app=user&mode=user');
+}
+
+function openMemberInstallInSafari(installUrl) {
+  try {
+    const target = new URL(installUrl);
+    const safariUrl = 'x-safari-https://' + target.host + target.pathname + target.search + target.hash;
+    if (navigateMemberTop(safariUrl)) return;
+  } catch (error) {}
+  navigateMemberTop(installUrl);
+}
+
+function openMemberSelfSettings() {
+  try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); }
+  catch (error) {}
+  const input = document.getElementById('memberSelfSearchInput');
+  if (input) {
+    input.value = '';
+    input.dataset.userEditing = '1';
+  }
+  renderMemberSelfSettings();
+  setTimeout(function() {
+    const currentInput = document.getElementById('memberSelfSearchInput');
+    if (currentInput) currentInput.focus();
+  }, 0);
+}
+
+function renderMemberSelfSettings() {
+  if (IS_ADMIN) return;
+  const summary = document.getElementById('memberSelfSummary');
+  const summaryText = document.getElementById('memberSelfSummaryText');
+  const panel = document.getElementById('memberSelfPanel');
+  const alertButton = document.getElementById('memberAlertToggle');
+  const vibrationButton = document.getElementById('memberVibrationToggle');
+  const appInstallButton = document.getElementById('memberAppInstallToggle');
+  const input = document.getElementById('memberSelfSearchInput');
+  if (!summary || !panel) return;
+
+  const selected = currentStoredWebPushMember();
+  let compact = false;
+  try { compact = !!selected && localStorage.getItem(MEMBER_SELF_PANEL_COMPACT_KEY) !== 'false'; }
+  catch (error) { compact = !!selected; }
+
+  summary.classList.toggle('hidden', !compact);
+  panel.classList.toggle('hidden', compact);
+
+  if (summaryText) {
+    summaryText.textContent = selected
+      ? '🌟 ' + selected.name + ' · 알림 ' + (memberAlertEnabled() ? 'ON' : 'OFF') +
+        ' · 진동 ' + (memberVibrationEnabled() ? 'ON' : 'OFF') +
+        ' · 앱설치 ' + (MEMBER_APP_INSTALL_STATE.installed ? 'ON' : 'OFF')
+      : '🌟 내 이름·알림·앱 설정';
+  }
+  if (alertButton) {
+    alertButton.textContent = '알림 ' + (memberAlertEnabled() ? 'ON' : 'OFF');
+    alertButton.classList.toggle('is-on', memberAlertEnabled());
+  }
+  if (vibrationButton) {
+    vibrationButton.textContent = '진동 ' + (memberVibrationEnabled() ? 'ON' : 'OFF');
+    vibrationButton.classList.toggle('is-on', memberVibrationEnabled());
+  }
+  if (appInstallButton) {
+    let installLabel = '앱 설치';
+    if (MEMBER_APP_INSTALL_STATE.installed) {
+      installLabel = '앱 설치완료';
+    } else if (MEMBER_APP_INSTALL_STATE.installing) {
+      installLabel = '설치 확인';
+    } else if (MEMBER_APP_INSTALL_STATE.browserContext === 'android-embedded') {
+      installLabel = 'Chrome 열기';
+    } else if (MEMBER_APP_I
+--- JAYUMINTON_PUSH_SETUP_REQUEST ---
+badge is-off';
+      }
+      if (setupButton) {
+        setupButton.textContent = '🔔 순서알람 연결';
+        setupButton.classList.remove('push-connected');
+      }
+    } else if (connection && String(connection.memberId) === String(selectedMember.id)) {
+      status.textContent = selectedMember.name + '님 알림 예정';
+      status.classList.add('is-connected');
+      if (connectionBadge) {
+        connectionBadge.textContent = '● 연결 ON';
+        connectionBadge.className = 'push-connection-badge is-on';
+      }
+      if (setupButton) {
+        setupButton.textContent = '● 연결 ON';
+        setupButton.classList.add('push-connected');
+      }
+    } else if (isIosBrowser() && !window.matchMedia('(display-mode: standalone)').matches) {
+      status.textContent = '현재 선택: ' + selectedMember.name +
+        ' — 이 화면을 열어 둔 동안 즉시 화면 알림을 받습니다. 잠금화면 알림은 홈 화면 등록 후 설정할 수 있습니다.';
+      status.classList.remove('is-connected');
+      if (connectionBadge) {
+        connectionBadge.textContent = '○ 연결 OFF';
+        connectionBadge.className = 'push-connection-badge is-off';
+      }
+    } else {
+      status.textContent = '현재 선택: ' + selectedMember.name +
+        ' — 버튼을 눌러 미리 알림과 진동을 연결하세요.';
+      status.classList.remove('is-connected');
+      if (connectionBadge) {
+        connectionBadge.textContent = '○ 연결 OFF';
+        connectionBadge.className = 'push-connection-badge is-off';
+      }
+    }
+  }
+}
+
+function requestUnifiedPushSetup() {
+  if (IS_ADMIN) return;
+  const member = selectedWebPushMember();
+  if (!member) {
+    alert('알림 받을 본인 이름을 먼저 선택하세요.');
+    return;
+  }
+
+  const selected = {
+    id: String(member.id),
+    name: String(member.name || '').trim()
+  };
+  try {
+    localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify(selected));
+  } catch (error) {}
+
+  const status = document.getElementById('webPushStatus');
+  const setupButton = document.getElementById('webPushSetupButton');
+  if (status) {
+    status.textContent = '연결 중…';
+    status.classList.remove('is-connected');
+  }
+  if (setupButton) {
+    setupButton.textContent = '연결 중…';
+    setupButton.disabled = true;
+  }
+
+  if (UNIFIED_MEMBER_BRIDGE_CONNECTED || isUnifiedMemberFrame()) {
+    postUnifiedMemberMessage('JAYUMINTON_PUSH_SETUP_REQUEST', {
+      member: selected,
+      authVersion: currentMemberAuthVersion()
+    });
+    return;
+  }
+
+  alert('알림 연결은 자유민턴 사용자 주소의 화면 맨 위에서 진행해 주세요.');
+}
+
+window.addEventListener('message', function(event) {
+  if (event.origin !== UNIFIED_MEMBER_APP_ORIGIN) return;
+  const data = event.data || {};
+
+  if (data.type === 'JAYUMINTON_UNIFIED_BOOTSTRAP') {
+    UNIFIED_MEMBER_BRIDGE_CONNECTED = true;
+    if (data.authVersion) {
+      try { localStorage.setItem(MEMBER_AUTH_KEY, String(data.authVersion)); }
+      catch (error) {}
+    }
+    if (data.authSession) storeMemberSessionToken(String(data.authSession));
+    if (data.member && data.member.id && data.member.name) {
+      try {
+        localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+          id: String(data.member.id),
+          name: String(data.member.name)
+        }));
+      } catch (error) {}
+      renderWebPushMemberOptions();
+    }
+    if (data.pushConnected && data.pushMember && data.pushMember.id) {
+      try {
+        localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify({
+          connected: true,
+          memberId: String(data.pushMember.id),
+          memberName: String(data.pushMember.name || ''),
+          connectedAt: Date.now()
+        }));
+      } catch (error) {}
+      renderWebPushMemberOptions();
+    }
+    MEMBER_APP_INSTALL_STATE = {
+      installed:MEMBER_PWA_STANDALONE_HINT || !!data.appInstalled,
+      choice:MEMBER_PWA_STANDALONE_HINT ? 'on' : String(data.appInstallChoice || ''),
+      platform:String(data.appInstallPlatform || 'other'),
+      browserContext:MEMBER_PWA_STANDALONE_HINT ? 'standalone' : String(data.appInstallBrowserContext || 'other'),
+      message:'',
+      ready:!!data.appInstallReady,
+      installing:!!data.appInstallPending,
+      armed:!!data.appInstallArmed,
+      prepRemaining:Number(data.appInstallPrepRemaining || 0),
+      nativeInstall:!!data.appInstallNative
+    };
+    renderMemberSelfSettings();
+    if (!IS_ADMIN) initialize();
+    return;
+  }
+
+  if (data.type === 'JAYUMINTON_UNIFIED_PUSH_STATUS') {
+    const status = document.getElementById('webPushStatus');
+    if (data.connected && data.member && data.m
+=== PWA INSTALL WIRING ===
+--- beforeinstallprompt ---
+(() => {
+  'use strict';
+  // v1.6.37: embedded browsers use a real top-level intent link; Chrome uses the native beforeinstallprompt event without reload loops.
+
+  const cfg = window.JAYUMINTON_PUSH_SETUP_CONFIG || {};
+  const frame = document.getElementById('courtFrame');
+  const setupPanel = document.getElementById('setupPanel');
+  const setupToggle = document.getElementById('setupToggle');
+  const setupBody = document.getElementById('setupBody');
+  const alarmSummaryBadge = document.getElementById('alarmSummaryBadge');
+  const installSummaryBadge = document.getElementById('installSummaryBadge');
+  const nameInput = document.getElementById('alarmNameInput');
+  const connectButton = document.getElementById('alarmConnectButton');
+  const stateBadge = document.getElementById('alarmState');
+  const message = document.getElementById('alarmMessage');
+  const appInstallButton = document.getElementById('appInstallButton');
+  const appInstallOffButton = document.getElementById('appInstallOffButton');
+  const appInstallState = document.getElementById('appInstallState');
+  const installTitle = document.getElementById('installTitle');
+  const installHint = document.getElementById('installHint');
+  const installMessage = document.getElementById('installMessage');
+  const toast = document.getElementById('toast');
+  const appInstallClickProxy = document.getElementById('appInstallClickProxy');
+  const appInstallChromeLink = document.getElementById('appInstallChromeLink');
+  const nativeInstallControl = document.getElementById('nativeInstallControl');
+
+  const STORAGE = Object.freeze({
+    member: 'jayuminton_push_setup_member_v164',
+    token: 'jayuminton_push_token_v158',
+    auth: 'jayuminton_member_auth_v164',
+    authSession: 'jayuminton_member_session_token_v1',
+    installChoice: 'jayuminton_user_app_download_choice_v170',
+    installGuideSeen: 'jayuminton_ios_install_guide_seen_v170',
+    installConfirmed: 'jayuminton_user_app_installed_confirmed_v204',
+    setupCollapsed: 'jayuminton_setup_panel_collapsed_v204',
+    engagementSeconds: 'jayuminton_pwa_chrome_visible_seconds_v204',
+    installRecheck: 'jayuminton_pwa_installability_recheck_v204'
+  });
+
+  let members = [];
+  let member = readJson(STORAGE.member);
+  let messaging = null;
+  let registration = null;
+  let serviceWorkerPromise = null;
+  let sdkPromise = null;
+  let toastTimer = null;
+  let isConnected = false;
+  let deferredInstallPrompt = null;
+  let installAttemptPending = false;
+  let installAttemptTimer = null;
+--- beforeinstallprompt ---
+ery.get('install') === 'choose' || query.get('install') === '1';
+  const externalBrowserEntry = query.get('source') === 'embedded' || query.get('external') === '1';
+  if (androidDevice && !embeddedBrowser && (installationEntryRequested || externalBrowserEntry)) {
+    setInstallIntentArmed(true);
+  }
+  const transferredMemberSession = String(query.get('memberSession') || localStorage.getItem(STORAGE.authSession) || '');
+  if (transferredMemberSession) localStorage.setItem(STORAGE.authSession, transferredMemberSession);
+  if (query.has('memberSession')) {
+    try {
+      query.delete('memberSession');
+      const cleanUrl = window.location.pathname + (query.toString() ? '?' + query.toString() : '') + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch (_) {}
+  }
+
+  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
+    member = {id:String(query.get('memberId')), name:String(query.get('memberName'))};
+    saveJson(STORAGE.member, member);
+  }
+  if (member && member.name) nameInput.value = shortName(member.name);
+  syncStandaloneInstallState();
+  frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
+
+
+  setupToggle.addEventListener('click', () => setSetupCollapsed(!setupPanel.classList.contains('is-collapsed'), true));
+  connectButton.addEventListener('click', handleAlarmButton);
+  appInstallButton.addEventListener('click', handleAppInstallButton);
+  appInstallOffButton.addEventListener('click', setAppDownloadOff);
+  appInstallClickProxy.addEventListener('click', handleDirectInstallProxyClick);
+  appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);
+  appInstallChromeLink.addEventListener('touchstart', () => {
+    if (androidDevice && embeddedBrowser) appInstallChromeLink.href = buildAndroidChromeIntent().intentUrl;
+  }, {passive:true});
+  appInstallClickProxy.removeAttribute('href');
+  appInstallClickProxy.removeAttribute('target');
+  appInstallChromeLink.setAttribute('target', '_top');
+  if (nativeInstallControl) {
+    nativeInstallControl.addEventListener('promptaction', handleNativeInstallAction);
+    nativeInstallControl.addEventListener('promptdismiss', handleNativeInstallDismiss);
+    nativeInstallControl.addEventListener('validationstatuschanged', handleNativeInstallValidation);
+  }
+  window.addEventListener('beforeinstallprompt', captureAndroidInstallPrompt);
+  window.addEventListener('jayuminton:installpromptready', consumeEarlyInstallPrompt);
+  window.addEventListener('appinstalled', handleUserAppInstalled);
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      consumeEarlyInstallPrompt();
+      refreshInstallState();
+    });
+  }
+  window.addEventListener('message', handleCourtMessage);
+  window.addEventListener('resize', refreshInstallProxyPosition, {passive:true});
+  window.addEventListener('scroll', refreshInstallProxyPosition, {passive:true});
+  frame.addEventListener('load', () => {
+    window.setTimeout(() => {
+      syncStandaloneInstallState();
+      sendBootstrap();
+      refreshInstallProxyPosition();
+    }, 120);
+  });
+  window.addEventListener('pageshow', () => {
+    syncStandaloneInstallState();
+    refreshInstallState();
+  });
+  const standaloneMedia = window.matchMedia('(display-mode: standalone)');
+  if (standaloneMedia && typeof standaloneMedia.addEventListener === 'function') {
+    standaloneMedia.addEventListener('change', () => {
+      syncStandaloneInstallState();
+      refreshInstallState();
+      sendBootstrap();
+    });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      syncStandaloneInstallState();
+      refreshConnectionState();
+      refreshInstallState();
+      startEngagementClock();
+    } else {
+      stopEngagementClock();
+    }
+  });
+
+  consumeEarlyInstallPrompt();
+  startEngagementClock();
+  prepareServiceWorker()
+    .then(() => ensureChromeInstallControl())
+    .catch(() => null);
+  configureSetupPanel();
+  refreshInstallState();
+  refreshConnectionState();
+  if ((installationEntryRequested || externalBrowserEntry) && !isStandaloneApp()) {
+    window.setTimeout(() => {
+      if (androidDevice && !embeddedBrowser) {
+        showToast('Chrome에서 PWA 설치 가능 상태를 확인하고 있습니다.');
+      } else if (iosDevice && browserContext === 'ios-safari') {
+        showToast('Safari에서 바로 사용할 수 있습니다. 앱설치를 누르면 홈 화면 추가 방법이 표시됩니다.');
+      }
+    }, 700);
+  }
+
+  function configureSetupPanel() {
+    setSetupCollapsed(true, false);
+    setupPanel.hidden = true;
+    setupPanel.setAttribute('aria-hidden', 'true');
+    setupPanel.style.setProperty('display', 'none', 'important');
+    setupPanel.classList.add('hidden-infrastructure');
+  }
+
+  function setSe
+--- deferredInstallPrompt ---
+torage.setItem(STORAGE.authSession, String(data.sessionToken));
+      sendBootstrap();
+    } else if (data.type === 'JAYUMINTON_MEMBER_LIST') {
+      members = Array.isArray(data.members) ? data.members : [];
+    } else if (data.type === 'JAYUMINTON_MEMBER_SELECTED' || data.type === 'JAYUMINTON_MEMBER_CLICKED') {
+      if (data.member && data.member.id && data.member.name) {
+        member = {id:String(data.member.id), name:String(data.member.name)};
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+      } else if (data.type === 'JAYUMINTON_MEMBER_SELECTED') {
+        member = null;
+        localStorage.removeItem(STORAGE.member);
+        nameInput.value = '';
+      }
+      sendBootstrap();
+    } else if (data.type === 'JAYUMINTON_PUSH_SETUP_REQUEST') {
+      if (data.member && data.member.id && data.member.name) {
+        member = {id:String(data.member.id), name:String(data.member.name)};
+        saveJson(STORAGE.member, member);
+        nameInput.value = shortName(member.name);
+      }
+      connectAlarm();
+    } else if (data.type === 'JAYUMINTON_PUSH_DISCONNECT_REQUEST') {
+      if (isConnected || localStorage.getItem(STORAGE.token)) disconnectAlarm();
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_BUTTON_RECT') {
+      updateInstallClickProxy(data);
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {
+      handleAppInstallButton(true);
+    } else if (data.type === 'JAYUMINTON_APP_INSTALL_OFF') {
+      setAppDownloadOff();
+    } else if (data.type === 'JAYUMINTON_CONTENT_HEIGHT') {
+      const height = Math.max(500, Math.ceil(Number(data.height || 0)));
+      frame.style.height = height + 'px';
+    }
+  }
+
+  function sendBootstrap() {
+    sendCourtMessage('JAYUMINTON_UNIFIED_BOOTSTRAP', {
+      authVersion:String(localStorage.getItem(STORAGE.auth) || ''),
+      authSession:String(localStorage.getItem(STORAGE.authSession) || ''),
+      member,
+      pushConnected:Boolean(localStorage.getItem(STORAGE.token) && member && 'Notification' in window && Notification.permission === 'granted'),
+      pushMember:member,
+      appInstalled:isUserAppInstalledState(),
+      appInstallChoice:String(localStorage.getItem(STORAGE.installChoice) || ''),
+      appInstallPlatform:iosDevice ? 'ios' : (androidDevice ? 'android' : 'other'),
+      appInstallBrowserContext:browserContext,
+      appInstallReady:Boolean(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall()),
+      appInstallPending:Boolean(installAttemptPending),
+      appInstallArmed:Boolean(installIntentArmed),
+      appInstallPrepRemaining:installPreparationRemaining(),
+      appInstallNative:Boolean(supportsNativeInstallElement() || supportsNavigatorInstall())
+    });
+  }
+
+  function sendCourtMessage(type, extra) {
+    if (frame.contentWindow) frame.contentWindow.postMessage(Object.assign({type}, extra || {}), '*');
+  }
+
+  function captureAndroidInstallPrompt(event) {
+    if (!event || !androidDevice || isStandaloneApp()) return;
+    try { event.preventDefault(); } catch (_) {}
+    deferredInstallPrompt = event;
+    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
+    installAttemptPending = false;
+    setInstallIntentArmed(false);
+    engagementSeconds = MIN_INSTALL_ENGAGEMENT_SECONDS;
+    persistEngagementSeconds();
+    try { sessionStorage.removeItem(STORAGE.installRecheck); } catch (_) {}
+    clearTimeout(installAttemptTimer);
+    refreshInstallState();
+    showToast('설치 준비 완료: PWA 설치 버튼을 눌러 주세요.');
+  }
+
+  function consumeEarlyInstallPrompt() {
+    const early = window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
+    if (early && early !== deferredInstallPrompt) captureAndroidInstallPrompt(early);
+    if (window.__JAYUMINTON_EARLY_APP_INSTALLED) handleUserAppInstalled();
+  }
+
+  function startEngagementClock() {
+    if (!androidDevice || embeddedBrowser || isStandaloneApp() || document.hidden || deferredInstallPrompt) return;
+    if (engagementSeconds >= MIN_INSTALL_ENGAGEMENT_SECONDS) scheduleInstallabilityRecheck();
+    if (engagementTimer) return;
+    engagementTimer = window.setInterval(() => {
+      if (document.hidden || deferredInstallPrompt || isStandaloneApp()) return;
+      if (engagementSeconds < MIN_INSTALL_ENGAGEMENT_SECONDS) {
+        engagementSeconds += 1;
+        persistEngagementSeconds();
+        refreshInstallState();
+        if (engagementSeconds >= MIN_INSTALL_ENGAGEMENT_SECONDS) scheduleInstallabilityRecheck();
+      }
+    }, 1000);
+  }
+
+  function stopEngagementClock() {
+    if (!engagementTimer) return;
+    clearInterval(engagementTimer);
+    engagementTimer = null;
+  }
+
+  function persistEngagementSeconds() {
+    try { localStorage.setItem(STORAGE.engagementSeconds, String(Math.max(0, Math.min(MIN_INSTALL_ENGAGEMENT_SECONDS, engagementSeconds)))); } cat
+--- deferredInstallPrompt ---
+s('설치 확인중');
+    refreshInstallState();
+  }
+
+  function handleNativeInstallDismiss() {
+    installAttemptPending = false;
+    setInstallIntentArmed(false);
+    const detail = '앱 설치가 취소되었습니다.';
+    setInstallMessage(detail);
+    sendAppInstallStatus(detail);
+    refreshInstallState();
+  }
+
+  function handleNativeInstallValidation(event) {
+    const reason = String((event && event.target && event.target.invalidReason) || '');
+    if (!reason) return;
+    installAttemptPending = false;
+    sendAppInstallStatus('설치 준비 확인 중');
+    refreshInstallState();
+  }
+
+  async function ensureChromeInstallControl() {
+    if (!androidDevice || embeddedBrowser || isStandaloneApp()) return;
+    try {
+      await prepareServiceWorker();
+      consumeEarlyInstallPrompt();
+      refreshInstallState();
+    } catch (_) {
+      refreshInstallState();
+    }
+  }
+
+  function handleEmbeddedChromeLinkClick() {
+    setInstallMessage('Chrome으로 이동합니다. 열린 Chrome 화면에서 앱설치를 한 번 눌러 주세요.', 'success');
+    sendAppInstallStatus('Chrome으로 이동');
+  }
+
+  function handleDirectInstallProxyClick(event) {
+    // This is a real top-level BUTTON, not an <a href="#">. Always consume the tap so
+    // Chrome can never navigate, refresh, or reopen the current page by default.
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (androidDevice && embeddedBrowser) {
+      setInstallMessage('Chrome에서 자유민턴 코트현황을 여는 중입니다.', 'success');
+      sendAppInstallStatus('Chrome으로 이동');
+      openInAndroidChrome();
+      return;
+    }
+    handleAppInstallButton(true);
+  }
+
+  function handleAppInstallButton(fromDirectUserTap) {
+    if (isUserAppInstalledState()) {
+      markAppDownloadOn();
+      showToast('자유민턴 코트현황 앱이 이미 설치되어 있습니다.');
+      collapseSetupAfterSuccess();
+      return;
+    }
+
+    if (androidDevice && embeddedBrowser) {
+      const detail = 'Chrome에서 설치 화면을 준비합니다.';
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus(detail);
+      showToast('Chrome으로 이동합니다.');
+      openInAndroidChrome();
+      return;
+    }
+
+    if (iosDevice && embeddedBrowser) {
+      const detail = 'Safari에서 설치 화면을 엽니다.';
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus(detail);
+      showToast('Safari로 이동합니다.');
+      openInIOSSafari();
+      return;
+    }
+
+    if (iosDevice) {
+      showIOSInstallGuide();
+      return;
+    }
+    if (androidDevice) {
+      if (deferredInstallPrompt) {
+        installAndroidUserApp(Boolean(fromDirectUserTap));
+        return;
+      }
+      if (supportsNavigatorInstall()) {
+        installWithNavigatorApi(Boolean(fromDirectUserTap));
+        return;
+      }
+      if (supportsNativeInstallElement()) {
+        setInstallIntentArmed(true);
+        refreshInstallState();
+        return;
+      }
+      // Chrome has not emitted beforeinstallprompt yet. Never refresh or reopen this page.
+      // Register the service worker and wait on this same screen. If Chrome suppresses
+      // the event, the user can still use Chrome menu > 앱 설치.
+      setInstallIntentArmed(true);
+      ensureChromeInstallControl();
+      const detail = '설치창을 준비 중입니다. 잠시 뒤 다시 누르거나 Chrome ⋮ 메뉴의 앱 설치를 선택하세요.';
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus(detail);
+      showToast(detail);
+      refreshInstallState();
+      return;
+    }
+    const detail = '현재 브라우저 메뉴에서 앱 설치 또는 홈 화면에 추가를 선택해 주세요.';
+    setInstallMessage(detail, 'error');
+    sendAppInstallStatus(detail);
+  }
+
+  async function installWithNavigatorApi(fromDirectUserTap) {
+    if (!fromDirectUserTap) {
+      sendAppInstallStatus('설치 버튼 직접 터치 필요');
+      return;
+    }
+    installAttemptPending = true;
+    setInstallIntentArmed(false);
+    setInstallMessage('시스템 설치창을 여는 중입니다.', 'success');
+    sendAppInstallStatus('설치창 여는 중');
+    refreshInstallState();
+    try {
+      const result = await navigator.install();
+      installAttemptPending = true;
+      setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
+      sendAppInstallStatus('설치 확인중');
+      if (result && (result.outcome === 'dismissed' || result === false)) {
+        handleNativeInstallDismiss();
+      }
+    } catch (error) {
+      installAttemptPending = false;
+      const detail = 'Chrome이 설치 요청을 허용하지 않았습니다.';
+      setInstallMessage(detail, 'error');
+      sendAppInstallStatus(detail);
+      refreshInstallState();
+    }
+  }
+
+  function installAndroidUserApp(fromDirectUserTap) {
+    if (!deferredInstallPrompt) {
+      installAttemptPending = false;
+      const detail = 'PWA 설치 준비가 아직 끝나지 않았습니다. 준비가 완료되면 버튼이 PWA 설치로 바뀝니다.';
+      setInstallMessage(detail);
+      sendAppInstallStatus(detail);
+      showToast(detail);
+      prepareServiceWorker().then(() => ensureChromeInstallControl()).catch(() => null);
+      refreshInstallState();
+      return;
+    }
+
+    if (!fromDirectUser
+--- deferredInstallPrompt ---
+rchParams.set('memberName', String(member.name));
+    const authSession = String(localStorage.getItem(STORAGE.authSession) || transferredMemberSession || '');
+    if (authSession) target.searchParams.set('memberSession', authSession);
+    return target;
+  }
+
+  function buildAndroidChromeIntent() {
+    const target = buildChromeUserTarget();
+    const targetUrl = target.toString();
+    const hostAndPath = target.host + target.pathname + target.search + target.hash;
+    // A real href intent is required in Kakao/Daangn WebView. JavaScript location changes
+    // are often treated as a same-page refresh. The HTTPS fallback keeps source=chrome
+    // so the destination is never classified as embedded again.
+    const intentUrl = 'intent://' + hostAndPath +
+      '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+      'category=android.intent.category.BROWSABLE;S.browser_fallback_url=' +
+      encodeURIComponent(targetUrl) + ';end';
+    return { targetUrl, intentUrl };
+  }
+
+  function launchChromeFromFirebaseTop() {
+    const links = buildAndroidChromeIntent();
+    const hasActivation = !navigator.userActivation || navigator.userActivation.isActive;
+    if (!hasActivation) {
+      // Never auto-run an Android intent from a timer/message event. It is blocked by Chrome
+      // and was the path that produced the Google Drive error page.
+      window.location.href = links.targetUrl;
+      return;
+    }
+    window.location.href = links.intentUrl;
+  }
+
+  function openInAndroidChrome() {
+    launchChromeFromFirebaseTop();
+  }
+
+  function openInIOSSafari() {
+    const target = new URL(window.location.href);
+    target.searchParams.set('install', 'choose');
+    target.searchParams.set('external', '1');
+    target.searchParams.set('source', 'embedded');
+    target.searchParams.set('app', 'user');
+    target.searchParams.set('mode', 'user');
+    const authSession = String(localStorage.getItem(STORAGE.authSession) || '');
+    if (authSession) target.searchParams.set('memberSession', authSession);
+    const safariTarget = 'x-safari-https://' + target.host + target.pathname + target.search + target.hash;
+    window.location.href = safariTarget;
+    window.setTimeout(() => {
+      showToast('Safari가 열리지 않으면 우측 상단 메뉴에서 Safari로 열기를 선택하세요.');
+      sendAppInstallStatus('Safari로 열기');
+    }, 900);
+  }
+
+  function handleUserAppInstalled() {
+    deferredInstallPrompt = null;
+    installAttemptPending = false;
+    setInstallIntentArmed(false);
+    stopEngagementClock();
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installConfirmed, '1');
+    markAppDownloadOn();
+    showToast('자유민턴 코트현황 앱 설치 완료');
+    collapseSetupAfterSuccess();
+  }
+
+  function setAppDownloadOff() {
+    installAttemptPending = false;
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installChoice, 'off');
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    refreshInstallState();
+    setInstallMessage('앱설치 OFF로 저장했습니다. 자동으로 다시 묻지 않습니다.', 'success');
+    sendAppInstallStatus('앱설치 OFF');
+    showToast('앱설치 OFF 저장 완료');
+    collapseSetupAfterSuccess();
+  }
+
+  function markAppDownloadOn() {
+    installAttemptPending = false;
+    clearTimeout(installAttemptTimer);
+    localStorage.setItem(STORAGE.installConfirmed, '1');
+    localStorage.setItem(STORAGE.installChoice, 'on');
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    refreshInstallState();
+  }
+
+  function refreshInstallState() {
+    const choice = localStorage.getItem(STORAGE.installChoice) || '';
+    const installed = isUserAppInstalledState();
+    if (installed) {
+      if (choice !== 'on') localStorage.setItem(STORAGE.installChoice, 'on');
+      appInstallState.textContent = '앱설치 ON';
+      appInstallState.className = 'state-pill is-on';
+      installSummaryBadge.textContent = '앱설치 ON';
+      installSummaryBadge.className = 'mini-state is-on';
+      appInstallButton.textContent = '앱설치 완료';
+      appInstallButton.disabled = true;
+      appInstallOffButton.classList.add('hidden');
+      appInstallClickProxy.hidden = true;
+      appInstallChromeLink.hidden = true;
+      setInstallMessage('홈 화면의 자유민턴 코트현황 앱으로 실행 중입니다.', 'success');
+      sendAppInstallStatus('앱설치 ON');
+      return;
+    }
+
+    appInstallButton.disabled = false;
+    appInstallOffButton.classList.remove('hidden');
+    if (iosDevice && embeddedBrowser) {
+      installTitle.textContent = '아이폰 PWA';
+      installHint.textContent = 'Safari로 이동해 자유민턴 코트현황을 홈 화면에 추가합니다.';
+      appInstallButton.textContent = 'Safari 열기';
+    } else if (iosDevice) {
+      installTitle.textContent = '아이폰 PWA';
+      installHint.textContent = 'Safari 홈 화면에 자유민턴 코트현황을 추가합니다.';
+      appInstallButton.textContent = 'PWA 설치';
+    } else if (androidDevice && embeddedBrowser) {
+    
+--- deferredInstallPrompt ---
+   appInstallButton.textContent = installAttemptPending
+        ? '설치 확인중'
+        : (deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall()
+          ? 'PWA 설치'
+          : '설치 준비중');
+    } else {
+      installTitle.textContent = '웹앱';
+      installHint.textContent = '브라우저의 앱 설치 또는 홈 화면 추가 기능을 사용합니다.';
+      appInstallButton.textContent = 'PWA 설치';
+    }
+
+    appInstallState.textContent = '앱설치 OFF';
+    appInstallState.className = installAttemptPending ? 'state-pill is-wait' : 'state-pill is-off';
+    installSummaryBadge.textContent = installAttemptPending ? '설치 확인' : '앱설치 OFF';
+    installSummaryBadge.className = installAttemptPending ? 'mini-state is-wait' : 'mini-state is-off';
+    if (choice === 'off') {
+      setInstallMessage('앱설치 OFF로 저장되어 있습니다. 자동으로 다시 묻지 않습니다.', 'success');
+    } else if (installAttemptPending) {
+      setInstallMessage('설치 완료 신호를 확인하고 있습니다.', 'success');
+    } else if (androidDevice && embeddedBrowser) {
+      setInstallMessage('누르면 Chrome으로 이동합니다. Chrome에서 앱설치를 한 번 더 눌러 시스템 설치창을 여세요.');
+    } else if (androidDevice && deferredInstallPrompt) {
+      setInstallMessage(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall() ? '앱설치를 누르면 시스템 설치창이 열립니다.' : 'Chrome 설치 가능 상태를 확인하고 있습니다.', 'success');
+    } else if (androidDevice) {
+      const remaining = installPreparationRemaining();
+      setInstallMessage(remaining > 0 ? 'PWA 설치 준비 ' + remaining + '초' : 'Chrome 설치창을 준비하고 있습니다.', 'success');
+    } else if (iosDevice && embeddedBrowser) {
+      setInstallMessage('누르면 Safari로 이동합니다. Safari에서 PWA 설치를 진행하세요.');
+    } else if (iosDevice) {
+      setInstallMessage('PWA 설치를 누른 뒤 Safari 공유 → 홈 화면에 추가를 선택하세요.');
+    }
+    sendAppInstallStatus(choice === 'off' ? '앱설치 OFF' : (installAttemptPending ? '설치 확인중' : (deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall() ? '설치 가능' : '설치 준비')));
+    refreshInstallProxyPosition();
+  }
+
+  function sendAppInstallStatus(messageText) {
+    sendCourtMessage('JAYUMINTON_APP_INSTALL_STATUS', {
+      installed:isUserAppInstalledState(),
+      choice:String(localStorage.getItem(STORAGE.installChoice) || ''),
+      platform:iosDevice ? 'ios' : (androidDevice ? 'android' : 'other'),
+      browserContext:browserContext,
+      source:String(new URLSearchParams(window.location.search).get('source') || ''),
+      ready:Boolean(deferredInstallPrompt || supportsNativeInstallElement() || supportsNavigatorInstall()),
+      installing:Boolean(installAttemptPending),
+      armed:Boolean(installIntentArmed),
+      prepRemaining:installPreparationRemaining(),
+      nativeInstall:Boolean(supportsNativeInstallElement() || supportsNavigatorInstall()),
+      message:String(messageText || '')
+    });
+  }
+
+  function updateInstallClickProxy(data) {
+    lastInstallButtonRect = {
+      visible:Boolean(data.visible),
+      left:Number(data.left || 0),
+      top:Number(data.top || 0),
+      width:Number(data.width || 0),
+      height:Number(data.height || 0)
+    };
+    refreshInstallProxyPosition();
+  }
+
+  function refreshInstallProxyPosition() {
+    const rect = lastInstallButtonRect;
+    const installed = isUserAppInstalledState();
+    if (!rect || !rect.visible || installed || rect.width < 16 || rect.height < 16) {
+      appInstallClickProxy.hidden = true;
+      appInstallChromeLink.hidden = true;
+      if (nativeInstallControl) nativeInstallControl.hidden = true;
+      return;
+    }
+    const frameRect = frame.getBoundingClientRect();
+    const left = Math.round(window.scrollX + frameRect.left + rect.left) + 'px';
+    const top = Math.round(window.scrollY + frameRect.top + rect.top) + 'px';
+    const width = Math.round(rect.width) + 'px';
+    const height = Math.round(rect.height) + 'px';
+    // Kakao/Daangn WebView must receive a real top-level <a href="intent://...">
+    // generated from the user's direct tap. JavaScript location changes can be blocked
+    // or converted into a refresh by the host app.
+    if (androidDevice && embeddedBrowser) {
+      const links = buildAndroidChromeIntent();
+      appInstallChromeLink.href = links.intentUrl;
+      appInstallChromeLink.style.left = left;
+      appInstallChromeLink.style.top = top;
+      appInstallChromeLink.style.width = width;
+      appInstallChromeLink.style.height = height;
+      appInstallChromeLink.hidden = false;
+      appInstallClickProxy.hidden = true;
+      if (nativeInstallControl) nativeInstallControl.hidden = true;
+      return;
+    }
+    appInstallChromeLink.hidden = true;
+    // In real Chrome, the transparent top-level button directly calls prompt().
+    if (supportsNativeInstallElement()) {
+      nativeInstallControl.style.left = left;
+      nativeInstallControl.style.top = top;
+      nativeInstallControl.style.width = width
+--- deferredInstallPrompt ---
+;
+    appInstallClickProxy.style.width = width;
+    appInstallClickProxy.style.height = height;
+    appInstallClickProxy.hidden = false;
+  }
+
+  function showIOSInstallGuide() {
+    if (!iosDevice || isStandaloneApp()) return;
+    localStorage.setItem(STORAGE.installGuideSeen, '1');
+    setInstallMessage('Safari 공유 → 홈 화면에 추가 → 추가를 눌러 주세요.', 'success');
+    showToast('아이폰: Safari 공유 → 홈 화면에 추가 → 추가');
+    sendAppInstallStatus('Safari 공유 → 홈 화면에 추가 → 추가');
+  }
+
+  function closeIOSInstallGuide() {}
+  function confirmIOSInstallGuide() { showIOSInstallGuide(); }
+
+  function isIOSDevice() {
+    const ua = String(navigator.userAgent || '');
+    return /iPhone|iPad|iPod/i.test(ua) ||
+      (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
+  }
+
+  function isAndroidDevice() {
+    return /Android/i.test(String(navigator.userAgent || ''));
+  }
+
+  function isEmbeddedBrowser() {
+    const ua = String(navigator.userAgent || '');
+    const source = String(new URLSearchParams(window.location.search).get('source') || '').toLowerCase();
+    // The Chrome intent target explicitly uses source=chrome. Never classify that page
+    // as embedded merely because document.referrer still contains Kakao or Daangn.
+    if (source === 'chrome' || source === 'pwa') return false;
+    if (source === 'embedded') return true;
+    return /;\s*wv\)|\bwv\b|KAKAOTALK|KakaoTalk|DaumApps|NAVER|Instagram|FBAN|FBAV|Line\/|Daangn|Danggeun|Karrot|com\.towneers|EverytimeApp|WhaleInApp/i.test(ua) ||
+      !!window.NativeVoice;
+  }
+
+  function isIOSSafari() {
+    const ua = String(navigator.userAgent || '');
+    return iosDevice && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|KAKAOTALK|DaumApps|NAVER|Instagram|FBAN|FBAV/i.test(ua);
+  }
+
+  function detectBrowserContext() {
+    if (isStandaloneApp()) return 'standalone';
+    if (androidDevice && embeddedBrowser) return 'android-embedded';
+    if (androidDevice) return 'android-chrome';
+    if (iosDevice && embeddedBrowser) return 'ios-embedded';
+    if (isIOSSafari()) return 'ios-safari';
+    if (iosDevice) return 'ios-browser';
+    return 'other';
+  }
+
+  function isStandaloneApp() {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+  }
+
+  function syncStandaloneInstallState() {
+    if (!isStandaloneApp()) return false;
+    installAttemptPending = false;
+    deferredInstallPrompt = null;
+    setInstallIntentArmed(false);
+    clearTimeout(installAttemptTimer);
+    try {
+      localStorage.setItem(STORAGE.installConfirmed, '1');
+      localStorage.setItem(STORAGE.installChoice, 'on');
+      sessionStorage.removeItem(STORAGE.installRecheck);
+    } catch (_) {}
+    return true;
+  }
+
+  function isUserAppInstalledState() {
+    if (syncStandaloneInstallState()) return true;
+    return localStorage.getItem(STORAGE.installConfirmed) === '1';
+  }
+
+  function normalizedName(value) { return String(value || '').normalize('NFC').replace(/[\s()\[\]{}._\-·]/g,'').toLocaleLowerCase('ko-KR'); }
+  function firstTwoSearchChars(value) { return Array.from(normalizedName(value)).slice(0,2).join(''); }
+  function shortName(value) { return Array.from(String(value || '').trim()).slice(0,2).join(''); }
+  function readJson(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } }
+  function saveJson(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} }
+  function validMemberPageUrl(value) { const t=String(value||'').trim(); return /^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/exec\/?$/.test(t)?t.replace(/\/$/,''):''; }
+  function userOnlyMemberPageUrl(value, sessionToken) {
+    const t = validMemberPageUrl(value);
+    if (!t) return '';
+    const u = new URL(t);
+    u.searchParams.set('mode', 'user');
+    u.searchParams.set('app', 'user');
+    u.searchParams.set('source', 'pwa');
+    if (isStandaloneApp()) u.searchParams.set('pwaStandalone', '1');
+    if (sessionToken) u.searchParams.set('memberSession', String(sessionToken));
+    return u.toString();
+  }
+  function validRelayUrl(value) { return validMemberPageUrl(value); }
+  function vibrationPattern(type) {
+    return type === 'court_assignment'
+      ? [1400,500,1400,500,1400]
+      : [900,450,900,450,900];
+  }
+  function notificationRepeatGap(type) {
+    return type === 'court_assignment' ? 6500 : 0;
+  }
+  function setMessage(text, type) { message.textContent=text; message.className='setting-message'+(type?' '+type:''); }
+  function setInstallMessage(text, type) { installMessage.textContent=text; installMessage.className='setting-message'+(type?' '+type:''); }
+  function showToast(text) { clearTimeout(toastTimer);toast.textContent=text;toast.classList.remove('hidden');toastTimer=setTimeout(()=>toast.class
