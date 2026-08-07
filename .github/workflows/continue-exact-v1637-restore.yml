@@ -6,7 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/continue-exact-v1637-restore.yml'
-      - 'deployment/jayuminton/exact-v1637-web/**'
+      - 'deployment/jayuminton/v1637-web/**'
 
 permissions:
   contents: write
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Keep v1.6.37 design and fix name/install only
+    name: Restore real v1.6.37 Chrome tap without UI changes
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -50,10 +50,10 @@ jobs:
             echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
-            echo "BUILD_ROOT=$RUNNER_TEMP/v1637-final7"
+            echo "BUILD_ROOT=$RUNNER_TEMP/v1637-final8"
           } >> "$GITHUB_ENV"
 
-      - name: Patch MAIN behavior only
+      - name: Fix MAIN behavior and remove visible debug text
         shell: bash
         run: |
           set -euo pipefail
@@ -63,7 +63,7 @@ jobs:
           cd "$WORK"
           clasp pull
 
-          # UI/design files are verified and never edited.
+          # Visible v1.6.37 UI files must stay byte-for-byte unchanged.
           printf '%s  %s\n' \
             '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
             '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
@@ -76,25 +76,37 @@ jobs:
           p=Path('Script.html')
           s=p.read_text(encoding='utf-8')
 
-          # Google Apps Script must never launch intent:// itself.
+          # Remove every accidentally rendered deployment marker after the real </script>.
+          end=s.rfind('</script>')
+          if end < 0:
+              raise SystemExit('Script closing tag missing')
+          tail=s[end+len('</script>'):]
+          if tail.strip() and not re.fullmatch(r'(?:\s*//\s*v1637-[^\n]*-main\s*)+', tail):
+              raise SystemExit('Unexpected content exists after </script>; refusing to cut it')
+          s=s[:end+len('</script>')]+'\n'
+
+          # MAIN iframe never launches Android intent itself. It only asks the Firebase top page.
           a=s.find('function openMemberInstallInChrome(installUrl) {')
           b=s.find('function openMemberInstallInSafari(installUrl) {',a)
-          if a<0 or b<0: raise SystemExit('Chrome install function not found')
+          if a<0 or b<0:
+              raise SystemExit('Chrome install function missing')
           s=s[:a]+"""function openMemberInstallInChrome(installUrl) {
             if (isUnifiedMemberFrame()) {
               postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {
-                platform:'android', browserContext:detectMemberInstallBrowserContext(), installUrl:installUrl
+                platform: 'android',
+                browserContext: detectMemberInstallBrowserContext(),
+                installUrl: installUrl
               });
               return;
             }
             try {
               const target = new URL(installUrl);
               if (target.origin !== UNIFIED_MEMBER_APP_ORIGIN) throw new Error('invalid member app origin');
-              target.searchParams.set('install','choose');
-              target.searchParams.set('external','1');
-              target.searchParams.set('source','embedded');
-              target.searchParams.set('app','user');
-              target.searchParams.set('mode','user');
+              target.searchParams.set('install', 'choose');
+              target.searchParams.set('external', '1');
+              target.searchParams.set('source', 'embedded');
+              target.searchParams.set('app', 'user');
+              target.searchParams.set('mode', 'user');
               navigateMemberTop(target.toString());
               return;
             } catch (error) {}
@@ -103,66 +115,74 @@ jobs:
 
           """+s[b:]
 
-          # Opening the existing name area is explicit edit mode.
+          # Name edit: opening settings means the user is changing the saved member.
           a=s.find('function openMemberSelfSettings() {')
           b=s.find('function renderMemberSelfSettings() {',a)
-          if a<0 or b<0: raise SystemExit('member settings block not found')
+          if a<0 or b<0:
+              raise SystemExit('Member settings block missing')
           s=s[:a]+"""function openMemberSelfSettings() {
-            try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY,'false'); } catch (error) {}
-            const input=document.getElementById('memberSelfSearchInput');
+            try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); }
+            catch (error) {}
+            const input = document.getElementById('memberSelfSearchInput');
             if (input) {
-              input.value='';
-              input.dataset.userEditing='1';
+              input.value = '';
+              input.dataset.userEditing = '1';
             }
             renderMemberSelfSettings();
-            setTimeout(function(){
-              const currentInput=document.getElementById('memberSelfSearchInput');
+            setTimeout(function() {
+              const currentInput = document.getElementById('memberSelfSearchInput');
               if (currentInput) currentInput.focus();
-            },0);
+            }, 0);
           }
 
           """+s[b:]
 
-          # If an old autofill line still exists, make it respect edit mode. If already removed, leave it removed.
           s=re.sub(
             r"^\s*if \(input && selected && !input\.value(?: && [^\n]*)?\) input\.value = selected\.name;\s*$",
             "  if (input && selected && !input.value && input.dataset.userEditing !== '1') input.value = selected.name;",
             s,count=1,flags=re.M
           )
 
-          # Selecting a speech-bubble result is what confirms the replacement user.
           a=s.find('function selectMemberSelf(memberId) {')
           b=s.find('function clearMemberSelfSelection() {',a)
-          if a<0 or b<0: raise SystemExit('selectMemberSelf block not found')
+          if a<0 or b<0:
+              raise SystemExit('Member select block missing')
           block=s[a:b]
-          if "memberInput.dataset.userEditing='0'" not in block and "memberInput.dataset.userEditing = '0'" not in block:
+          if "memberInput.dataset.userEditing = '0'" not in block:
               needle='  if (!member) return;\n'
-              if needle not in block: raise SystemExit('member selection insertion point missing')
+              if needle not in block:
+                  raise SystemExit('Member selection insertion point missing')
               block=block.replace(needle,"""  if (!member) return;
-            const memberInput=document.getElementById('memberSelfSearchInput');
+            const memberInput = document.getElementById('memberSelfSearchInput');
             if (memberInput) {
-              memberInput.dataset.userEditing='0';
-              memberInput.value=String(member.name || '').trim();
+              memberInput.dataset.userEditing = '0';
+              memberInput.value = String(member.name || '').trim();
             }
           """,1)
               s=s[:a]+block+s[b:]
 
-          p.write_text(s+'\n// v1637-final7-main\n',encoding='utf-8')
+          p.write_text(s,encoding='utf-8')
           PY
 
-          grep -F 'v1637-final7-main' Script.html >/dev/null
-          if grep -F 'S.browser_fallback_url' Script.html >/dev/null; then exit 1; fi
+          # No debug text may exist after the closing script tag.
           python3 - <<'PY'
           from pathlib import Path
           s=Path('Script.html').read_text(encoding='utf-8')
+          if s.rstrip().endswith('</script>') is False:
+              raise SystemExit('Script.html has visible text after </script>')
+          if re := __import__('re'):
+              if re.search(r'^//\s*v1637-.*-main\s*$', s, re.M):
+                  raise SystemExit('Visible v1637 debug marker remains')
           a=s.find('function openMemberInstallInChrome(installUrl) {')
           b=s.find('function openMemberInstallInSafari(installUrl) {',a)
-          if 'intent://' in s[a:b]: raise SystemExit('MAIN still launches intent://')
+          if 'intent://' in s[a:b]:
+              raise SystemExit('MAIN still launches intent://')
           PY
-          clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v1.6.37 UI final7 ${GITHUB_SHA::7}"
 
-      - name: Verify MAIN endpoint
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v1.6.37 real Chrome tap final8 ${GITHUB_SHA::7}"
+
+      - name: Verify MAIN endpoint and no visible debug text
         shell: bash
         run: |
           set -euo pipefail
@@ -172,18 +192,27 @@ jobs:
           curl --fail --location --retry 5 --retry-delay 3 --max-time 90 --output "$BODY" --write-out '%{url_effective}' "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" > "$FINAL"
           if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then echo 'Drive redirect'; cat "$FINAL"; exit 1; fi
           for key in memberSelfSearchInput memberSelfMatches memberAlertToggle memberVibrationToggle memberAppInstallToggle memberSelfDone; do grep -F "$key" "$BODY" >/dev/null; done
+          if grep -E '// v1637-final[0-9]+-main' "$BODY" >/dev/null; then echo 'Visible debug marker still live'; exit 1; fi
 
-      - name: Build PWA behavior only
+      - name: Build from the real v1.6.37 PWA source
         shell: bash
         run: |
           set -euo pipefail
           rm -rf "$BUILD_ROOT" && mkdir -p "$BUILD_ROOT/web-push"
           cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
-          cp deployment/jayuminton/exact-v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
-          cp deployment/jayuminton/exact-v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
-          cat deployment/jayuminton/exact-v1637-web/setup-v205.js.part-* > "$BUILD_ROOT/web-push/setup-v205.js"
-          cp deployment/jayuminton/exact-v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
-          cp deployment/jayuminton/exact-v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+          cp deployment/jayuminton/v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
+          cp deployment/jayuminton/v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
+          cp deployment/jayuminton/v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
+          cp deployment/jayuminton/v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+          cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup-v205.js.gz"
+          gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$BUILD_ROOT/web-push/setup-v205.js"
+
+          printf '%s  %s\n' \
+            '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d' "$BUILD_ROOT/web-push/index.html" \
+            '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f' "$BUILD_ROOT/web-push/setup-v205.css" \
+            '53828f38565e057b865750b9fbf66737b8841451ac4afebc34150b0f93d8fd9b' "$BUILD_ROOT/web-push/setup-v205.js" \
+            'd1bad15093aa92ab3ab89097e2bb783763666350b4fcba5c24f5365e6d53de5a' "$BUILD_ROOT/web-push/manifest.webmanifest" \
+            '2b8fea2e2051fd265ec2e5d4ef1f988e149e4575f252c2a3d18b2020913278b1' "$BUILD_ROOT/web-push/firebase-messaging-sw.js" | sha256sum --check
 
           python3 - <<'PY'
           import os
@@ -192,23 +221,88 @@ jobs:
           p=root/'setup-v205.js'
           s=p.read_text(encoding='utf-8')
 
-          # Clear stale installed flag only when Chrome emits beforeinstallprompt.
+          # Real v1.6.37 direct anchor behavior must exist before patching.
+          required=[
+            "appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);",
+            "appInstallChromeLink.addEventListener('touchstart'",
+            "appInstallChromeLink.setAttribute('target', '_top');",
+            "appInstallChromeLink.href = links.intentUrl;"
+          ]
+          for marker in required:
+              if marker not in s:
+                  raise SystemExit('Real v1.6.37 Chrome anchor marker missing: '+marker)
+
+          # Keep the real anchor intent, but remove browser_fallback_url completely.
+          old="""    const intentUrl = 'intent://' + hostAndPath +
+            '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+            'category=android.intent.category.BROWSABLE;S.browser_fallback_url=' +
+            encodeURIComponent(targetUrl) + ';end';
+          """
+          new="""    const intentUrl = 'intent://' + hostAndPath +
+            '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +
+            'category=android.intent.category.BROWSABLE;end';
+          """
+          if old not in s:
+              raise SystemExit('v1.6.37 intent block changed unexpectedly')
+          s=s.replace(old,new,1)
+
+          # A postMessage/timer is not a trusted tap. Never turn it into same-page navigation.
+          old="""    if (!hasActivation) {
+              // Never auto-run an Android intent from a timer/message event. It is blocked by Chrome
+              // and was the path that produced the Google Drive error page.
+              window.location.href = links.targetUrl;
+              return;
+            }
+          """
+          new="""    if (!hasActivation) {
+              setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');
+              sendAppInstallStatus('Chrome 직접 터치 대기');
+              refreshInstallProxyPosition();
+              return;
+            }
+          """
+          if old not in s:
+              raise SystemExit('v1.6.37 activation fallback block changed unexpectedly')
+          s=s.replace(old,new,1)
+
+          # If the iframe button receives a tap instead of the transparent real link,
+          # do not refresh/reopen this Firebase page. Re-arm the real top-level link only.
+          old="""    } else if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {
+              handleAppInstallButton(true);
+          """
+          new="""    } else if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {
+              if (androidDevice && embeddedBrowser) {
+                setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');
+                sendAppInstallStatus('Chrome 직접 링크 대기');
+                refreshInstallProxyPosition();
+                return;
+              }
+              handleAppInstallButton(true);
+          """
+          if old not in s:
+              raise SystemExit('install request message block changed unexpectedly')
+          s=s.replace(old,new,1)
+
+          # Uninstalling a PWA does not clear localStorage. Clear stale installed state only
+          # when Chrome itself proves the app is installable again.
           anchor="    deferredInstallPrompt = event;\n    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;\n"
-          if 'final7-stale-install-reset' not in s:
-              if anchor not in s: raise SystemExit('beforeinstallprompt anchor missing')
-              s=s.replace(anchor,"""    deferredInstallPrompt = event;
+          if anchor not in s:
+              raise SystemExit('beforeinstallprompt anchor missing')
+          s=s.replace(anchor,"""    deferredInstallPrompt = event;
             try {
               localStorage.removeItem(STORAGE.installConfirmed);
               if (localStorage.getItem(STORAGE.installChoice) === 'on') localStorage.removeItem(STORAGE.installChoice);
             } catch (_) {}
-            // final7-stale-install-reset
             window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
           """,1)
-          p.write_text(s+'\n// v1637-final7-pwa\n',encoding='utf-8')
 
-          # Cache bust only; visible structure/CSS stay unchanged.
+          p.write_text(s,encoding='utf-8')
+
+          # Cache bust only; visible DOM/CSS/layout are unchanged.
           idx=root/'index.html'
-          t=idx.read_text(encoding='utf-8').replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-final7').replace('/config-v204.js?v=1637','/config-v204.js?v=1637-final7')
+          t=idx.read_text(encoding='utf-8')
+          t=t.replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-final8')
+          t=t.replace('/config-v204.js?v=1637','/config-v204.js?v=1637-final8')
           idx.write_text(t,encoding='utf-8')
 
           template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
@@ -217,16 +311,20 @@ jobs:
               (root/name).write_text(cfg,encoding='utf-8')
 
           sw=root/'firebase-messaging-sw.js'
-          t=sw.read_text(encoding='utf-8').replace("const JAYUMINTON_SW_VERSION = '1.6.37-fix1';","const JAYUMINTON_SW_VERSION = '1.6.37-final7';").replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v211';","const JAYUMINTON_CACHE = 'jayuminton-shell-v217';")
+          t=sw.read_text(encoding='utf-8')
+          t=t.replace("const JAYUMINTON_SW_VERSION = '1.6.37';","const JAYUMINTON_SW_VERSION = '1.6.37-final8';")
+          t=t.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';","const JAYUMINTON_CACHE = 'jayuminton-shell-v218';")
           sw.write_text(t,encoding='utf-8')
           PY
 
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
-          grep -F 'final7-stale-install-reset' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F "appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F "appInstallChromeLink.addEventListener('touchstart'" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
+          grep -F "appInstallChromeLink.setAttribute('target', '_top');" "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
           grep -F 'appInstallChromeLink.href = links.intentUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
           grep -F 'promptResult = promptEvent.prompt()' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
-          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then exit 1; fi
-          if grep -F 'window.location.href = links.targetUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then exit 1; fi
+          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then echo 'Drive-risk fallback remains'; exit 1; fi
+          if grep -F 'window.location.href = links.targetUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then echo 'Same-page refresh fallback remains'; exit 1; fi
 
           BASE="${HOSTING_URL%/}"
           for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
@@ -236,20 +334,23 @@ jobs:
 
       - name: Deploy Firebase Hosting
         working-directory: ${{ env.BUILD_ROOT }}
-        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "v1.6.37 design unchanged final7 ${GITHUB_SHA::7}"
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "real v1.6.37 Chrome tap final8 ${GITHUB_SHA::7}"
 
-      - name: Verify live Firebase
+      - name: Verify live Firebase after propagation
         shell: bash
         run: |
           set -euo pipefail
+          sleep 8
           BASE="${HOSTING_URL%/}"
-          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-final8"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/?v=$BUST" > "$RUNNER_TEMP/index"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?v=$BUST" > "$RUNNER_TEMP/setup"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/config-v204.js?v=$BUST" > "$RUNNER_TEMP/config"
-          grep -F 'setup-v205.js?v=1637-final7' "$RUNNER_TEMP/index" >/dev/null
-          grep -F 'v1637-final7-pwa' "$RUNNER_TEMP/setup" >/dev/null
-          grep -F 'final7-stale-install-reset' "$RUNNER_TEMP/setup" >/dev/null
+          grep -F 'setup-v205.js?v=1637-final8' "$RUNNER_TEMP/index" >/dev/null
+          grep -F "appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);" "$RUNNER_TEMP/setup" >/dev/null
+          grep -F "appInstallChromeLink.addEventListener('touchstart'" "$RUNNER_TEMP/setup" >/dev/null
+          grep -F "appInstallChromeLink.setAttribute('target', '_top');" "$RUNNER_TEMP/setup" >/dev/null
+          grep -F 'appInstallChromeLink.href = links.intentUrl' "$RUNNER_TEMP/setup" >/dev/null
           grep -F 'promptResult = promptEvent.prompt()' "$RUNNER_TEMP/setup" >/dev/null
           if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
           if grep -F 'window.location.href = links.targetUrl' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
@@ -265,6 +366,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/jayuminton/EXACT_V1637_LIVE_RESULT.txt
-          git commit -m "Record exact v1.6.37 final7: $STATUS" || exit 0
+          git commit -m "Record real v1.6.37 Chrome final8: $STATUS" || exit 0
           git pull --rebase origin main || true
           git push
