@@ -156,7 +156,7 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
-      - name: Build PWA with safe Chrome handoff and install enabled
+      - name: Build installable PWA with no Drive route
         shell: bash
         run: |
           set -euo pipefail
@@ -169,11 +169,50 @@ jobs:
           cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup-v205.js.gz"
           gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$BUILD_ROOT/web-push/setup-v205.js"
 
+          BASE="${HOSTING_URL%/}"
+          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 4 --retry-delay 2 --max-time 60 "$BASE/$a?src=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"
+            test -s "$BUILD_ROOT/web-push/$a"
+          done
+
+          python3 -m pip install --quiet pillow
+
           python3 - <<'PY'
+          import json
           import os
           from pathlib import Path
+          from PIL import Image
 
           root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+
+          # Make icon sizes physically exact. Chrome validates the declared 192/512 icons.
+          with Image.open(root / 'icon-198.png') as im:
+              im.convert('RGBA').resize((192, 192), Image.Resampling.LANCZOS).save(root / 'icon-192.png')
+          with Image.open(root / 'icon-512.png') as im:
+              im.convert('RGBA').resize((512, 512), Image.Resampling.LANCZOS).save(root / 'icon-512.png')
+
+          manifest_path = root / 'manifest.webmanifest'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          manifest.update({
+              'id': '/',
+              'name': '자유민턴 코트현황',
+              'short_name': '자유민턴',
+              'description': '자유민턴 사용자용 코트현황과 내 순서 알림·진동',
+              'scope': '/',
+              'start_url': '/?app=user&mode=user&source=pwa',
+              'display': 'standalone',
+              'background_color': '#f3f5fa',
+              'theme_color': '#315efb',
+              'prefer_related_applications': False,
+          })
+          manifest['icons'] = [
+              {'src':'/icon-192.png?v=pwa3','sizes':'192x192','type':'image/png','purpose':'any'},
+              {'src':'/icon-512.png?v=pwa3','sizes':'512x512','type':'image/png','purpose':'any'},
+              {'src':'/icon-192.png?v=pwa3','sizes':'192x192','type':'image/png','purpose':'maskable'},
+              {'src':'/icon-512.png?v=pwa3','sizes':'512x512','type':'image/png','purpose':'maskable'},
+          ]
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
           js = root / 'setup-v205.js'
           s = js.read_text(encoding='utf-8')
 
@@ -184,23 +223,19 @@ jobs:
               depth = 0
               i = brace_open
               while i < len(src):
-                  if src[i] == '{':
-                      depth += 1
+                  if src[i] == '{': depth += 1
                   elif src[i] == '}':
                       depth -= 1
-                      if depth == 0:
-                          return src[start_idx:i+1], start_idx, i+1
+                      if depth == 0: return src[start_idx:i+1], start_idx, i+1
                   i += 1
               raise SystemExit('unbalanced braces')
 
-          # Critical: never send Android Chrome handoff through a browser_fallback_url.
-          # That old fallback is what can land on a Google Drive "file cannot be opened" page.
+          # Never create browser_fallback_url. The install route must never touch Drive.
           a = s.find('function buildAndroidChromeIntent() {')
           if a < 0:
               raise SystemExit('buildAndroidChromeIntent function missing')
           block, bstart, bend = extract_block(s, a)
-          if 'S.browser_fallback_url' in block:
-              safe_block = """function buildAndroidChromeIntent() {
+          safe_block = """function buildAndroidChromeIntent() {
             const target = buildChromeUserTarget();
             const targetUrl = target.toString();
             const hostAndPath = target.host + target.pathname + target.search + target.hash;
@@ -209,10 +244,9 @@ jobs:
               'category=android.intent.category.BROWSABLE;end';
             return { targetUrl, intentUrl };
           }"""
-              s = s[:bstart] + safe_block + s[bend:]
+          s = s[:bstart] + safe_block + s[bend:]
 
-          # A timer/postMessage is not a fresh user gesture. Do not fall back to a same-page
-          # navigation that can be rewritten by an embedded browser. Wait for another tap.
+          # No automatic same-page fallback after a non-user-activated message/timer.
           a = s.find('function launchChromeFromFirebaseTop() {')
           if a < 0:
               raise SystemExit('launchChromeFromFirebaseTop function missing')
@@ -222,16 +256,14 @@ jobs:
               iblock, istart, iend = extract_block(fn, guard)
               if 'window.location.href = links.targetUrl' in iblock:
                   replacement = """if (!hasActivation) {
-              setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');
-              sendAppInstallStatus('Chrome 직접 터치 대기');
-              refreshInstallProxyPosition();
+              setInstallMessage('아래 파란 앱 설치 버튼을 눌러 설치해 주세요.', 'success');
+              sendAppInstallStatus('앱 설치 버튼 대기');
               return;
             }"""
                   fn = fn[:istart] + replacement + fn[iend:]
                   s = s[:fstart] + fn + s[fend:]
 
-          # Apps Script may add a googleusercontent iframe layer. Accept that trusted origin
-          # instead of requiring exact window identity, while keeping the origin allow-list.
+          # Apps Script adds a googleusercontent iframe layer; allow only known Google script origins.
           old_guard = '\n'.join([
               '  function handleCourtMessage(event) {',
               '    if (event.source !== frame.contentWindow) return;',
@@ -247,149 +279,230 @@ jobs:
 
           js.write_text(s, encoding='utf-8')
 
+          # One service worker owns both offline PWA behavior and Firebase messaging.
+          sw = root / 'firebase-messaging-sw.js'
+          t = sw.read_text(encoding='utf-8')
+          t = t.replace("const JAYUMINTON_SW_VERSION = '1.6.37';", "const JAYUMINTON_SW_VERSION = '1.6.37-pwa-install3';")
+          t = t.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';", "const JAYUMINTON_CACHE = 'jayuminton-shell-v221';")
+          t = t.replace("'/icon-198.png',", "'/icon-192.png',")
+          sw.write_text(t, encoding='utf-8')
+
           idx = root / 'index.html'
           html = idx.read_text(encoding='utf-8')
-          marker = 'JAYUMINTON_VISIBLE_PWA_INSTALL_V2'
+          marker = 'JAYUMINTON_PWA_INSTALL_DIRECT_V3'
           if marker not in html:
               head_patch = r'''
-  <!-- JAYUMINTON_VISIBLE_PWA_INSTALL_V2 -->
+  <!-- JAYUMINTON_PWA_INSTALL_DIRECT_V3 -->
   <style>
-    #jayumintonPwaInstallButton {
-      position: fixed;
-      right: 14px;
-      bottom: calc(14px + env(safe-area-inset-bottom));
-      z-index: 9999;
-      min-height: 44px;
-      padding: 0 16px;
-      border: 0;
-      border-radius: 999px;
-      background: #315efb;
-      color: #fff;
-      font: 900 14px/1 -apple-system,BlinkMacSystemFont,"Noto Sans KR","Apple SD Gothic Neo",sans-serif;
-      box-shadow: 0 10px 28px rgba(49,94,251,.30);
-      cursor: pointer;
-    }
-    #jayumintonPwaInstallButton[hidden] { display: none !important; }
+    #jayumintonPwaInstallDock{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:10000;display:flex;flex-direction:column;align-items:flex-end;gap:6px;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR","Apple SD Gothic Neo",sans-serif}
+    #jayumintonPwaInstallButton{min-height:48px;padding:0 18px;border:0;border-radius:999px;background:#315efb;color:#fff;font-size:14px;font-weight:950;box-shadow:0 10px 30px rgba(49,94,251,.34);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+    #jayumintonPwaInstallButton.is-ready{background:#0b8f4d}
+    #jayumintonPwaInstallButton.is-installed{background:#697386}
+    #jayumintonPwaInstallStatus{max-width:min(82vw,360px);padding:7px 10px;border-radius:10px;background:rgba(23,43,77,.94);color:#fff;font-size:11px;font-weight:800;line-height:1.4;text-align:right;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+    #jayumintonPwaInstallDock[hidden],#jayumintonPwaInstallStatus[hidden]{display:none!important}
   </style>
   <script>
   (() => {
-    let deferredPwaInstallPrompt = null;
+    let installPrompt = window.__JAYUMINTON_EARLY_INSTALL_PROMPT || null;
+    let secondsOpen = 0;
 
-    function isStandalone() {
-      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const isAndroid = () => /Android/i.test(navigator.userAgent || '');
+    const isEmbedded = () => /;\s*wv\)|\bwv\b|KAKAOTALK|KakaoTalk|DaumApps|NAVER|Instagram|FBAN|FBAV|Line\/|Daangn|Danggeun|Karrot/i.test(navigator.userAgent || '');
+
+    function dock(){ return document.getElementById('jayumintonPwaInstallDock'); }
+    function button(){ return document.getElementById('jayumintonPwaInstallButton'); }
+    function status(){ return document.getElementById('jayumintonPwaInstallStatus'); }
+
+    function childStatus(extra) {
+      const frame = document.getElementById('courtFrame');
+      if (!frame || !frame.contentWindow) return;
+      frame.contentWindow.postMessage(Object.assign({
+        type:'JAYUMINTON_APP_INSTALL_STATUS',
+        installed:isStandalone(),
+        choice:isStandalone() ? 'on' : '',
+        platform:isAndroid() ? 'android' : (/iPhone|iPad|iPod/i.test(navigator.userAgent || '') ? 'ios' : 'other'),
+        browserContext:isStandalone() ? 'standalone' : (isAndroid() ? (isEmbedded() ? 'android-embedded' : 'android-browser') : 'other'),
+        ready:!!installPrompt,
+        installing:false,
+        armed:true,
+        prepRemaining:Math.max(0,30-secondsOpen),
+        nativeInstall:false
+      }, extra || {}), '*');
     }
 
-    function button() {
-      return document.getElementById('jayumintonPwaInstallButton');
+    function paint(message) {
+      const d=dock(), b=button(), s=status();
+      if (!d || !b || !s) return;
+      if (isStandalone()) {
+        d.hidden=false;
+        b.textContent='✅ 앱 설치완료';
+        b.className='is-installed';
+        b.disabled=true;
+        s.hidden=true;
+        childStatus({installed:true,choice:'on',ready:false,message:'앱 설치완료'});
+        setTimeout(()=>{ d.hidden=true; },1600);
+        return;
+      }
+      d.hidden=false;
+      b.disabled=false;
+      if (installPrompt) {
+        b.textContent='📲 앱 설치';
+        b.className='is-ready';
+        s.textContent=message || '설치 준비 완료 — 버튼을 누르면 바로 설치창이 열립니다.';
+      } else if (isAndroid() && isEmbedded()) {
+        b.textContent='🌐 Chrome에서 열기';
+        b.className='';
+        s.textContent=message || '내부 브라우저에서는 설치할 수 없어 Chrome으로 바로 엽니다.';
+      } else {
+        b.textContent='📲 앱 설치 준비중';
+        b.className='';
+        const remain=Math.max(0,30-secondsOpen);
+        s.textContent=message || (remain>0 ? 'Chrome 설치 조건 확인 중 · 약 '+remain+'초 후 설치 버튼이 활성화됩니다.' : '설치 준비가 되면 버튼이 자동으로 활성화됩니다. Chrome 메뉴의 “앱 설치”도 사용할 수 있습니다.');
+      }
+      s.hidden=false;
+      childStatus({ready:!!installPrompt,message:s.textContent,prepRemaining:Math.max(0,30-secondsOpen)});
     }
 
-    function refresh() {
-      const el = button();
-      if (!el) return;
-      el.hidden = isStandalone() || !deferredPwaInstallPrompt;
+    function openRealChrome() {
+      const target = new URL(location.href);
+      target.searchParams.set('install','1');
+      target.searchParams.set('source','chrome');
+      const hostPath = target.host + target.pathname + target.search + target.hash;
+      location.href = 'intent://' + hostPath + '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end';
     }
 
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
-      deferredPwaInstallPrompt = event;
-      refresh();
+      installPrompt = event;
+      window.__JAYUMINTON_EARLY_INSTALL_PROMPT = event;
+      paint('설치 준비 완료 — 지금 “앱 설치”를 누르세요.');
     });
 
     window.addEventListener('appinstalled', () => {
-      deferredPwaInstallPrompt = null;
-      refresh();
+      installPrompt = null;
+      window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
+      paint('앱 설치가 완료되었습니다.');
     });
 
-    window.addEventListener('DOMContentLoaded', () => {
-      if (window.__JAYUMINTON_EARLY_INSTALL_PROMPT) {
-        deferredPwaInstallPrompt = window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
-      }
-
+    window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }).catch(() => {});
+        try {
+          const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {scope:'/'});
+          if (reg.waiting) reg.waiting.postMessage({type:'JAYUMINTON_SKIP_WAITING'});
+          await navigator.serviceWorker.ready;
+        } catch (error) {
+          console.error('[Jayuminton] service worker registration failed', error);
+        }
       }
 
-      const el = button();
-      if (el) {
-        el.addEventListener('click', async () => {
-          const promptEvent = deferredPwaInstallPrompt || window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
-          if (!promptEvent) {
-            refresh();
-            return;
+      if (window.__JAYUMINTON_EARLY_INSTALL_PROMPT) installPrompt = window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
+      paint();
+
+      const b=button();
+      if (b) b.addEventListener('click', async () => {
+        if (isStandalone()) return;
+        if (isAndroid() && isEmbedded() && !installPrompt) {
+          openRealChrome();
+          return;
+        }
+        const promptEvent = installPrompt || window.__JAYUMINTON_EARLY_INSTALL_PROMPT;
+        if (!promptEvent) {
+          paint(secondsOpen>=30 ? 'Chrome 메뉴(⋮)의 “앱 설치”를 눌러도 바로 설치할 수 있습니다.' : null);
+          return;
+        }
+        b.disabled=true;
+        try {
+          await promptEvent.prompt();
+          const choice = await promptEvent.userChoice;
+          if (choice && choice.outcome === 'accepted') {
+            childStatus({installing:true,choice:'on',message:'설치 확인 중'});
+          } else {
+            childStatus({installing:false,message:'설치가 취소되었습니다.'});
           }
-          el.disabled = true;
-          try {
-            await promptEvent.prompt();
-            await promptEvent.userChoice;
-          } catch (_) {}
-          deferredPwaInstallPrompt = null;
-          window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;
-          el.disabled = false;
-          refresh();
-        });
-      }
-      refresh();
+        } catch (error) {
+          console.error('[Jayuminton] install prompt failed', error);
+        }
+        installPrompt=null;
+        window.__JAYUMINTON_EARLY_INSTALL_PROMPT=null;
+        b.disabled=false;
+        paint();
+      });
+
+      setInterval(() => {
+        secondsOpen += 1;
+        if (!installPrompt && !isStandalone() && secondsOpen <= 31) paint();
+      },1000);
     });
   })();
   </script>
 '''
-              body_patch = '\n  <button id="jayumintonPwaInstallButton" type="button" hidden aria-label="자유민턴 앱 설치">📲 앱 설치</button>\n'
+              body_patch = '\n  <div id="jayumintonPwaInstallDock"><div id="jayumintonPwaInstallStatus">앱 설치 준비 중</div><button id="jayumintonPwaInstallButton" type="button">📲 앱 설치 준비중</button></div>\n'
               html = html.replace('</head>', head_patch + '</head>', 1)
               html = html.replace('<main class="court-shell">', body_patch + '  <main class="court-shell">', 1)
 
-          html = html.replace('/setup-v205.js?v=1637', '/setup-v205.js?v=1637-pwa-on2')
-          html = html.replace('/config-v204.js?v=1637', '/config-v204.js?v=1637-pwa-on2')
+          html = html.replace('/manifest.webmanifest?v=205','/manifest.webmanifest?v=pwa3')
+          html = html.replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-pwa-install3')
+          html = html.replace('/config-v204.js?v=1637','/config-v204.js?v=1637-pwa-install3')
+          html = html.replace('/icon-198.png?v=205','/icon-192.png?v=pwa3')
           idx.write_text(html, encoding='utf-8')
 
           template = Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
           cfg = template.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
-          for name in ('config-v202.js', 'config-v203.js', 'config-v204.js'):
+          for name in ('config-v202.js','config-v203.js','config-v204.js'):
               (root / name).write_text(cfg, encoding='utf-8')
-
-          sw = root / 'firebase-messaging-sw.js'
-          t = sw.read_text(encoding='utf-8')
-          t = t.replace("const JAYUMINTON_SW_VERSION = '1.6.37';", "const JAYUMINTON_SW_VERSION = '1.6.37-pwa-on2';")
-          t = t.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';", "const JAYUMINTON_CACHE = 'jayuminton-shell-v220';")
-          sw.write_text(t, encoding='utf-8')
           PY
 
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
-          grep -F 'JAYUMINTON_VISIBLE_PWA_INSTALL_V2' "$BUILD_ROOT/web-push/index.html" >/dev/null
-          grep -F 'navigator.serviceWorker.register' "$BUILD_ROOT/web-push/index.html" >/dev/null
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          from PIL import Image
+          root=Path(os.environ['BUILD_ROOT'])/'web-push'
+          m=json.loads((root/'manifest.webmanifest').read_text(encoding='utf-8'))
+          assert m['display']=='standalone'
+          assert m['scope']=='/'
+          assert m['start_url'].startswith('/')
+          assert m['prefer_related_applications'] is False
+          assert Image.open(root/'icon-192.png').size==(192,192)
+          assert Image.open(root/'icon-512.png').size==(512,512)
+          PY
+          grep -F 'JAYUMINTON_PWA_INSTALL_DIRECT_V3' "$BUILD_ROOT/web-push/index.html" >/dev/null
+          grep -F "navigator.serviceWorker.register('/firebase-messaging-sw.js'" "$BUILD_ROOT/web-push/index.html" >/dev/null
           grep -F 'beforeinstallprompt' "$BUILD_ROOT/web-push/index.html" >/dev/null
-          grep -F '"display": "standalone"' "$BUILD_ROOT/web-push/manifest.webmanifest" >/dev/null
-          grep -F '"scope": "/"' "$BUILD_ROOT/web-push/manifest.webmanifest" >/dev/null
-          if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then
-            echo 'Unsafe browser_fallback_url remains'; exit 1
+          grep -F '📲 앱 설치' "$BUILD_ROOT/web-push/index.html" >/dev/null
+          if grep -E 'drive\.google\.com|docs\.google\.com|S\.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then
+            echo 'Drive/fallback route remains in setup JS'; exit 1
           fi
           if grep -F 'window.location.href = links.targetUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then
-            echo 'Unsafe same-page Chrome fallback remains'; exit 1
+            echo 'Unsafe same-page install fallback remains'; exit 1
           fi
-
-          BASE="${HOSTING_URL%/}"
-          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
-            curl --fail --location --retry 3 --max-time 60 "$BASE/$a?src=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"
-            test -s "$BUILD_ROOT/web-push/$a"
-          done
 
       - name: Deploy Firebase Hosting
         working-directory: ${{ env.BUILD_ROOT }}
-        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "PWA install ON safe Chrome ${GITHUB_SHA::7}"
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "PWA install direct no-Drive ${GITHUB_SHA::7}"
 
-      - name: Verify live PWA
+      - name: Verify live installability files
         shell: bash
         run: |
           set -euo pipefail
-          sleep 8
+          sleep 10
           BASE="${HOSTING_URL%/}"
-          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-pwa-on2"
-          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/?v=$BUST" > "$RUNNER_TEMP/index-live"
+          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-pwa-install3"
+          FINAL="$RUNNER_TEMP/final-url"
+          curl --fail --location -H 'Cache-Control: no-cache' --write-out '%{url_effective}' --output "$RUNNER_TEMP/index-live" "$BASE/?v=$BUST" > "$FINAL"
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then echo 'Unexpected Drive redirect'; cat "$FINAL"; exit 1; fi
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?v=$BUST" > "$RUNNER_TEMP/setup-live"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/manifest.webmanifest?v=$BUST" > "$RUNNER_TEMP/manifest-live"
           curl --fail --location -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?v=$BUST" > "$RUNNER_TEMP/sw-live"
-          grep -F 'JAYUMINTON_VISIBLE_PWA_INSTALL_V2' "$RUNNER_TEMP/index-live" >/dev/null
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/icon-192.png?v=$BUST" > "$RUNNER_TEMP/icon192-live"
+          curl --fail --location -H 'Cache-Control: no-cache' "$BASE/icon-512.png?v=$BUST" > "$RUNNER_TEMP/icon512-live"
+          grep -F 'JAYUMINTON_PWA_INSTALL_DIRECT_V3' "$RUNNER_TEMP/index-live" >/dev/null
           grep -F '📲 앱 설치' "$RUNNER_TEMP/index-live" >/dev/null
           grep -F '"display": "standalone"' "$RUNNER_TEMP/manifest-live" >/dev/null
-          grep -F "1.6.37-pwa-on2" "$RUNNER_TEMP/sw-live" >/dev/null
-          if grep -F 'S.browser_fallback_url' "$RUNNER_TEMP/setup-live" >/dev/null; then exit 1; fi
-          if grep -F 'window.location.href = links.targetUrl' "$RUNNER_TEMP/setup-live" >/dev/null; then exit 1; fi
+          grep -F '"src": "/icon-192.png?v=pwa3"' "$RUNNER_TEMP/manifest-live" >/dev/null
+          grep -F '"src": "/icon-512.png?v=pwa3"' "$RUNNER_TEMP/manifest-live" >/dev/null
+          grep -F "1.6.37-pwa-install3" "$RUNNER_TEMP/sw-live" >/dev/null
+          test -s "$RUNNER_TEMP/icon192-live"
+          test -s "$RUNNER_TEMP/icon512-live"
+          if grep -E 'drive\.google\.com|docs\.google\.com|S\.browser_fallback_url' "$RUNNER_TEMP/setup-live" >/dev/null; then exit 1; fi
