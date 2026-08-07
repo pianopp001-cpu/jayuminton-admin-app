@@ -24,6 +24,7 @@ jobs:
         shell: bash
         run: |
           set -u
+          # retrigger marker: verify-retry-v13
           BODY="$RUNNER_TEMP/dispatch-body.txt"
           CODE=$(curl -sS -o "$BODY" -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
