@@ -1,0 +1,95 @@
+name: Inspect Jayuminton install path
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-install-path.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+
+      - name: Pull live MAIN and extract install path
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$JAYUMINTON_DEPLOY_CONFIG_JSON"
+          test -n "$CLASPRC_JSON"
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+
+          WORK="$RUNNER_TEMP/main-inspect"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          test -s Script.html
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          text = Path('Script.html').read_text(encoding='utf-8')
+          keys = [
+              'memberAppInstallToggle',
+              'requestMemberAppInstall',
+              'openMemberInstallInChrome',
+              'JAYUMINTON_APP_INSTALL_BUTTON_RECT',
+              'JAYUMINTON_APP_INSTALL_REQUEST',
+              'navigateMemberTop',
+              'renderMemberSelfSettings',
+          ]
+
+          out = []
+          out.append('LIVE MAIN INSTALL PATH DIAGNOSTIC')
+          out.append('=================================')
+          out.append('')
+          for key in keys:
+              out.append('### ' + key)
+              positions = [m.start() for m in re.finditer(re.escape(key), text)]
+              if not positions:
+                  out.append('[NOT FOUND]')
+                  out.append('')
+                  continue
+              for i, pos in enumerate(positions[:8], 1):
+                  start = max(0, text.rfind('\n', 0, max(0, pos - 1800)))
+                  end = min(len(text), text.find('\n', min(len(text), pos + 2600)))
+                  if end < 0:
+                      end = min(len(text), pos + 2600)
+                  out.append(f'-- match {i} --')
+                  out.append(text[start:end])
+                  out.append('')
+          dest = Path(os.environ['GITHUB_WORKSPACE']) / 'deployment/jayuminton/INSTALL_PATH_DIAGNOSTIC.txt'
+          dest.write_text('\n'.join(out), encoding='utf-8')
+          PY
+
+      - name: Commit diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/INSTALL_PATH_DIAGNOSTIC.txt
+          git commit -m 'Record live install click path' || exit 0
+          git pull --rebase origin main || true
+          git push
