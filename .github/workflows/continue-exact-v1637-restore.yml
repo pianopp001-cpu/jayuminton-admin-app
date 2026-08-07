@@ -363,6 +363,26 @@ jobs:
           fn_block=fn_block[:istart]+new_if+fn_block[iend:]
           s=s[:fstart]+fn_block+s[fend:]
 
+          # Apps Script wraps the served MAIN page in its own googleusercontent.com sandbox
+          # iframe, so a real postMessage's event.source is one level deeper than
+          # frame.contentWindow, so it always failed this check and got silently dropped
+          # (this is why the diagnostic showed "전송=true" but nothing ever happened next).
+          # postMessage's own targetOrigin is already the real security boundary, so this
+          # becomes an origin allow-list instead of a brittle exact-window-identity check.
+          old_guard='\n'.join([
+            '  function handleCourtMessage(event) {',
+            '    if (event.source !== frame.contentWindow) return;',
+          ])
+          if old_guard not in s:
+              raise SystemExit('handleCourtMessage guard changed unexpectedly')
+          new_guard='\n'.join([
+            '  function handleCourtMessage(event) {',
+            '    const originOk = event.source === frame.contentWindow ||',
+            "      /^https:\\/\\/([a-z0-9-]+\\.)*(script\\.google\\.com|googleusercontent\\.com)$/i.test(String(event.origin || ''));",
+            '    if (!originOk) return;',
+          ])
+          s=s.replace(old_guard,new_guard,1)
+
           # If the iframe button receives a tap instead of the transparent real link,
           # do not refresh/reopen this Firebase page. Re-arm the real top-level link only.
           import re
