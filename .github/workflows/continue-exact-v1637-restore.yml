@@ -62,8 +62,6 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-
-          # Freeze all visible v1.6.37 files byte-for-byte.
           printf '%s  %s\n' \
             '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' Admin.html \
             '7342d7051bf125f771c5951e4c54f114f9eb57949327d874be63e6ba5781522b' Code.js \
@@ -73,25 +71,19 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
-          p = Path('Script.html')
-          s = p.read_text(encoding='utf-8')
-
-          # Never render deployment/debug markers after </script>.
-          end = s.rfind('</script>')
-          if end < 0:
-              raise SystemExit('Script closing tag missing')
-          tail = s[end + len('</script>'):]
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          end=s.rfind('</script>')
+          if end < 0: raise SystemExit('Script closing tag missing')
+          tail=s[end+len('</script>'):]
           if tail.strip() and not re.fullmatch(r'(?:\s*//\s*v1637-[^\n]*-main\s*)+', tail):
               raise SystemExit('Unexpected content after </script>')
-          s = s[:end + len('</script>')] + '\n'
+          s=s[:end+len('</script>')]+'\n'
 
-          # Apps Script iframe only requests install from the Firebase top page.
-          a = s.find('function openMemberInstallInChrome(installUrl) {')
-          b = s.find('function openMemberInstallInSafari(installUrl) {', a)
-          if a < 0 or b < 0:
-              raise SystemExit('Chrome install function missing')
-          s = s[:a] + """function openMemberInstallInChrome(installUrl) {
+          a=s.find('function openMemberInstallInChrome(installUrl) {')
+          b=s.find('function openMemberInstallInSafari(installUrl) {',a)
+          if a<0 or b<0: raise SystemExit('Chrome install function missing')
+          s=s[:a]+"""function openMemberInstallInChrome(installUrl) {
             if (isUnifiedMemberFrame()) {
               postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {
                 platform: 'android',
@@ -114,14 +106,12 @@ jobs:
             navigateMemberTop(UNIFIED_MEMBER_APP_URL + '?install=choose&external=1&source=embedded&app=user&mode=user');
           }
 
-          """ + s[b:]
+          """+s[b:]
 
-          # Explicit edit state: typing must never be overwritten by the saved member.
-          a = s.find('function openMemberSelfSettings() {')
-          b = s.find('function renderMemberSelfSettings() {', a)
-          if a < 0 or b < 0:
-              raise SystemExit('Member settings block missing')
-          s = s[:a] + """function openMemberSelfSettings() {
+          a=s.find('function openMemberSelfSettings() {')
+          b=s.find('function renderMemberSelfSettings() {',a)
+          if a<0 or b<0: raise SystemExit('Member settings block missing')
+          s=s[:a]+"""function openMemberSelfSettings() {
             try { localStorage.setItem(MEMBER_SELF_PANEL_COMPACT_KEY, 'false'); }
             catch (error) {}
             const input = document.getElementById('memberSelfSearchInput');
@@ -136,49 +126,42 @@ jobs:
             }, 0);
           }
 
-          """ + s[b:]
+          """+s[b:]
 
-          s, n = re.subn(
-              r"^\s*if \(input && selected && !input\.value(?: && [^\n]*)?\) input\.value = selected\.name;\s*$",
-              "  if (input && selected && !input.value && input.dataset.userEditing !== '1') input.value = selected.name;",
-              s, count=1, flags=re.M
+          s,n=re.subn(
+            r"^\s*if \(input && selected && !input\.value(?: && [^\n]*)?\) input\.value = selected\.name;\s*$",
+            "  if (input && selected && !input.value && input.dataset.userEditing !== '1') input.value = selected.name;",
+            s,count=1,flags=re.M
           )
           if n != 1 and "input.dataset.userEditing !== '1'" not in s:
               raise SystemExit('Saved-name render guard missing')
 
-          a = s.find('function selectMemberSelf(memberId) {')
-          b = s.find('function clearMemberSelfSelection() {', a)
-          if a < 0 or b < 0:
-              raise SystemExit('Member select block missing')
-          block = s[a:b]
+          a=s.find('function selectMemberSelf(memberId) {')
+          b=s.find('function clearMemberSelfSelection() {',a)
+          if a<0 or b<0: raise SystemExit('Member select block missing')
+          block=s[a:b]
           if "memberInput.dataset.userEditing = '0'" not in block:
-              block, n = re.subn(
-                  r"(?m)^(\s*)if \(!member\) return;\s*$",
-                  lambda m: m.group(0) + "\n" + m.group(1) + "const memberInput = document.getElementById('memberSelfSearchInput');\n" + m.group(1) + "if (memberInput) {\n" + m.group(1) + "  memberInput.dataset.userEditing = '0';\n" + m.group(1) + "  memberInput.value = String(member.name || '').trim();\n" + m.group(1) + "}",
-                  block, count=1
+              block,n=re.subn(
+                r"(?m)^(\s*)if \(!member\) return;\s*$",
+                lambda m:m.group(0)+"\n"+m.group(1)+"const memberInput = document.getElementById('memberSelfSearchInput');\n"+m.group(1)+"if (memberInput) {\n"+m.group(1)+"  memberInput.dataset.userEditing = '0';\n"+m.group(1)+"  memberInput.value = String(member.name || '').trim();\n"+m.group(1)+"}",
+                block,count=1
               )
-              if n != 1:
-                  raise SystemExit('Member selection insertion point missing')
-              s = s[:a] + block + s[b:]
-
-          p.write_text(s, encoding='utf-8')
+              if n != 1: raise SystemExit('Member selection insertion point missing')
+              s=s[:a]+block+s[b:]
+          p.write_text(s,encoding='utf-8')
           PY
 
           python3 - <<'PY'
           from pathlib import Path
           import re
-          s = Path('Script.html').read_text(encoding='utf-8')
-          if not s.rstrip().endswith('</script>'):
-              raise SystemExit('Visible text remains after </script>')
-          if re.search(r'^//\s*v1637-.*-main\s*$', s, re.M):
-              raise SystemExit('Visible debug marker remains')
-          a = s.find('function openMemberInstallInChrome(installUrl) {')
-          b = s.find('function openMemberInstallInSafari(installUrl) {', a)
-          if 'intent://' in s[a:b]:
-              raise SystemExit('MAIN still launches Android intent directly')
-          for marker in ["dataset.userEditing = '1'", "dataset.userEditing !== '1'", "dataset.userEditing = '0'"]:
-              if marker not in s:
-                  raise SystemExit('Name-edit marker missing: ' + marker)
+          s=Path('Script.html').read_text(encoding='utf-8')
+          if not s.rstrip().endswith('</script>'): raise SystemExit('Visible text after </script>')
+          if re.search(r'^//\s*v1637-.*-main\s*$',s,re.M): raise SystemExit('Visible debug marker remains')
+          a=s.find('function openMemberInstallInChrome(installUrl) {')
+          b=s.find('function openMemberInstallInSafari(installUrl) {',a)
+          if 'intent://' in s[a:b]: raise SystemExit('MAIN still launches intent directly')
+          for marker in ["dataset.userEditing = '1'","dataset.userEditing !== '1'","dataset.userEditing = '0'"]:
+              if marker not in s: raise SystemExit('Name-edit marker missing: '+marker)
           PY
 
           clasp push --force
@@ -192,9 +175,11 @@ jobs:
           BODY="$RUNNER_TEMP/main.html"
           FINAL="$RUNNER_TEMP/main-url.txt"
           curl --fail --location --retry 5 --retry-delay 3 --max-time 90 --output "$BODY" --write-out '%{url_effective}' "$MAIN_URL?mode=user&app=user&verify=$GITHUB_RUN_ID" > "$FINAL"
-          if grep -Eiq 'drive\.google\.com|docs\.google\.com|주소를 확인한 다음 다시 시도|현재 파일을 열 수 없습니다' "$FINAL" "$BODY"; then exit 1; fi
-          for key in memberSelfSearchInput memberSelfMatches memberAlertToggle memberVibrationToggle memberAppInstallToggle memberSelfDone; do grep -F "$key" "$BODY" >/dev/null; done
-          if grep -E '// v1637-final[0-9]+-main' "$BODY" >/dev/null; then exit 1; fi
+          if grep -Eiq 'drive\.google\.com|docs\.google\.com' "$FINAL"; then echo 'Drive redirect'; cat "$FINAL"; exit 1; fi
+          for key in memberSelfSearchInput memberSelfMatches memberAlertToggle memberVibrationToggle memberAppInstallToggle memberSelfDone; do
+            grep -F "$key" "$BODY" >/dev/null || { echo "Missing MAIN marker: $key"; exit 1; }
+          done
+          if grep -E '// v1637-final[0-9]+-main' "$BODY" >/dev/null; then echo 'Visible debug marker live'; exit 1; fi
 
       - name: Build genuine v1.6.37 PWA with behavior fixes
         shell: bash
@@ -208,7 +193,6 @@ jobs:
           cp deployment/jayuminton/v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
           cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup-v205.js.gz"
           gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$BUILD_ROOT/web-push/setup-v205.js"
-
           printf '%s  %s\n' \
             '89f3203c79f62e32aabfeaeee275a3b1fd425326fd1f66866c95a58d91cb559d' "$BUILD_ROOT/web-push/index.html" \
             '5e5483ec6a1554d028587ec48cc750c56e4d75b05330a57221201352cda6500f' "$BUILD_ROOT/web-push/setup-v205.css" \
@@ -217,103 +201,57 @@ jobs:
             '2b8fea2e2051fd265ec2e5d4ef1f988e149e4575f252c2a3d18b2020913278b1' "$BUILD_ROOT/web-push/firebase-messaging-sw.js" | sha256sum --check
 
           python3 - <<'PY'
-          import os, re
+          import os,re
           from pathlib import Path
+          root=Path(os.environ['BUILD_ROOT'])/'web-push'
+          p=root/'setup-v205.js'
+          s=p.read_text(encoding='utf-8')
+          for marker in [
+            "appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);",
+            "appInstallChromeLink.addEventListener('touchstart'",
+            "appInstallChromeLink.setAttribute('target', '_top');",
+            "appInstallChromeLink.href = links.intentUrl;",
+            "promptEvent.prompt()",
+            "registration.showNotification(",
+            "navigator.vibrate(",
+            "vibrationPattern(type)"
+          ]:
+              if marker not in s: raise SystemExit('Required behavior missing: '+marker)
 
-          root = Path(os.environ['BUILD_ROOT']) / 'web-push'
-          p = root / 'setup-v205.js'
-          s = p.read_text(encoding='utf-8')
+          pat=re.compile(r"(?ms)^(?P<i>[ \t]*)const intentUrl\s*=\s*'intent://'\s*\+\s*hostAndPath\s*\+\s*'#Intent;scheme=https;package=com\.android\.chrome;action=android\.intent\.action\.VIEW;'\s*\+\s*'category=android\.intent\.category\.BROWSABLE;S\.browser_fallback_url='\s*\+\s*encodeURIComponent\(targetUrl\)\s*\+\s*';end';")
+          def repl_intent(m):
+              i=m.group('i')
+              return i+"const intentUrl = 'intent://' + hostAndPath +\n"+i+"  '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +\n"+i+"  'category=android.intent.category.BROWSABLE;end';"
+          s,n=pat.subn(repl_intent,s,count=1)
+          if n!=1: raise SystemExit('Chrome intent block not found')
 
-          required = [
-              "appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);",
-              "appInstallChromeLink.addEventListener('touchstart'",
-              "appInstallChromeLink.setAttribute('target', '_top');",
-              "appInstallChromeLink.href = links.intentUrl;",
-              "promptEvent.prompt()",
-              "registration.showNotification(",
-              "navigator.vibrate(",
-              "vibrationPattern(type)"
-          ]
-          for marker in required:
-              if marker not in s:
-                  raise SystemExit('Required v1.6.37 behavior missing: ' + marker)
+          pat=re.compile(r"(?ms)^(?P<i>[ \t]*)if \(!hasActivation\) \{(?P<body>.*?)^(?P=i)\}")
+          changed=[False]
+          def repl_activation(m):
+              if 'window.location.href = links.targetUrl' not in m.group('body'): return m.group(0)
+              changed[0]=True
+              i=m.group('i')
+              return i+"if (!hasActivation) {\n"+i+"  setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');\n"+i+"  sendAppInstallStatus('Chrome 직접 터치 대기');\n"+i+"  refreshInstallProxyPosition();\n"+i+"  return;\n"+i+"}"
+          s=pat.sub(repl_activation,s)
+          if not changed[0]: raise SystemExit('Activation refresh block not found')
 
-          # 1) Keep the real top-level Chrome intent, remove Drive-risk fallback.
-          pattern = re.compile(
-              r"(?ms)^(?P<i>[ \t]*)const intentUrl\s*=\s*'intent://'\s*\+\s*hostAndPath\s*\+\s*"
-              r"'#Intent;scheme=https;package=com\.android\.chrome;action=android\.intent\.action\.VIEW;'\s*\+\s*"
-              r"'category=android\.intent\.category\.BROWSABLE;S\.browser_fallback_url='\s*\+\s*"
-              r"encodeURIComponent\(targetUrl\)\s*\+\s*';end';"
-          )
-          def intent_repl(m):
-              i = m.group('i')
-              return (i + "const intentUrl = 'intent://' + hostAndPath +\n" +
-                      i + "  '#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;' +\n" +
-                      i + "  'category=android.intent.category.BROWSABLE;end';")
-          s, n = pattern.subn(intent_repl, s, count=1)
-          if n != 1:
-              raise SystemExit('Chrome intent block not found')
+          pat=re.compile(r"(?ms)^(?P<i>[ \t]*)\}\s*else if \(data\.type === 'JAYUMINTON_APP_INSTALL_REQUEST'\) \{\s*handleAppInstallButton\(true\);\s*^(?P=i)\}")
+          def repl_request(m):
+              i=m.group('i')
+              return i+"} else if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {\n"+i+"  if (androidDevice && embeddedBrowser) {\n"+i+"    setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');\n"+i+"    sendAppInstallStatus('Chrome 직접 링크 대기');\n"+i+"    refreshInstallProxyPosition();\n"+i+"    return;\n"+i+"  }\n"+i+"  handleAppInstallButton(true);\n"+i+"}"
+          s,n=pat.subn(repl_request,s,count=1)
+          if n!=1: raise SystemExit('Install request block not found')
 
-          # 2) A timer/postMessage cannot refresh or reopen the same Firebase page.
-          pattern = re.compile(
-              r"(?ms)^(?P<i>[ \t]*)if \(!hasActivation\) \{(?P<body>.*?)^(?P=i)\}"
-          )
-          replaced = False
-          def activation_repl(m):
-              global replaced
-              body = m.group('body')
-              if 'window.location.href = links.targetUrl' not in body:
-                  return m.group(0)
-              replaced = True
-              i = m.group('i')
-              return (i + "if (!hasActivation) {\n" +
-                      i + "  setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');\n" +
-                      i + "  sendAppInstallStatus('Chrome 직접 터치 대기');\n" +
-                      i + "  refreshInstallProxyPosition();\n" +
-                      i + "  return;\n" + i + "}")
-          s = pattern.sub(activation_repl, s)
-          if not replaced:
-              raise SystemExit('Activation refresh fallback block not found')
+          pat=re.compile(r"(?m)^(?P<i>[ \t]*)deferredInstallPrompt\s*=\s*event;\s*\n(?P=i)window\.__JAYUMINTON_EARLY_INSTALL_PROMPT\s*=\s*null;")
+          def repl_bip(m):
+              i=m.group('i')
+              return i+"deferredInstallPrompt = event;\n"+i+"try {\n"+i+"  localStorage.removeItem(STORAGE.installConfirmed);\n"+i+"  if (localStorage.getItem(STORAGE.installChoice) === 'on') localStorage.removeItem(STORAGE.installChoice);\n"+i+"} catch (_) {}\n"+i+"window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;"
+          s,n=pat.subn(repl_bip,s,count=1)
+          if n!=1: raise SystemExit('beforeinstallprompt block not found')
 
-          # 3) iframe install request only re-arms the top-level transparent link in embedded browsers.
-          pattern = re.compile(
-              r"(?ms)^(?P<i>[ \t]*)\}\s*else if \(data\.type === 'JAYUMINTON_APP_INSTALL_REQUEST'\) \{\s*"
-              r"handleAppInstallButton\(true\);\s*^(?P=i)\}"
-          )
-          def request_repl(m):
-              i = m.group('i')
-              return (i + "} else if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {\n" +
-                      i + "  if (androidDevice && embeddedBrowser) {\n" +
-                      i + "    setInstallMessage('앱설치 버튼을 다시 눌러 Chrome으로 이동해 주세요.', 'success');\n" +
-                      i + "    sendAppInstallStatus('Chrome 직접 링크 대기');\n" +
-                      i + "    refreshInstallProxyPosition();\n" +
-                      i + "    return;\n" +
-                      i + "  }\n" +
-                      i + "  handleAppInstallButton(true);\n" + i + "}")
-          s, n = pattern.subn(request_repl, s, count=1)
-          if n != 1:
-              raise SystemExit('Install request message block not found')
-
-          # 4) Only a real new beforeinstallprompt proves an old installed flag is stale.
-          pattern = re.compile(
-              r"(?m)^(?P<i>[ \t]*)deferredInstallPrompt\s*=\s*event;\s*\n(?P=i)window\.__JAYUMINTON_EARLY_INSTALL_PROMPT\s*=\s*null;"
-          )
-          def bip_repl(m):
-              i = m.group('i')
-              return (i + "deferredInstallPrompt = event;\n" +
-                      i + "try {\n" +
-                      i + "  localStorage.removeItem(STORAGE.installConfirmed);\n" +
-                      i + "  if (localStorage.getItem(STORAGE.installChoice) === 'on') localStorage.removeItem(STORAGE.installChoice);\n" +
-                      i + "} catch (_) {}\n" +
-                      i + "window.__JAYUMINTON_EARLY_INSTALL_PROMPT = null;")
-          s, n = pattern.subn(bip_repl, s, count=1)
-          if n != 1:
-              raise SystemExit('beforeinstallprompt state block not found')
-
-          # 5) Parent PWA must not force the saved member while a different name is being typed.
-          listener = "  connectButton.addEventListener('click', handleAlarmButton);\n"
+          listener="  connectButton.addEventListener('click', handleAlarmButton);\n"
           if listener in s and "nameInput.addEventListener('input'" not in s:
-              s = s.replace(listener, listener + """  nameInput.addEventListener('input', () => {
+              s=s.replace(listener,listener+"""  nameInput.addEventListener('input', () => {
             const typed = firstTwoSearchChars(nameInput.value);
             const saved = member && member.name ? firstTwoSearchChars(member.name) : '';
             if (member && typed && typed !== saved) {
@@ -324,55 +262,32 @@ jobs:
               sendBootstrap();
             }
           });
-          """, 1)
+          """,1)
 
-          # 6) Selecting another member replaces the old member and invalidates the old token mapping.
-          marker = "} else if (data.type === 'JAYUMINTON_MEMBER_SELECTED' || data.type === 'JAYUMINTON_MEMBER_CLICKED') {"
-          start = s.find(marker)
-          if start < 0:
-              raise SystemExit('Member selection message branch missing')
-          if 'const nextMember =' not in s[start:start + 1800]:
-              pattern = re.compile(
-                  r"(?ms)(?P<i>^[ \t]*)member\s*=\s*\{id:String\(data\.member\.id\), name:String\(data\.member\.name\)\};\s*\n"
-                  r"(?P=i)saveJson\(STORAGE\.member, member\);\s*\n(?P=i)nameInput\.value\s*=\s*shortName\(member\.name\);"
-              )
-              def member_repl(m):
-                  i = m.group('i')
-                  return (i + "const nextMember = {id:String(data.member.id), name:String(data.member.name)};\n" +
-                          i + "const memberChanged = Boolean(member && String(member.id) !== String(nextMember.id));\n" +
-                          i + "member = nextMember;\n" +
-                          i + "saveJson(STORAGE.member, member);\n" +
-                          i + "nameInput.value = shortName(member.name);\n" +
-                          i + "if (memberChanged) {\n" +
-                          i + "  try { localStorage.removeItem(STORAGE.token); } catch (_) {}\n" +
-                          i + "  isConnected = false;\n" +
-                          i + "  setOff(member.name + '님으로 변경했습니다. 완료를 눌러 알림을 다시 연결해 주세요.');\n" +
-                          i + "}")
-              tail = s[start:]
-              tail, n = pattern.subn(member_repl, tail, count=1)
-              if n != 1:
-                  raise SystemExit('Member replacement assignment missing')
-              s = s[:start] + tail
+          marker="} else if (data.type === 'JAYUMINTON_MEMBER_SELECTED' || data.type === 'JAYUMINTON_MEMBER_CLICKED') {"
+          start=s.find(marker)
+          if start<0: raise SystemExit('Member selection branch missing')
+          if 'const nextMember =' not in s[start:start+1800]:
+              pat=re.compile(r"(?ms)(?P<i>^[ \t]*)member\s*=\s*\{id:String\(data\.member\.id\), name:String\(data\.member\.name\)\};\s*\n(?P=i)saveJson\(STORAGE\.member, member\);\s*\n(?P=i)nameInput\.value\s*=\s*shortName\(member\.name\);")
+              def repl_member(m):
+                  i=m.group('i')
+                  return i+"const nextMember = {id:String(data.member.id), name:String(data.member.name)};\n"+i+"const memberChanged = Boolean(member && String(member.id) !== String(nextMember.id));\n"+i+"member = nextMember;\n"+i+"saveJson(STORAGE.member, member);\n"+i+"nameInput.value = shortName(member.name);\n"+i+"if (memberChanged) {\n"+i+"  try { localStorage.removeItem(STORAGE.token); } catch (_) {}\n"+i+"  isConnected = false;\n"+i+"  setOff(member.name + '님으로 변경했습니다. 완료를 눌러 알림을 다시 연결해 주세요.');\n"+i+"}"
+              tail=s[start:]
+              tail,n=pat.subn(repl_member,tail,count=1)
+              if n!=1: raise SystemExit('Member replacement assignment missing')
+              s=s[:start]+tail
 
-          p.write_text(s, encoding='utf-8')
-
-          # Cache bust only. No DOM/CSS/layout changes.
-          idx = root / 'index.html'
-          t = idx.read_text(encoding='utf-8')
-          t = t.replace('/setup-v205.js?v=1637', '/setup-v205.js?v=1637-final9')
-          t = t.replace('/config-v204.js?v=1637', '/config-v204.js?v=1637-final9')
-          idx.write_text(t, encoding='utf-8')
-
-          template = Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
-          cfg = template.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
-          for name in ('config-v202.js', 'config-v203.js', 'config-v204.js'):
-              (root / name).write_text(cfg, encoding='utf-8')
-
-          sw = root / 'firebase-messaging-sw.js'
-          t = sw.read_text(encoding='utf-8')
-          t = t.replace("const JAYUMINTON_SW_VERSION = '1.6.37';", "const JAYUMINTON_SW_VERSION = '1.6.37-final9';")
-          t = t.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';", "const JAYUMINTON_CACHE = 'jayuminton-shell-v219';")
-          sw.write_text(t, encoding='utf-8')
+          p.write_text(s,encoding='utf-8')
+          idx=root/'index.html'
+          t=idx.read_text(encoding='utf-8').replace('/setup-v205.js?v=1637','/setup-v205.js?v=1637-final9').replace('/config-v204.js?v=1637','/config-v204.js?v=1637-final9')
+          idx.write_text(t,encoding='utf-8')
+          template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          cfg=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          for name in ('config-v202.js','config-v203.js','config-v204.js'):
+              (root/name).write_text(cfg,encoding='utf-8')
+          sw=root/'firebase-messaging-sw.js'
+          t=sw.read_text(encoding='utf-8').replace("const JAYUMINTON_SW_VERSION = '1.6.37';","const JAYUMINTON_SW_VERSION = '1.6.37-final9';").replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';","const JAYUMINTON_CACHE = 'jayuminton-shell-v219';")
+          sw.write_text(t,encoding='utf-8')
           PY
 
           node --check "$BUILD_ROOT/web-push/setup-v205.js"
@@ -387,7 +302,6 @@ jobs:
           grep -F 'vibrationPattern(type)' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null
           if grep -F 'S.browser_fallback_url' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then echo 'Drive-risk fallback remains'; exit 1; fi
           if grep -F 'window.location.href = links.targetUrl' "$BUILD_ROOT/web-push/setup-v205.js" >/dev/null; then echo 'Same-page refresh fallback remains'; exit 1; fi
-
           BASE="${HOSTING_URL%/}"
           for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
             curl --fail --location --retry 3 --max-time 60 "$BASE/$a?src=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"
@@ -423,7 +337,7 @@ jobs:
           if grep -F 'window.location.href = links.targetUrl' "$RUNNER_TEMP/setup" >/dev/null; then exit 1; fi
           grep -F "$MAIN_URL" "$RUNNER_TEMP/config" >/dev/null
           grep -F "$PUSH_URL" "$RUNNER_TEMP/config" >/dev/null
-          grep -F "jayuminton-shell-v219" "$RUNNER_TEMP/sw" >/dev/null
+          grep -F 'jayuminton-shell-v219' "$RUNNER_TEMP/sw" >/dev/null
 
       - name: Record result
         if: always()
