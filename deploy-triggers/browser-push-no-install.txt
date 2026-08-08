@@ -1,0 +1,2 @@
+Deploy Android browser push registration without requiring PWA installation.
+Trigger: 2026-08-09 Asia/Seoul
