@@ -1,3 +1,4 @@
+# v199.5 fresh-install rebuild trigger 2026-08-08
 name: Build signed Jayuminton v199.5 fresh APK
 
 on:
@@ -76,14 +77,11 @@ jobs:
             fi
           }
 
-          # First scan APKs currently kept in the repository.
           while IFS= read -r apk; do
             [ -f "$FOUND" ] && break
             check_apk "$apk"
           done < <(find releases -type f -name '*.apk' 2>/dev/null | sort)
 
-          # If necessary, scan recent APK history. This preserves the exact old dog image,
-          # not a redrawn replacement.
           if [ ! -f "$FOUND" ]; then
             COUNT=0
             while IFS= read -r commit; do
@@ -149,7 +147,6 @@ jobs:
 
           gradle_path = Path('app/build.gradle')
           gradle = gradle_path.read_text(encoding='utf-8')
-          # User will delete the old APK first. Keep one stable package for future upgrades.
           gradle = re.sub(
               r"applicationId\s+['\"][^'\"]+['\"]",
               "applicationId 'com.jayuminton.admin199'",
