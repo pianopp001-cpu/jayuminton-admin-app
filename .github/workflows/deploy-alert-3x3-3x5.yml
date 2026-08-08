@@ -102,23 +102,24 @@ jobs:
           grep -F "ttl: '600s'" Code.js >/dev/null
           grep -F "Urgency: 'high'" Code.js >/dev/null
 
-      - name: Rebuild the verified hidden PWA push shell without design changes
+      - name: Rebuild verified hidden PWA push shell
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/hosting"
           PUBLIC="$ROOT/web-push"
           SRC="deployment/jayuminton/v1637-web"
+          BASE="${HOSTING_URL%/}"
           mkdir -p "$PUBLIC"
           cp deployment/jayuminton/firebase.json "$ROOT/firebase.json"
           cp "$SRC/index.html" "$PUBLIC/index.html"
           cp "$SRC/setup-v205.css" "$PUBLIC/setup-v205.css"
           cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
           cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
-          cp "$SRC/icon-198.png" "$PUBLIC/icon-198.png"
-          cp "$SRC/icon-512.png" "$PUBLIC/icon-512.png"
-          cp "$SRC/apple-touch-icon-180.png" "$PUBLIC/apple-touch-icon-180.png"
-          cp "$SRC/badge-96.png" "$PUBLIC/badge-96.png"
+          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 5 --retry-delay 2 --max-time 90 "$BASE/$a?src=$GITHUB_RUN_ID" -o "$PUBLIC/$a"
+            test -s "$PUBLIC/$a"
+          done
           cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup-v205.js.gz"
           gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$PUBLIC/setup-v205.js"
           python3 - "$SRC/config-v204.template.js" "$PUBLIC" <<'PY'
