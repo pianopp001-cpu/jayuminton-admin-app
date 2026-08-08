@@ -55,6 +55,8 @@ jobs:
             echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG")"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
           } >> "$GITHUB_ENV"
 
       - name: Patch and verify live user foreground alert
@@ -67,8 +69,10 @@ jobs:
           cd "$WORK"
           clasp pull
           cp Style.html "$RUNNER_TEMP/style-before.html"
+          cp Index.html "$RUNNER_TEMP/index-before.html"
           python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_alert_3x3_3x5.py" "$WORK"
           cmp Style.html "$RUNNER_TEMP/style-before.html"
+          cmp Index.html "$RUNNER_TEMP/index-before.html"
           python3 - <<'PY'
           from pathlib import Path
           s=Path('Script.html').read_text(encoding='utf-8')
@@ -98,71 +102,42 @@ jobs:
           grep -F "ttl: '600s'" Code.js >/dev/null
           grep -F "Urgency: 'high'" Code.js >/dev/null
 
-      - name: Mirror current live Hosting without design changes
+      - name: Rebuild the verified hidden PWA push shell without design changes
         shell: bash
         run: |
           set -euo pipefail
-          BASE="${HOSTING_URL%/}"
           ROOT="$RUNNER_TEMP/hosting"
           PUBLIC="$ROOT/web-push"
+          SRC="deployment/jayuminton/v1637-web"
           mkdir -p "$PUBLIC"
           cp deployment/jayuminton/firebase.json "$ROOT/firebase.json"
-          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/index.html?mirror=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
-          cp "$PUBLIC/index.html" "$RUNNER_TEMP/live-index-before.html"
-          python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/asset-list.txt" <<'PY'
+          cp "$SRC/index.html" "$PUBLIC/index.html"
+          cp "$SRC/setup-v205.css" "$PUBLIC/setup-v205.css"
+          cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
+          cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
+          cp "$SRC/icon-198.png" "$PUBLIC/icon-198.png"
+          cp "$SRC/icon-512.png" "$PUBLIC/icon-512.png"
+          cp "$SRC/apple-touch-icon-180.png" "$PUBLIC/apple-touch-icon-180.png"
+          cp "$SRC/badge-96.png" "$PUBLIC/badge-96.png"
+          cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup-v205.js.gz"
+          gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$PUBLIC/setup-v205.js"
+          python3 - "$SRC/config-v204.template.js" "$PUBLIC" <<'PY'
           from pathlib import Path
-          import re,sys,json
-          html=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore')
-          paths=set(['/manifest.webmanifest','/setup-v205.css','/setup-v205.js','/config-v204.js','/icon-198.png','/icon-512.png','/apple-touch-icon-180.png','/badge-96.png'])
-          for value in re.findall(r'(?:src|href)=["\']([^"\']+)',html):
-              if value.startswith('/') and not value.startswith('//'):
-                  paths.add(value.split('?',1)[0].split('#',1)[0])
-          manifest_match=re.search(r'<link[^>]+rel=["\']manifest["\'][^>]+href=["\']([^"\']+)',html,re.I)
-          if manifest_match and manifest_match.group(1).startswith('/'):
-              paths.add(manifest_match.group(1).split('?',1)[0])
-          Path(sys.argv[2]).write_text('\n'.join(sorted(p for p in paths if p and p!='/'))+'\n')
+          import os,sys
+          template=Path(sys.argv[1]).read_text(encoding='utf-8')
+          cfg=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          root=Path(sys.argv[2])
+          for name in ('config-v202.js','config-v203.js','config-v204.js'):
+              (root/name).write_text(cfg,encoding='utf-8')
           PY
-          while IFS= read -r path; do
-            [ -n "$path" ] || continue
-            target="$PUBLIC/${path#/}"
-            mkdir -p "$(dirname "$target")"
-            code="$(curl --location --retry 3 --silent --show-error -w '%{http_code}' -o "$target" "$BASE$path?mirror=$GITHUB_RUN_ID")"
-            if [ "$code" != '200' ]; then
-              rm -f "$target"
-              echo "Skipping unavailable live asset $path ($code)"
-              continue
-            fi
-            if [[ "$path" != *.html && "$path" != '/' ]] && head -c 80 "$target" | grep -qi '<!doctype html'; then
-              rm -f "$target"
-              echo "Skipping rewrite fallback for $path"
-            fi
-          done < "$RUNNER_TEMP/asset-list.txt"
-          # Manifest icons may not be directly referenced by index.
-          if [ -s "$PUBLIC/manifest.webmanifest" ]; then
-            python3 - "$PUBLIC/manifest.webmanifest" "$RUNNER_TEMP/manifest-assets.txt" <<'PY'
-          import json,sys
-          from pathlib import Path
-          try: data=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
-          except Exception: data={}
-          paths=[]
-          for icon in data.get('icons',[]):
-              src=str(icon.get('src',''))
-              if src.startswith('/'): paths.append(src.split('?',1)[0])
-          Path(sys.argv[2]).write_text('\n'.join(sorted(set(paths)))+'\n')
-          PY
-            while IFS= read -r path; do
-              [ -n "$path" ] || continue
-              target="$PUBLIC/${path#/}"
-              [ -s "$target" ] && continue
-              mkdir -p "$(dirname "$target")"
-              curl --fail --location --retry 3 "$BASE$path?mirror=$GITHUB_RUN_ID" -o "$target"
-            done < "$RUNNER_TEMP/manifest-assets.txt"
-          fi
-          # The only Hosting file intentionally changed is the messaging service worker.
-          cp deployment/jayuminton/v1637-web/firebase-messaging-sw.js "$PUBLIC/firebase-messaging-sw.js"
+          node --check "$PUBLIC/setup-v205.js"
+          node --check "$PUBLIC/firebase-messaging-sw.js"
+          grep -F 'hidden-infrastructure' "$PUBLIC/index.html" >/dev/null
+          grep -F '<title>자유민턴 코트현황</title>' "$PUBLIC/index.html" >/dev/null
           grep -F "const sets = String(type || '') === 'court_assignment' ? 5 : 3;" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
           grep -F 'return [650, 220, 650, 220, 650];' "$PUBLIC/firebase-messaging-sw.js" >/dev/null
-          cmp "$PUBLIC/index.html" "$RUNNER_TEMP/live-index-before.html"
+          grep -F "$MAIN_URL" "$PUBLIC/config-v204.js" >/dev/null
+          grep -F "$PUSH_URL" "$PUBLIC/config-v204.js" >/dev/null
 
       - name: Deploy Apps Scripts
         shell: bash
@@ -175,7 +150,7 @@ jobs:
           clasp push --force
           clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "web+android high priority 3x3 3x5 $GITHUB_RUN_ID"
 
-      - name: Deploy Hosting service worker only over mirrored live assets
+      - name: Deploy verified PWA push shell
         shell: bash
         run: |
           set -euo pipefail
@@ -200,7 +175,7 @@ jobs:
           grep -F "priority: 'high'" Code.js >/dev/null
           grep -F "ttl: '600s'" Code.js >/dev/null
 
-      - name: Verify live Hosting and unchanged design shell
+      - name: Verify live Hosting service worker and shell title
         shell: bash
         run: |
           set -euo pipefail
@@ -209,6 +184,7 @@ jobs:
           curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-sw.js"
           grep -F "const sets = String(type || '') === 'court_assignment' ? 5 : 3;" "$RUNNER_TEMP/live-sw.js" >/dev/null
           grep -F 'return [650, 220, 650, 220, 650];' "$RUNNER_TEMP/live-sw.js" >/dev/null
-          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/index.html?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-index-after.html"
-          cmp "$RUNNER_TEMP/live-index-before.html" "$RUNNER_TEMP/live-index-after.html"
-          echo 'Verified: web users wait1=3x3, court=3x5; Android sender high priority; Hosting design shell unchanged.'
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-index.html"
+          grep -F '<title>자유민턴 코트현황</title>' "$RUNNER_TEMP/live-index.html" >/dev/null
+          grep -F 'hidden-infrastructure' "$RUNNER_TEMP/live-index.html" >/dev/null
+          echo 'Verified: web users wait1=3x3, court=3x5; Android sender high priority; user shell remains hidden infrastructure.'
