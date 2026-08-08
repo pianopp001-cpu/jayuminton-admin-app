@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      DOG_ICON_SHA256: c64778554936a98100ef4a277a007bd4d619e75f22804a8b86deaae86a4af4ed
+      DOG_ICON_SHA256: 4c3d5786562535ab3fbae79eaa4fde4b2161629314d8dd95f0a5aea181b1570a
       APK_OUTPUT: releases/jayuminton-v199.6-final-fresh-install.apk
 
     steps:
@@ -63,10 +63,7 @@ jobs:
           clean = re.sub(r'[^A-Za-z0-9+/=]', '', raw)
           core = clean.rstrip('=')
           clean = core + ('=' * ((4 - len(core) % 4) % 4))
-          try:
-              data = base64.b64decode(clean, validate=False)
-          except Exception as exc:
-              raise SystemExit('dog icon decode failed: ' + str(exc))
+          data = base64.b64decode(clean, validate=False)
 
           expected = os.environ['DOG_ICON_SHA256'].strip().lower()
           actual = hashlib.sha256(data).hexdigest()
@@ -227,7 +224,10 @@ jobs:
           grep -F "package: name='com.jayuminton.admin'" "$RUNNER_TEMP/badging.txt"
           grep -F "versionCode='1996'" "$RUNNER_TEMP/badging.txt"
           grep -F "versionName='199.6'" "$RUNNER_TEMP/badging.txt"
-          unzip -p "$APK" res/drawable/icon.png > "$RUNNER_TEMP/final-dog-icon.png"
+          ICON_PATH=$(unzip -Z1 "$APK" | grep -E '^res/drawable[^/]*/icon\.png$' | head -1)
+          test -n "$ICON_PATH"
+          echo "packaged dog icon=$ICON_PATH"
+          unzip -p "$APK" "$ICON_PATH" > "$RUNNER_TEMP/final-dog-icon.png"
           test -s "$RUNNER_TEMP/final-dog-icon.png"
           test "$(sha256sum "$RUNNER_TEMP/final-dog-icon.png" | awk '{print $1}')" = "$DOG_ICON_SHA256"
           ls -lh "$APK"
@@ -269,7 +269,7 @@ jobs:
             echo 'version=199.6'
             echo 'package=com.jayuminton.admin'
             echo 'output=releases/jayuminton-v199.6-final-fresh-install.apk'
-            echo 'dog_icon_sha256=c64778554936a98100ef4a277a007bd4d619e75f22804a8b86deaae86a4af4ed'
+            echo 'dog_icon_sha256=4c3d5786562535ab3fbae79eaa4fde4b2161629314d8dd95f0a5aea181b1570a'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
           } > deployment/status/v1996-final-apk.txt
           git config user.name 'github-actions[bot]'
