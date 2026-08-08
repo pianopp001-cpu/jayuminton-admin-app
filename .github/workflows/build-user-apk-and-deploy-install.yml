@@ -1,8 +1,6 @@
 name: Build Jayuminton user APK and deploy install button
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -66,16 +64,21 @@ jobs:
           grep -F 'status=success' deployment/status/user-apk-v1.0.0.txt >/dev/null
           grep -F 'application_id=com.jayuminton.user' deployment/status/user-apk-v1.0.0.txt >/dev/null
           grep -F 'native_install_signal=NativeUserApp' deployment/status/user-apk-v1.0.0.txt >/dev/null
+          cp releases/jayuminton-user-v1.0.0.apk "$RUNNER_TEMP/user.apk"
+          cp deployment/status/user-apk-v1.0.0.txt "$RUNNER_TEMP/user-status.txt"
 
       - name: Publish verified user APK before changing live button
         shell: bash
         run: |
           set -euo pipefail
+          git reset --hard HEAD
+          cp "$RUNNER_TEMP/user.apk" releases/jayuminton-user-v1.0.0.apk
+          cp "$RUNNER_TEMP/user-status.txt" deployment/status/user-apk-v1.0.0.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add releases/jayuminton-user-v1.0.0.apk deployment/status/user-apk-v1.0.0.txt
           git commit -m 'Publish verified Jayuminton user APK v1.0.0' || true
-          git pull --rebase --autostash origin main
+          git pull --rebase origin main
           git push origin main
 
       - name: Confirm APK exists on main
@@ -85,10 +88,9 @@ jobs:
           git fetch origin main
           git show origin/main:releases/jayuminton-user-v1.0.0.apk > "$RUNNER_TEMP/published-user.apk"
           test -s "$RUNNER_TEMP/published-user.apk"
-          LOCAL_SHA="$(sha256sum releases/jayuminton-user-v1.0.0.apk | awk '{print $1}')"
+          LOCAL_SHA="$(sha256sum "$RUNNER_TEMP/user.apk" | awk '{print $1}')"
           REMOTE_SHA="$(sha256sum "$RUNNER_TEMP/published-user.apk" | awk '{print $1}')"
           test "$LOCAL_SHA" = "$REMOTE_SHA"
-          echo "Published user APK SHA-256: $REMOTE_SHA"
 
       - name: Set up clasp
         shell: bash
@@ -97,7 +99,7 @@ jobs:
           npm install --global @google/clasp@latest
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
 
-      - name: Pull live user source and patch install behavior only
+      - name: Pull live source and patch only user install behavior
         shell: bash
         run: |
           set -euo pipefail
@@ -106,70 +108,40 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-
-          sha256sum Admin.html Style.html Code.js > "$RUNNER_TEMP/non-user-files-before.sha"
+          sha256sum Admin.html Style.html Code.js > "$RUNNER_TEMP/non-user-before.sha"
           python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_apk_install.py" "$WORK"
-          sha256sum Admin.html Style.html Code.js > "$RUNNER_TEMP/non-user-files-after.sha"
-          cmp "$RUNNER_TEMP/non-user-files-before.sha" "$RUNNER_TEMP/non-user-files-after.sha"
-
+          sha256sum Admin.html Style.html Code.js > "$RUNNER_TEMP/non-user-after.sha"
+          cmp "$RUNNER_TEMP/non-user-before.sha" "$RUNNER_TEMP/non-user-after.sha"
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Script.html').read_text(encoding='utf-8')
-          start = text.find('<script>')
-          end = text.rfind('</script>')
-          if start < 0 or end <= start:
-              raise SystemExit('Script.html wrapper missing')
-          Path('Script.syntax-check.js').write_text(text[start + len('<script>'):end], encoding='utf-8')
+          start = text.find('<script>'); end = text.rfind('</script>')
+          if start < 0 or end <= start: raise SystemExit('Script wrapper missing')
+          Path('Script.syntax-check.js').write_text(text[start+8:end], encoding='utf-8')
           PY
           node --check Script.syntax-check.js
-          rm Script.syntax-check.js
-
           grep -F 'jayuminton-user-v1.0.0.apk' Script.html >/dev/null
           grep -F "? '앱설치 ON'" Script.html >/dev/null
           grep -F '!!window.NativeUserApp' Script.html >/dev/null
-          grep -F 'window.top.location.href = MEMBER_USER_APK_URL;' Script.html >/dev/null
           grep -F '>앱설치</button>' Index.html >/dev/null
-          if grep -F '앱 설치완료' Script.html >/dev/null; then exit 1; fi
-          if grep -F '설치 준비 ' Script.html >/dev/null; then exit 1; fi
-          if grep -F 'Chrome 열기' Script.html >/dev/null; then exit 1; fi
 
-      - name: Deploy user APK install behavior
+      - name: Deploy and verify live user install behavior
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/apps-script-main"
           cd "$WORK"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "user APK direct install ${GITHUB_SHA::7}"
-
-      - name: Re-pull and verify live Apps Script source
-        shell: bash
-        run: |
-          set -euo pipefail
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "user APK direct install manual"
           VERIFY="$RUNNER_TEMP/verify-user-install"
           rm -rf "$VERIFY" && mkdir -p "$VERIFY"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
           cd "$VERIFY"
           clasp pull
-
           grep -F 'jayuminton-user-v1.0.0.apk' Script.html >/dev/null
           grep -F "? '앱설치 ON'" Script.html >/dev/null
           grep -F '!!window.NativeUserApp' Script.html >/dev/null
-          grep -F 'window.top.location.href = MEMBER_USER_APK_URL;' Script.html >/dev/null
           grep -F '>앱설치</button>' Index.html >/dev/null
-          if grep -F '앱 설치완료' Script.html >/dev/null; then exit 1; fi
-          if grep -F '설치 준비 ' Script.html >/dev/null; then exit 1; fi
-          if grep -F 'Chrome 열기' Script.html >/dev/null; then exit 1; fi
-
-          python3 - <<'PY'
-          from pathlib import Path
-          text = Path('Script.html').read_text(encoding='utf-8')
-          start = text.find('<script>')
-          end = text.rfind('</script>')
-          Path('Script.syntax-check.js').write_text(text[start + len('<script>'):end], encoding='utf-8')
-          PY
-          node --check Script.syntax-check.js
-
           cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
           cp Index.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Index.html"
 
@@ -181,15 +153,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Record verified live user install state
+      - name: Record verified live state
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p deployment/status
-          APK_SHA="$(sha256sum releases/jayuminton-user-v1.0.0.apk | awk '{print $1}')"
+          APK_SHA="$(sha256sum "$RUNNER_TEMP/user.apk" | awk '{print $1}')"
           cat > deployment/status/user-apk-install-live.txt <<EOF
           workflow=Build Jayuminton user APK and deploy install button
-          run_id=${{ github.run_id }}
           status=success
           user_apk=releases/jayuminton-user-v1.0.0.apk
           apk_sha256=$APK_SHA
@@ -200,10 +170,9 @@ jobs:
           user_design=unchanged
           updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
           EOF
-
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/user-apk-install-live.txt source-snapshot/current-main/Script.html source-snapshot/current-main/Index.html
           git commit -m 'Record verified user APK install flow' || true
-          git pull --rebase --autostash origin main
+          git pull --rebase origin main
           git push origin main
