@@ -82,7 +82,7 @@ if not saw_iend or pos != len(png):
 if (width, height) != (128, 152):
     raise SystemExit(f'Decoded launcher PNG dimensions are invalid: {width}x{height}')
 sha256 = hashlib.sha256(png).hexdigest()
-expected_sha256 = 'fa8c7154f81f933f60b793d4f9b7bd50fe688be2eab12121f8fe3b0960981877'
+expected_sha256 = 'a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e'
 if sha256 != expected_sha256:
     raise SystemExit(f'Decoded launcher PNG SHA-256 mismatch: {sha256}')
 
@@ -115,7 +115,7 @@ src = src.replace(square_needle, square_replacement, 1)
 
 if 'rm -f "$SOURCE_B64"' not in src:
     raise SystemExit('resource cleanup patch missing')
-if 'fa8c7154f81f933f60b793d4f9b7bd50fe688be2eab12121f8fe3b0960981877' not in src:
+if 'a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e' not in src:
     raise SystemExit('pinned icon hash validation missing')
 if "launcher icon dimensions changed unexpectedly" not in src:
     raise SystemExit('rectangular icon validation patch missing')
@@ -124,5 +124,5 @@ Path(sys.argv[2]).write_text(src, encoding='utf-8')
 PY
 
 chmod +x "$FIXED"
-echo 'Verified build wrapper: pinned 128x152 icon is base64-normalized, PNG CRC/SHA-256 validated, then the .b64 keeper is removed from the runner drawable tree.'
+echo 'Verified build wrapper: pinned 128x152 icon is base64-normalized, PNG chunk/CRC/SHA-256 validated, then the .b64 keeper is removed from the runner drawable tree.'
 bash "$FIXED"
