@@ -1,5 +1,5 @@
-name: Deploy final member edit vibration state
-run-name: Final member edit vibration deploy
+name: Restore stable admin interactions
+run-name: Restore admin double tap and clean header
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-final-member-state
+  group: jayuminton-stable-admin-interactions
   cancel-in-progress: true
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
           echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
 
-      - name: Pull and apply complete requested state
+      - name: Pull and restore requested stable state
         shell: bash
         run: |
           set -euo pipefail
@@ -58,12 +58,12 @@ jobs:
           cd "$WORK"
           clasp pull
 
-          # Existing-member edit, user-mode guard, and four one-line actions.
+          # Preserve the verified existing-member edit behavior.
           python3 "$GITHUB_WORKSPACE/deployment/scripts/apply_member_edit_existing_only.py" "$WORK"
 
-          # Strong vibration and the APK-to-browser PWA launcher.
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           def replace_function(src, name, replacement):
               token = 'function ' + name + '('
@@ -97,6 +97,21 @@ jobs:
                   i += 1
               raise SystemExit('unbalanced ' + name)
 
+          # ---------- Admin header: push-app button must stay removed ----------
+          p = Path('Admin.html')
+          a = p.read_text(encoding='utf-8')
+          a = re.sub(
+              r'\s*<button[^>]*id="adminPushAppButton"[^>]*>.*?</button>\s*',
+              '\n',
+              a,
+              count=1,
+              flags=re.S,
+          )
+          if 'adminPushAppButton' in a or '📱 푸시앱' in a:
+              raise SystemExit('admin push app button still present')
+          p.write_text(a, encoding='utf-8')
+
+          # ---------- Script: preserve 2/4 vibration and restore double-tap-to-active ----------
           p = Path('Script.html')
           s = p.read_text(encoding='utf-8')
           s = replace_function(s, 'memberAlertRepeatCount', """function memberAlertRepeatCount(type) {
@@ -111,40 +126,84 @@ jobs:
           }""")
           s = s.replace('}, index * 1300);', '}, index * 1700);')
 
-          if 'function openAdminPushApp()' not in s:
-              close = s.rfind('</script>')
-              if close < 0:
-                  raise SystemExit('script close missing')
-              fn = """
-          function openAdminPushApp() {
-            const target = 'https://jayuminton-push.web.app/';
-            try {
-              if (window.NativeBrowser && typeof window.NativeBrowser.openPwa === 'function') {
-                window.NativeBrowser.openPwa();
-                return;
-              }
-            } catch (error) {}
-            try { window.location.href = target; }
-            catch (error) { window.open(target, '_blank', 'noopener'); }
-          }
-          """
-              s = s[:close] + fn + s[close:]
-          p.write_text(s, encoding='utf-8')
+          if 'let LAST_EXCLUDED_MEMBER_TAP' not in s:
+              marker = "let LAST_COURT_MEMBER_TAP = {"
+              pos = s.find(marker)
+              if pos < 0:
+                  raise SystemExit('court tap tracker missing')
+              s = s[:pos] + "let LAST_EXCLUDED_MEMBER_TAP = { memberId:'', tappedAt:0 };\n" + s[pos:]
 
-          p = Path('Admin.html')
-          a = p.read_text(encoding='utf-8')
-          if 'id="adminPushAppButton"' not in a:
-              anchor = '    <details class="top-admin-menu">'
-              if anchor not in a:
-                  raise SystemExit('admin top menu anchor missing')
-              button = '''    <button id="adminPushAppButton" class="ghost-button admin-push-app-button" type="button" onclick="openAdminPushApp()" style="white-space:nowrap;font-weight:900">📱 푸시앱</button>\n\n'''
-              a = a.replace(anchor, button + anchor, 1)
-          p.write_text(a, encoding='utf-8')
+          handler = """function handleExcludedMemberTap(memberId, event) {
+            if (!IS_ADMIN) return;
+            if (consumeLongPressClick(memberId, event)) return;
+            if (assignMemberToChosenEmpty(memberId, event)) return;
+
+            const now = Date.now();
+            const isDoubleTap =
+              LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+              now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+
+            LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+              ? { memberId:'', tappedAt:0 }
+              : { memberId:memberId, tappedAt:now };
+
+            if (isDoubleTap) {
+              if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+              cancelQuickPick();
+              runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+              return;
+            }
+
+            toggleSelected(memberId);
+          }"""
+
+          if 'function handleExcludedMemberTap(' in s:
+              s = replace_function(s, 'handleExcludedMemberTap', handler)
+          else:
+              anchor = 'function handleCourtMemberTap('
+              pos = s.find(anchor)
+              if pos < 0:
+                  raise SystemExit('court tap handler anchor missing')
+              s = s[:pos] + handler + '\n\n' + s[pos:]
+
+          # Only the admin excluded roster changes: one tap selects, double tap returns to court-assignment waiting.
+          old = " onclick=\"handleSelectableMemberClick(\\'" + "' +\n              member.id +\n              '\\',event)\">"
+          # Robust textual replacement around renderExcluded rather than depending on formatting from older revisions.
+          render_start = s.find('function renderExcluded()')
+          render_end = s.find('function renderInactive()', render_start)
+          if render_start < 0 or render_end < 0:
+              raise SystemExit('renderExcluded block missing')
+          block = s[render_start:render_end]
+          block, count = re.subn(
+              r'onclick="handleSelectableMemberClick\(\\\'\' \+\s*member\.id \+\s*\\\'\,event\)"',
+              'onclick="handleExcludedMemberTap(\\\'\' + member.id + '\\,event)"',
+              block,
+              count=1,
+          )
+          if count == 0:
+              block = block.replace(
+                  "' onclick=\"handleSelectableMemberClick(\\'' +\n              member.id +\n              '\\',event)\">'",
+                  "' onclick=\"handleExcludedMemberTap(\\'' +\n              member.id +\n              '\\',event)\">'",
+                  1,
+              )
+          if 'handleExcludedMemberTap' not in block:
+              raise SystemExit('excluded roster double-tap handler was not wired')
+          s = s[:render_start] + block + s[render_end:]
+
+          # Remove old admin push launcher function if it exists; user PWA remains independent.
+          if 'function openAdminPushApp(' in s:
+              s = replace_function(s, 'openAdminPushApp', """function openAdminPushApp() {
+            return;
+          }""")
+
+          p.write_text(s, encoding='utf-8')
           PY
 
-          # Repeated historical patches left `async` before the function token.
-          # Normalize that declaration and then parse the entire client JS with Node.
           python3 "$GITHUB_WORKSPACE/deployment/scripts/normalize_member_edit_js.py" "$WORK"
+
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Script.html').read_text(encoding='utf-8')
@@ -157,33 +216,35 @@ jobs:
           node --check Script.syntax-check.js
           rm Script.syntax-check.js
 
+          # Hard checks before deployment.
           grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
           if grep -F '수정 저장' Admin.html >/dev/null; then exit 1; fi
-          grep -F 'id="adminPushAppButton"' Admin.html >/dev/null
-          grep -F 'async function applyMemberEdit()' Script.html >/dev/null
-          if grep -E '(async[[:space:]]+){2,}function' Script.html >/dev/null; then exit 1; fi
+          if grep -F 'adminPushAppButton' Admin.html >/dev/null; then exit 1; fi
+          if grep -F '📱 푸시앱' Admin.html >/dev/null; then exit 1; fi
+          grep -F 'function handleExcludedMemberTap(memberId, event)' Script.html >/dev/null
+          grep -F "runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active'])" Script.html >/dev/null
+          grep -F 'handleExcludedMemberTap' Script.html >/dev/null
           grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
           grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
           grep -F 'index * 1700' Script.html >/dev/null
           grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
           grep -F "server('updateMemberProfile'" Script.html >/dev/null
           grep -F 'members[index].name = name;' Code.js >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_EDIT_EXISTING_ONLY_STYLE' Style.html >/dev/null
 
-      - name: Deploy complete requested state
+      - name: Deploy restored admin state
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/main"
           cd "$WORK"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "final valid edit vibration state ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "restore stable admin interactions ${GITHUB_SHA::7}"
           cp Admin.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Admin.html"
           cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
           cp Style.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Style.html"
           cp Code.js "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js"
 
-      - name: Verify deployed Apps Script source and JavaScript syntax
+      - name: Verify deployed Apps Script source
         shell: bash
         run: |
           set -euo pipefail
@@ -193,29 +254,24 @@ jobs:
           cd "$VERIFY"
           clasp pull
 
-          grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
-          if grep -F '수정 저장' Admin.html >/dev/null; then exit 1; fi
-          grep -F 'id="adminPushAppButton"' Admin.html >/dev/null
-          grep -F 'async function applyMemberEdit()' Script.html >/dev/null
-          if grep -E '(async[[:space:]]+){2,}function' Script.html >/dev/null; then exit 1; fi
+          if grep -F 'adminPushAppButton' Admin.html >/dev/null; then exit 1; fi
+          if grep -F '📱 푸시앱' Admin.html >/dev/null; then exit 1; fi
+          grep -F 'function handleExcludedMemberTap(memberId, event)' Script.html >/dev/null
+          grep -F "runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active'])" Script.html >/dev/null
           grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
           grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
-          grep -F 'index * 1700' Script.html >/dev/null
-          grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
+          grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
           grep -F 'members[index].name = name;' Code.js >/dev/null
-          if grep -F 'id="memberEditModal"' Index.html >/dev/null; then exit 1; fi
 
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Script.html').read_text(encoding='utf-8')
           start = text.find('<script>')
           end = text.rfind('</script>')
-          if start < 0 or end <= start:
-              raise SystemExit('Script.html wrapper missing')
           Path('Script.syntax-check.js').write_text(text[start + len('<script>'):end], encoding='utf-8')
           PY
           node --check Script.syntax-check.js
-          echo 'Deployed Apps Script JavaScript syntax verified.'
+          echo 'Restored admin source verified.'
 
       - name: Record deployment result
         if: always()
@@ -224,25 +280,26 @@ jobs:
           set -u
           mkdir -p deployment/status
           {
-            echo 'workflow=Deploy final member edit vibration state'
+            echo 'workflow=Restore stable admin interactions'
             echo 'run_id=${{ github.run_id }}'
             echo 'status=${{ job.status }}'
             echo 'head_sha=${{ github.sha }}'
-            echo 'edit=existing-member-overwrite-only'
-            echo 'edit_js=syntax-checked'
+            echo 'admin_push_button=removed'
+            echo 'court_double_tap=active'
+            echo 'wait_double_tap=active'
+            echo 'excluded_double_tap=active'
             echo 'wait1_vibration=3-pulse-x2'
             echo 'court_vibration=3-pulse-x4'
-            echo 'admin_push_button=native-browser-first'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
-          } > deployment/status/final-member-state.txt
+          } > deployment/status/stable-admin-interactions.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/final-member-state.txt
+          git add deployment/status/stable-admin-interactions.txt
           if [ '${{ job.status }}' = 'success' ]; then
             git add source-snapshot/current-main/Admin.html source-snapshot/current-main/Script.html source-snapshot/current-main/Style.html source-snapshot/current-main/Code.js || true
           else
             git restore source-snapshot/current-main/Admin.html source-snapshot/current-main/Script.html source-snapshot/current-main/Style.html source-snapshot/current-main/Code.js 2>/dev/null || true
           fi
-          git commit -m 'Record syntax-checked final member state: ${{ job.status }}' || exit 0
+          git commit -m 'Record stable admin restore: ${{ job.status }}' || exit 0
           git pull --rebase origin main || true
           git push origin main
