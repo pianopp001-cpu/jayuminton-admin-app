@@ -1,11 +1,12 @@
 name: Inspect Jayuminton push source
-run-name: Inspect push token and notification flow
+run-name: Inspect and validate push token flow
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/inspect-push-source.yml'
+      - 'deployment/scripts/patch_push_setup_verification.py'
   workflow_dispatch: {}
 
 permissions:
@@ -21,7 +22,7 @@ jobs:
         with:
           ref: main
 
-      - name: Reconstruct setup source
+      - name: Reconstruct and validate setup source
         shell: bash
         run: |
           set -euo pipefail
@@ -34,55 +35,59 @@ jobs:
           cat "${PARTS[@]}" | tr -d '\r\n' | base64 --decode | gzip --decompress > "$RUNNER_TEMP/setup-v205.js"
           test -s "$RUNNER_TEMP/setup-v205.js"
           node --check "$RUNNER_TEMP/setup-v205.js"
+
+          cp "$RUNNER_TEMP/setup-v205.js" "$RUNNER_TEMP/setup-v205-patched.js"
+          python3 deployment/scripts/patch_push_setup_verification.py "$RUNNER_TEMP/setup-v205-patched.js"
+          node --check "$RUNNER_TEMP/setup-v205-patched.js"
+
           echo "parts=${#PARTS[@]}"
-          echo "bytes=$(wc -c < "$RUNNER_TEMP/setup-v205.js")"
+          echo "baseline_bytes=$(wc -c < "$RUNNER_TEMP/setup-v205.js")"
+          echo "patched_bytes=$(wc -c < "$RUNNER_TEMP/setup-v205-patched.js")"
 
       - name: Inspect token and bridge flow
         shell: bash
         run: |
           set -euo pipefail
-          JS="$RUNNER_TEMP/setup-v205.js"
+          BASE="$RUNNER_TEMP/setup-v205.js"
+          JS="$RUNNER_TEMP/setup-v205-patched.js"
           mkdir -p deployment/status
           OUT=deployment/status/push-source-inspection.txt
 
           has() {
-            local pattern="$1"
-            if grep -F "$pattern" "$JS" >/dev/null; then echo yes; else echo no; fi
+            local file="$1"
+            local pattern="$2"
+            if grep -F "$pattern" "$file" >/dev/null; then echo yes; else echo no; fi
           }
 
           {
             echo 'workflow=Inspect Jayuminton push source'
             echo 'run_id=${{ github.run_id }}'
             echo 'status=success'
-            echo "getToken=$(has 'getToken')"
-            echo "notification_permission=$(has 'Notification.requestPermission')"
-            echo "push_setup_request=$(has 'JAYUMINTON_PUSH_SETUP_REQUEST')"
-            echo "member_selected=$(has 'JAYUMINTON_MEMBER_SELECTED')"
-            echo "push_connect_result=$(has 'JAYUMINTON_PUSH_CONNECT_RESULT')"
-            echo "push_disconnect_request=$(has 'JAYUMINTON_PUSH_DISCONNECT_REQUEST')"
-            echo "service_worker_registration=$(has 'serviceWorker')"
-            echo "relay_url_reference=$(has 'relayUrl')"
+            echo "baseline_getToken=$(has "$BASE" 'getToken')"
+            echo "baseline_notification_permission=$(has "$BASE" 'Notification.requestPermission')"
+            echo "baseline_push_setup_request=$(has "$BASE" 'JAYUMINTON_PUSH_SETUP_REQUEST')"
+            echo "baseline_member_selected=$(has "$BASE" 'JAYUMINTON_MEMBER_SELECTED')"
+            echo "patched_server_verify_marker=$(has "$JS" 'JAYUMINTON_PUSH_SERVER_VERIFY_V1')"
+            echo "patched_token_status=$(has "$JS" "action:'token_status'")"
+            echo "patched_verify_function=$(has "$JS" 'async function verifyRelayToken(memberId, token)')"
+            echo "patched_refresh_verification=$(has "$JS" 'else if (!(await verifyRelayToken(member.id, currentToken)))')"
+            echo "patched_bootstrap_requires_verified_state=$(has "$JS" 'pushConnected:Boolean(isConnected && localStorage.getItem(STORAGE.token)')"
             echo
-            echo '--- getToken context ---'
-            grep -n -C 24 -F 'getToken' "$JS" || true
+            echo '--- patched submit/verify context ---'
+            grep -n -C 35 -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$JS" || true
             echo
-            echo '--- push setup request context ---'
-            grep -n -C 30 -F 'JAYUMINTON_PUSH_SETUP_REQUEST' "$JS" || true
-            echo
-            echo '--- member selected context ---'
-            grep -n -C 24 -F 'JAYUMINTON_MEMBER_SELECTED' "$JS" || true
-            echo
-            echo '--- connect result context ---'
-            grep -n -C 24 -F 'JAYUMINTON_PUSH_CONNECT_RESULT' "$JS" || true
+            echo '--- patched refresh verification context ---'
+            grep -n -C 25 -F 'else if (!(await verifyRelayToken(member.id, currentToken)))' "$JS" || true
           } > "$OUT"
 
-          grep -F 'getToken=yes' "$OUT" >/dev/null
-          grep -F 'notification_permission=yes' "$OUT" >/dev/null
-          grep -F 'push_setup_request=yes' "$OUT" >/dev/null
-          grep -F 'member_selected=yes' "$OUT" >/dev/null
-          grep -F 'push_connect_result=yes' "$OUT" >/dev/null
-          grep -F 'service_worker_registration=yes' "$OUT" >/dev/null
-          grep -F 'relay_url_reference=yes' "$OUT" >/dev/null
+          grep -F 'baseline_getToken=yes' "$OUT" >/dev/null
+          grep -F 'baseline_notification_permission=yes' "$OUT" >/dev/null
+          grep -F 'baseline_push_setup_request=yes' "$OUT" >/dev/null
+          grep -F 'patched_server_verify_marker=yes' "$OUT" >/dev/null
+          grep -F 'patched_token_status=yes' "$OUT" >/dev/null
+          grep -F 'patched_verify_function=yes' "$OUT" >/dev/null
+          grep -F 'patched_refresh_verification=yes' "$OUT" >/dev/null
+          grep -F 'patched_bootstrap_requires_verified_state=yes' "$OUT" >/dev/null
 
       - name: Commit inspection result
         if: always()
@@ -102,6 +107,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$OUT"
-          git commit -m 'Record push source inspection: ${{ job.status }}' || exit 0
+          git commit -m 'Record push verification inspection: ${{ job.status }}' || exit 0
           git pull --rebase origin main || true
           git push origin main
