@@ -3,3 +3,4 @@ Trigger: 2026-08-09 Asia/Seoul
 Alert reinforcement: repeated heads-up windows and per-window vibration v2
 APK delivery: Firebase-hosted verified v1.1.0 link
 APK link retry: direct raw download URL, no Firebase executable hosting
+Native APK token bridge reliable sync v1.1.1
