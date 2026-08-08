@@ -1,0 +1,31 @@
+name: Force verified APK build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy-triggers/apk-build.txt'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm build workflow is registered
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow view build-apk.yml --repo "$GITHUB_REPOSITORY"
+
+      - name: Dispatch verified v199.6 build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run build-apk.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo 'Verified v199.6 APK build dispatched.'
