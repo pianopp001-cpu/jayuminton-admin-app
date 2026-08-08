@@ -74,6 +74,7 @@ jobs:
           gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$PUBLIC/setup-v205.js"
           python3 deployment/scripts/patch_push_setup_verification.py "$PUBLIC/setup-v205.js"
           python3 deployment/scripts/patch_embedded_browser_push.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_native_host_bridge.py "$PUBLIC/setup-v205.js"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -97,6 +98,7 @@ jobs:
           grep -F 'package=com.android.chrome' "$PUBLIC/setup-v205.js" >/dev/null
           grep -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$PUBLIC/setup-v205.js" >/dev/null
           grep -F '앱 설치는 필요 없습니다.' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_HOST_PUSH_BRIDGE_V111' "$PUBLIC/setup-v205.js" >/dev/null
 
           cat > "$ROOT/firebase.json" <<'JSON'
           {
@@ -147,4 +149,5 @@ jobs:
           grep -F 'JAYUMINTON_EMBEDDED_PUSH_TO_CHROME_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F 'package=com.android.chrome' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_HOST_PUSH_BRIDGE_V111' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F "JAYUMINTON_SW_VERSION = '1.6.37-headsup-3x3-3x5-20260809'" "$RUNNER_TEMP/live-sw.js" >/dev/null
