@@ -66,4 +66,13 @@ jobs:
                       x=re.sub(r'Bearer\s+[^\s\"\']+', 'Bearer [REDACTED]', x)
                       print(f'{j+1}: {x[:220]}')
                   print('---')
+          print('--- registration code contexts ---')
+          for i,line in enumerate(lines):
+              if any(key in line for key in ('register_web_token', 'token_status', 'doPost', 'userAgent')):
+                  lo=max(0,i-3); hi=min(len(lines),i+8)
+                  for j in range(lo,hi):
+                      x=lines[j]
+                      x=re.sub(r"(['\"])(?:[^'\"]{40,})\1", r"\1[REDACTED_STRING]\1", x)
+                      print(f'{j+1}: {x[:240]}')
+                  print('---')
           PY
