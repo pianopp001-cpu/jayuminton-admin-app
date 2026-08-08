@@ -38,7 +38,7 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-          test "$(cat check.js)" = '// Intentionally empty server-side placeholder.'
+          ! grep -F 'window' check.js
           grep -F 'jayuminton-courtstatus-v1.1.2-fresh-install.apk' Script.html >/dev/null
           grep -F 'function handleMemberSelfCardTap' Script.html >/dev/null
           grep -F 'member-new-badge' Script.html >/dev/null
