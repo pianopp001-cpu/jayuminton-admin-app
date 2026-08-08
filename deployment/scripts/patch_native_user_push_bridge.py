@@ -67,6 +67,57 @@ function syncNativeUserPushBridge() {
 '''
     s = s[:insert] + bridge + s[insert:]
 
+reliable_marker = '/* JAYUMINTON_NATIVE_USER_PUSH_RELIABLE_V111 */'
+if reliable_marker not in s:
+    insert = s.rfind('</script>')
+    if insert < 0:
+        raise SystemExit('Script closing tag missing for reliable native bridge')
+    reliable_bridge = r'''
+
+/* JAYUMINTON_NATIVE_USER_PUSH_RELIABLE_V111 */
+syncNativeUserPushBridge = function() {
+  if (IS_ADMIN || !window.NativeUserApp) return;
+  try {
+    window.NativeUserApp.setPushEnabled(!!memberAlertEnabled());
+  } catch (error) {}
+  try {
+    window.NativeUserApp.setVibrationEnabled(!!memberVibrationEnabled());
+  } catch (error) {}
+  const selectedMember = currentStoredWebPushMember();
+  if (selectedMember && selectedMember.id) {
+    try {
+      window.NativeUserApp.setMember(
+        String(selectedMember.id),
+        String(selectedMember.name || '')
+      );
+    } catch (error) {}
+  } else {
+    try { window.NativeUserApp.clearMember(); } catch (error) {}
+  }
+};
+
+(function installReliableNativeUserPushV111() {
+  if (window.__JAYUMINTON_NATIVE_USER_PUSH_RELIABLE_V111__) return;
+  window.__JAYUMINTON_NATIVE_USER_PUSH_RELIABLE_V111__ = true;
+  function resyncNativePush() {
+    try { syncNativeUserPushBridge(); } catch (error) {}
+  }
+  window.addEventListener('load', function() {
+    setTimeout(resyncNativePush, 300);
+    setTimeout(resyncNativePush, 1500);
+    setTimeout(resyncNativePush, 4000);
+  });
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) setTimeout(resyncNativePush, 100);
+  });
+  document.addEventListener('click', function() {
+    setTimeout(resyncNativePush, 250);
+  }, true);
+  setTimeout(resyncNativePush, 500);
+})();
+'''
+    s = s[:insert] + reliable_bridge + s[insert:]
+
 checks = [
     'jayuminton-courtstatus-v1.1.0-fresh-install.apk',
     marker,
@@ -74,6 +125,8 @@ checks = [
     'window.NativeUserApp.clearMember',
     'window.NativeUserApp.setPushEnabled',
     'window.NativeUserApp.setVibrationEnabled',
+    reliable_marker,
+    '__JAYUMINTON_NATIVE_USER_PUSH_RELIABLE_V111__',
 ]
 for check in checks:
     if check not in s:
