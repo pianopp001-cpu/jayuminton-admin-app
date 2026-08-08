@@ -1,0 +1,2 @@
+trigger=2026-08-09T01:52:00+09:00
+reason=avoid-duplicate-short-pings-use-device-vibration-pattern
