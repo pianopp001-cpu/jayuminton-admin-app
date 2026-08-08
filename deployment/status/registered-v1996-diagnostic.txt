@@ -1,0 +1,2 @@
+safe_error_extract=v1
+Only error-oriented build lines are retained; full environment/log is not committed.
