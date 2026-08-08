@@ -1,191 +1,62 @@
-name: Restore stable admin interactions
-run-name: Restore admin double tap and clean header
+name: Build verified Jayuminton v199.6 through registered workflow
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/trigger-member-install-hotfix.yml'
-      - 'deployment/scripts/apply_stable_admin_interactions.py'
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-stable-admin-interactions
-  cancel-in-progress: true
+  group: jayuminton-v1996-registered-build
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
-
     steps:
-      - name: Checkout main
+      - name: Checkout current main
         uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          node-version: '22'
+          distribution: temurin
+          java-version: '17'
 
-      - name: Install clasp
-        run: npm install --global @google/clasp@latest
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Resolve live MAIN deployment
-        shell: bash
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build and verify v199.6
+        run: bash deployment/scripts/run_verified_v1996_fixed.sh
+
+      - name: Upload verified APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-v199.6-verified
+          path: releases/jayuminton-v199.6-verified.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Commit verified APK and status
         run: |
           set -euo pipefail
-          CONFIG="$RUNNER_TEMP/deploy.json"
-          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
-          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
-          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
-
-      - name: Pull and patch live MAIN safely
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/main"
-          rm -rf "$WORK"
-          mkdir -p "$WORK"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
-          cd "$WORK"
-          clasp pull
-
-          python3 "$GITHUB_WORKSPACE/deployment/scripts/apply_member_edit_existing_only.py" "$WORK"
-          python3 "$GITHUB_WORKSPACE/deployment/scripts/apply_stable_admin_interactions.py" "$WORK"
-          python3 "$GITHUB_WORKSPACE/deployment/scripts/normalize_member_edit_js.py" "$WORK"
-
-          python3 - <<'PY'
-          from pathlib import Path
-          text = Path('Script.html').read_text(encoding='utf-8')
-          start = text.find('<script>')
-          end = text.rfind('</script>')
-          if start < 0 or end <= start:
-              raise SystemExit('Script.html wrapper missing')
-          Path('Script.syntax-check.js').write_text(
-              text[start + len('<script>'):end], encoding='utf-8'
-          )
-          PY
-          node --check Script.syntax-check.js
-          rm Script.syntax-check.js
-
-          grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
-          if grep -F '수정 저장' Admin.html >/dev/null; then exit 1; fi
-          if grep -F 'adminPushAppButton' Admin.html >/dev/null; then exit 1; fi
-          if grep -F '📱 푸시앱' Admin.html >/dev/null; then exit 1; fi
-          grep -F 'function handleExcludedMemberTap(memberId, event)' Script.html >/dev/null
-          grep -F "runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active'])" Script.html >/dev/null
-          grep -F 'onclick="handleExcludedMemberTap' Script.html >/dev/null
-          grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
-          grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
-          grep -F 'index * 1700' Script.html >/dev/null
-          grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
-          grep -F "server('updateMemberProfile'" Script.html >/dev/null
-          grep -F 'members[index].name = name;' Code.js >/dev/null
-
-      - name: Deploy restored admin state
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/main"
-          cd "$WORK"
-          clasp push --force
-          clasp create-deployment \
-            --deploymentId "$MAIN_DEPLOYMENT_ID" \
-            --description "restore stable admin interactions ${GITHUB_SHA::7}"
-
-          cp Admin.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Admin.html"
-          cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
-          cp Style.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Style.html"
-          cp Code.js "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js"
-
-      - name: Verify deployed Apps Script source
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERIFY="$RUNNER_TEMP/verify-main"
-          rm -rf "$VERIFY"
-          mkdir -p "$VERIFY"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
-          cd "$VERIFY"
-          clasp pull
-
-          if grep -F 'adminPushAppButton' Admin.html >/dev/null; then exit 1; fi
-          if grep -F '📱 푸시앱' Admin.html >/dev/null; then exit 1; fi
-          grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
-          grep -F 'function handleExcludedMemberTap(memberId, event)' Script.html >/dev/null
-          grep -F "runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active'])" Script.html >/dev/null
-          grep -F 'onclick="handleExcludedMemberTap' Script.html >/dev/null
-          grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
-          grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
-          grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
-          grep -F 'members[index].name = name;' Code.js >/dev/null
-          if grep -F 'id="memberEditModal"' Index.html >/dev/null; then exit 1; fi
-
-          python3 - <<'PY'
-          from pathlib import Path
-          text = Path('Script.html').read_text(encoding='utf-8')
-          start = text.find('<script>')
-          end = text.rfind('</script>')
-          if start < 0 or end <= start:
-              raise SystemExit('Script.html wrapper missing')
-          Path('Script.syntax-check.js').write_text(
-              text[start + len('<script>'):end], encoding='utf-8'
-          )
-          PY
-          node --check Script.syntax-check.js
-          echo 'Restored admin source verified.'
-
-      - name: Record deployment result
-        if: always()
-        shell: bash
-        run: |
-          set -u
-          mkdir -p deployment/status
-          {
-            echo 'workflow=Restore stable admin interactions'
-            echo 'run_id=${{ github.run_id }}'
-            echo 'status=${{ job.status }}'
-            echo 'head_sha=${{ github.sha }}'
-            if [ '${{ job.status }}' = 'success' ]; then
-              echo 'verification=deployed-project-pull-and-js-syntax'
-              echo 'admin_push_button=removed'
-              echo 'court_double_tap=active'
-              echo 'wait_double_tap=active'
-              echo 'excluded_double_tap=active'
-              echo 'wait1_vibration=3-pulse-x2'
-              echo 'court_vibration=3-pulse-x4'
-            else
-              echo 'verification=not-complete'
-            fi
-            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
-          } > deployment/status/stable-admin-interactions.txt
-
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/stable-admin-interactions.txt
-          if [ '${{ job.status }}' = 'success' ]; then
-            git add \
-              source-snapshot/current-main/Admin.html \
-              source-snapshot/current-main/Script.html \
-              source-snapshot/current-main/Style.html \
-              source-snapshot/current-main/Code.js || true
-          else
-            git restore \
-              source-snapshot/current-main/Admin.html \
-              source-snapshot/current-main/Script.html \
-              source-snapshot/current-main/Style.html \
-              source-snapshot/current-main/Code.js 2>/dev/null || true
-          fi
-          git commit -m 'Record stable admin restore: ${{ job.status }}' || exit 0
+          git add releases/jayuminton-v199.6-verified.apk deployment/status/apk-v1996.txt
+          git commit -m 'Add fully verified Jayuminton v199.6 APK' || exit 0
           git pull --rebase origin main || true
           git push origin main
