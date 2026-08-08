@@ -14,6 +14,7 @@ src = Path(sys.argv[1]).read_text(encoding='utf-8')
 decode_needle = 'base64 --decode "$SOURCE_B64" > "$TARGET_ICON"\n'
 decode_replacement = r'''python3 - "$SOURCE_B64" "$TARGET_ICON" <<'PYICON'
 import base64
+import hashlib
 import re
 import struct
 import sys
@@ -78,13 +79,17 @@ while pos < len(png):
 
 if not saw_iend or pos != len(png):
     raise SystemExit('Decoded launcher PNG is incomplete or has trailing data')
-if width is None or height is None or width != height or width < 128:
+if (width, height) != (128, 152):
     raise SystemExit(f'Decoded launcher PNG dimensions are invalid: {width}x{height}')
+sha256 = hashlib.sha256(png).hexdigest()
+expected_sha256 = 'fa8c7154f81f933f60b793d4f9b7bd50fe688be2eab12121f8fe3b0960981877'
+if sha256 != expected_sha256:
+    raise SystemExit(f'Decoded launcher PNG SHA-256 mismatch: {sha256}')
 
 target.write_bytes(png)
 print(
     f'Pinned launcher base64 validated: {width}x{height}, '
-    f'{len(png)} bytes, {chunk_count} chunks, ignored_non_base64={invalid_count}'
+    f'{len(png)} bytes, sha256={sha256}, {chunk_count} chunks, ignored_non_base64={invalid_count}'
 )
 PYICON
 '''
@@ -102,14 +107,22 @@ if file_needle not in src:
     raise SystemExit('icon validation insertion point missing')
 src = src.replace(file_needle, file_replacement, 1)
 
+square_needle = "if w != h or w < 128:\n    raise SystemExit(f'launcher icon must be square and >=128px, got {w}x{h}')\n"
+square_replacement = "if (w, h) != (128, 152):\n    raise SystemExit(f'launcher icon dimensions changed unexpectedly: {w}x{h}')\n"
+if square_needle not in src:
+    raise SystemExit('legacy square icon validation block missing')
+src = src.replace(square_needle, square_replacement, 1)
+
 if 'rm -f "$SOURCE_B64"' not in src:
     raise SystemExit('resource cleanup patch missing')
-if "Pinned launcher base64 validated" not in src:
-    raise SystemExit('strict PNG validation patch missing')
+if 'fa8c7154f81f933f60b793d4f9b7bd50fe688be2eab12121f8fe3b0960981877' not in src:
+    raise SystemExit('pinned icon hash validation missing')
+if "launcher icon dimensions changed unexpectedly" not in src:
+    raise SystemExit('rectangular icon validation patch missing')
 
 Path(sys.argv[2]).write_text(src, encoding='utf-8')
 PY
 
 chmod +x "$FIXED"
-echo 'Verified build wrapper: pinned icon is base64-normalized, PNG chunk/CRC validated, then the .b64 keeper is removed from the runner drawable tree.'
+echo 'Verified build wrapper: pinned 128x152 icon is base64-normalized, PNG CRC/SHA-256 validated, then the .b64 keeper is removed from the runner drawable tree.'
 bash "$FIXED"
