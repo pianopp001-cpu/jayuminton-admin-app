@@ -1,0 +1,2 @@
+trigger=2026-08-09T01:47:00+09:00
+reason=popup-and-vibration-missing-while-sound-arrives
