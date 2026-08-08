@@ -216,6 +216,8 @@ if "isNew: row[8] === true" not in code:
         'read isNew')
 code = code.replace('.getRange(sheet.getLastRow() + 1, 1, 1, 8)',
                     '.getRange(sheet.getLastRow() + 1, 1, 1, 9)')
+code = code.replace('.getRange(2, 1, rows.length, 8)',
+                    '.getRange(2, 1, rows.length, 9)')
 if "member.isNew === true" not in code:
     code = replace_once(code,
         "      member.grade || '',\n      member.experience || ''\n    ]]);",
