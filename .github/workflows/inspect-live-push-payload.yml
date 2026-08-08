@@ -1,0 +1,65 @@
+name: Inspect live push payload structure
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deployment/status/trigger-inspect-live-push.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Pull live push sender and inspect message shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          test -n "$PUSH_SCRIPT_ID"
+          WORK="$RUNNER_TEMP/push"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('Code.js').read_text(encoding='utf-8')
+          print('notification_key_count=', len(re.findall(r'\bnotification\s*:', s)))
+          print('data_key_count=', len(re.findall(r'\bdata\s*:', s)))
+          print('webpush_key_count=', len(re.findall(r'\bwebpush\s*:', s)))
+          print('android_key_count=', len(re.findall(r'\bandroid\s*:', s)))
+          print('show_notification_literal=', 'showNotification' in s)
+          print('repeat_3_5=', "repeatCount: event.type === 'court_assignment' ? '5' : '3'" in s)
+          print('android_high=', "priority: 'high'" in s)
+          print('web_urgency_high=', "Urgency: 'high'" in s)
+          print('--- notification key contexts (keys/structure only) ---')
+          lines=s.splitlines()
+          for i,line in enumerate(lines):
+              if re.search(r'\bnotification\s*:', line):
+                  lo=max(0,i-4); hi=min(len(lines),i+8)
+                  for j in range(lo,hi):
+                      x=lines[j]
+                      x=re.sub(r"(['\"])(?:[^'\"]{8,})\1", r"\1[REDACTED_STRING]\1", x)
+                      x=re.sub(r'Bearer\s+[^\s\"\']+', 'Bearer [REDACTED]', x)
+                      print(f'{j+1}: {x[:220]}')
+                  print('---')
+          PY
