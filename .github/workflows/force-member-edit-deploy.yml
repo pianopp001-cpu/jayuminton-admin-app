@@ -1,4 +1,4 @@
-name: Force member edit deployment
+name: Force verified APK build via registered dispatcher
 
 on:
   workflow_dispatch:
@@ -9,16 +9,45 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
 
 jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch member edit deployment workflow
+      - name: Confirm safe APK workflow is registered
+        id: inspect
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh workflow run apply-member-edit-vibration.yml --repo "$GITHUB_REPOSITORY" --ref main
-          echo "Dispatched apply-member-edit-vibration.yml"
+          gh workflow view build-v1996-safe.yml --repo "$GITHUB_REPOSITORY"
+
+      - name: Dispatch verified v199.6 APK build
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run build-v1996-safe.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo 'Dispatched build-v1996-safe.yml'
+
+      - name: Record dispatcher result
+        if: always()
+        run: |
+          mkdir -p deployment/status
+          {
+            echo 'workflow=registered dispatcher to v199.6 build'
+            echo 'run_id=${{ github.run_id }}'
+            echo 'status=${{ job.status }}'
+            echo 'workflow_registered_step=${{ steps.inspect.outcome }}'
+            echo 'dispatch_step=${{ steps.dispatch.outcome }}'
+            echo 'head_sha=${{ github.sha }}'
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > deployment/status/apk-dispatch.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/apk-dispatch.txt
+          git commit -m 'Record registered APK dispatcher: ${{ job.status }}' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
