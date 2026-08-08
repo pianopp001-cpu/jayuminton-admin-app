@@ -15,18 +15,22 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
+import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity implements TextToSpeech.OnInitListener {
     private static final String ADMIN_URL =
             "https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec?mode=admin";
+    private static final String APK_WEB_BUILD = "1994-fresh-admin";
     private static final String PREFS = "jayuminton_audio_state";
     private static final String KEY_WAS_DUCKING = "was_ducking";
     private static final String KEY_MEDIA_VOLUME = "media_volume";
@@ -78,11 +82,25 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.4");
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.4 FreshAdmin/1994");
+
+        /*
+         * 관리자 APK는 웹 화면을 껍데기처럼 띄우는 WebView 앱이다.
+         * 예전 버전은 DOM storage/localStorage와 WebView cache를 계속 보존해서
+         * jayuminton_admin_session_v1 로그인 세션과 오래된 HTML/JS가 남을 수 있었다.
+         * 앱을 새로 시작할 때 APK WebView 저장소와 캐시를 초기화해서
+         * 항상 최신 배포본을 새 로그인부터 읽게 한다.
+         */
+        webView.clearCache(true);
+        webView.clearHistory();
+        WebStorage.getInstance().deleteAllData();
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
+        cookieManager.removeSessionCookies(null);
+        cookieManager.flush();
 
         webView.addJavascriptInterface(new VoiceBridge(), "NativeVoice");
         webView.setWebChromeClient(new WebChromeClient());
@@ -101,12 +119,22 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                 super.onPageFinished(view, url);
                 view.evaluateJavascript(
                         "window.__JAYUMINTON_NATIVE_APP__=true;" +
-                        "document.documentElement.setAttribute('data-native-app','1');",
+                        "window.__JAYUMINTON_APK_WEB_BUILD__='" + APK_WEB_BUILD + "';" +
+                        "document.documentElement.setAttribute('data-native-app','1');" +
+                        "document.documentElement.setAttribute('data-apk-web-build','" + APK_WEB_BUILD + "');",
                         null
                 );
             }
         });
-        webView.loadUrl(ADMIN_URL);
+
+        String freshAdminUrl = ADMIN_URL
+                + "&apkBuild=" + APK_WEB_BUILD
+                + "&ts=" + System.currentTimeMillis();
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Cache-Control", "no-cache, no-store, must-revalidate");
+        headers.put("Pragma", "no-cache");
+        headers.put("Expires", "0");
+        webView.loadUrl(freshAdminUrl, headers);
     }
 
     @Override
