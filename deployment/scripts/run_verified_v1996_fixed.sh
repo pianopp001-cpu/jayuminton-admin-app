@@ -126,6 +126,13 @@ if packaged_icon_needle not in src:
     raise SystemExit('legacy packaged icon extraction line missing')
 src = src.replace(packaged_icon_needle, packaged_icon_replacement, 1)
 
+signer_needle = '''SIGNER_SHA="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {gsub(":", "", $2); print toupper($2); exit}' "$RUNNER_TEMP/apksigner.txt")"\n'''
+signer_replacement = r'''SIGNER_SHA="$(sed -n -E 's/^.*certificate SHA-256 digest: ([0-9A-Fa-f:]+).*$/\1/p' "$RUNNER_TEMP/apksigner.txt" | head -1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+'''
+if signer_needle not in src:
+    raise SystemExit('legacy apksigner digest parser missing')
+src = src.replace(signer_needle, signer_replacement, 1)
+
 if 'rm -f "$SOURCE_B64"' not in src:
     raise SystemExit('resource cleanup patch missing')
 if 'a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e' not in src:
@@ -134,10 +141,12 @@ if "launcher icon dimensions changed unexpectedly" not in src:
     raise SystemExit('rectangular icon validation patch missing')
 if 'Packaged launcher icon path:' not in src:
     raise SystemExit('dynamic packaged icon verification patch missing')
+if "certificate SHA-256 digest: ([0-9A-Fa-f:]+)" not in src:
+    raise SystemExit('current apksigner digest parser patch missing')
 
 Path(sys.argv[2]).write_text(src, encoding='utf-8')
 PY
 
 chmod +x "$FIXED"
-echo 'Verified build wrapper: pinned icon is validated, optimized APK icon path is resolved from aapt badging, and packaged pixels are compared.'
+echo 'Verified build wrapper: icon source/package pixels and current apksigner certificate digest are verified.'
 bash "$FIXED"
