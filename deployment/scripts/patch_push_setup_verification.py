@@ -8,10 +8,15 @@ INSTALL_MARKER = "JAYUMINTON_NATIVE_PWA_ONLY_V1"
 
 def function_bounds(source: str, name: str):
     token = f"function {name}("
-    start = source.find(token)
-    if start < 0:
+    function_start = source.find(token)
+    if function_start < 0:
         return None
-    brace = source.find("{", start)
+    start = function_start
+    # Include an existing `async ` prefix so replacing an async function cannot
+    # accidentally leave `async async function ...` behind.
+    if function_start >= 6 and source[function_start - 6:function_start] == "async ":
+        start = function_start - 6
+    brace = source.find("{", function_start)
     if brace < 0:
         return None
 
@@ -73,7 +78,6 @@ def assert_no_legacy_handoffs(source: str) -> None:
 
 
 def patch_native_pwa_only(source: str) -> str:
-    # Chrome itself must retain the browser-native beforeinstallprompt path.
     required_native_markers = (
         "window.addEventListener('beforeinstallprompt', captureAndroidInstallPrompt);",
         "promptResult = promptEvent.prompt();",
@@ -89,7 +93,7 @@ def patch_native_pwa_only(source: str) -> str:
 function buildAndroidChromeIntent() {{
   const target = buildChromeUserTarget();
   const targetUrl = target.toString();
-  // Kept as a compatibility-shaped object only. No Android intent/external resolver is used.
+  // Compatibility-shaped object only. No Android intent/external resolver is used.
   return {{ targetUrl, intentUrl: targetUrl }};
 }}""",
     )
@@ -123,7 +127,6 @@ function buildAndroidChromeIntent() {{
 }""",
     )
 
-    # In Kakao/Daangn/etc. never create an invisible top-level intent/URL overlay.
     old_overlay = """if (androidDevice && embeddedBrowser) {
       const links = buildAndroidChromeIntent();
       appInstallChromeLink.href = links.intentUrl;
@@ -153,7 +156,6 @@ function buildAndroidChromeIntent() {{
   }, {passive:true});"""
     source = replace_exact_once(source, old_touch, new_touch, "embedded install touch handler")
 
-    # Replace only the embedded-Android branch of the visible install button.
     bounds = function_bounds(source, "handleAppInstallButton")
     if not bounds:
         raise RuntimeError("handleAppInstallButton missing")
@@ -181,7 +183,6 @@ function buildAndroidChromeIntent() {{
         raise RuntimeError("embedded Android install button branch changed unexpectedly")
     source = source[:start] + block + source[end:]
 
-    # Remove stale intent-specific comments so future searches cannot mistake them for active design.
     source = source.replace(
         "// v1.6.37: embedded browsers use a real top-level intent link; Chrome uses the native beforeinstallprompt event without reload loops.",
         "// Embedded browsers never invoke external resolvers; real Chrome uses the native beforeinstallprompt event without reload loops.",
@@ -333,6 +334,8 @@ async function submitRelay(action, token) {{
     assert_no_legacy_handoffs(source)
     if "promptResult = promptEvent.prompt();" not in source:
         raise RuntimeError("native Chrome PWA prompt missing after push patch")
+    if "async async function" in source:
+        raise RuntimeError("duplicate async prefix remains after patch")
     js_path.write_text(source, encoding="utf-8")
 
     final = js_path.read_text(encoding="utf-8")
