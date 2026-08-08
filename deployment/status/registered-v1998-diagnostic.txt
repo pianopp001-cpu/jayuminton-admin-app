@@ -1,2 +1,11 @@
 safe_error_extract=v1
-alarm-volume patch target count=0
+Pinned launcher icon verified: 128x152 sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
+Full-tile dog launcher generated: 128x128
+Cropped launcher dimensions verified: 128x128
+Launcher icon pixels verified: 128x128
+admin_session=server-validated-localstorage-persistent
+voice_volume=max-device-level
+media_duck_volume_step=6
+launcher_label=자유민턴 관리자
+launcher_icon_layout=dog-full-square-128x128
+launcher_icon_sha256=19dd56d141d1a4feedaad6179ad143418191520c1529a85d5ae5783744e17fdb
