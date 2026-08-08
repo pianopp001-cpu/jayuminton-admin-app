@@ -1,0 +1,2 @@
+trigger=2026-08-09T00:10:00+09:00
+purpose=inspect-existing-push-registration-contract-only
