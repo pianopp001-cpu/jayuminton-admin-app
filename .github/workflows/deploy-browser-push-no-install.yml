@@ -21,13 +21,14 @@ jobs:
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
 
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --global firebase-tools@latest
+      - run: npm install --global firebase-tools@latest @google/clasp@latest
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
@@ -38,11 +39,14 @@ jobs:
           set -euo pipefail
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
-          jq -e '.firebaseProjectId and .hostingUrl and .mainDeploymentId and .pushDeploymentId' "$CONFIG" >/dev/null
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.firebaseProjectId and .hostingUrl and .mainScriptId and .mainDeploymentId and .pushDeploymentId' "$CONFIG" >/dev/null
           {
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
             echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
             echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
           } >> "$GITHUB_ENV"
 
@@ -60,6 +64,7 @@ jobs:
           cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
           cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
           cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
+          cp releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk "$PUBLIC/jayuminton-courtstatus-v1.1.0-fresh-install.apk"
 
           BASE="${HOSTING_URL%/}"
           for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
@@ -112,6 +117,24 @@ jobs:
       - name: Deploy Firebase Hosting only
         run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/browser-push-hosting/firebase.json" --non-interactive
 
+      - name: Point the live member install button to the hosted native APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main-live"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          sha256sum Admin.html Style.html Code.js Index.html > "$RUNNER_TEMP/non-script-before.sha"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_native_user_push_bridge.py" "$WORK"
+          sha256sum Admin.html Style.html Code.js Index.html > "$RUNNER_TEMP/non-script-after.sha"
+          cmp "$RUNNER_TEMP/non-script-before.sha" "$RUNNER_TEMP/non-script-after.sha"
+          grep -F 'https://jayuminton-push.web.app/jayuminton-courtstatus-v1.1.0-fresh-install.apk' Script.html >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_USER_PUSH_SYNC_V110' Script.html >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "hosted native user APK link $GITHUB_RUN_ID"
+
       - name: Verify live release
         shell: bash
         run: |
@@ -120,9 +143,11 @@ jobs:
           BASE="${HOSTING_URL%/}"
           curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-setup.js"
           curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-sw.js"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/jayuminton-courtstatus-v1.1.0-fresh-install.apk?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-user.apk"
           node --check "$RUNNER_TEMP/live-setup.js"
           node --check "$RUNNER_TEMP/live-sw.js"
           grep -F 'JAYUMINTON_EMBEDDED_PUSH_TO_CHROME_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F 'package=com.android.chrome' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F "JAYUMINTON_SW_VERSION = '1.6.37-headsup-3x3-3x5-20260809'" "$RUNNER_TEMP/live-sw.js" >/dev/null
+          test "$(sha256sum "$RUNNER_TEMP/live-user.apk" | awk '{print $1}')" = "$(sha256sum releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk | awk '{print $1}')"
