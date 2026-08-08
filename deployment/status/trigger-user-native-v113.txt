@@ -1,0 +1,3 @@
+Build verified native FCM user APK v1.1.3.
+Requires server token-status verification and native local alert probe.
+Trigger: 2026-08-09 Asia/Seoul
