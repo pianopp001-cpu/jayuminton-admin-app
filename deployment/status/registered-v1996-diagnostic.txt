@@ -1,4 +1,3 @@
 safe_error_extract=v2
 Only error-oriented build lines are retained; full environment/log is not committed.
-Verified build wrapper: pinned icon is base64-normalized, PNG chunk/CRC validated, then the .b64 keeper is removed from the runner drawable tree.
-Pinned launcher base64 cannot be decoded safely: Invalid base64-encoded string: number of data characters (10017) cannot be 1 more than a multiple of 4
+Verified build wrapper: pinned 128x152 icon is base64-normalized, PNG CRC/SHA-256 validated, then the .b64 keeper is removed from the runner drawable tree.
