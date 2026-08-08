@@ -4,10 +4,6 @@ run-name: Inspect and validate push token flow
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/inspect-push-source.yml'
-      - 'deployment/scripts/patch_push_setup_verification.py'
-      - 'deploy-triggers/push-inspect.txt'
   workflow_dispatch: {}
 
 permissions:
