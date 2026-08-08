@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reuse the already verified v199.7 build pipeline, but transform a temporary
-# copy so v199.8 changes are isolated and the stable v199.7 recipe remains intact.
 BASE="deployment/scripts/run_verified_v1997.sh"
 TEMP="$RUNNER_TEMP/run_verified_v1998_generated.sh"
 test -s "$BASE"
 
 python3 - "$BASE" "$TEMP" <<'PY'
 from pathlib import Path
+import re
 import sys
 src = Path(sys.argv[1]).read_text(encoding='utf-8')
 
-# Version bump everywhere inside the temporary build recipe.
 src = src.replace('199.7', '199.8').replace('1997', '1998')
 
-# The announcement/TTS stream must be maximum volume. Music alone stays at 6.
-old_alarm = '''                int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
-                int voiceStep = Math.max(1, Math.min(VOICE_VOLUME_STEP, maxAlarm));
-                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, voiceStep, 0);'''
-new_alarm = '''                int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
-                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0);'''
-if old_alarm not in src:
-    raise SystemExit('v199.7 alarm-volume block not found')
-src = src.replace(old_alarm, new_alarm, 1)
+# TTS uses STREAM_ALARM. Keep music at level 6, but force the announcement
+# stream to the device maximum. Match the source defensively across whitespace.
+pattern = re.compile(
+    r'int maxAlarm\s*=\s*audioManager\.getStreamMaxVolume\(AudioManager\.STREAM_ALARM\);\s*'
+    r'int voiceStep\s*=\s*Math\.max\(1,\s*Math\.min\(VOICE_VOLUME_STEP,\s*maxAlarm\)\);\s*'
+    r'audioManager\.setStreamVolume\(AudioManager\.STREAM_ALARM,\s*voiceStep,\s*0\);'
+)
+src, n = pattern.subn(
+    'int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);\n'
+    '                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0);',
+    src,
+    count=1,
+)
+if n != 1:
+    raise SystemExit('alarm-volume patch target count=' + str(n))
 
 src = src.replace(
     "grep -F 'private static final int VOICE_VOLUME_STEP = 6;' \"$JAVA_FILE\" >/dev/null\n",
@@ -39,8 +43,6 @@ src = src.replace(
     '# Music remains audible at level 6 while TTS/ALARM is forced to the device maximum.',
 )
 
-# After validating the original dog artwork, turn it into a true square launcher
-# icon. The crop removes the title/outer whitespace and lets the dog fill the tile.
 anchor = '''PYICON
 rm -f "$SOURCE_B64"'''
 if anchor not in src:
@@ -62,8 +64,8 @@ public final class CropDogIcon {
     if (source.getWidth() != 128 || source.getHeight() != 152)
       throw new RuntimeException("unexpected source launcher size");
 
-    // Original artwork: dog is concentrated in x=16..111, y=56..151.
-    // Crop exactly that 96x96 region and scale it to the full 128x128 tile.
+    // Keep the original dog/racket artwork, remove the tall title/outer area,
+    // and make the dog fill the actual square launcher tile.
     BufferedImage crop = source.getSubimage(16, 56, 96, 96);
     BufferedImage square = new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB);
     Graphics2D g = square.createGraphics();
@@ -93,7 +95,6 @@ PYICONCHECK
 rm -f "$SOURCE_B64"'''
 src = src.replace(anchor, icon_transform, 1)
 
-# Status must explicitly prove the two requested changes.
 src = src.replace(
     'media_duck_volume_step=6\nmedia_restore=original-value',
     'media_duck_volume_step=6\nvoice_stream=alarm-max\nmedia_restore=original-value',
