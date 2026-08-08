@@ -1,0 +1,209 @@
+name: Build Jayuminton user APK and deploy install button
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-apk-install
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Resolve live Apps Script project
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME/platform-tools"
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -n "$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | head -1)"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build and verify user APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash deployment/scripts/build_user_apk_v100.sh
+          test -s releases/jayuminton-user-v1.0.0.apk
+          grep -F 'status=success' deployment/status/user-apk-v1.0.0.txt >/dev/null
+          grep -F 'application_id=com.jayuminton.user' deployment/status/user-apk-v1.0.0.txt >/dev/null
+          grep -F 'native_install_signal=NativeUserApp' deployment/status/user-apk-v1.0.0.txt >/dev/null
+
+      - name: Publish verified user APK before changing live button
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/jayuminton-user-v1.0.0.apk deployment/status/user-apk-v1.0.0.txt
+          git commit -m 'Publish verified Jayuminton user APK v1.0.0' || true
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Confirm APK exists on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git show origin/main:releases/jayuminton-user-v1.0.0.apk > "$RUNNER_TEMP/published-user.apk"
+          test -s "$RUNNER_TEMP/published-user.apk"
+          LOCAL_SHA="$(sha256sum releases/jayuminton-user-v1.0.0.apk | awk '{print $1}')"
+          REMOTE_SHA="$(sha256sum "$RUNNER_TEMP/published-user.apk" | awk '{print $1}')"
+          test "$LOCAL_SHA" = "$REMOTE_SHA"
+          echo "Published user APK SHA-256: $REMOTE_SHA"
+
+      - name: Set up clasp
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global @google/clasp@latest
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+
+      - name: Pull live user source and patch install behavior only
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/apps-script-main"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+
+          sha256sum Admin.html Style.html Code.js > "$RUNNER_TEMP/non-user-files-before.sha"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_apk_install.py" "$WORK"
+          sha256sum Admin.html Style.html Code.js > "$RUNNER_TEMP/non-user-files-after.sha"
+          cmp "$RUNNER_TEMP/non-user-files-before.sha" "$RUNNER_TEMP/non-user-files-after.sha"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('Script.html').read_text(encoding='utf-8')
+          start = text.find('<script>')
+          end = text.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('Script.html wrapper missing')
+          Path('Script.syntax-check.js').write_text(text[start + len('<script>'):end], encoding='utf-8')
+          PY
+          node --check Script.syntax-check.js
+          rm Script.syntax-check.js
+
+          grep -F 'jayuminton-user-v1.0.0.apk' Script.html >/dev/null
+          grep -F "? '앱설치 ON'" Script.html >/dev/null
+          grep -F '!!window.NativeUserApp' Script.html >/dev/null
+          grep -F 'window.top.location.href = MEMBER_USER_APK_URL;' Script.html >/dev/null
+          grep -F '>앱설치</button>' Index.html >/dev/null
+          if grep -F '앱 설치완료' Script.html >/dev/null; then exit 1; fi
+          if grep -F '설치 준비 ' Script.html >/dev/null; then exit 1; fi
+          if grep -F 'Chrome 열기' Script.html >/dev/null; then exit 1; fi
+
+      - name: Deploy user APK install behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/apps-script-main"
+          cd "$WORK"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "user APK direct install ${GITHUB_SHA::7}"
+
+      - name: Re-pull and verify live Apps Script source
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERIFY="$RUNNER_TEMP/verify-user-install"
+          rm -rf "$VERIFY" && mkdir -p "$VERIFY"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
+          cd "$VERIFY"
+          clasp pull
+
+          grep -F 'jayuminton-user-v1.0.0.apk' Script.html >/dev/null
+          grep -F "? '앱설치 ON'" Script.html >/dev/null
+          grep -F '!!window.NativeUserApp' Script.html >/dev/null
+          grep -F 'window.top.location.href = MEMBER_USER_APK_URL;' Script.html >/dev/null
+          grep -F '>앱설치</button>' Index.html >/dev/null
+          if grep -F '앱 설치완료' Script.html >/dev/null; then exit 1; fi
+          if grep -F '설치 준비 ' Script.html >/dev/null; then exit 1; fi
+          if grep -F 'Chrome 열기' Script.html >/dev/null; then exit 1; fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('Script.html').read_text(encoding='utf-8')
+          start = text.find('<script>')
+          end = text.rfind('</script>')
+          Path('Script.syntax-check.js').write_text(text[start + len('<script>'):end], encoding='utf-8')
+          PY
+          node --check Script.syntax-check.js
+
+          cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
+          cp Index.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Index.html"
+
+      - name: Upload user APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-user-v1.0.0
+          path: releases/jayuminton-user-v1.0.0.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record verified live user install state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          APK_SHA="$(sha256sum releases/jayuminton-user-v1.0.0.apk | awk '{print $1}')"
+          cat > deployment/status/user-apk-install-live.txt <<EOF
+          workflow=Build Jayuminton user APK and deploy install button
+          run_id=${{ github.run_id }}
+          status=success
+          user_apk=releases/jayuminton-user-v1.0.0.apk
+          apk_sha256=$APK_SHA
+          install_button_before=앱설치-white
+          install_button_after_confirm=앱설치-ON-green
+          confirmation_signal=JayumintonUserNative/1.0.0+NativeUserApp
+          pwa_address_copy_flow=removed-from-install-button
+          user_design=unchanged
+          updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-apk-install-live.txt source-snapshot/current-main/Script.html source-snapshot/current-main/Index.html
+          git commit -m 'Record verified user APK install flow' || true
+          git pull --rebase origin main
+          git push origin main
