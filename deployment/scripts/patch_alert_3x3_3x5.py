@@ -48,14 +48,19 @@ s = replace_function(s, 'function memberVibrationPattern(type) {', """function m
   return [650, 220, 650, 220, 650];
 }""")
 
-old = '    }, index * 1700);'
-if old not in s:
-    old = '    }, index * 2000);'
-if old not in s:
-    old = '    }, index * 1300);'
-if old not in s:
-    raise SystemExit('member alert repeat interval not found')
-s = s.replace(old, '    }, index * 3500);', 1)
+# Safe to run repeatedly. If the requested spacing is already live, leave it alone.
+current = '    }, index * 3500);'
+if current not in s:
+    for old in (
+        '    }, index * 1700);',
+        '    }, index * 2000);',
+        '    }, index * 1300);',
+    ):
+        if old in s:
+            s = s.replace(old, current, 1)
+            break
+    else:
+        raise SystemExit('member alert repeat interval not found')
 
 if "if (type === 'court_assignment') return 5;" not in s:
     raise SystemExit('court repeat 5 verification failed')
@@ -67,4 +72,4 @@ if 'index * 3500' not in s:
     raise SystemExit('repeat spacing verification failed')
 
 p.write_text(s, encoding='utf-8')
-print('Applied user foreground alert: wait1=3 pulses x3 groups, court=3 pulses x5 groups.')
+print('Verified user foreground alert: wait1=3 long pulses x3 groups, court=3 long pulses x5 groups.')
