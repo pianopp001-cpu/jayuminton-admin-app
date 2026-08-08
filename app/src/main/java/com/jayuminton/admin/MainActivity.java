@@ -40,6 +40,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     private static final String KEY_WAS_DUCKING = "was_ducking";
     private static final String KEY_MEDIA_VOLUME = "media_volume";
     private static final String KEY_ALARM_VOLUME = "alarm_volume";
+    private static final int VOICE_VOLUME_STEP = 6;
 
     private WebView webView;
     private TextToSpeech tts;
@@ -289,27 +290,33 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                     .putInt(KEY_ALARM_VOLUME, originalAlarmVolume)
                     .apply();
 
-            int maxMedia = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-            int minimumMusic = maxMedia > 0 ? 1 : 0;
-            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, minimumMusic, 0);
+            try {
+                int maxMedia = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                int minimumMusic = maxMedia > 0 ? 1 : 0;
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, minimumMusic, 0);
 
-            int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
-            int clearVoiceAlarm = Math.max(1, Math.round(maxAlarm * 0.85f));
-            if (originalAlarmVolume < clearVoiceAlarm) {
-                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, clearVoiceAlarm, 0);
+                int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+                int voiceStep = Math.max(1, Math.min(VOICE_VOLUME_STEP, maxAlarm));
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, voiceStep, 0);
+                ducking = true;
+            } catch (SecurityException error) {
+                ducking = false;
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().clear().apply();
             }
-            ducking = true;
         }
     }
 
     private void restoreAudio() {
         synchronized (audioLock) {
             if (audioManager == null) return;
-            if (originalMediaVolume >= 0) {
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalMediaVolume, 0);
-            }
-            if (originalAlarmVolume >= 0) {
-                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, originalAlarmVolume, 0);
+            try {
+                if (originalMediaVolume >= 0) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalMediaVolume, 0);
+                }
+                if (originalAlarmVolume >= 0) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_ALARM, originalAlarmVolume, 0);
+                }
+            } catch (SecurityException ignored) {
             }
             ducking = false;
             originalMediaVolume = -1;
@@ -324,8 +331,11 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         if (!wasDucking || audioManager == null) return;
         int media = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MEDIA_VOLUME, -1);
         int alarm = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_ALARM_VOLUME, -1);
-        if (media >= 0) audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, media, 0);
-        if (alarm >= 0) audioManager.setStreamVolume(AudioManager.STREAM_ALARM, alarm, 0);
+        try {
+            if (media >= 0) audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, media, 0);
+            if (alarm >= 0) audioManager.setStreamVolume(AudioManager.STREAM_ALARM, alarm, 0);
+        } catch (SecurityException ignored) {
+        }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().clear().apply();
     }
 
