@@ -1,109 +1,16 @@
-name: Inspect Jayuminton push source
-run-name: Inspect and validate push token flow
+name: Inspect Jayuminton push source - manual only
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  inspect:
+  info:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Reconstruct and validate setup source
-        shell: bash
+      - name: Manual inspection notice
         run: |
-          set -euo pipefail
-          SRC=deployment/jayuminton/v1637-web
-          mapfile -t PARTS < <(find "$SRC" -maxdepth 1 -type f -name 'setup-v205.js.gz.b64.part-*' | sort)
-          if [ "${#PARTS[@]}" -lt 1 ]; then
-            echo 'No setup-v205 split source found.' >&2
-            exit 1
-          fi
-          cat "${PARTS[@]}" | tr -d '\r\n' | base64 --decode | gzip --decompress > "$RUNNER_TEMP/setup-v205.js"
-          test -s "$RUNNER_TEMP/setup-v205.js"
-          node --check "$RUNNER_TEMP/setup-v205.js"
-
-          cp "$RUNNER_TEMP/setup-v205.js" "$RUNNER_TEMP/setup-v205-patched.js"
-          python3 deployment/scripts/patch_push_setup_verification.py "$RUNNER_TEMP/setup-v205-patched.js"
-          node --check "$RUNNER_TEMP/setup-v205-patched.js"
-
-          echo "parts=${#PARTS[@]}"
-          echo "baseline_bytes=$(wc -c < "$RUNNER_TEMP/setup-v205.js")"
-          echo "patched_bytes=$(wc -c < "$RUNNER_TEMP/setup-v205-patched.js")"
-
-      - name: Inspect token and bridge flow
-        shell: bash
-        run: |
-          set -euo pipefail
-          BASE="$RUNNER_TEMP/setup-v205.js"
-          JS="$RUNNER_TEMP/setup-v205-patched.js"
-          mkdir -p deployment/status
-          OUT=deployment/status/push-source-inspection.txt
-
-          has() {
-            local file="$1"
-            local pattern="$2"
-            if grep -F "$pattern" "$file" >/dev/null; then echo yes; else echo no; fi
-          }
-
-          {
-            echo 'workflow=Inspect Jayuminton push source'
-            echo 'run_id=${{ github.run_id }}'
-            echo 'status=success'
-            echo "baseline_getToken=$(has "$BASE" 'getToken')"
-            echo "baseline_notification_permission=$(has "$BASE" 'Notification.requestPermission')"
-            echo "baseline_push_setup_request=$(has "$BASE" 'JAYUMINTON_PUSH_SETUP_REQUEST')"
-            echo "baseline_member_selected=$(has "$BASE" 'JAYUMINTON_MEMBER_SELECTED')"
-            echo "patched_server_verify_marker=$(has "$JS" 'JAYUMINTON_PUSH_SERVER_VERIFY_V1')"
-            echo "patched_token_status=$(has "$JS" "action:'token_status'")"
-            echo "patched_verify_function=$(has "$JS" 'async function verifyRelayToken(memberId, token)')"
-            echo "patched_refresh_verification=$(has "$JS" 'else if (!(await verifyRelayToken(member.id, currentToken)))')"
-            echo "patched_bootstrap_requires_verified_state=$(has "$JS" 'pushConnected:Boolean(isConnected && localStorage.getItem(STORAGE.token)')"
-            echo
-            echo '--- patched submit/verify context ---'
-            grep -n -C 35 -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$JS" || true
-            echo
-            echo '--- patched refresh verification context ---'
-            grep -n -C 25 -F 'else if (!(await verifyRelayToken(member.id, currentToken)))' "$JS" || true
-          } > "$OUT"
-
-          grep -F 'baseline_getToken=yes' "$OUT" >/dev/null
-          grep -F 'baseline_notification_permission=yes' "$OUT" >/dev/null
-          grep -F 'baseline_push_setup_request=yes' "$OUT" >/dev/null
-          grep -F 'patched_server_verify_marker=yes' "$OUT" >/dev/null
-          grep -F 'patched_token_status=yes' "$OUT" >/dev/null
-          grep -F 'patched_verify_function=yes' "$OUT" >/dev/null
-          grep -F 'patched_refresh_verification=yes' "$OUT" >/dev/null
-          grep -F 'patched_bootstrap_requires_verified_state=yes' "$OUT" >/dev/null
-
-      - name: Commit inspection result
-        if: always()
-        shell: bash
-        run: |
-          set -u
-          mkdir -p deployment/status
-          OUT=deployment/status/push-source-inspection.txt
-          if [ ! -f "$OUT" ]; then
-            {
-              echo 'workflow=Inspect Jayuminton push source'
-              echo 'run_id=${{ github.run_id }}'
-              echo 'status=failure'
-              echo 'inspection=not-complete'
-            } > "$OUT"
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$OUT"
-          git commit -m 'Record push verification inspection: ${{ job.status }}' || exit 0
-          git pull --rebase origin main || true
-          git push origin main
+          echo 'Automatic push inspection is intentionally disabled after the verified live deployment.'
+          echo 'The guarded live workflow performs syntax, native-PWA-only, token-registration, vibration, and live-byte checks before reporting success.'
