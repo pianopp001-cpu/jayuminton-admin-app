@@ -9,23 +9,47 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
 
 jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
       - name: Confirm build workflow is registered
+        id: inspect
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh workflow view build-apk.yml --repo "$GITHUB_REPOSITORY"
+          gh workflow view build-apk.yml --repo "$GITHUB_REPOSITORY" | tee "$RUNNER_TEMP/build-workflow-view.txt"
 
       - name: Dispatch verified v199.6 build
+        id: dispatch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh workflow run build-apk.yml --repo "$GITHUB_REPOSITORY" --ref main
           echo 'Verified v199.6 APK build dispatched.'
+
+      - name: Record dispatcher result
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          mkdir -p deployment/status
+          {
+            echo 'workflow=Force verified APK build'
+            echo 'run_id=${{ github.run_id }}'
+            echo 'status=${{ job.status }}'
+            echo 'workflow_registered_step=${{ steps.inspect.outcome }}'
+            echo 'dispatch_step=${{ steps.dispatch.outcome }}'
+            echo 'head_sha=${{ github.sha }}'
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > deployment/status/apk-dispatch.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/apk-dispatch.txt
+          git commit -m 'Record verified APK dispatcher: ${{ job.status }}' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
