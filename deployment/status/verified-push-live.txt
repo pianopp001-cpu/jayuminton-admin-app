@@ -1,6 +1,12 @@
 workflow=Deploy verified Jayuminton push
-run_id=31252673600
-status=failure
-head_sha=c615bc91f19a4eb5535d1475cd11015443cb397d
-hosting_verification=not-complete
-updated_at=2026-08-08T10:23:48Z
+run_id=31252761618
+status=success
+head_sha=9ce8ab43de9afb819afdf458f9d56a442d15eed6
+hosting_verification=live-bytes-checked
+pwa_install=chrome-native-prompt-only
+legacy_handoff=intent-drive-resolver-absent
+token_registration=server-verified-before-on
+token_refresh=server-verified
+wait1_vibration=3-pulse-x2
+court_vibration=3-pulse-x4
+updated_at=2026-08-08T10:26:27Z
