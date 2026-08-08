@@ -1,4 +1,4 @@
-name: Deploy APK admin live fixes
+name: Deploy Jayuminton v199.5 user admin PWA fixes
 
 on:
   workflow_dispatch:
@@ -6,21 +6,26 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/enable-admin-push-pwa.yml'
+  workflow_run:
+    workflows: ['Continue exact Jayuminton v1.6.37 restore']
+    types: [completed]
 
 permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-apk-admin-live-fix
+  group: jayuminton-v1995-live-fixes
   cancel-in-progress: true
 
 jobs:
   deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +36,11 @@ jobs:
         with:
           node-version: '22'
 
-      - run: npm install --global @google/clasp@latest
+      - run: npm install --global @google/clasp@latest firebase-tools@latest
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
       - name: Read deploy config
         shell: bash
@@ -40,14 +49,18 @@ jobs:
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          jq -e '.mainScriptId and .mainDeploymentId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
           {
             echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
             echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
             echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
+            echo "BUILD_ROOT=$RUNNER_TEMP/jayuminton-v1995"
           } >> "$GITHUB_ENV"
 
-      - name: Pull and patch live MAIN
+      - name: Patch and deploy live Apps Script
         shell: bash
         run: |
           set -euo pipefail
@@ -61,22 +74,46 @@ jobs:
           from pathlib import Path
           import re
 
-          def extract_block(src, start_idx):
-              brace = src.find('{', start_idx)
+          def function_range(src, signature):
+              start = src.find(signature)
+              if start < 0:
+                  return None
+              brace = src.find('{', start)
               if brace < 0:
-                  raise SystemExit('opening brace missing')
+                  raise SystemExit('opening brace missing for ' + signature)
               depth = 0
+              quote = None
+              escape = False
               i = brace
               while i < len(src):
-                  if src[i] == '{': depth += 1
-                  elif src[i] == '}':
-                      depth -= 1
-                      if depth == 0:
-                          return src[start_idx:i+1], start_idx, i+1
+                  ch = src[i]
+                  if quote:
+                      if escape:
+                          escape = False
+                      elif ch == '\\':
+                          escape = True
+                      elif ch == quote:
+                          quote = None
+                  else:
+                      if ch in ('"', "'", '`'):
+                          quote = ch
+                      elif ch == '{':
+                          depth += 1
+                      elif ch == '}':
+                          depth -= 1
+                          if depth == 0:
+                              return start, i + 1
                   i += 1
-              raise SystemExit('unbalanced braces')
+              raise SystemExit('unbalanced function ' + signature)
 
-          # ---------------- Script.html ----------------
+          def replace_function(src, signature, replacement):
+              rng = function_range(src, signature)
+              if not rng:
+                  return src, False
+              a, b = rng
+              return src[:a] + replacement + src[b:], True
+
+          # ---------- Script.html ----------
           p = Path('Script.html')
           s = p.read_text(encoding='utf-8')
           end = s.rfind('</script>')
@@ -84,178 +121,213 @@ jobs:
               raise SystemExit('Script.html closing tag missing')
           s = s[:end + len('</script>')] + '\n'
 
-          init = s.find('async function initialize() {')
-          if init < 0:
-              raise SystemExit('initialize() missing')
-          block, bstart, bend = extract_block(s, init)
-          if 'JAYUMINTON_NATIVE_FORCE_LOGIN_V1' not in block:
-              needle = '  if (IS_ADMIN) {'
-              if needle not in block:
-                  raise SystemExit('admin initialize branch missing')
-              replacement = '''  if (IS_ADMIN) {
-    /* JAYUMINTON_NATIVE_FORCE_LOGIN_V1 */
-    if (window.NativeVoice || window.__JAYUMINTON_NATIVE_APP__) {
-      try { localStorage.removeItem(ADMIN_AUTH_KEY); } catch (error) {}
-      try { sessionStorage.removeItem(ADMIN_AUTH_KEY); } catch (error) {}
-      ADMIN_PIN_VALUE = '';
-      return;
-    }'''
-              block = block.replace(needle, replacement, 1)
-              s = s[:bstart] + block + s[bend:]
-
-          a = s.find('function memberLongPressAttributes(memberId) {')
-          if a < 0:
+          # User mode must never receive administrator long-press edit/delete controls.
+          sig = 'function memberLongPressAttributes(memberId) {'
+          rng = function_range(s, sig)
+          if not rng:
               raise SystemExit('memberLongPressAttributes missing')
-          block, bstart, bend = extract_block(s, a)
+          a, b = rng
+          block = s[a:b]
           if "if (!IS_ADMIN) return '';" not in block:
               block = block.replace('{', "{\n  if (!IS_ADMIN) return '';", 1)
-              s = s[:bstart] + block + s[bend:]
+              s = s[:a] + block + s[b:]
 
-          a = s.find('function startMemberLongPress(memberId, event) {')
-          if a < 0:
+          sig = 'function startMemberLongPress(memberId, event) {'
+          rng = function_range(s, sig)
+          if not rng:
               raise SystemExit('startMemberLongPress missing')
-          block, bstart, bend = extract_block(s, a)
-          if 'if (!IS_ADMIN) return;' not in block[:140]:
+          a, b = rng
+          block = s[a:b]
+          if 'if (!IS_ADMIN) return;' not in block[:180]:
               block = block.replace('{', '{\n  if (!IS_ADMIN) return;', 1)
-              s = s[:bstart] + block + s[bend:]
+              s = s[:a] + block + s[b:]
 
-          if 'let EDIT_MEMBER_ID' not in s:
-              state_anchor = 'let MEMBER_ACTION_IDS = [];'
-              if state_anchor not in s:
-                  raise SystemExit('MEMBER_ACTION_IDS missing')
-              s = s.replace(state_anchor, state_anchor + '\nlet EDIT_MEMBER_ID = null;', 1)
+          # Foreground vibration: each cue is exactly three strong pulses.
+          vibration_repeat = """function memberAlertRepeatCount(type) {
+            if (type === 'court_assignment') return 4;
+            if (type === 'wait1_ready') return 2;
+            return 1;
+          }"""
+          s, found = replace_function(s, 'function memberAlertRepeatCount(type) {', vibration_repeat)
+          if not found:
+              raise SystemExit('memberAlertRepeatCount missing')
 
-          if 'function startMemberEdit()' not in s:
-              add_anchor = 'async function addMember() {'
-              if add_anchor not in s:
-                  raise SystemExit('addMember() missing')
-              edit_js = r'''
+          vibration_pattern = """function memberVibrationPattern() {
+            return [380, 180, 380, 180, 380];
+          }"""
+          s, found = replace_function(s, 'function memberVibrationPattern() {', vibration_pattern)
+          if not found:
+              raise SystemExit('memberVibrationPattern missing')
+          s = s.replace('}, index * 1300);', '}, index * 2000);')
+
+          # The member install button only talks to the Firebase top page. No intent or Drive route.
+          install_request = """function requestMemberAppInstall() {
+            publishMemberAppInstallButtonRect();
+            if (MEMBER_PWA_STANDALONE_HINT || MEMBER_APP_INSTALL_STATE.installed) {
+              MEMBER_APP_INSTALL_STATE.installed = true;
+              MEMBER_APP_INSTALL_STATE.choice = 'on';
+              MEMBER_APP_INSTALL_STATE.browserContext = 'standalone';
+              renderMemberSelfSettings();
+              showMemberSettingMessage('자유민턴 앱이 이미 설치되어 있습니다.');
+              return;
+            }
+            const sent = postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {
+              platform: detectMemberInstallPlatform(),
+              browserContext: detectMemberInstallBrowserContext(),
+              installUrl: 'https://jayuminton-push.web.app/'
+            });
+            if (sent) {
+              showMemberSettingMessage('화면 아래의 앱 설치 버튼을 눌러 주세요.');
+              return;
+            }
+            showMemberSettingMessage('Chrome에서 jayuminton-push.web.app 주소를 열어 설치해 주세요.', true);
+          }"""
+          s, found = replace_function(s, 'function requestMemberAppInstall() {', install_request)
+          if not found:
+              raise SystemExit('requestMemberAppInstall missing')
+
+          # Reliable dedicated edit modal: name, gender, grade and experience.
+          edit_code = r'''
+function closeMemberEdit() {
+  const modal = document.getElementById('memberEditModal');
+  if (modal) modal.remove();
+}
+
 function startMemberEdit() {
   if (!IS_ADMIN) return;
-  if (MEMBER_ACTION_IDS.length !== 1) {
-    alert('편집은 한 명만 선택했을 때 가능합니다.');
+  if (!Array.isArray(MEMBER_ACTION_IDS) || MEMBER_ACTION_IDS.length !== 1) {
+    alert('편집할 멤버 한 명을 길게 눌러 주세요.');
     return;
   }
-  const member = memberById(MEMBER_ACTION_IDS[0]);
-  if (!member) return;
-  EDIT_MEMBER_ID = String(member.id);
-  const nameInput = document.getElementById('newName');
-  const genderInput = document.getElementById('newGender');
-  const gradeInput = document.getElementById('newGrade');
-  const experienceInput = document.getElementById('newExperience');
-  const button = document.getElementById('addMemberButton');
-  if (nameInput) nameInput.value = String(member.name || '');
-  if (genderInput) genderInput.value = member.gender === 'female' ? 'female' : 'male';
-  if (gradeInput) gradeInput.value = String(member.grade || '');
-  if (experienceInput) experienceInput.value = String(member.experience || '');
-  if (button) button.textContent = '수정 저장';
-  closeMemberActionBar();
-  const details = document.querySelector('.admin-setup-details');
-  if (details) details.open = true;
-  if (nameInput) {
-    nameInput.scrollIntoView({behavior:'smooth', block:'center'});
-    setTimeout(function() { nameInput.focus(); nameInput.select(); }, 150);
-  }
-}
-
-function cancelMemberEdit() {
-  EDIT_MEMBER_ID = null;
-  const button = document.getElementById('addMemberButton');
-  if (button) button.textContent = '등록';
-  ['newName','newGrade','newExperience'].forEach(function(id) {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
+  const memberId = String(MEMBER_ACTION_IDS[0]);
+  const member = (STATE.members || []).find(function(item) {
+    return String(item.id) === memberId;
   });
-  const gender = document.getElementById('newGender');
-  if (gender) gender.value = '';
+  if (!member) {
+    alert('멤버 정보를 찾을 수 없습니다.');
+    return;
+  }
+
+  closeMemberActionBar();
+  closeMemberEdit();
+
+  const modal = document.createElement('div');
+  modal.id = 'memberEditModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.innerHTML = `
+    <div style="width:min(430px,100%);background:#fff;border-radius:18px;padding:18px;box-shadow:0 24px 70px rgba(0,0,0,.28)">
+      <h2 style="margin:0 0 14px">멤버 편집</h2>
+      <label style="display:block;font-weight:800;margin:8px 0 5px">이름</label>
+      <input id="editMemberName" maxlength="20" style="width:100%" value="">
+      <label style="display:block;font-weight:800;margin:12px 0 5px">성별</label>
+      <select id="editMemberGender" style="width:100%">
+        <option value="male">남자</option>
+        <option value="female">여자</option>
+      </select>
+      <label style="display:block;font-weight:800;margin:12px 0 5px">급수</label>
+      <input id="editMemberGrade" maxlength="12" style="width:100%" value="">
+      <label style="display:block;font-weight:800;margin:12px 0 5px">구력</label>
+      <input id="editMemberExperience" maxlength="20" style="width:100%" value="">
+      <div style="display:flex;gap:8px;margin-top:18px">
+        <button type="button" class="ghost-button" style="flex:1" onclick="closeMemberEdit()">취소</button>
+        <button type="button" class="primary" style="flex:1" onclick="saveMemberEdit('${memberId.replace(/'/g, "\\'")}')">수정 저장</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('editMemberName').value = String(member.name || '');
+  document.getElementById('editMemberGender').value = member.gender === 'female' ? 'female' : 'male';
+  document.getElementById('editMemberGrade').value = String(member.grade || '');
+  document.getElementById('editMemberExperience').value = String(member.experience || '');
+  setTimeout(function() {
+    const input = document.getElementById('editMemberName');
+    if (input) { input.focus(); input.select(); }
+  }, 100);
 }
 
-async function saveMemberEdit() {
-  if (!IS_ADMIN || !EDIT_MEMBER_ID || ADD_MEMBER_IN_FLIGHT) return;
-  const nameInput = document.getElementById('newName');
-  const genderInput = document.getElementById('newGender');
-  const gradeInput = document.getElementById('newGrade');
-  const experienceInput = document.getElementById('newExperience');
-  const button = document.getElementById('addMemberButton');
-  const name = String(nameInput && nameInput.value || '').trim();
-  const gender = String(genderInput && genderInput.value || '');
-  const grade = String(gradeInput && gradeInput.value || '').trim();
-  const experience = String(experienceInput && experienceInput.value || '').trim();
-  if (!name) { alert('이름 또는 닉네임을 입력하세요.'); if (nameInput) nameInput.focus(); return; }
-  if (!gender) { alert('성별을 선택하세요.'); if (genderInput) genderInput.focus(); return; }
-  ADD_MEMBER_IN_FLIGHT = true;
-  if (button) { button.disabled = true; button.textContent = '저장 중…'; }
+async function saveMemberEdit(memberId) {
+  if (!IS_ADMIN || ACTION_IN_FLIGHT) return;
+  const name = String(document.getElementById('editMemberName')?.value || '').trim();
+  const gender = String(document.getElementById('editMemberGender')?.value || '');
+  const grade = String(document.getElementById('editMemberGrade')?.value || '').trim();
+  const experience = String(document.getElementById('editMemberExperience')?.value || '').trim();
+  if (!name) { alert('이름을 입력하세요.'); return; }
+  if (!gender) { alert('성별을 선택하세요.'); return; }
   try {
     const state = await server('updateMemberProfile', [
-      ADMIN_PIN_VALUE, EDIT_MEMBER_ID, name, gender, grade, experience
+      ADMIN_PIN_VALUE, String(memberId), name, gender, grade, experience
     ]);
-    cancelMemberEdit();
+    closeMemberEdit();
+    MEMBER_ACTION_IDS = [];
     renderState(state);
   } catch (error) {
-    alert(String((error && error.message) || error || '수정에 실패했습니다.'));
-  } finally {
-    ADD_MEMBER_IN_FLIGHT = false;
-    if (button) button.disabled = false;
+    alert(String((error && error.message) || error || '멤버 수정에 실패했습니다.'));
   }
 }
-
 '''
-              s = s.replace(add_anchor, edit_js + add_anchor, 1)
-
-          if 'if (EDIT_MEMBER_ID) return saveMemberEdit();' not in s:
-              s, count = re.subn(
-                  r'async function addMember\(\) \{\s*',
-                  'async function addMember() {\n  if (EDIT_MEMBER_ID) return saveMemberEdit();\n  ',
-                  s,
-                  count=1,
-              )
-              if count != 1:
-                  raise SystemExit('could not patch addMember edit delegation')
+          for signature in (
+              'function closeMemberEdit() {',
+              'function startMemberEdit() {',
+              'async function saveMemberEdit(memberId) {',
+              'async function saveMemberEdit() {'
+          ):
+              rng = function_range(s, signature)
+              if rng:
+                  a, b = rng
+                  s = s[:a] + s[b:]
+          insert_at = s.find('async function addMember() {')
+          if insert_at < 0:
+              raise SystemExit('addMember anchor missing')
+          s = s[:insert_at] + edit_code + '\n' + s[insert_at:]
 
           if "'updateMemberProfile'" not in s:
-              mutation_anchor = "'createManualBackup','restoreManualBackup','changeMemberPassword'"
-              if mutation_anchor in s:
-                  s = s.replace(
-                      mutation_anchor,
-                      mutation_anchor + ",'updateMemberProfile'",
-                      1,
-                  )
+              s = s.replace(
+                  "'addMember','setMemberStatus'",
+                  "'addMember','updateMemberProfile','setMemberStatus'",
+                  1,
+              )
 
-          if 'JAYUMINTON_ADMIN_PUSH_APP_BUTTON_V3' not in s:
-              insert = s.rfind('</script>')
-              launcher = r'''
+          # Replace any old APK launcher with a NativeBrowser-aware launcher.
+          marker = '/* JAYUMINTON_ADMIN_PUSH_NATIVE_V5 */'
+          insert = s.rfind('</script>')
+          launcher = r'''
 
-/* JAYUMINTON_ADMIN_PUSH_APP_BUTTON_V3 */
-(function() {
-  function openPushApp() {
-    const url = 'https://jayuminton-push.web.app/?source=admin-apk';
-    try { window.location.assign(url); }
-    catch (error) { window.location.href = url; }
+/* JAYUMINTON_ADMIN_PUSH_NATIVE_V5 */
+(function installNativePushLauncherV5() {
+  function launchMemberPwa() {
+    try {
+      if (window.NativeBrowser && typeof window.NativeBrowser.openPwa === 'function') {
+        window.NativeBrowser.openPwa();
+        return;
+      }
+    } catch (error) {}
+    const url = 'https://jayuminton-push.web.app/';
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) window.location.href = url;
   }
   function mount() {
     if (!IS_ADMIN) return;
     const host = document.querySelector('#adminApp header .wrap.toolbar');
-    if (!host || document.getElementById('adminPushAppButton')) return;
+    if (!host) return;
+    const old = document.getElementById('adminPushAppButton');
+    if (old) old.remove();
     const button = document.createElement('button');
     button.id = 'adminPushAppButton';
     button.type = 'button';
     button.className = 'ghost-button';
     button.textContent = '📱 푸시앱';
     button.style.cssText = 'white-space:nowrap;background:#315efb;color:#fff;border-color:#315efb;font-weight:900;';
-    button.addEventListener('click', openPushApp);
+    button.addEventListener('click', launchMemberPwa);
     const menu = host.querySelector('.top-admin-menu');
     host.insertBefore(button, menu || null);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
-  else mount();
-  setTimeout(mount, 500);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(mount,80); });
+  else setTimeout(mount,80);
 })();
 '''
-              s = s[:insert] + launcher + s[insert:]
-
+          s = s[:insert] + launcher + s[insert:]
           p.write_text(s, encoding='utf-8')
 
-          # ---------------- Code.js ----------------
+          # ---------- Code.js ----------
           p = Path('Code.js')
           c = p.read_text(encoding='utf-8')
           if 'function updateMemberProfile(' not in c:
@@ -272,11 +344,12 @@ function updateMemberProfile(pin, memberId, name, gender, grade, experience) {
     grade = String(grade == null ? '' : grade).trim();
     experience = String(experience == null ? '' : experience).trim();
     if (!memberId) throw new Error('편집할 멤버가 없습니다.');
-    if (!name) throw new Error('이름 또는 닉네임을 입력하세요.');
+    if (!name) throw new Error('이름을 입력하세요.');
     if (name.length > 20) throw new Error('이름은 20자 이내로 입력하세요.');
     if (gender !== 'male' && gender !== 'female') throw new Error('성별을 선택하세요.');
     if (grade.length > 12) throw new Error('급수는 12자 이내로 입력하세요.');
     if (experience.length > 20) throw new Error('구력은 20자 이내로 입력하세요.');
+
     const members = readMembers_();
     const member = members.find(function(item) { return String(item.id) === memberId; });
     if (!member) throw new Error('멤버를 찾을 수 없습니다.');
@@ -284,6 +357,7 @@ function updateMemberProfile(pin, memberId, name, gender, grade, experience) {
       return String(item.id) !== memberId && String(item.name || '').trim() === name;
     });
     if (duplicate) throw new Error('같은 이름의 멤버가 이미 있습니다.');
+
     member.name = name;
     member.gender = gender;
     member.grade = grade;
@@ -298,7 +372,7 @@ function updateMemberProfile(pin, memberId, name, gender, grade, experience) {
               c = c.replace(anchor, fn + anchor, 1)
           p.write_text(c, encoding='utf-8')
 
-          # ---------------- Admin.html ----------------
+          # ---------- Admin.html ----------
           p = Path('Admin.html')
           h = p.read_text(encoding='utf-8')
           pattern = re.compile(r'(<div id="quickMoveBar" class="quick-move-bar hidden">)(.*?)(</div>)', re.S)
@@ -315,66 +389,308 @@ function updateMemberProfile(pin, memberId, name, gender, grade, experience) {
   '''
           h = h[:m.start()] + m.group(1) + body + m.group(3) + h[m.end():]
           p.write_text(h, encoding='utf-8')
+
+          # ---------- Style.html ----------
+          p = Path('Style.html')
+          css = p.read_text(encoding='utf-8')
+          marker = '/* JAYUMINTON_QUICK_ACTION_ONE_ROW_V5 */'
+          if marker not in css:
+              css += r'''
+
+/* JAYUMINTON_QUICK_ACTION_ONE_ROW_V5 */
+@media(max-width:620px){
+  #adminApp .quick-move-bar{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    grid-template-columns:none!important;
+    align-items:center!important;
+    gap:4px!important;
+    padding:7px!important
+  }
+  #adminApp .quick-move-bar.hidden{display:none!important}
+  #adminApp .quick-move-bar strong,
+  #adminApp .quick-move-bar span{display:none!important}
+  #adminApp .quick-move-bar button{
+    flex:1 1 0!important;
+    width:auto!important;
+    min-width:0!important;
+    min-height:34px!important;
+    height:34px!important;
+    padding:0 2px!important;
+    font-size:10px!important;
+    white-space:nowrap!important
+  }
+}
+'''
+          p.write_text(css, encoding='utf-8')
           PY
 
-          grep -F 'JAYUMINTON_NATIVE_FORCE_LOGIN_V1' Script.html >/dev/null
+          grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
           grep -F 'function startMemberEdit()' Script.html >/dev/null
+          grep -F 'editMemberName' Script.html >/dev/null
+          grep -F "type === 'court_assignment') return 4" Script.html >/dev/null
+          grep -F "type === 'wait1_ready') return 2" Script.html >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_PUSH_NATIVE_V5' Script.html >/dev/null
           grep -F 'function updateMemberProfile(' Code.js >/dev/null
           grep -F '>배정대기로</button>' Admin.html >/dev/null
           grep -F '>삭제</button>' Admin.html >/dev/null
           grep -F '>취소</button>' Admin.html >/dev/null
           grep -F '>편집</button>' Admin.html >/dev/null
+          grep -F 'JAYUMINTON_QUICK_ACTION_ONE_ROW_V5' Style.html >/dev/null
 
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "APK admin login + longpress edit ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v199.5 edit vibration PWA bridge ${GITHUB_SHA::7}"
 
           cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
           cp Code.js "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js"
           cp Admin.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Admin.html"
+          cp Style.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Style.html"
 
-      - name: Verify live admin endpoint
+      - name: Build clean installable PWA
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$BUILD_ROOT" && mkdir -p "$BUILD_ROOT/web-push"
+          cp deployment/jayuminton/firebase.json "$BUILD_ROOT/firebase.json"
+          cp deployment/jayuminton/v1637-web/index.html "$BUILD_ROOT/web-push/index.html"
+          cp deployment/jayuminton/v1637-web/setup-v205.css "$BUILD_ROOT/web-push/setup-v205.css"
+          cp deployment/jayuminton/v1637-web/manifest.webmanifest "$BUILD_ROOT/web-push/manifest.webmanifest"
+          cp deployment/jayuminton/v1637-web/firebase-messaging-sw.js "$BUILD_ROOT/web-push/firebase-messaging-sw.js"
+          cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup-v205.js.gz"
+          gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$BUILD_ROOT/web-push/setup-v205.js"
+
+          BASE="${HOSTING_URL%/}"
+          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 5 --retry-delay 2 --max-time 90 "$BASE/$a?src=$GITHUB_RUN_ID" -o "$BUILD_ROOT/web-push/$a"
+            test -s "$BUILD_ROOT/web-push/$a"
+          done
+
+          python3 -m pip install --quiet pillow
+
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          from PIL import Image
+
+          root = Path(os.environ['BUILD_ROOT']) / 'web-push'
+          with Image.open(root/'icon-198.png') as im:
+              im.convert('RGBA').resize((192,192), Image.Resampling.LANCZOS).save(root/'icon-192.png')
+          with Image.open(root/'icon-512.png') as im:
+              im.convert('RGBA').resize((512,512), Image.Resampling.LANCZOS).save(root/'icon-512.png')
+
+          manifest = json.loads((root/'manifest.webmanifest').read_text(encoding='utf-8'))
+          manifest.update({
+              'id':'/',
+              'name':'자유민턴 코트현황',
+              'short_name':'자유민턴',
+              'scope':'/',
+              'start_url':'/?app=user&mode=user&source=pwa',
+              'display':'standalone',
+              'background_color':'#f3f5fa',
+              'theme_color':'#315efb',
+              'prefer_related_applications':False,
+              'icons':[
+                  {'src':'/icon-192.png?v=1995','sizes':'192x192','type':'image/png','purpose':'any'},
+                  {'src':'/icon-512.png?v=1995','sizes':'512x512','type':'image/png','purpose':'any'}
+              ]
+          })
+          (root/'manifest.webmanifest').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          # Remove all legacy intent/Drive installation behavior from setup JS.
+          p = root/'setup-v205.js'
+          s = p.read_text(encoding='utf-8')
+
+          def function_range(src, signature):
+              start = src.find(signature)
+              if start < 0: return None
+              brace = src.find('{', start)
+              depth = 0; quote = None; escape = False; i = brace
+              while i < len(src):
+                  ch = src[i]
+                  if quote:
+                      if escape: escape = False
+                      elif ch == '\\': escape = True
+                      elif ch == quote: quote = None
+                  else:
+                      if ch in ('"', "'", '`'): quote = ch
+                      elif ch == '{': depth += 1
+                      elif ch == '}':
+                          depth -= 1
+                          if depth == 0: return start, i+1
+                  i += 1
+              raise SystemExit('unbalanced '+signature)
+
+          def replace(src, sig, code):
+              rng=function_range(src,sig)
+              if not rng: return src
+              a,b=rng
+              return src[:a]+code+src[b:]
+
+          s = replace(s, 'function buildAndroidChromeIntent() {', """function buildAndroidChromeIntent() {
+            const target = buildChromeUserTarget();
+            const targetUrl = target.toString();
+            return { targetUrl: targetUrl, intentUrl: targetUrl };
+          }""")
+          s = replace(s, 'function launchChromeFromFirebaseTop() {', """function launchChromeFromFirebaseTop() {
+            setInstallMessage('Chrome 기본 PWA 설치 기능을 사용합니다.', 'success');
+            sendAppInstallStatus('PWA 설치 준비');
+            return false;
+          }""")
+          s = replace(s, 'function handleEmbeddedChromeLinkClick() {', """function handleEmbeddedChromeLinkClick() {
+            setInstallMessage('외부 앱으로 이동하지 않습니다. 화면의 앱 설치 버튼을 눌러 주세요.', 'success');
+            sendAppInstallStatus('PWA 설치 준비');
+          }""")
+          s = s.replace('window.location.href = links.targetUrl;', "setInstallMessage('PWA 설치 버튼을 눌러 주세요.', 'success');")
+          s = s.replace("appInstallChromeLink.href = links.intentUrl;", "appInstallChromeLink.removeAttribute('href'); appInstallChromeLink.hidden = true;")
+          if 'S.browser_fallback_url' in s or 'drive.google.com' in s or 'docs.google.com' in s or 'intent://' in s:
+              raise SystemExit('legacy Drive/intent install route remains')
+          p.write_text(s, encoding='utf-8')
+
+          # Direct top-level install button keeps the user gesture in the Firebase page.
+          idx = root/'index.html'
+          html = idx.read_text(encoding='utf-8')
+          direct = r'''
+<style>
+#jayumintonDirectInstallV5{position:fixed;right:12px;bottom:12px;z-index:2147483647;border:0;border-radius:14px;padding:12px 16px;background:#315efb;color:#fff;font-weight:900;font-size:14px;box-shadow:0 10px 30px rgba(30,64,175,.28)}
+#jayumintonDirectInstallV5[hidden]{display:none!important}
+#jayumintonDirectInstallNoteV5{position:fixed;right:12px;bottom:66px;z-index:2147483646;max-width:min(320px,calc(100% - 24px));padding:8px 10px;border-radius:10px;background:rgba(15,23,42,.92);color:#fff;font-size:11px;font-weight:700;display:none}
+</style>
+<button id="jayumintonDirectInstallV5" type="button">📲 앱 설치 준비중</button>
+<div id="jayumintonDirectInstallNoteV5"></div>
+<script>
+/* JAYUMINTON_DIRECT_PWA_INSTALL_V5 */
+(() => {
+  const button = document.getElementById('jayumintonDirectInstallV5');
+  const note = document.getElementById('jayumintonDirectInstallNoteV5');
+  let installPrompt = window.__JAYUMINTON_EARLY_INSTALL_PROMPT || null;
+  const standalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const showNote = (text) => { note.textContent=text; note.style.display='block'; setTimeout(()=>{note.style.display='none';},4500); };
+  const refresh = () => {
+    if (standalone()) { button.hidden=true; return; }
+    button.hidden=false;
+    button.textContent = installPrompt ? '📲 자유민턴 앱 설치' : '📲 앱 설치 준비중';
+    button.style.background = installPrompt ? '#16a34a' : '#315efb';
+  };
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    installPrompt = event;
+    window.__JAYUMINTON_EARLY_INSTALL_PROMPT = event;
+    refresh();
+  });
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    button.hidden = true;
+  });
+  window.addEventListener('message', (event) => {
+    const data=event.data||{};
+    if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {
+      refresh();
+      if (!installPrompt) showNote('Chrome이 설치 가능 상태를 확인 중입니다. 잠시 후 초록색 앱 설치 버튼을 눌러 주세요.');
+      else showNote('아래 초록색 앱 설치 버튼을 눌러 주세요.');
+    }
+  });
+  button.addEventListener('click', async () => {
+    if (standalone()) { button.hidden=true; return; }
+    if (!installPrompt) {
+      showNote('아직 설치 준비 중입니다. Chrome 메뉴(⋮)의 앱 설치도 사용할 수 있습니다.');
+      return;
+    }
+    const current=installPrompt;
+    try {
+      await current.prompt();
+      const choice=await current.userChoice;
+      if (!choice || choice.outcome !== 'accepted') showNote('설치가 취소되었습니다.');
+    } catch (error) {
+      showNote('Chrome 메뉴(⋮)에서 앱 설치를 선택해 주세요.');
+    }
+    installPrompt=null;
+    refresh();
+  });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/firebase-messaging-sw.js',{scope:'/'}).catch(()=>{});
+  refresh();
+})();
+</script>
+'''
+          html = html.replace('</body>', direct+'\n</body>', 1)
+          html = html.replace('/manifest.webmanifest?v=205','/manifest.webmanifest?v=1995')
+          html = html.replace('/setup-v205.js?v=1637','/setup-v205.js?v=1995')
+          idx.write_text(html, encoding='utf-8')
+
+          template = Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          cfg = template.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
+          for name in ('config-v202.js','config-v203.js','config-v204.js'):
+              (root/name).write_text(cfg,encoding='utf-8')
+
+          # Background notification vibration follows the same request:
+          # 3 pulses x 2 groups for wait1, 3 pulses x 4 groups for court entry.
+          sw = root/'firebase-messaging-sw.js'
+          text = sw.read_text(encoding='utf-8')
+          text = text.replace("const JAYUMINTON_SW_VERSION = '1.6.37';", "const JAYUMINTON_SW_VERSION = '1.6.37-v1995';")
+          text = text.replace("const JAYUMINTON_CACHE = 'jayuminton-shell-v205';", "const JAYUMINTON_CACHE = 'jayuminton-shell-v1995';")
+          text = text.replace("'/icon-198.png',", "'/icon-192.png',")
+          old = """    const vibration = data.type === 'court_assignment'
+      ? [1400,500,1400,500,1400]
+      : [900,450,900,450,900];
+    const repeatCount = Math.max(1, Math.min(3, Number(
+      data.repeatCount || (data.type === 'court_assignment' ? 3 : 1)
+    )));"""
+          new = """    const vibration = [500,180,500,180,500];
+    const repeatCount = data.type === 'court_assignment'
+      ? 4
+      : (data.type === 'wait1_ready' ? 2 : 1);"""
+          if old not in text:
+              raise SystemExit('service-worker vibration block changed')
+          text = text.replace(old,new,1)
+          text = text.replace("? '🚨 ' + titleBase + ' (' + (repeatIndex + 1) + '/3)'", "? '🚨 ' + titleBase + ' (' + (repeatIndex + 1) + '/' + repeatCount + ')'", 1)
+          text = text.replace('setTimeout(resolve, 6500)', 'setTimeout(resolve, 2200)')
+          text = text.replace("icon: '/icon-198.png'", "icon: '/icon-192.png'")
+          sw.write_text(text, encoding='utf-8')
+          PY
+
+          node --check "$BUILD_ROOT/web-push/setup-v205.js"
+          grep -F 'JAYUMINTON_DIRECT_PWA_INSTALL_V5' "$BUILD_ROOT/web-push/index.html" >/dev/null
+          grep -F "? 4" "$BUILD_ROOT/web-push/firebase-messaging-sw.js" >/dev/null
+          grep -F "wait1_ready' ? 2" "$BUILD_ROOT/web-push/firebase-messaging-sw.js" >/dev/null
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          from PIL import Image
+          root=Path(os.environ['BUILD_ROOT'])/'web-push'
+          m=json.loads((root/'manifest.webmanifest').read_text(encoding='utf-8'))
+          assert m['display']=='standalone' and m['scope']=='/' and m['prefer_related_applications'] is False
+          assert Image.open(root/'icon-192.png').size==(192,192)
+          assert Image.open(root/'icon-512.png').size==(512,512)
+          PY
+
+      - name: Deploy Firebase Hosting
+        working-directory: ${{ env.BUILD_ROOT }}
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "v199.5 PWA install + vibration ${GITHUB_SHA::7}"
+
+      - name: Verify deployed PWA
         shell: bash
         run: |
           set -euo pipefail
           sleep 8
-          BODY="$RUNNER_TEMP/admin-live.html"
-          curl --fail --location --retry 5 --retry-delay 3 --max-time 90 \
-            -H 'Cache-Control: no-cache' \
-            "$MAIN_URL?mode=admin&verify=$GITHUB_RUN_ID" > "$BODY"
-          grep -F 'JAYUMINTON_NATIVE_FORCE_LOGIN_V1' "$BODY" >/dev/null
-          grep -F 'function startMemberEdit()' "$BODY" >/dev/null
-          grep -F 'onclick="startMemberEdit()"' "$BODY" >/dev/null
-          grep -F '>배정대기로</button>' "$BODY" >/dev/null
-          grep -F '>삭제</button>' "$BODY" >/dev/null
-          grep -F '>취소</button>' "$BODY" >/dev/null
-          grep -F '>편집</button>' "$BODY" >/dev/null
+          BASE="${HOSTING_URL%/}"
+          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-v1995"
+          curl --fail --location --retry 5 --retry-delay 2 -H 'Cache-Control: no-cache' "$BASE/?verify=$BUST" > "$RUNNER_TEMP/live-index"
+          curl --fail --location --retry 5 --retry-delay 2 -H 'Cache-Control: no-cache' "$BASE/manifest.webmanifest?verify=$BUST" > "$RUNNER_TEMP/live-manifest"
+          curl --fail --location --retry 5 --retry-delay 2 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$BUST" > "$RUNNER_TEMP/live-sw"
+          grep -F 'JAYUMINTON_DIRECT_PWA_INSTALL_V5' "$RUNNER_TEMP/live-index" >/dev/null
+          grep -F '"display": "standalone"' "$RUNNER_TEMP/live-manifest" >/dev/null
+          grep -F "1.6.37-v1995" "$RUNNER_TEMP/live-sw" >/dev/null
 
-      - name: Sync live snapshot
+      - name: Sync live source snapshot
         if: success()
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- source-snapshot/current-main/Script.html source-snapshot/current-main/Code.js source-snapshot/current-main/Admin.html; then
+          if git diff --quiet -- source-snapshot/current-main/Script.html source-snapshot/current-main/Code.js source-snapshot/current-main/Admin.html source-snapshot/current-main/Style.html; then
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add source-snapshot/current-main/Script.html source-snapshot/current-main/Code.js source-snapshot/current-main/Admin.html
-          git commit -m 'Sync APK admin login and long-press live fixes'
-          git pull --rebase origin main || true
-          git push origin main
-
-      - name: Record live deploy result
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p deployment/jayuminton
-          printf 'status=%s\ncommit=%s\nrun=%s\n' '${{ job.status }}' "$GITHUB_SHA" "$GITHUB_RUN_ID" \
-            > deployment/jayuminton/APK_ADMIN_LIVE_RESULT.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/jayuminton/APK_ADMIN_LIVE_RESULT.txt
-          git commit -m "Record APK admin live deploy: ${{ job.status }}" || exit 0
+          git add source-snapshot/current-main/Script.html source-snapshot/current-main/Code.js source-snapshot/current-main/Admin.html source-snapshot/current-main/Style.html
+          git commit -m 'Sync v199.5 admin edit and member vibration fixes' || exit 0
           git pull --rebase origin main || true
           git push origin main || true
