@@ -1,0 +1,105 @@
+name: Surgical member new-fullname card update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-member-new-fullname.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-member-new-fullname
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+
+      - name: Patch only member registration and card display
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          test -n "$MAIN_SCRIPT_ID"
+          test -n "$MAIN_DEPLOYMENT_ID"
+
+          WORK="$RUNNER_TEMP/main-live"
+          BEFORE="$RUNNER_TEMP/main-before"
+          VERIFY="$RUNNER_TEMP/main-verify"
+          mkdir -p "$WORK" "$BEFORE" "$VERIFY"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          test "$(cat check.js)" = '// Intentionally empty server-side placeholder.'
+          cp -a . "$BEFORE/"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_member_new_fullname.py" "$WORK"
+
+          python3 - "$BEFORE" "$WORK" <<'PY'
+          from pathlib import Path
+          import hashlib, sys
+          before, after = map(Path, sys.argv[1:3])
+          allowed = {'Admin.html', 'Script.html', 'Code.js'}
+          names = {p.name for p in before.iterdir() if p.is_file()} | {p.name for p in after.iterdir() if p.is_file()}
+          changed = set()
+          for name in names:
+              if name == '.clasp.json':
+                  continue
+              a, b = before / name, after / name
+              av = a.read_bytes() if a.exists() else None
+              bv = b.read_bytes() if b.exists() else None
+              if av != bv:
+                  changed.add(name)
+          if changed != allowed:
+              raise SystemExit('Unexpected changed files: ' + ', '.join(sorted(changed)))
+          print('Changed files verified:', ', '.join(sorted(changed)))
+          PY
+
+          node --check Code.js
+          python3 - "$WORK/Script.html" "$RUNNER_TEMP/member-browser-check.js" <<'PY'
+          from pathlib import Path
+          import sys
+          s=Path(sys.argv[1]).read_text(encoding='utf-8')
+          a=s.find('<script>'); b=s.rfind('</script>')
+          if a < 0 or b <= a:
+              raise SystemExit('Script wrapper missing')
+          Path(sys.argv[2]).write_text(s[a+8:b], encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/member-browser-check.js"
+          grep -F 'id="newIsNew"' Admin.html >/dev/null
+          grep -F 'function memberCardDisplayName(member)' Script.html >/dev/null
+          ! grep -F '급수·구력 미입력' Script.html
+          ! grep -F '급수 미입력' Script.html
+          ! grep -F '구력 미입력' Script.html
+          grep -F "'IS_NEW'" Code.js >/dev/null
+
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "surgical member new/fullname card update $GITHUB_RUN_ID"
+
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
+          cd "$VERIFY"
+          clasp pull
+          test "$(cat check.js)" = '// Intentionally empty server-side placeholder.'
+          grep -F 'id="newIsNew"' Admin.html >/dev/null
+          grep -F 'function memberCardDisplayName(member)' Script.html >/dev/null
+          ! grep -F '급수·구력 미입력' Script.html
+          grep -F "'IS_NEW'" Code.js >/dev/null
