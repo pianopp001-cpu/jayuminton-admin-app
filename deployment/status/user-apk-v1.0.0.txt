@@ -1,0 +1,15 @@
+workflow=Build Jayuminton user APK
+status=success
+version=1.0.0
+version_code=100
+application_id=com.jayuminton.user
+user_deployment_id=AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_
+user_agent=JayumintonUserNative/1.0.0
+native_install_signal=NativeUserApp
+web_storage=preserved_on_launch
+cache_mode=LOAD_NO_CACHE
+launcher_label=자유민턴 사용자
+launcher_icon_layout=dog-full-square-128x128
+apk_sha256=6b621c46bdfbe0448ccd6d637f0b6dc9677b6289d24424c87f0280f7ad4c5a11
+signer_sha256=D47ADB93363FF397601E63667E79F27F99AE499AADC1FD0013861809950FC787
+updated_at=2026-08-08T14:56:15Z
