@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      DOG_ICON_SHA256: 4c3d5786562535ab3fbae79eaa4fde4b2161629314d8dd95f0a5aea181b1570a
+      DOG_SOURCE_SHA256: 4c3d5786562535ab3fbae79eaa4fde4b2161629314d8dd95f0a5aea181b1570a
       APK_OUTPUT: releases/jayuminton-v199.6-final-fresh-install.apk
 
     steps:
@@ -44,43 +44,49 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Restore and verify exact original dog icon
+      - name: Restore original dog art and normalize PNG for Android
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m pip install --quiet pillow
           python3 - <<'PY'
           from pathlib import Path
-          import base64
-          import hashlib
-          import os
-          import re
+          from io import BytesIO
+          from PIL import Image
+          import base64, hashlib, os, re
 
           parts = sorted(Path('app/icon-base64').glob('original-dog-icon.b64.part-*'))
           if not parts:
               raise SystemExit('dog icon base64 parts are missing')
-
           raw = ''.join(p.read_text(encoding='utf-8', errors='ignore') for p in parts)
           clean = re.sub(r'[^A-Za-z0-9+/=]', '', raw)
           core = clean.rstrip('=')
           clean = core + ('=' * ((4 - len(core) % 4) % 4))
           data = base64.b64decode(clean, validate=False)
 
-          expected = os.environ['DOG_ICON_SHA256'].strip().lower()
-          actual = hashlib.sha256(data).hexdigest()
-          print('dog icon bytes=', len(data))
-          print('dog icon sha256=', actual)
-          if actual != expected:
-              raise SystemExit('dog icon SHA mismatch')
-          if not data.startswith(b'\x89PNG\r\n\x1a\n'):
-              raise SystemExit('dog icon is not a PNG')
+          source_sha = hashlib.sha256(data).hexdigest()
+          print('dog source bytes=', len(data))
+          print('dog source sha256=', source_sha)
+          if source_sha != os.environ['DOG_SOURCE_SHA256']:
+              raise SystemExit('original dog source SHA mismatch')
 
+          image = Image.open(BytesIO(data))
+          image.load()
+          if image.size != (512, 512):
+              raise SystemExit('unexpected dog icon dimensions: %r' % (image.size,))
+
+          # Preserve the same pixels/art, but write a clean conventional PNG that AAPT2 accepts.
+          image = image.convert('RGBA')
           out = Path('app/src/main/res/drawable/icon.png')
           out.parent.mkdir(parents=True, exist_ok=True)
-          out.write_bytes(data)
+          image.save(out, format='PNG', optimize=False, compress_level=6)
+
+          normalized = out.read_bytes()
+          print('normalized dog bytes=', len(normalized))
+          print('normalized dog sha256=', hashlib.sha256(normalized).hexdigest())
+          Image.open(out).verify()
           PY
-          test -s app/src/main/res/drawable/icon.png
           file app/src/main/res/drawable/icon.png
-          test "$(sha256sum app/src/main/res/drawable/icon.png | awk '{print $1}')" = "$DOG_ICON_SHA256"
 
       - name: Prepare v199.6 against current live admin deployment
         shell: bash
@@ -88,9 +94,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import json
-          import os
-          import re
+          import json, os, re
 
           cfg = json.loads(os.environ['JAYUMINTON_DEPLOY_CONFIG_JSON'])
           deployment_id = str(cfg.get('mainDeploymentId') or '').strip()
@@ -99,59 +103,35 @@ jobs:
 
           java = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           text = java.read_text(encoding='utf-8')
-          admin_url = (
-              'https://script.google.com/macros/s/' + deployment_id +
-              '/exec?mode=admin&appVersion=199.6&freshAdmin=1'
-          )
-          text, count = re.subn(
+          admin_url = 'https://script.google.com/macros/s/' + deployment_id + '/exec?mode=admin&appVersion=199.6&freshAdmin=1'
+          text, n = re.subn(
               r'https://script\.google\.com/macros/s/[^"\\]+/exec\?mode=admin[^"\\]*',
-              admin_url,
-              text,
-              count=1,
-          )
-          if count != 1:
+              admin_url, text, count=1)
+          if n != 1:
               raise SystemExit('ADMIN_URL replacement failed')
-
-          text, count = re.subn(
+          text, n = re.subn(
               r'private static final String APK_WEB_BUILD = "[^"]+";',
               'private static final String APK_WEB_BUILD = "1996-final-fresh-install";',
-              text,
-              count=1,
-          )
-          if count != 1:
+              text, count=1)
+          if n != 1:
               raise SystemExit('APK_WEB_BUILD replacement failed')
-
           text = re.sub(
               r'JayumintonNative/[0-9A-Za-z.\-]+(?: FreshAdmin/[0-9A-Za-z.\-]+)?',
-              'JayumintonNative/199.6 FreshAdmin/1996-final',
-              text,
-          )
+              'JayumintonNative/199.6 FreshAdmin/1996-final', text)
           java.write_text(text, encoding='utf-8')
 
           gradle = Path('app/build.gradle')
           g = gradle.read_text(encoding='utf-8')
-          g, c1 = re.subn(
-              r"applicationId\s+['\"][^'\"]+['\"]",
-              "applicationId 'com.jayuminton.admin'",
-              g,
-              count=1,
-          )
-          g, c2 = re.subn(r'versionCode\s+\d+', 'versionCode 1996', g, count=1)
-          g, c3 = re.subn(
-              r"versionName\s+['\"][^'\"]+['\"]",
-              "versionName '199.6'",
-              g,
-              count=1,
-          )
-          if not (c1 and c2 and c3):
+          g, a = re.subn(r"applicationId\s+['\"][^'\"]+['\"]", "applicationId 'com.jayuminton.admin'", g, count=1)
+          g, b = re.subn(r'versionCode\s+\d+', 'versionCode 1996', g, count=1)
+          g, c = re.subn(r"versionName\s+['\"][^'\"]+['\"]", "versionName '199.6'", g, count=1)
+          if not (a and b and c):
               raise SystemExit('Gradle version/package replacement failed')
           gradle.write_text(g, encoding='utf-8')
 
           Path('deployment/status/v1996-build-target.txt').write_text(
               'deployment_id=' + deployment_id + '\n' +
-              'apk_web_build=1996-final-fresh-install\n',
-              encoding='utf-8',
-          )
+              'apk_web_build=1996-final-fresh-install\n', encoding='utf-8')
           PY
 
           grep -F "applicationId 'com.jayuminton.admin'" app/build.gradle
@@ -164,14 +144,10 @@ jobs:
           grep -F 'com.android.chrome' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'jayuminton-push.web.app' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'android:icon="@drawable/icon"' app/src/main/AndroidManifest.xml
-          if grep -F 'intent://' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null; then
-            echo 'Forbidden intent URL found'; exit 1
-          fi
-          if grep -F 'drive.google.com' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null; then
-            echo 'Forbidden Drive fallback found'; exit 1
-          fi
+          if grep -F 'intent://' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null; then exit 1; fi
+          if grep -F 'drive.google.com' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null; then exit 1; fi
 
-      - name: Verify current server snapshot before APK build
+      - name: Verify latest requested server state
         shell: bash
         run: |
           set -euo pipefail
@@ -185,15 +161,13 @@ jobs:
           grep -F "if (type === 'court_assignment') return 4;" source-snapshot/current-main/Script.html >/dev/null
           grep -F 'index * 1700' source-snapshot/current-main/Script.html >/dev/null
           grep -F 'members[index].name = name;' source-snapshot/current-main/Code.js >/dev/null
-
           python3 - <<'PY'
           from pathlib import Path
-          text = Path('source-snapshot/current-main/Script.html').read_text(encoding='utf-8')
-          start = text.find('<script>')
-          end = text.rfind('</script>')
-          if start < 0 or end <= start:
+          t = Path('source-snapshot/current-main/Script.html').read_text(encoding='utf-8')
+          a, b = t.find('<script>'), t.rfind('</script>')
+          if a < 0 or b <= a:
               raise SystemExit('Script wrapper missing')
-          Path('/tmp/jayuminton-server-check.js').write_text(text[start + len('<script>'):end], encoding='utf-8')
+          Path('/tmp/jayuminton-server-check.js').write_text(t[a + 8:b], encoding='utf-8')
           PY
           node --check /tmp/jayuminton-server-check.js
 
@@ -208,7 +182,7 @@ jobs:
       - name: Build signed release APK
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Verify signed APK package version signature and dog icon
+      - name: Verify signed APK package version signature and dog pixels
         shell: bash
         run: |
           set -euo pipefail
@@ -217,19 +191,33 @@ jobs:
           unzip -t "$APK" >/dev/null
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
-          test -x "$APKSIGNER"
-          test -x "$AAPT"
+          test -x "$APKSIGNER" && test -x "$AAPT"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
           grep -F "package: name='com.jayuminton.admin'" "$RUNNER_TEMP/badging.txt"
           grep -F "versionCode='1996'" "$RUNNER_TEMP/badging.txt"
           grep -F "versionName='199.6'" "$RUNNER_TEMP/badging.txt"
-          ICON_PATH=$(unzip -Z1 "$APK" | grep -E '^res/drawable[^/]*/icon\.png$' | head -1)
+
+          ICON_PATH=$(sed -n "s/^application:.* icon='\([^']*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt" | head -1)
+          if [ -z "$ICON_PATH" ]; then
+            ICON_PATH=$(unzip -Z1 "$APK" | grep -E '^res/drawable[^/]*/icon\.png$' | head -1)
+          fi
           test -n "$ICON_PATH"
           echo "packaged dog icon=$ICON_PATH"
-          unzip -p "$APK" "$ICON_PATH" > "$RUNNER_TEMP/final-dog-icon.png"
-          test -s "$RUNNER_TEMP/final-dog-icon.png"
-          test "$(sha256sum "$RUNNER_TEMP/final-dog-icon.png" | awk '{print $1}')" = "$DOG_ICON_SHA256"
+          unzip -p "$APK" "$ICON_PATH" > "$RUNNER_TEMP/packaged-dog-icon.png"
+          test -s "$RUNNER_TEMP/packaged-dog-icon.png"
+
+          python3 - <<'PY'
+          from PIL import Image, ImageChops
+          import os
+          src = Image.open('app/src/main/res/drawable/icon.png').convert('RGBA')
+          apk = Image.open(os.path.join(os.environ['RUNNER_TEMP'], 'packaged-dog-icon.png')).convert('RGBA')
+          if src.size != apk.size:
+              raise SystemExit('packaged dog icon dimensions differ')
+          if ImageChops.difference(src, apk).getbbox() is not None:
+              raise SystemExit('packaged dog icon pixels differ from original dog art')
+          print('packaged dog icon pixels verified:', apk.size)
+          PY
           ls -lh "$APK"
 
       - name: Publish verified fresh-install APK
@@ -269,7 +257,8 @@ jobs:
             echo 'version=199.6'
             echo 'package=com.jayuminton.admin'
             echo 'output=releases/jayuminton-v199.6-final-fresh-install.apk'
-            echo 'dog_icon_sha256=4c3d5786562535ab3fbae79eaa4fde4b2161629314d8dd95f0a5aea181b1570a'
+            echo 'dog_source_sha256=4c3d5786562535ab3fbae79eaa4fde4b2161629314d8dd95f0a5aea181b1570a'
+            echo 'dog_art=normalized-png-same-pixels'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
           } > deployment/status/v1996-final-apk.txt
           git config user.name 'github-actions[bot]'
