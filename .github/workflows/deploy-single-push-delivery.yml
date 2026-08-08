@@ -1,0 +1,64 @@
+name: Deploy single push delivery
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deployment/status/trigger-single-push-delivery.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Patch and deploy live push sender
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$CONFIG")"
+          test -n "$PUSH_SCRIPT_ID"; test -n "$PUSH_DEPLOYMENT_ID"
+          WORK="$RUNNER_TEMP/push"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_push_sender_single_delivery.py" "$WORK"
+          node --check Code.js
+          grep -F "repeatCount: '1'," Code.js >/dev/null
+          grep -F "priority: 'high'" Code.js >/dev/null
+          grep -F "Urgency: 'high'" Code.js >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "single push delivery $GITHUB_RUN_ID"
+      - name: Re-pull and verify live sender
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          V="$RUNNER_TEMP/verify"
+          mkdir -p "$V"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$V/.clasp.json"
+          cd "$V"
+          clasp pull
+          grep -F "repeatCount: '1'," Code.js >/dev/null
+          grep -F "priority: 'high'" Code.js >/dev/null
+          grep -F "Urgency: 'high'" Code.js >/dev/null
+          echo 'Verified live sender: one FCM delivery per assignment event.'
