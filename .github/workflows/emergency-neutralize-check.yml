@@ -1,0 +1,64 @@
+name: Emergency neutralize accidental Apps Script check file
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-neutralize-check.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-emergency-check-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+
+      - name: Neutralize check file and deploy only that correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          test -n "$MAIN_SCRIPT_ID"
+          test -n "$MAIN_DEPLOYMENT_ID"
+
+          WORK="$RUNNER_TEMP/main-live"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          test -f check.js
+          find . -maxdepth 1 -type f ! -name '.clasp.json' ! -name 'check.js' -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/before.sha"
+          printf '%s\n' '// Intentionally empty server-side placeholder.' > check.js
+          find . -maxdepth 1 -type f ! -name '.clasp.json' ! -name 'check.js' -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/after.sha"
+          cmp "$RUNNER_TEMP/before.sha" "$RUNNER_TEMP/after.sha"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "emergency neutralize accidental check file $GITHUB_RUN_ID"
+
+          VERIFY="$RUNNER_TEMP/verify"
+          mkdir -p "$VERIFY"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
+          cd "$VERIFY"
+          clasp pull
+          test "$(cat check.js)" = '// Intentionally empty server-side placeholder.'
