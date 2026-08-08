@@ -1,0 +1,8 @@
+status=success
+version=1.1.2
+live_apk_link=yes
+user_full_names=yes
+new_badge=yes
+double_tap=yes
+manual_search=yes
+verified_at=2026-08-08T19:41:00Z
