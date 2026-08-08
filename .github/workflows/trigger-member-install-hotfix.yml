@@ -1,5 +1,5 @@
-name: Deploy member edit - existing member only
-run-name: Existing member edit deploy
+name: Deploy final member edit vibration state
+run-name: Final member edit vibration deploy
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-existing-member-edit
+  group: jayuminton-final-member-state
   cancel-in-progress: true
 
 jobs:
@@ -48,67 +48,132 @@ jobs:
           echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
 
-      - name: Pull, patch and validate live MAIN
+      - name: Pull and apply complete requested state
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/main"
-          rm -rf "$WORK"
-          mkdir -p "$WORK"
+          rm -rf "$WORK" && mkdir -p "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
+
+          # Existing-member edit, user-mode guard, 4 one-line buttons.
           python3 "$GITHUB_WORKSPACE/deployment/scripts/apply_member_edit_existing_only.py" "$WORK"
 
+          # Strong vibration + admin PWA launcher.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_function(src, name, replacement):
+              token='function '+name+'('
+              start=src.find(token)
+              if start < 0:
+                  raise SystemExit(name+' missing')
+              brace=src.find('{',start)
+              depth=0; quote=None; escape=False; i=brace
+              while i < len(src):
+                  ch=src[i]
+                  if quote:
+                      if escape: escape=False
+                      elif ch=='\\': escape=True
+                      elif ch==quote: quote=None
+                      i+=1; continue
+                  if ch in "'\"`": quote=ch
+                  elif ch=='{': depth+=1
+                  elif ch=='}':
+                      depth-=1
+                      if depth==0:
+                          return src[:start]+replacement+src[i+1:]
+                  i+=1
+              raise SystemExit('unbalanced '+name)
+
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          s=replace_function(s,'memberAlertRepeatCount',"""function memberAlertRepeatCount(type) {
+            if (type === 'court_assignment') return 4;
+            if (type === 'wait1_ready') return 2;
+            return 1;
+          }""")
+          s=replace_function(s,'memberVibrationPattern',"""function memberVibrationPattern(type) {
+            if (type === 'wait1_ready') return [320, 180, 320, 180, 320];
+            if (type === 'court_assignment') return [320, 180, 320, 180, 320];
+            return [320, 180, 320, 180, 320];
+          }""")
+          s=s.replace('}, index * 1300);','}, index * 1700);')
+
+          if 'function openAdminPushApp()' not in s:
+              close=s.rfind('</script>')
+              if close < 0: raise SystemExit('script close missing')
+              fn="""
+          function openAdminPushApp() {
+            const target = 'https://jayuminton-push.web.app/';
+            try {
+              if (window.NativeBrowser && typeof window.NativeBrowser.openPwa === 'function') {
+                window.NativeBrowser.openPwa();
+                return;
+              }
+            } catch (error) {}
+            try { window.location.href = target; }
+            catch (error) { window.open(target, '_blank', 'noopener'); }
+          }
+          """
+              s=s[:close]+fn+s[close:]
+          p.write_text(s,encoding='utf-8')
+
+          p=Path('Admin.html')
+          a=p.read_text(encoding='utf-8')
+          if 'id="adminPushAppButton"' not in a:
+              anchor='    <details class="top-admin-menu">'
+              if anchor not in a: raise SystemExit('admin top menu anchor missing')
+              button='''    <button id="adminPushAppButton" class="ghost-button admin-push-app-button" type="button" onclick="openAdminPushApp()" style="white-space:nowrap;font-weight:900">📱 푸시앱</button>\n\n'''
+              a=a.replace(anchor,button+anchor,1)
+          p.write_text(a,encoding='utf-8')
+          PY
+
           grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
-          if grep -F '수정 저장' Admin.html >/dev/null; then
-            echo 'Old edit/save wording remains'
-            exit 1
-          fi
-          grep -F "server('updateMemberProfile'" Script.html >/dev/null
+          if grep -F '수정 저장' Admin.html >/dev/null; then exit 1; fi
+          grep -F 'id="adminPushAppButton"' Admin.html >/dev/null
+          grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
+          grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
+          grep -F "return [320, 180, 320, 180, 320];" Script.html >/dev/null
+          grep -F 'index * 1700' Script.html >/dev/null
           grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
+          grep -F "server('updateMemberProfile'" Script.html >/dev/null
           grep -F 'members[index].name = name;' Code.js >/dev/null
           grep -F 'JAYUMINTON_MEMBER_EDIT_EXISTING_ONLY_STYLE' Style.html >/dev/null
 
-      - name: Deploy patched MAIN
+      - name: Deploy complete requested state
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/main"
           cd "$WORK"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "existing-member-only edit ${GITHUB_SHA::7}"
-
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "final edit vibration state ${GITHUB_SHA::7}"
           cp Admin.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Admin.html"
           cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
           cp Style.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Style.html"
           cp Code.js "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js"
 
-      - name: Verify Apps Script project after deployment
+      - name: Verify deployed Apps Script source
         shell: bash
         run: |
           set -euo pipefail
           VERIFY="$RUNNER_TEMP/verify-main"
-          rm -rf "$VERIFY"
-          mkdir -p "$VERIFY"
+          rm -rf "$VERIFY" && mkdir -p "$VERIFY"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
           cd "$VERIFY"
           clasp pull
-
-          grep -F 'id="memberEditModal"' Admin.html >/dev/null
           grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
-          if grep -F '수정 저장' Admin.html >/dev/null; then
-            echo 'Deployed project still contains old edit/save wording'
-            exit 1
-          fi
-          grep -F "server('updateMemberProfile'" Script.html >/dev/null
+          if grep -F '수정 저장' Admin.html >/dev/null; then exit 1; fi
+          grep -F 'id="adminPushAppButton"' Admin.html >/dev/null
+          grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
+          grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
+          grep -F 'index * 1700' Script.html >/dev/null
           grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
           grep -F 'members[index].name = name;' Code.js >/dev/null
-          if grep -F 'id="memberEditModal"' Index.html >/dev/null; then
-            echo 'Admin edit modal leaked into user template'
-            exit 1
-          fi
-          echo 'Apps Script project verification passed.'
+          if grep -F 'id="memberEditModal"' Index.html >/dev/null; then exit 1; fi
 
       - name: Record deployment result
         if: always()
@@ -117,29 +182,24 @@ jobs:
           set -u
           mkdir -p deployment/status
           {
-            echo 'workflow=Deploy member edit - existing member only'
+            echo 'workflow=Deploy final member edit vibration state'
             echo 'run_id=${{ github.run_id }}'
             echo 'status=${{ job.status }}'
             echo 'head_sha=${{ github.sha }}'
-            echo 'mode=existing-member-overwrite-only'
-            echo 'verification=apps-script-project-pull'
+            echo 'edit=existing-member-overwrite-only'
+            echo 'wait1_vibration=3-pulse-x2'
+            echo 'court_vibration=3-pulse-x4'
+            echo 'admin_push_button=native-browser-first'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
-          } > deployment/status/member-edit-live.txt
-
+          } > deployment/status/final-member-state.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/member-edit-live.txt
+          git add deployment/status/final-member-state.txt
           if [ '${{ job.status }}' = 'success' ]; then
-            git add source-snapshot/current-main/Admin.html \
-                    source-snapshot/current-main/Script.html \
-                    source-snapshot/current-main/Style.html \
-                    source-snapshot/current-main/Code.js || true
+            git add source-snapshot/current-main/Admin.html source-snapshot/current-main/Script.html source-snapshot/current-main/Style.html source-snapshot/current-main/Code.js || true
           else
-            git restore source-snapshot/current-main/Admin.html \
-                        source-snapshot/current-main/Script.html \
-                        source-snapshot/current-main/Style.html \
-                        source-snapshot/current-main/Code.js 2>/dev/null || true
+            git restore source-snapshot/current-main/Admin.html source-snapshot/current-main/Script.html source-snapshot/current-main/Style.html source-snapshot/current-main/Code.js 2>/dev/null || true
           fi
-          git commit -m 'Record existing-member edit deployment: ${{ job.status }}' || exit 0
+          git commit -m 'Record final member state deployment: ${{ job.status }}' || exit 0
           git pull --rebase origin main || true
           git push origin main
