@@ -2784,13 +2784,15 @@ function mostElapsedCourtNoForState(state) {
 }
 
 function memberAlertRepeatCount(type) {
-  return type === 'court_assignment' ? 3 : 1;
+  if (type === 'court_assignment') return 4;
+  if (type === 'wait1_ready') return 2;
+  return 1;
 }
 
 function memberVibrationPattern(type) {
-  if (type === 'wait1_ready') return [320, 200, 320];
-  if (type === 'court_assignment') return [320, 170, 320, 170, 320, 170, 320];
-  return [320, 170, 320, 170, 320];
+  if (type === 'wait1_ready') return [320, 180, 320, 180, 320];
+  if (type === 'court_assignment') return [320, 180, 320, 180, 320];
+  return [320, 180, 320, 180, 320];
 }
 
 function playSingleMemberAlertCue(type) {
@@ -2826,7 +2828,7 @@ function playMemberAlertCue(type, title, body, eventId) {
     setTimeout(function() {
       playSingleMemberAlertCue(type);
       showSingleNativeMemberNotification(title, body, eventId, index + 1);
-    }, index * 1300);
+    }, index * 1700);
   }
 }
 
@@ -5210,7 +5212,7 @@ function closeMemberEdit() {
   }
 }
 
-async async function applyMemberEdit() {
+async async async function applyMemberEdit() {
   if (!IS_ADMIN || !EDIT_MEMBER_ID || ACTION_IN_FLIGHT) return;
   const targetId = String(EDIT_MEMBER_ID);
   const name = String(document.getElementById('editMemberName')?.value || '').trim();
@@ -5998,4 +6000,16 @@ smartAssignSelected = async function() {
   }
 };
 
+
+function openAdminPushApp() {
+  const target = 'https://jayuminton-push.web.app/';
+  try {
+    if (window.NativeBrowser && typeof window.NativeBrowser.openPwa === 'function') {
+      window.NativeBrowser.openPwa();
+      return;
+    }
+  } catch (error) {}
+  try { window.location.href = target; }
+  catch (error) { window.open(target, '_blank', 'noopener'); }
+}
 </script>
