@@ -1,10 +1,14 @@
-name: Build fresh Jayuminton court status native push v1.1.0
+name: Build fresh Jayuminton court status native push v1.1.1
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/status/trigger-user-native-v111.txt'
   pull_request:
     branches: [main]
     paths:
-      - 'deployment/status/trigger-user-native-v110.txt'
+      - 'deployment/status/trigger-user-native-v111.txt'
       - '.github/workflows/build-user-native-push-fresh-v110.yml'
   workflow_dispatch: {}
 
@@ -12,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-user-native-v110
+  group: jayuminton-user-native-v111
   cancel-in-progress: false
 
 jobs:
@@ -133,7 +137,7 @@ NODE
           printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-          grep -F "repeatCount: event.type === 'court_assignment' ? '5' : '3'" Code.js >/dev/null
+          grep -F "repeatCount: '1'," Code.js >/dev/null
           grep -F "priority: 'high'" Code.js >/dev/null
           grep -F "ttl: '600s'" Code.js >/dev/null
 
@@ -142,26 +146,26 @@ NODE
         run: |
           set -euo pipefail
           bash deployment/scripts/build_user_native_push_fresh_v110.sh
-          test -s releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk
-          grep -F 'status=success' deployment/status/user-native-push-v1.1.0.txt >/dev/null
-          grep -F 'launcher_label=자유민턴 코트현황' deployment/status/user-native-push-v1.1.0.txt >/dev/null
-          grep -F 'install_mode=uninstall-old-then-fresh-install' deployment/status/user-native-push-v1.1.0.txt >/dev/null
-          grep -F 'wait1_vibration=3-long-pulses-x3-groups' deployment/status/user-native-push-v1.1.0.txt >/dev/null
-          grep -F 'court_vibration=3-long-pulses-x5-groups' deployment/status/user-native-push-v1.1.0.txt >/dev/null
-          cp releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk "$RUNNER_TEMP/user-native.apk"
-          cp deployment/status/user-native-push-v1.1.0.txt "$RUNNER_TEMP/user-native-status.txt"
+          test -s releases/jayuminton-courtstatus-v1.1.1-fresh-install.apk
+          grep -F 'status=success' deployment/status/user-native-push-v1.1.1.txt >/dev/null
+          grep -F 'launcher_label=자유민턴 코트현황' deployment/status/user-native-push-v1.1.1.txt >/dev/null
+          grep -F 'install_mode=uninstall-old-then-fresh-install' deployment/status/user-native-push-v1.1.1.txt >/dev/null
+          grep -F 'wait1_vibration=3-long-pulses-x3-groups' deployment/status/user-native-push-v1.1.1.txt >/dev/null
+          grep -F 'court_vibration=3-long-pulses-x5-groups' deployment/status/user-native-push-v1.1.1.txt >/dev/null
+          cp releases/jayuminton-courtstatus-v1.1.1-fresh-install.apk "$RUNNER_TEMP/user-native.apk"
+          cp deployment/status/user-native-push-v1.1.1.txt "$RUNNER_TEMP/user-native-status.txt"
 
       - name: Publish verified APK before changing live install button
         shell: bash
         run: |
           set -euo pipefail
           git reset --hard HEAD
-          cp "$RUNNER_TEMP/user-native.apk" releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk
-          cp "$RUNNER_TEMP/user-native-status.txt" deployment/status/user-native-push-v1.1.0.txt
+          cp "$RUNNER_TEMP/user-native.apk" releases/jayuminton-courtstatus-v1.1.1-fresh-install.apk
+          cp "$RUNNER_TEMP/user-native-status.txt" deployment/status/user-native-push-v1.1.1.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk deployment/status/user-native-push-v1.1.0.txt
-          git commit -m 'Publish verified fresh-install native push user APK v1.1.0' || true
+          git add releases/jayuminton-courtstatus-v1.1.1-fresh-install.apk deployment/status/user-native-push-v1.1.1.txt
+          git commit -m 'Publish verified fresh-install native push user APK v1.1.1' || true
           git pull --rebase origin main
           git push origin main
 
@@ -170,7 +174,7 @@ NODE
         run: |
           set -euo pipefail
           git fetch origin main
-          git show origin/main:releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk > "$RUNNER_TEMP/remote.apk"
+          git show origin/main:releases/jayuminton-courtstatus-v1.1.1-fresh-install.apk > "$RUNNER_TEMP/remote.apk"
           test -s "$RUNNER_TEMP/remote.apk"
           test "$(sha256sum "$RUNNER_TEMP/remote.apk" | awk '{print $1}')" = "$(sha256sum "$RUNNER_TEMP/user-native.apk" | awk '{print $1}')"
 
@@ -196,7 +200,7 @@ NODE
           Path('check.js').write_text(s[a+8:b],encoding='utf-8')
           PY
           node --check check.js
-          grep -F 'jayuminton-courtstatus-v1.1.0-fresh-install.apk' Script.html >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.1.1-fresh-install.apk' Script.html >/dev/null
           grep -F 'JAYUMINTON_NATIVE_USER_PUSH_SYNC_V110' Script.html >/dev/null
           grep -F 'window.NativeUserApp.setMember' Script.html >/dev/null
           grep -F "if (type === 'court_assignment') return 5;" Script.html >/dev/null
@@ -208,13 +212,13 @@ NODE
           set -euo pipefail
           cd "$RUNNER_TEMP/main-live"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "fresh native FCM user APK v1.1.0 $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "fresh native FCM user APK v1.1.1 $GITHUB_RUN_ID"
           VERIFY="$RUNNER_TEMP/verify-main"
           mkdir -p "$VERIFY"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
           cd "$VERIFY"
           clasp pull
-          grep -F 'jayuminton-courtstatus-v1.1.0-fresh-install.apk' Script.html >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.1.1-fresh-install.apk' Script.html >/dev/null
           grep -F 'JAYUMINTON_NATIVE_USER_PUSH_SYNC_V110' Script.html >/dev/null
           grep -F 'window.NativeUserApp.setMember' Script.html >/dev/null
           grep -F "if (type === 'court_assignment') return 5;" Script.html >/dev/null
@@ -223,7 +227,7 @@ NODE
       - name: Upload fresh-install APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-courtstatus-v1.1.0-fresh-install
-          path: releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk
+          name: jayuminton-courtstatus-v1.1.1-fresh-install
+          path: releases/jayuminton-courtstatus-v1.1.1-fresh-install.apk
           if-no-files-found: error
           retention-days: 30
