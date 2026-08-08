@@ -2,8 +2,11 @@ package com.jayuminton.admin;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.graphics.Color;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
@@ -18,6 +21,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,7 +34,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class MainActivity extends Activity implements TextToSpeech.OnInitListener {
     private static final String ADMIN_URL =
             "https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec?mode=admin";
-    private static final String APK_WEB_BUILD = "1994-fresh-admin";
+    private static final String MEMBER_PWA_URL = "https://jayuminton-push.web.app/";
+    private static final String APK_WEB_BUILD = "1995-fresh-admin";
     private static final String PREFS = "jayuminton_audio_state";
     private static final String KEY_WAS_DUCKING = "was_ducking";
     private static final String KEY_MEDIA_VOLUME = "media_volume";
@@ -83,15 +88,8 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         settings.setDisplayZoomControls(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/1.4 FreshAdmin/1994");
+        settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/199.5 FreshAdmin/1995");
 
-        /*
-         * 관리자 APK는 웹 화면을 껍데기처럼 띄우는 WebView 앱이다.
-         * 예전 버전은 DOM storage/localStorage와 WebView cache를 계속 보존해서
-         * jayuminton_admin_session_v1 로그인 세션과 오래된 HTML/JS가 남을 수 있었다.
-         * 앱을 새로 시작할 때 APK WebView 저장소와 캐시를 초기화해서
-         * 항상 최신 배포본을 새 로그인부터 읽게 한다.
-         */
         webView.clearCache(true);
         webView.clearHistory();
         WebStorage.getInstance().deleteAllData();
@@ -103,11 +101,17 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         cookieManager.flush();
 
         webView.addJavascriptInterface(new VoiceBridge(), "NativeVoice");
+        webView.addJavascriptInterface(new BrowserBridge(), "NativeBrowser");
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String scheme = request.getUrl().getScheme();
+                Uri uri = request.getUrl();
+                if (isMemberPwaUri(uri)) {
+                    openMemberPwaInBrowser(uri.toString());
+                    return true;
+                }
+                String scheme = uri.getScheme();
                 if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
                     return false;
                 }
@@ -135,6 +139,35 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         headers.put("Pragma", "no-cache");
         headers.put("Expires", "0");
         webView.loadUrl(freshAdminUrl, headers);
+    }
+
+    private boolean isMemberPwaUri(Uri uri) {
+        return uri != null && "jayuminton-push.web.app".equalsIgnoreCase(uri.getHost());
+    }
+
+    private boolean tryOpenBrowserPackage(String packageName, String url) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            intent.setPackage(packageName);
+            startActivity(intent);
+            return true;
+        } catch (ActivityNotFoundException error) {
+            return false;
+        }
+    }
+
+    private void openMemberPwaInBrowser(String requestedUrl) {
+        String url = requestedUrl == null || requestedUrl.trim().isEmpty()
+                ? MEMBER_PWA_URL
+                : requestedUrl;
+        if (tryOpenBrowserPackage("com.android.chrome", url)) return;
+        if (tryOpenBrowserPackage("com.sec.android.app.sbrowser", url)) return;
+        Toast.makeText(
+                this,
+                "PWA 설치는 Chrome 또는 삼성 인터넷에서 진행해 주세요.",
+                Toast.LENGTH_LONG
+        ).show();
     }
 
     @Override
@@ -320,6 +353,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         restoreAudio();
         if (webView != null) {
             webView.removeJavascriptInterface("NativeVoice");
+            webView.removeJavascriptInterface("NativeBrowser");
             webView.destroy();
         }
         super.onDestroy();
@@ -366,6 +400,13 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         @JavascriptInterface
         public boolean isSpeaking() {
             return speaking.get() || (tts != null && tts.isSpeaking());
+        }
+    }
+
+    public final class BrowserBridge {
+        @JavascriptInterface
+        public void openPwa() {
+            runOnUiThread(() -> openMemberPwaInBrowser(MEMBER_PWA_URL));
         }
     }
 }
