@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - name: Checkout current main
         uses: actions/checkout@v4
@@ -32,8 +34,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verify preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME"
+          test -d "$ANDROID_HOME/platform-tools"
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -n "$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | head -1)"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo 'Installed Android 35 platform:'
+          ls -ld "$ANDROID_HOME/platforms/android-35"
+          echo 'Installed build-tools:'
+          find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n 8
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -93,11 +106,11 @@ jobs:
           } > "$STATUS"
 
           {
-            echo 'safe_error_extract=v1'
+            echo 'safe_error_extract=v2'
             echo 'Only error-oriented build lines are retained; full environment/log is not committed.'
             if [ -s "$LOG" ]; then
-              grep -Ei '(^|[[:space:]])(FAILURE:|BUILD FAILED|Execution failed|What went wrong|ERROR:|error:|Could not|No such file|not found|FAILED$|ResourceCompilation|mergeReleaseResources|compileRelease|AAPT|Exception|launcher icon|stale admin|ADMIN_URL replacement)' "$LOG" \
-                | tail -n 120 \
+              grep -Ei '(^|[[:space:]])(FAILURE:|BUILD FAILED|Execution failed|What went wrong|ERROR:|error:|Could not|No such file|not found|FAILED$|ResourceCompilation|mergeReleaseResources|compileRelease|AAPT|Exception|launcher icon|Pinned launcher|stale admin|ADMIN_URL replacement|base64)' "$LOG" \
+                | tail -n 140 \
                 | sed -E 's/(storePassword|keyPassword)[^[:space:]]*/\1=[REDACTED]/g' \
                 || true
             else
