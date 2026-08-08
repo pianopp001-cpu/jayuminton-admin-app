@@ -1,0 +1,472 @@
+name: Apply member edit vibration and PWA handoff
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-member-edit-vibration.yml'
+  workflow_run:
+    workflows: ['Continue exact Jayuminton v1.6.37 restore']
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-member-edit-vibration
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm install --global @google/clasp@latest
+
+      - name: Resolve MAIN deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+          } >> "$GITHUB_ENV"
+
+      - name: Pull and patch live MAIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_function(src, name, replacement):
+              token='function '+name+'('
+              start=src.find(token)
+              if start < 0:
+                  return src, False
+              brace=src.find('{', start)
+              if brace < 0:
+                  raise SystemExit('opening brace missing for '+name)
+              depth=0
+              quote=None
+              escape=False
+              i=brace
+              while i < len(src):
+                  ch=src[i]
+                  if quote:
+                      if escape:
+                          escape=False
+                      elif ch=='\\':
+                          escape=True
+                      elif ch==quote:
+                          quote=None
+                      i+=1
+                      continue
+                  if ch in "'\"`":
+                      quote=ch
+                  elif ch=='{':
+                      depth+=1
+                  elif ch=='}':
+                      depth-=1
+                      if depth==0:
+                          return src[:start]+replacement+src[i+1:], True
+                  i+=1
+              raise SystemExit('unbalanced function '+name)
+
+          # ---------- Admin.html: exactly four one-line actions + a real edit modal ----------
+          p=Path('Admin.html')
+          a=p.read_text(encoding='utf-8')
+          quick=re.compile(r'<div id="quickMoveBar" class="quick-move-bar hidden">.*?</div>',re.S)
+          replacement='''<div id="quickMoveBar" class="quick-move-bar hidden" aria-label="길게 누른 멤버 관리">
+    <button type="button" onclick="sendQuickPickToActive()">배정대기로</button>
+    <button type="button" class="danger" onclick="deleteQuickPickedMembers()">삭제</button>
+    <button type="button" class="ghost-button" onclick="closeMemberActionBar()">취소</button>
+    <button type="button" class="primary" onclick="startMemberEdit()">편집</button>
+  </div>'''
+          if quick.search(a):
+              a=quick.sub(replacement,a,count=1)
+          else:
+              raise SystemExit('quickMoveBar not found')
+
+          marker='JAYUMINTON_MEMBER_EDIT_MODAL_V2'
+          if marker not in a:
+              modal='''\n  <!-- JAYUMINTON_MEMBER_EDIT_MODAL_V2 -->
+  <div id="memberEditModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeMemberEdit()">
+    <div class="modal-card member-edit-modal-card" role="dialog" aria-modal="true" aria-labelledby="memberEditTitle">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow dark-eyebrow">MEMBER EDIT</span>
+          <h2 id="memberEditTitle">멤버 편집</h2>
+        </div>
+        <button type="button" class="modal-close" onclick="closeMemberEdit()">×</button>
+      </div>
+      <div class="member-edit-form">
+        <label>이름 또는 닉네임<input id="editMemberName" maxlength="20" autocomplete="off"></label>
+        <label>성별<select id="editMemberGender"><option value="male">남자</option><option value="female">여자</option></select></label>
+        <label>급수<input id="editMemberGrade" maxlength="12" autocomplete="off" placeholder="예: A급·초급"></label>
+        <label>구력<input id="editMemberExperience" maxlength="20" autocomplete="off" placeholder="예: 3년"></label>
+      </div>
+      <div class="member-edit-actions">
+        <button type="button" class="ghost-button" onclick="closeMemberEdit()">취소</button>
+        <button id="saveMemberEditButton" type="button" class="primary" onclick="saveMemberEdit()">수정 저장</button>
+      </div>
+    </div>
+  </div>\n'''
+              anchor='<div\n    id="wholeSwapBar"'
+              pos=a.find(anchor)
+              if pos < 0:
+                  pos=a.find('<div id="wholeSwapBar"')
+              if pos < 0:
+                  raise SystemExit('wholeSwapBar anchor not found')
+              a=a[:pos]+modal+a[pos:]
+          p.write_text(a,encoding='utf-8')
+
+          # ---------- Style.html: force all four buttons onto one row ----------
+          p=Path('Style.html')
+          css=p.read_text(encoding='utf-8')
+          css_marker='JAYUMINTON_MEMBER_EDIT_STYLE_V2'
+          patch='''\n/* JAYUMINTON_MEMBER_EDIT_STYLE_V2 */
+#adminApp .quick-move-bar{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  gap:4px!important;
+  width:min(520px,calc(100% - 12px))!important;
+  padding:6px!important;
+  left:50%!important;
+  transform:translateX(-50%)!important;
+  overflow:visible!important
+}
+#adminApp .quick-move-bar.hidden{display:none!important}
+#adminApp .quick-move-bar button{
+  flex:1 1 0!important;
+  min-width:0!important;
+  width:auto!important;
+  padding:0 4px!important;
+  min-height:36px!important;
+  height:36px!important;
+  font-size:10px!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:clip!important
+}
+.member-edit-modal-card{width:min(440px,calc(100% - 22px))!important}
+.member-edit-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.member-edit-form label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:900;color:var(--text)}
+.member-edit-form input,.member-edit-form select{width:100%;min-width:0}
+.member-edit-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.member-edit-actions button{min-width:110px}
+@media(max-width:460px){
+  #adminApp .quick-move-bar{width:calc(100% - 8px)!important;gap:3px!important;padding:5px!important}
+  #adminApp .quick-move-bar button{font-size:9px!important;padding:0 2px!important}
+  .member-edit-form{grid-template-columns:1fr}
+}
+'''
+          if css_marker in css:
+              css=re.sub(r'/\* JAYUMINTON_MEMBER_EDIT_STYLE_V2 \*/.*\Z',patch.strip()+'\n',css,flags=re.S)
+          else:
+              css=css.rstrip()+'\n'+patch
+          p.write_text(css,encoding='utf-8')
+
+          # ---------- Script.html ----------
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          closing=s.rfind('</script>')
+          if closing < 0:
+              raise SystemExit('Script.html closing script missing')
+          s=s[:closing+len('</script>')]+'\n'
+
+          # User mode must never get administrator long-press actions.
+          fn='''function memberLongPressAttributes(memberId) {
+  if (!IS_ADMIN) return '';
+  return (
+    ' onpointerdown="startMemberLongPress(\\'' + memberId + '\\',event)"' +
+    ' onpointermove="moveMemberLongPress(event)"' +
+    ' onpointerup="finishMemberLongPress()"' +
+    ' onpointercancel="finishMemberLongPress()"' +
+    ' oncontextmenu="event.preventDefault()"'
+  );
+}'''
+          s,ok=replace_function(s,'memberLongPressAttributes',fn)
+          if not ok:
+              raise SystemExit('memberLongPressAttributes missing')
+
+          sig='function startMemberLongPress(memberId, event) {'
+          pos=s.find(sig)
+          if pos < 0:
+              raise SystemExit('startMemberLongPress missing')
+          guard='\n  if (!IS_ADMIN) return;'
+          after=pos+len(sig)
+          if guard.strip() not in s[after:after+160]:
+              s=s[:after]+guard+s[after:]
+
+          if 'let EDIT_MEMBER_ID' not in s:
+              anchor='let MEMBER_ACTION_IDS = [];'
+              if anchor not in s:
+                  raise SystemExit('MEMBER_ACTION_IDS missing')
+              s=s.replace(anchor,anchor+"\nlet EDIT_MEMBER_ID = '';",1)
+
+          start_edit='''function startMemberEdit() {
+  if (!IS_ADMIN) return;
+  if (MEMBER_ACTION_IDS.length !== 1) {
+    alert('편집할 멤버 한 명을 길게 눌러 주세요.');
+    return;
+  }
+  const member = memberById(MEMBER_ACTION_IDS[0]);
+  if (!member) {
+    alert('멤버 정보를 찾을 수 없습니다.');
+    return;
+  }
+  EDIT_MEMBER_ID = String(member.id || '');
+  const name = document.getElementById('editMemberName');
+  const gender = document.getElementById('editMemberGender');
+  const grade = document.getElementById('editMemberGrade');
+  const experience = document.getElementById('editMemberExperience');
+  const modal = document.getElementById('memberEditModal');
+  if (!name || !gender || !grade || !experience || !modal) {
+    alert('편집 화면을 불러오지 못했습니다. 앱을 완전히 종료한 뒤 다시 실행해 주세요.');
+    return;
+  }
+  name.value = String(member.name || '');
+  gender.value = member.gender === 'female' ? 'female' : 'male';
+  grade.value = String(member.grade || '');
+  experience.value = String(member.experience || '');
+  closeMemberActionBar();
+  modal.classList.remove('hidden');
+  setTimeout(function(){ name.focus(); name.select(); }, 80);
+}'''
+          s,_=replace_function(s,'startMemberEdit',start_edit)
+          if 'function startMemberEdit()' not in s:
+              anchor='async function addMember() {'
+              if anchor not in s:
+                  raise SystemExit('addMember anchor missing')
+              s=s.replace(anchor,start_edit+'\n\n'+anchor,1)
+
+          close_edit='''function closeMemberEdit() {
+  EDIT_MEMBER_ID = '';
+  const modal = document.getElementById('memberEditModal');
+  if (modal) modal.classList.add('hidden');
+  const button = document.getElementById('saveMemberEditButton');
+  if (button) { button.disabled = false; button.textContent = '수정 저장'; }
+}'''
+          s,_=replace_function(s,'closeMemberEdit',close_edit)
+          if 'function closeMemberEdit()' not in s:
+              pos=s.find('async function addMember() {')
+              s=s[:pos]+close_edit+'\n\n'+s[pos:]
+
+          save_edit='''async function saveMemberEdit() {
+  if (!IS_ADMIN || !EDIT_MEMBER_ID || ACTION_IN_FLIGHT) return;
+  const name = String(document.getElementById('editMemberName')?.value || '').trim();
+  const gender = String(document.getElementById('editMemberGender')?.value || '').trim();
+  const grade = String(document.getElementById('editMemberGrade')?.value || '').trim();
+  const experience = String(document.getElementById('editMemberExperience')?.value || '').trim();
+  if (!name) { alert('이름 또는 닉네임을 입력하세요.'); return; }
+  if (!gender) { alert('성별을 선택하세요.'); return; }
+  const button = document.getElementById('saveMemberEditButton');
+  ACTION_IN_FLIGHT = true;
+  if (button) { button.disabled = true; button.textContent = '저장 중…'; }
+  try {
+    const state = await server('updateMemberProfile', [ADMIN_PIN_VALUE, EDIT_MEMBER_ID, name, gender, grade, experience]);
+    const modal = document.getElementById('memberEditModal');
+    if (modal) modal.classList.add('hidden');
+    EDIT_MEMBER_ID = '';
+    renderState(state);
+  } catch (error) {
+    alert(String((error && error.message) || error || '멤버 수정에 실패했습니다.'));
+  } finally {
+    ACTION_IN_FLIGHT = false;
+    if (button) { button.disabled = false; button.textContent = '수정 저장'; }
+  }
+}'''
+          s,_=replace_function(s,'saveMemberEdit',save_edit)
+          if 'function saveMemberEdit()' not in s:
+              pos=s.find('async function addMember() {')
+              s=s[:pos]+save_edit+'\n\n'+s[pos:]
+
+          # User vibration: 3 pulses x2 for wait1, 3 pulses x4 for court.
+          repeat='''function memberAlertRepeatCount(type) {
+  if (type === 'court_assignment') return 4;
+  if (type === 'wait1_ready') return 2;
+  return 1;
+}'''
+          s,ok=replace_function(s,'memberAlertRepeatCount',repeat)
+          if not ok:
+              raise SystemExit('memberAlertRepeatCount missing')
+          s=s.replace('}, index * 1300);','}, index * 1700);')
+
+          # Admin APK hands the PWA URL to real Chrome through NativeApp. Never Drive/intent://.
+          open_push='''function openJayumintonPushApp() {
+  const target = 'https://jayuminton-push.web.app/';
+  try {
+    if (window.NativeApp && typeof window.NativeApp.openPwaInChrome === 'function') {
+      window.NativeApp.openPwaInChrome();
+      return;
+    }
+  } catch (error) {}
+  try { window.open(target, '_blank', 'noopener,noreferrer'); }
+  catch (error) { window.location.href = target; }
+}'''
+          s,_=replace_function(s,'openJayumintonPushApp',open_push)
+          if 'function openJayumintonPushApp()' not in s:
+              insert=s.rfind('</script>')
+              s=s[:insert]+open_push+'\n'+s[insert:]
+
+          marker='JAYUMINTON_ADMIN_PUSH_NATIVE_CHROME_V2'
+          if marker not in s:
+              insert=s.rfind('</script>')
+              mount=r'''
+/* JAYUMINTON_ADMIN_PUSH_NATIVE_CHROME_V2 */
+(function keepAdminPushButtonOnNativeChrome(){
+  function mount(){
+    if (!IS_ADMIN) return;
+    const app=document.getElementById('adminApp');
+    const host=app && app.querySelector('header .wrap.toolbar');
+    if (!host) return;
+    let button=document.getElementById('adminPushAppButton');
+    if (button) {
+      const clone=button.cloneNode(true);
+      button.replaceWith(clone);
+      button=clone;
+    } else {
+      button=document.createElement('button');
+      button.id='adminPushAppButton';
+      button.type='button';
+      button.className='ghost-button admin-push-app-button';
+      button.textContent='📱 푸시앱';
+      button.style.cssText='white-space:nowrap;background:#315efb;color:#fff;border-color:#315efb;font-weight:900;';
+      const menu=host.querySelector('.top-admin-menu');
+      host.insertBefore(button,menu || null);
+    }
+    button.onclick=function(event){ event.preventDefault(); openJayumintonPushApp(); };
+  }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',mount);
+  else mount();
+  setTimeout(mount,300);
+  setTimeout(mount,1200);
+})();
+'''
+              s=s[:insert]+mount+s[insert:]
+          p.write_text(s,encoding='utf-8')
+
+          # ---------- Code.js: actual persisted member edit ----------
+          p=Path('Code.js')
+          c=p.read_text(encoding='utf-8')
+          server_fn='''function updateMemberProfile(pin, memberId, name, gender, grade, experience) {
+  auth_(pin);
+  return withDocumentLock_('멤버 편집', function() {
+    memberId = String(memberId == null ? '' : memberId).trim();
+    name = String(name == null ? '' : name).trim();
+    gender = String(gender == null ? '' : gender).trim();
+    grade = String(grade == null ? '' : grade).trim();
+    experience = String(experience == null ? '' : experience).trim();
+    if (!memberId) throw new Error('편집할 멤버가 없습니다.');
+    if (!name) throw new Error('이름 또는 닉네임을 입력하세요.');
+    if (name.length > 20) throw new Error('이름은 20자 이내로 입력하세요.');
+    if (gender !== 'male' && gender !== 'female') throw new Error('성별을 선택하세요.');
+    if (grade.length > 12) throw new Error('급수는 12자 이내로 입력하세요.');
+    if (experience.length > 20) throw new Error('구력은 20자 이내로 입력하세요.');
+    const members = readMembers_();
+    const member = members.find(function(item) { return String(item.id) === memberId; });
+    if (!member) throw new Error('멤버를 찾을 수 없습니다.');
+    const duplicate = members.some(function(item) {
+      return String(item.id) !== memberId && String(item.name || '').trim() === name;
+    });
+    if (duplicate) throw new Error('같은 이름의 멤버가 이미 있습니다.');
+    member.name = name;
+    member.gender = gender;
+    member.grade = grade;
+    member.experience = experience;
+    writeMembers_(members);
+    if (typeof touch_ === 'function') touch_();
+    return getPublicState();
+  });
+}'''
+          c,replaced=replace_function(c,'updateMemberProfile',server_fn)
+          if not replaced:
+              anchor='function addMember('
+              pos=c.find(anchor)
+              if pos < 0:
+                  raise SystemExit('Code.js addMember anchor missing')
+              c=c[:pos]+server_fn+'\n\n'+c[pos:]
+          p.write_text(c,encoding='utf-8')
+          PY
+
+          # Hard checks before live deployment.
+          grep -F 'onclick="startMemberEdit()"' Admin.html >/dev/null
+          grep -F '>배정대기로</button>' Admin.html >/dev/null
+          grep -F '>삭제</button>' Admin.html >/dev/null
+          grep -F '>취소</button>' Admin.html >/dev/null
+          grep -F '>편집</button>' Admin.html >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_EDIT_STYLE_V2' Style.html >/dev/null
+          grep -F 'function saveMemberEdit()' Script.html >/dev/null
+          grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
+          grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
+          grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
+          grep -F 'index * 1700' Script.html >/dev/null
+          grep -F 'NativeApp.openPwaInChrome' Script.html >/dev/null
+          grep -F 'function updateMemberProfile(' Code.js >/dev/null
+
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member edit + vibration + Chrome PWA ${GITHUB_SHA::7}"
+
+          cp Admin.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Admin.html"
+          cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
+          cp Style.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Style.html"
+          cp Code.js "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js"
+
+      - name: Verify live admin and user modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          curl --fail --location -H 'Cache-Control: no-cache' "$MAIN_URL?mode=admin&verify=$BUST" -o "$RUNNER_TEMP/admin.html"
+          grep -F 'JAYUMINTON_MEMBER_EDIT_MODAL_V2' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '>배정대기로</button>' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '>편집</button>' "$RUNNER_TEMP/admin.html" >/dev/null
+          curl --fail --location -H 'Cache-Control: no-cache' "$MAIN_URL?mode=user&app=user&verify=$BUST" -o "$RUNNER_TEMP/user.html"
+          if grep -F 'JAYUMINTON_MEMBER_EDIT_MODAL_V2' "$RUNNER_TEMP/user.html" >/dev/null; then
+            echo 'Admin edit modal leaked into user mode'; exit 1
+          fi
+
+      - name: Sync verified MAIN snapshot
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- source-snapshot/current-main/Admin.html source-snapshot/current-main/Script.html source-snapshot/current-main/Style.html source-snapshot/current-main/Code.js; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source-snapshot/current-main/Admin.html source-snapshot/current-main/Script.html source-snapshot/current-main/Style.html source-snapshot/current-main/Code.js
+          git commit -m 'Sync working member edit and vibration settings'
+          git pull --rebase origin main || true
+          git push origin main
