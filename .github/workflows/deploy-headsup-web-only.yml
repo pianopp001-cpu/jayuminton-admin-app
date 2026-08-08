@@ -68,6 +68,7 @@ jobs:
           cp "$SRC/setup-v205.css" "$PUBLIC/setup-v205.css"
           cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
           cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
+          cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
 
           for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
             curl --fail --location --retry 5 --retry-delay 2 --max-time 90 "$BASE/$a?src=$GITHUB_RUN_ID" -o "$PUBLIC/$a"
@@ -88,6 +89,7 @@ jobs:
 
           node --check "$PUBLIC/setup-v205.js"
           node --check "$PUBLIC/firebase-messaging-sw.js"
+          node --check "$PUBLIC/alert-self-test.js"
           grep -F "const sets = String(type || '') === 'court_assignment' ? 5 : 3;" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
           grep -F 'return [650, 220, 650, 220, 650];' "$PUBLIC/firebase-messaging-sw.js" >/dev/null
           grep -F "requireInteraction: true" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
@@ -95,6 +97,9 @@ jobs:
           grep -F "silent: false" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
           grep -F "코트 입장 — 지금 이동하세요" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
           grep -F "대기1 진입 — 곧 경기입니다" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
+          grep -F 'alert-self-test.js?v=1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_PUSH_SETUP_REQUEST' "$PUBLIC/alert-self-test.js" >/dev/null
+          grep -F '자유민턴 알림 테스트' "$PUBLIC/alert-self-test.js" >/dev/null
           grep -F '<title>자유민턴 코트현황</title>' "$PUBLIC/index.html" >/dev/null
 
       - name: Deploy Hosting only
@@ -119,4 +124,9 @@ jobs:
           grep -F 'silent: false' "$RUNNER_TEMP/live-sw.js" >/dev/null
           grep -F '코트 입장 — 지금 이동하세요' "$RUNNER_TEMP/live-sw.js" >/dev/null
           grep -F '대기1 진입 — 곧 경기입니다' "$RUNNER_TEMP/live-sw.js" >/dev/null
-          echo 'Live web heads-up notification worker verified.'
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/alert-self-test.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-test.js"
+          node --check "$RUNNER_TEMP/live-test.js"
+          grep -F '자유민턴 알림 테스트' "$RUNNER_TEMP/live-test.js" >/dev/null
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-index.html"
+          grep -F 'alert-self-test.js?v=1' "$RUNNER_TEMP/live-index.html" >/dev/null
+          echo 'Live web heads-up worker and notification self-test verified.'
