@@ -1,5 +1,5 @@
-const JAYUMINTON_SW_VERSION = '1.6.37-pushfix-3x3-3x5-20260809';
-const JAYUMINTON_CACHE = 'jayuminton-shell-pushfix-3x3-3x5-20260809';
+const JAYUMINTON_SW_VERSION = '1.6.37-headsup-3x3-3x5-20260809';
+const JAYUMINTON_CACHE = 'jayuminton-shell-headsup-3x3-3x5-20260809';
 const JAYUMINTON_SHELL = [
   '/',
   '/index.html',
@@ -84,7 +84,7 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 function threePulseSet() {
-  // Web APIs do not expose vibration amplitude. Longer pulses are used for a stronger-feeling cue.
+  // Web APIs do not expose vibration amplitude. Longer pulses create the strongest cue we can request from Chrome.
   return [650, 220, 650, 220, 650];
 }
 
@@ -97,6 +97,12 @@ function joinedVibrationPattern(type) {
     pattern.push(...pulse);
   }
   return pattern;
+}
+
+function notificationTitle(type) {
+  return String(type || '') === 'court_assignment'
+    ? '🚨 코트 입장 — 지금 이동하세요'
+    : '🏸 대기1 진입 — 곧 경기입니다';
 }
 
 try {
@@ -117,22 +123,27 @@ try {
   messaging.onBackgroundMessage((payload) => {
     const data = payload && payload.data ? payload.data : {};
     const type = String(data.type || '');
-    const titleBase = data.title || '자유민턴 배정 알림';
-    const shownTitle = type === 'court_assignment'
-      ? '🚨 ' + titleBase
-      : '🏸 ' + titleBase;
+    const assignmentId = String(data.assignmentId || '');
+    const eventKey = data.notificationTag || assignmentId || ('jayuminton-' + type);
 
-    return self.registration.showNotification(shownTitle, {
-      body: data.body || '새 배정 안내가 있습니다.',
-      requireInteraction: type === 'court_assignment',
+    return self.registration.showNotification(notificationTitle(type), {
+      body: data.body || (type === 'court_assignment'
+        ? '코트에 배정되었습니다. 지금 코트로 이동해 주세요.'
+        : '대기1에 들어왔습니다. 곧 경기 순서입니다.'),
+      requireInteraction: true,
       silent: false,
       icon: '/icon-198.png',
       badge: '/badge-96.png',
-      tag: data.notificationTag || data.assignmentId || 'jayuminton-assignment',
+      tag: eventKey,
       renotify: true,
       vibrate: joinedVibrationPattern(type),
+      timestamp: Date.now(),
+      actions: [
+        { action: 'open', title: '코트현황 보기' }
+      ],
       data: {
-        assignmentId: data.assignmentId || ''
+        assignmentId,
+        type
       }
     });
   });
