@@ -7,28 +7,34 @@ test -s "$BASE"
 
 python3 - "$BASE" "$TEMP" <<'PY'
 from pathlib import Path
-import re
 import sys
 src = Path(sys.argv[1]).read_text(encoding='utf-8')
 
+# Keep the proven v199.7 pipeline and only alter its temporary build recipe.
 src = src.replace('199.7', '199.8').replace('1997', '1998')
 
-# TTS uses STREAM_ALARM. Keep music at level 6, but force the announcement
-# stream to the device maximum. Match the source defensively across whitespace.
-pattern = re.compile(
-    r'int maxAlarm\s*=\s*audioManager\.getStreamMaxVolume\(AudioManager\.STREAM_ALARM\);\s*'
-    r'int voiceStep\s*=\s*Math\.max\(1,\s*Math\.min\(VOICE_VOLUME_STEP,\s*maxAlarm\)\);\s*'
-    r'audioManager\.setStreamVolume\(AudioManager\.STREAM_ALARM,\s*voiceStep,\s*0\);'
-)
-src, n = pattern.subn(
-    'int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);\n'
-    '                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0);',
-    src,
-    count=1,
-)
-if n != 1:
-    raise SystemExit('alarm-volume patch target count=' + str(n))
+# The v199.7 recipe patches MainActivity during the build. Add the voice-volume
+# change inside that same Java-patching Python block: MUSIC=6, TTS/ALARM=MAX.
+needle = """text = text.replace(old, new, 1)
+java_path.write_text(text, encoding='utf-8')"""
+if needle not in src:
+    raise SystemExit('Java patch insertion point missing')
+injected = """text = text.replace(old, new, 1)
 
+alarm_old = '''                int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+                int voiceStep = Math.max(1, Math.min(VOICE_VOLUME_STEP, maxAlarm));
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, voiceStep, 0);'''
+alarm_new = '''                int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0);'''
+if alarm_old not in text:
+    raise SystemExit('MainActivity alarm-volume block missing')
+text = text.replace(alarm_old, alarm_new, 1)
+text = text.replace('    private static final int VOICE_VOLUME_STEP = 6;\\n', '')
+
+java_path.write_text(text, encoding='utf-8')"""
+src = src.replace(needle, injected, 1)
+
+# Update hard checks to prove the final Java source uses max alarm volume.
 src = src.replace(
     "grep -F 'private static final int VOICE_VOLUME_STEP = 6;' \"$JAVA_FILE\" >/dev/null\n",
     "",
@@ -43,6 +49,8 @@ src = src.replace(
     '# Music remains audible at level 6 while TTS/ALARM is forced to the device maximum.',
 )
 
+# Convert the original 128x152 artwork to a real square icon. Keep the dog and
+# racket, remove the tall title/outer area, and scale the dog crop to the tile.
 anchor = '''PYICON
 rm -f "$SOURCE_B64"'''
 if anchor not in src:
@@ -64,8 +72,6 @@ public final class CropDogIcon {
     if (source.getWidth() != 128 || source.getHeight() != 152)
       throw new RuntimeException("unexpected source launcher size");
 
-    // Keep the original dog/racket artwork, remove the tall title/outer area,
-    // and make the dog fill the actual square launcher tile.
     BufferedImage crop = source.getSubimage(16, 56, 96, 96);
     BufferedImage square = new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB);
     Graphics2D g = square.createGraphics();
@@ -84,8 +90,7 @@ java -cp "$RUNNER_TEMP" CropDogIcon "$TARGET_ICON"
 python3 - "$TARGET_ICON" <<'PYICONCHECK'
 from pathlib import Path
 import struct, sys
-p = Path(sys.argv[1])
-data = p.read_bytes()
+data = Path(sys.argv[1]).read_bytes()
 if data[:8] != b'\x89PNG\r\n\x1a\n': raise SystemExit('cropped launcher is not PNG')
 w, h = struct.unpack('>II', data[16:24])
 if (w, h) != (128, 128): raise SystemExit(f'cropped launcher must be 128x128, got {w}x{h}')
@@ -95,6 +100,7 @@ PYICONCHECK
 rm -f "$SOURCE_B64"'''
 src = src.replace(anchor, icon_transform, 1)
 
+# Record exactly what was verified in the final APK.
 src = src.replace(
     'media_duck_volume_step=6\nmedia_restore=original-value',
     'media_duck_volume_step=6\nvoice_stream=alarm-max\nmedia_restore=original-value',
