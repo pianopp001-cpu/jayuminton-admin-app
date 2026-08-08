@@ -53,6 +53,17 @@ jobs:
             echo "BUILD_ROOT=$RUNNER_TEMP/v1637-final8"
           } >> "$GITHUB_ENV"
 
+          echo "=== Deployment ID sanity check ==="
+          echo "This workflow will push to deployment ID:"
+          jq -r '.mainDeploymentId' "$CONFIG"
+          echo "The admin APK (MainActivity.java) is hardcoded to load deployment ID:"
+          echo "AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q"
+          if [ "$(jq -r '.mainDeploymentId' "$CONFIG")" != "AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q" ]; then
+            echo "MISMATCH: this workflow is deploying to a DIFFERENT deployment ID than the admin APK loads. That is almost certainly why admin-side changes never show up."
+          else
+            echo "MATCH: same deployment ID - the admin APK should see this push."
+          fi
+
       - name: Fix MAIN behavior and remove visible debug text
         shell: bash
         run: |
