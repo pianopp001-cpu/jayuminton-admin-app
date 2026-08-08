@@ -1,6 +1,5 @@
 safe_error_extract=v2
 Only error-oriented build lines are retained; full environment/log is not committed.
-Verified build wrapper: pinned icon is validated, optimized APK icon path is resolved from aapt badging, and packaged pixels are compared.
 Pinned launcher base64 validated: 128x152, 3508 bytes, sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e, 4 chunks, ignored_non_base64=0
 Pinned launcher icon: 128x152, 3508 bytes
 Packaged launcher icon path: res/9T.png
