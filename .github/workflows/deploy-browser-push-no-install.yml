@@ -1,0 +1,128 @@
+name: Deploy browser push without app install
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy-triggers/browser-push-no-install.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-browser-push-no-install
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve deployment endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          jq -e '.firebaseProjectId and .hostingUrl and .mainDeploymentId and .pushDeploymentId' "$CONFIG" >/dev/null
+          {
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
+          } >> "$GITHUB_ENV"
+
+      - name: Build Hosting-only release
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
+          ROOT="$RUNNER_TEMP/browser-push-hosting"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+
+          cp "$SRC/index.html" "$PUBLIC/index.html"
+          cp "$SRC/setup-v205.css" "$PUBLIC/setup-v205.css"
+          cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
+          cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
+          cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
+
+          BASE="${HOSTING_URL%/}"
+          for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 5 "$BASE/$asset?source=$GITHUB_RUN_ID" -o "$PUBLIC/$asset"
+          done
+
+          cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup-v205.js.gz"
+          gzip -dc "$RUNNER_TEMP/setup-v205.js.gz" > "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_push_setup_verification.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_embedded_browser_push.py "$PUBLIC/setup-v205.js"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          public = Path(os.environ['RUNNER_TEMP']) / 'browser-push-hosting' / 'public'
+          template = Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          config = template.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
+          for name in ('config-v202.js', 'config-v203.js', 'config-v204.js'):
+              (public / name).write_text(config, encoding='utf-8')
+          index_path = public / 'index.html'
+          index = index_path.read_text(encoding='utf-8')
+          index = index.replace('/setup-v205.js?v=1637', '/setup-v205.js?v=push-no-install-20260809')
+          index = index.replace('/config-v204.js?v=1637', '/config-v204.js?v=push-no-install-20260809')
+          index_path.write_text(index, encoding='utf-8')
+          PY
+
+          node --check "$PUBLIC/setup-v205.js"
+          node --check "$PUBLIC/firebase-messaging-sw.js"
+          grep -F 'JAYUMINTON_EMBEDDED_PUSH_TO_CHROME_V1' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F "target.searchParams.set('pushSetup', '1');" "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'package=com.android.chrome' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F '앱 설치는 필요 없습니다.' "$PUBLIC/setup-v205.js" >/dev/null
+
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {
+            "hosting": {
+              "public": "public",
+              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+              "headers": [
+                {"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},
+                {"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},
+                {"source":"/firebase-messaging-sw.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]}
+              ],
+              "rewrites": [{"source":"**","destination":"/index.html"}]
+            }
+          }
+          JSON
+
+      - name: Deploy Firebase Hosting only
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/browser-push-hosting/firebase.json" --non-interactive
+
+      - name: Verify live release
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          BASE="${HOSTING_URL%/}"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-setup.js"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-sw.js"
+          node --check "$RUNNER_TEMP/live-setup.js"
+          node --check "$RUNNER_TEMP/live-sw.js"
+          grep -F 'JAYUMINTON_EMBEDDED_PUSH_TO_CHROME_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'package=com.android.chrome' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F "JAYUMINTON_SW_VERSION = '1.6.37-headsup-3x3-3x5-20260809'" "$RUNNER_TEMP/live-sw.js" >/dev/null
