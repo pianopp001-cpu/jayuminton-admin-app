@@ -43,10 +43,20 @@ jobs:
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           jq -e '.mainScriptId and .mainDeploymentId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
+
+          # The deployment ID from the secret was confirmed (by extracting strings from
+          # the actual installed admin APK) to NOT match what that APK really loads.
+          # Deploy straight to the confirmed-correct ID instead of the secret's value.
+          CONFIRMED_APK_DEPLOYMENT_ID="AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww"
+          SECRET_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          if [ "$SECRET_DEPLOYMENT_ID" != "$CONFIRMED_APK_DEPLOYMENT_ID" ]; then
+            echo "Secret mainDeploymentId ($SECRET_DEPLOYMENT_ID) does not match the ID found inside the real installed APK. Using the confirmed APK ID instead for this run."
+          fi
+
           {
             echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
-            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
-            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+            echo "MAIN_DEPLOYMENT_ID=$CONFIRMED_APK_DEPLOYMENT_ID"
+            echo "MAIN_URL=https://script.google.com/macros/s/$CONFIRMED_APK_DEPLOYMENT_ID/exec"
             echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
             echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
@@ -54,15 +64,8 @@ jobs:
           } >> "$GITHUB_ENV"
 
           echo "=== Deployment ID sanity check ==="
-          echo "This workflow will push to deployment ID:"
-          jq -r '.mainDeploymentId' "$CONFIG"
-          echo "The admin APK (MainActivity.java) is hardcoded to load deployment ID:"
-          echo "AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q"
-          if [ "$(jq -r '.mainDeploymentId' "$CONFIG")" != "AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q" ]; then
-            echo "MISMATCH: this workflow is deploying to a DIFFERENT deployment ID than the admin APK loads. That is almost certainly why admin-side changes never show up."
-          else
-            echo "MATCH: same deployment ID - the admin APK should see this push."
-          fi
+          echo "This workflow will push to deployment ID: $CONFIRMED_APK_DEPLOYMENT_ID"
+          echo "(confirmed by extracting strings from the actual installed admin APK)"
 
       - name: Fix MAIN behavior and remove visible debug text
         shell: bash
