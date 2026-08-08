@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 
 MARKER = "JAYUMINTON_PUSH_SERVER_VERIFY_V1"
+INSTALL_MARKER = "JAYUMINTON_NATIVE_PWA_ONLY_V1"
 
 
 def function_bounds(source: str, name: str):
@@ -49,58 +50,159 @@ def replace_js_function(source: str, name: str, replacement: str) -> str:
     return source[:start] + replacement + source[end:]
 
 
-def print_legacy_context(source: str) -> None:
-    print("=== LEGACY INSTALL CONTEXT BEGIN ===", file=sys.stderr)
-    for name in (
-        "buildAndroidChromeIntent",
-        "launchChromeFromFirebaseTop",
-        "handleEmbeddedChromeLinkClick",
-        "handleAppInstallButton",
-        "runNativeInstallPrompt",
-    ):
-        bounds = function_bounds(source, name)
-        if bounds:
-            start, end = bounds
-            print(f"--- function {name} ---", file=sys.stderr)
-            print(source[start:end], file=sys.stderr)
-
-    for needle in (
-        "intent://",
-        "appInstallChromeLink.href",
-        "beforeinstallprompt",
-        "promptEvent.prompt()",
-        "promptResult = promptEvent.prompt()",
-    ):
-        offset = 0
-        hit = 0
-        while True:
-            pos = source.find(needle, offset)
-            if pos < 0:
-                break
-            hit += 1
-            left = max(0, pos - 500)
-            right = min(len(source), pos + len(needle) + 700)
-            print(f"--- {needle} hit {hit} ---", file=sys.stderr)
-            print(source[left:right], file=sys.stderr)
-            offset = pos + len(needle)
-    print("=== LEGACY INSTALL CONTEXT END ===", file=sys.stderr)
+def replace_exact_once(source: str, old: str, new: str, label: str) -> str:
+    if old in source:
+        return source.replace(old, new, 1)
+    if new in source:
+        return source
+    raise RuntimeError(f"{label} changed unexpectedly")
 
 
 def assert_no_legacy_handoffs(source: str) -> None:
     forbidden = {
         "intent://": "Android intent handoff",
+        "S.browser_fallback_url": "Android browser fallback resolver",
         "drive.google": "Google Drive handoff",
         "docs.google.com": "Google Docs/Drive handoff",
+        "appInstallChromeLink.href = links.intentUrl": "transparent intent link",
+        "window.location.href = links.intentUrl": "JavaScript intent navigation",
     }
     found = [label for token, label in forbidden.items() if token in source]
     if found:
-        print_legacy_context(source)
         raise RuntimeError("legacy external handoff remains: " + ", ".join(found))
+
+
+def patch_native_pwa_only(source: str) -> str:
+    # Chrome itself must retain the browser-native beforeinstallprompt path.
+    required_native_markers = (
+        "window.addEventListener('beforeinstallprompt', captureAndroidInstallPrompt);",
+        "promptResult = promptEvent.prompt();",
+    )
+    missing_native = [marker for marker in required_native_markers if marker not in source]
+    if missing_native:
+        raise RuntimeError("native PWA prompt baseline missing: " + repr(missing_native))
+
+    source = replace_js_function(
+        source,
+        "buildAndroidChromeIntent",
+        f"""/* {INSTALL_MARKER} */
+function buildAndroidChromeIntent() {{
+  const target = buildChromeUserTarget();
+  const targetUrl = target.toString();
+  // Kept as a compatibility-shaped object only. No Android intent/external resolver is used.
+  return {{ targetUrl, intentUrl: targetUrl }};
+}}""",
+    )
+
+    source = replace_js_function(
+        source,
+        "launchChromeFromFirebaseTop",
+        """function launchChromeFromFirebaseTop() {
+  const targetUrl = buildChromeUserTarget().toString();
+  const detail = 'Chrome 앱에서 아래 주소를 열어 주세요: ' + targetUrl;
+  setInstallMessage(detail, 'success');
+  sendAppInstallStatus(detail);
+  showToast('Chrome에서 링크를 열어 주세요.');
+  return targetUrl;
+}""",
+    )
+
+    source = replace_js_function(
+        source,
+        "handleEmbeddedChromeLinkClick",
+        """function handleEmbeddedChromeLinkClick(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const targetUrl = buildChromeUserTarget().toString();
+  const detail = 'Chrome 앱에서 아래 주소를 열어 주세요: ' + targetUrl;
+  setInstallMessage(detail, 'success');
+  sendAppInstallStatus(detail);
+  showToast('Chrome에서 링크를 열어 주세요.');
+}""",
+    )
+
+    # In Kakao/Daangn/etc. never create an invisible top-level intent/URL overlay.
+    old_overlay = """if (androidDevice && embeddedBrowser) {
+      const links = buildAndroidChromeIntent();
+      appInstallChromeLink.href = links.intentUrl;
+      appInstallChromeLink.style.left = left;
+      appInstallChromeLink.style.top = top;
+      appInstallChromeLink.style.width = width;
+      appInstallChromeLink.style.height = height;
+      appInstallChromeLink.hidden = false;
+      appInstallClickProxy.hidden = true;
+      if (nativeInstallControl) nativeInstallControl.hidden = true;
+      return;
+    }"""
+    new_overlay = """if (androidDevice && embeddedBrowser) {
+      appInstallChromeLink.removeAttribute('href');
+      appInstallChromeLink.hidden = true;
+      appInstallClickProxy.hidden = true;
+      if (nativeInstallControl) nativeInstallControl.hidden = true;
+      return;
+    }"""
+    source = replace_exact_once(source, old_overlay, new_overlay, "embedded install overlay")
+
+    old_touch = """appInstallChromeLink.addEventListener('touchstart', () => {
+    if (androidDevice && embeddedBrowser) appInstallChromeLink.href = buildAndroidChromeIntent().intentUrl;
+  }, {passive:true});"""
+    new_touch = """appInstallChromeLink.addEventListener('touchstart', () => {
+    if (androidDevice && embeddedBrowser) appInstallChromeLink.removeAttribute('href');
+  }, {passive:true});"""
+    source = replace_exact_once(source, old_touch, new_touch, "embedded install touch handler")
+
+    # Replace only the embedded-Android branch of the visible install button.
+    bounds = function_bounds(source, "handleAppInstallButton")
+    if not bounds:
+        raise RuntimeError("handleAppInstallButton missing")
+    start, end = bounds
+    block = source[start:end]
+    old_branch = """if (androidDevice && embeddedBrowser) {
+      const detail = 'Chrome에서 설치 화면을 준비합니다.';
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus(detail);
+      showToast('Chrome으로 이동합니다.');
+      openInAndroidChrome();
+      return;
+    }"""
+    new_branch = """if (androidDevice && embeddedBrowser) {
+      const targetUrl = buildChromeUserTarget().toString();
+      const detail = 'Chrome 앱에서 아래 주소를 열어 주세요: ' + targetUrl;
+      setInstallMessage(detail, 'success');
+      sendAppInstallStatus(detail);
+      showToast('Chrome에서 링크를 열어 주세요.');
+      return;
+    }"""
+    if old_branch in block:
+        block = block.replace(old_branch, new_branch, 1)
+    elif new_branch not in block:
+        raise RuntimeError("embedded Android install button branch changed unexpectedly")
+    source = source[:start] + block + source[end:]
+
+    # Remove stale intent-specific comments so future searches cannot mistake them for active design.
+    source = source.replace(
+        "// v1.6.37: embedded browsers use a real top-level intent link; Chrome uses the native beforeinstallprompt event without reload loops.",
+        "// Embedded browsers never invoke external resolvers; real Chrome uses the native beforeinstallprompt event without reload loops.",
+    )
+    source = source.replace(
+        "// Kakao/Daangn WebView must receive a real top-level <a href=\"intent://...\">\n    // generated from the user's direct tap. JavaScript location changes can be blocked\n    // or converted into a refresh by the host app.",
+        "// Embedded Android browsers do not receive a transparent external-app handoff overlay.",
+    )
+
+    assert_no_legacy_handoffs(source)
+    for marker in required_native_markers:
+        if marker not in source:
+            raise RuntimeError("native PWA prompt was lost after patch: " + marker)
+    if INSTALL_MARKER not in source:
+        raise RuntimeError("native-PWA-only install marker missing")
+    return source
 
 
 def main(js_path: Path) -> None:
     source = js_path.read_text(encoding="utf-8")
-    assert_no_legacy_handoffs(source)
+    source = patch_native_pwa_only(source)
 
     submit_replacement = f"""/* {MARKER} */
 async function jayumintonPushTokenHash(value) {{
@@ -229,10 +331,14 @@ async function submitRelay(action, token) {{
         raise RuntimeError("pushConnected bootstrap expression changed unexpectedly")
 
     assert_no_legacy_handoffs(source)
+    if "promptResult = promptEvent.prompt();" not in source:
+        raise RuntimeError("native Chrome PWA prompt missing after push patch")
     js_path.write_text(source, encoding="utf-8")
 
     final = js_path.read_text(encoding="utf-8")
     required = [
+        INSTALL_MARKER,
+        "promptResult = promptEvent.prompt();",
         MARKER,
         "async function verifyRelayToken(memberId, token)",
         "action:'token_status'",
@@ -242,9 +348,9 @@ async function submitRelay(action, token) {{
     ]
     missing = [item for item in required if item not in final]
     if missing:
-        raise RuntimeError("push verification checks missing: " + repr(missing))
+        raise RuntimeError("final checks missing: " + repr(missing))
 
-    print("Push token server-verification patch validated")
+    print("Native-PWA-only install and push server-verification patch validated")
 
 
 if __name__ == "__main__":
