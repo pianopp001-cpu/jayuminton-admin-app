@@ -1,0 +1,24 @@
+name: Force member edit deployment
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy-triggers/member-edit.txt'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch member edit deployment workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run apply-member-edit-vibration.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "Dispatched apply-member-edit-vibration.yml"
