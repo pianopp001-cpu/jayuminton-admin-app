@@ -8,13 +8,13 @@ s = p.read_text(encoding='utf-8')
 
 s = re.sub(
     r"const MEMBER_USER_APK_URL\s*=\s*\n\s*'[^']+';",
-    "const MEMBER_USER_APK_URL =\n  'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk';",
+    "const MEMBER_USER_APK_URL =\n  'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.1-fresh-install.apk';",
     s,
     count=1,
 )
 s = re.sub(
-    r"/JayumintonUserNative\\/1\\\.0\\\.0/i",
-    r"/JayumintonUserNative\\/1\\\.1\\\.0/i",
+    r"/JayumintonUserNative\\/1\\\.[0-9]+\\\.[0-9]+/i",
+    r"/JayumintonUserNative\\/1\\\.1\\\.1/i",
     s,
     count=1,
 )
@@ -119,7 +119,7 @@ syncNativeUserPushBridge = function() {
     s = s[:insert] + reliable_bridge + s[insert:]
 
 checks = [
-    'jayuminton-courtstatus-v1.1.0-fresh-install.apk',
+    'jayuminton-courtstatus-v1.1.1-fresh-install.apk',
     marker,
     'window.NativeUserApp.setMember',
     'window.NativeUserApp.clearMember',
@@ -133,4 +133,4 @@ for check in checks:
         raise SystemExit('native user push bridge verification failed: ' + check)
 
 p.write_text(s, encoding='utf-8')
-print('Patched user page for fresh-install native push APK v1.1.0 without changing CSS/design.')
+print('Patched user page for fresh-install native push APK v1.1.1 without changing CSS/design.')
