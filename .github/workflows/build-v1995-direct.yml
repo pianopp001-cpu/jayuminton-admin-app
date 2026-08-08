@@ -22,13 +22,16 @@ jobs:
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       APK_OUTPUT: releases/jayuminton-v199.6-final-fresh-install.apk
-      OLD_APK: releases/jayuminton-v199.3-reinstall.apk
+      DOG_ICON_SHA256: c64778554936a98100ef4a277a007bd4d619e75f22804a8b86deaae86a4af4ed
+      DOG_APK_COMMIT: 8abae213e5e0154c67c6f404f366808a999048e9
+      DOG_APK_PATH: releases/jayuminton-v199.4.apk
 
     steps:
-      - name: Checkout current main
+      - name: Checkout full repository history
         uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -39,11 +42,10 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install exact Android build tools
+      - name: Install Android 35 build tools
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
           test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
           test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
@@ -53,89 +55,31 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Restore exact dog launcher art from working v199.3 APK
+      - name: Restore verified original dog icon from successful v199.4 APK
         shell: bash
         run: |
           set -euo pipefail
-          test -s "$OLD_APK"
-          unzip -t "$OLD_APK" >/dev/null
-          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
-          "$AAPT" dump badging "$OLD_APK" > "$RUNNER_TEMP/v1993-badging.txt"
-          grep -E '^application(-icon-[0-9]+)?:' "$RUNNER_TEMP/v1993-badging.txt" || true
+          HIST_APK="$RUNNER_TEMP/jayuminton-v199.4.apk"
+          ICON="$RUNNER_TEMP/original-dog-icon.png"
+          git cat-file -e "$DOG_APK_COMMIT:$DOG_APK_PATH"
+          git show "$DOG_APK_COMMIT:$DOG_APK_PATH" > "$HIST_APK"
+          test -s "$HIST_APK"
+          unzip -t "$HIST_APK" >/dev/null
+          unzip -p "$HIST_APK" res/drawable/icon.png > "$ICON"
+          test -s "$ICON"
+          ACTUAL=$(sha256sum "$ICON" | awk '{print $1}')
+          echo "historical dog icon sha256=$ACTUAL"
+          test "$ACTUAL" = "$DOG_ICON_SHA256"
+          file "$ICON"
 
-          python3 -m pip install --quiet pillow
-          python3 - <<'PY'
-          from pathlib import Path
-          from io import BytesIO
-          from PIL import Image
-          import os, re, zipfile, hashlib
-
-          apk = Path(os.environ['OLD_APK'])
-          badging = Path(os.environ['RUNNER_TEMP']) / 'v1993-badging.txt'
-          text = badging.read_text(encoding='utf-8', errors='ignore')
-
-          preferred = []
-          for m in re.finditer(r"application-icon-[0-9]+:'([^']+)'", text):
-              preferred.append(m.group(1))
-          m = re.search(r"application:.*? icon='([^']+)'", text)
-          if m:
-              preferred.append(m.group(1))
-
-          with zipfile.ZipFile(apk, 'r') as z:
-              names = z.namelist()
-              extra = [n for n in names if re.search(r'^res/(?:mipmap|drawable)[^/]*/[^/]*(?:icon|launcher)[^/]*\.(?:png|webp)$', n, re.I)]
-              all_rasters = [n for n in names if re.search(r'^res/(?:mipmap|drawable)[^/]*/[^/]+\.(?:png|webp)$', n, re.I)]
-
-              candidates = []
-              for n in preferred + extra + all_rasters:
-                  if n not in candidates:
-                      candidates.append(n)
-
-              valid = []
-              for order, name in enumerate(candidates):
-                  if name not in names:
-                      continue
-                  try:
-                      data = z.read(name)
-                      im = Image.open(BytesIO(data))
-                      im.load()
-                      w, h = im.size
-                      if w < 48 or h < 48:
-                          continue
-                      is_preferred = name in preferred
-                      looks_icon = bool(re.search(r'(icon|launcher)', name, re.I))
-                      score = (2 if is_preferred else 0, 1 if looks_icon else 0, w * h, -order)
-                      valid.append((score, name, im.convert('RGBA')))
-                  except Exception:
-                      continue
-
-          if not valid:
-              raise SystemExit('No valid raster launcher icon could be extracted from v199.3 APK')
-
-          valid.sort(key=lambda item: item[0], reverse=True)
-          score, chosen, image = valid[0]
-          print('chosen old APK launcher icon:', chosen)
-          print('chosen icon size:', image.size)
-
-          # Preserve the artwork/pixels from the known-working APK while writing
-          # a conventional PNG that current AAPT2 accepts.
-          out = Path('app/src/main/res/drawable/icon.png')
-          out.parent.mkdir(parents=True, exist_ok=True)
-          image.save(out, format='PNG', optimize=False, compress_level=6)
-          clean = out.read_bytes()
-          print('normalized launcher sha256:', hashlib.sha256(clean).hexdigest())
-
-          # Record provenance so the build result proves which old APK resource was used.
-          Path('deployment/status/v1996-dog-icon-source.txt').write_text(
-              'source_apk=releases/jayuminton-v199.3-reinstall.apk\n'
-              'source_resource=' + chosen + '\n'
-              'source_dimensions=%dx%d\n' % image.size +
-              'normalized_sha256=' + hashlib.sha256(clean).hexdigest() + '\n',
-              encoding='utf-8')
-          PY
-
-          test -s app/src/main/res/drawable/icon.png
-          file app/src/main/res/drawable/icon.png
+          mkdir -p app/src/main/res/drawable deployment/status
+          cp "$ICON" app/src/main/res/drawable/icon.png
+          {
+            echo "source_commit=$DOG_APK_COMMIT"
+            echo "source_apk=$DOG_APK_PATH"
+            echo 'source_resource=res/drawable/icon.png'
+            echo "sha256=$ACTUAL"
+          } > deployment/status/v1996-dog-icon-source.txt
 
       - name: Prepare v199.6 against current live admin deployment
         shell: bash
@@ -231,7 +175,7 @@ jobs:
       - name: Build signed release APK
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Verify signed APK package version signature and launcher artwork
+      - name: Verify signed APK package version signature and exact dog icon
         shell: bash
         run: |
           set -euo pipefail
@@ -245,27 +189,11 @@ jobs:
           grep -F "package: name='com.jayuminton.admin'" "$RUNNER_TEMP/new-badging.txt"
           grep -F "versionCode='1996'" "$RUNNER_TEMP/new-badging.txt"
           grep -F "versionName='199.6'" "$RUNNER_TEMP/new-badging.txt"
-
-          NEW_ICON=$(sed -n "s/^application-icon-[0-9]*:'\([^']*\)'.*/\1/p" "$RUNNER_TEMP/new-badging.txt" | tail -1)
-          if [ -z "$NEW_ICON" ]; then
-            NEW_ICON=$(sed -n "s/^application:.* icon='\([^']*\)'.*/\1/p" "$RUNNER_TEMP/new-badging.txt" | head -1)
-          fi
-          test -n "$NEW_ICON"
-          unzip -p "$APK" "$NEW_ICON" > "$RUNNER_TEMP/new-launcher"
-          test -s "$RUNNER_TEMP/new-launcher"
-
-          python3 - <<'PY'
-          from PIL import Image, ImageChops
-          from pathlib import Path
-          import os
-          src = Image.open('app/src/main/res/drawable/icon.png').convert('RGBA')
-          packaged = Image.open(Path(os.environ['RUNNER_TEMP']) / 'new-launcher').convert('RGBA')
-          if src.size != packaged.size:
-              raise SystemExit('packaged launcher dimensions differ')
-          if ImageChops.difference(src, packaged).getbbox() is not None:
-              raise SystemExit('packaged launcher pixels differ from extracted dog artwork')
-          print('packaged launcher pixels verified:', packaged.size)
-          PY
+          unzip -p "$APK" res/drawable/icon.png > "$RUNNER_TEMP/final-dog-icon.png"
+          test -s "$RUNNER_TEMP/final-dog-icon.png"
+          FINAL_SHA=$(sha256sum "$RUNNER_TEMP/final-dog-icon.png" | awk '{print $1}')
+          echo "final packaged dog icon sha256=$FINAL_SHA"
+          test "$FINAL_SHA" = "$DOG_ICON_SHA256"
           ls -lh "$APK"
 
       - name: Publish verified fresh-install APK
@@ -305,7 +233,8 @@ jobs:
             echo 'version=199.6'
             echo 'package=com.jayuminton.admin'
             echo 'output=releases/jayuminton-v199.6-final-fresh-install.apk'
-            echo 'dog_art=extracted-from-working-v199.3-apk'
+            echo 'dog_icon_sha256=c64778554936a98100ef4a277a007bd4d619e75f22804a8b86deaae86a4af4ed'
+            echo 'dog_art=exact-resource-from-verified-v199.4-apk'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
           } > deployment/status/v1996-final-apk.txt
           git config user.name 'github-actions[bot]'
