@@ -1,13 +1,17 @@
-name: Build verified Jayuminton v199.6 through registered workflow
+name: Build verified Jayuminton v199.7
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/trigger-member-install-hotfix.yml'
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-v1996-registered-build
+  group: jayuminton-v1997-verified-build
   cancel-in-progress: false
 
 jobs:
@@ -18,6 +22,7 @@ jobs:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout current main
         uses: actions/checkout@v4
@@ -34,54 +39,49 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -d "$ANDROID_HOME"
           test -d "$ANDROID_HOME/platform-tools"
           test -d "$ANDROID_HOME/platforms/android-35"
           test -n "$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | head -1)"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo 'Installed Android 35 platform:'
-          ls -ld "$ANDROID_HOME/platforms/android-35"
-          echo 'Installed build-tools:'
-          find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n 8
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Build and verify v199.6
+      - name: Build and verify v199.7
         id: build_apk
         shell: bash
         run: |
           set +e
-          LOG="$RUNNER_TEMP/v1996-build.log"
-          bash deployment/scripts/run_verified_v1996_fixed.sh 2>&1 | tee "$LOG"
+          LOG="$RUNNER_TEMP/v1997-build.log"
+          bash deployment/scripts/run_verified_v1997.sh 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
           exit "$RC"
 
-      - name: Upload verified APK
+      - name: Upload verified v199.7 APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-v199.6-verified
-          path: releases/jayuminton-v199.6-verified.apk
+          name: jayuminton-v199.7-verified
+          path: releases/jayuminton-v199.7-verified.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Record build result diagnostics and verified APK
+      - name: Record v199.7 result
         if: always()
         shell: bash
         run: |
           set -u
           mkdir -p deployment/status
-          STATUS=deployment/status/registered-v1996-build.txt
-          DIAG=deployment/status/registered-v1996-diagnostic.txt
-          APK=releases/jayuminton-v199.6-verified.apk
-          LOG="$RUNNER_TEMP/v1996-build.log"
+          STATUS=deployment/status/registered-v1997-build.txt
+          DIAG=deployment/status/registered-v1997-diagnostic.txt
+          DETAIL=deployment/status/apk-v1997.txt
+          APK=releases/jayuminton-v199.7-verified.apk
+          LOG="$RUNNER_TEMP/v1997-build.log"
 
           {
-            echo 'workflow=Build verified Jayuminton v199.6 through registered workflow'
+            echo 'workflow=Build verified Jayuminton v199.7'
             echo 'run_id=${{ github.run_id }}'
             echo 'status=${{ job.status }}'
             echo 'build_step=${{ steps.build_apk.outcome }}'
@@ -93,7 +93,7 @@ jobs:
             else
               echo 'apk_exists=no'
             fi
-            if [ -s deployment/status/apk-v1996.txt ]; then
+            if [ -s "$DETAIL" ]; then
               echo 'detailed_verification_status=present'
             else
               echo 'detailed_verification_status=absent'
@@ -102,11 +102,10 @@ jobs:
           } > "$STATUS"
 
           {
-            echo 'safe_error_extract=v2'
-            echo 'Only error-oriented build lines are retained; full environment/log is not committed.'
+            echo 'safe_error_extract=v1'
             if [ -s "$LOG" ]; then
-              grep -Ei '(^|[[:space:]])(FAILURE:|BUILD FAILED|Execution failed|What went wrong|ERROR:|error:|Could not|No such file|not found|FAILED$|ResourceCompilation|mergeReleaseResources|compileRelease|AAPT|Exception|launcher icon|Pinned launcher|stale admin|ADMIN_URL replacement|base64)' "$LOG" \
-                | tail -n 140 \
+              grep -Ei '(FAILURE:|BUILD FAILED|Execution failed|ERROR:|error:|not found|missing|mismatch|stale|WebStorage|launcher|Pinned|session|volume|ADMIN_URL)' "$LOG" \
+                | tail -n 120 \
                 | sed -E 's/(storePassword|keyPassword)[^[:space:]]*/\1=[REDACTED]/g' \
                 || true
             else
@@ -117,12 +116,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$STATUS" "$DIAG"
-          if [ -s "$APK" ]; then
-            git add "$APK"
-          fi
-          if [ -s deployment/status/apk-v1996.txt ]; then
-            git add deployment/status/apk-v1996.txt
-          fi
-          git commit -m 'Record registered v199.6 build diagnostics: ${{ job.status }}' || exit 0
-          git pull --rebase origin main || true
+          [ -s "$DETAIL" ] && git add "$DETAIL" || true
+          [ -s "$APK" ] && git add "$APK" || true
+          git commit -m 'Record verified v199.7 APK build: ${{ job.status }}' || exit 0
           git push origin main
