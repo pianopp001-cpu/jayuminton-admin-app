@@ -1,3 +1,2 @@
-trigger=2026-08-08T11:19:00+09:00
-reason=apply existing-member edit fix
-commit=89c37cb44f57d2a3efee043d8fd8bdbd70b4f999
+trigger=2026-08-08T19:58:00+09:00
+reason=dispatch verified v199.6 APK build through known registered workflow
