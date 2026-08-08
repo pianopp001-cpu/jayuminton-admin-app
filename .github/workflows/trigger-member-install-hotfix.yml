@@ -47,7 +47,6 @@ jobs:
           jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
           echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
-          echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec" >> "$GITHUB_ENV"
 
       - name: Pull, patch and validate live MAIN
         shell: bash
@@ -85,27 +84,31 @@ jobs:
           cp Style.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Style.html"
           cp Code.js "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js"
 
-      - name: Verify live admin and user pages
+      - name: Verify Apps Script project after deployment
         shell: bash
         run: |
           set -euo pipefail
-          sleep 8
-          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          curl --fail --location --retry 3 --max-time 90 -H 'Cache-Control: no-cache' \
-            "$MAIN_URL?mode=admin&verify=$BUST" -o "$RUNNER_TEMP/admin-live.html"
-          grep -F 'id="memberEditModal"' "$RUNNER_TEMP/admin-live.html" >/dev/null
-          grep -F 'onclick="applyMemberEdit()">수정</button>' "$RUNNER_TEMP/admin-live.html" >/dev/null
-          if grep -F '수정 저장' "$RUNNER_TEMP/admin-live.html" >/dev/null; then
-            echo 'Live admin still contains old edit/save wording'
-            exit 1
-          fi
+          VERIFY="$RUNNER_TEMP/verify-main"
+          rm -rf "$VERIFY"
+          mkdir -p "$VERIFY"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
+          cd "$VERIFY"
+          clasp pull
 
-          curl --fail --location --retry 3 --max-time 90 -H 'Cache-Control: no-cache' \
-            "$MAIN_URL?mode=user&app=user&verify=$BUST" -o "$RUNNER_TEMP/user-live.html"
-          if grep -F 'id="memberEditModal"' "$RUNNER_TEMP/user-live.html" >/dev/null; then
-            echo 'Admin edit modal leaked into user mode'
+          grep -F 'id="memberEditModal"' Admin.html >/dev/null
+          grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
+          if grep -F '수정 저장' Admin.html >/dev/null; then
+            echo 'Deployed project still contains old edit/save wording'
             exit 1
           fi
+          grep -F "server('updateMemberProfile'" Script.html >/dev/null
+          grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
+          grep -F 'members[index].name = name;' Code.js >/dev/null
+          if grep -F 'id="memberEditModal"' Index.html >/dev/null; then
+            echo 'Admin edit modal leaked into user template'
+            exit 1
+          fi
+          echo 'Apps Script project verification passed.'
 
       - name: Record deployment result
         if: always()
@@ -119,6 +122,7 @@ jobs:
             echo 'status=${{ job.status }}'
             echo 'head_sha=${{ github.sha }}'
             echo 'mode=existing-member-overwrite-only'
+            echo 'verification=apps-script-project-pull'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
           } > deployment/status/member-edit-live.txt
 
@@ -130,6 +134,11 @@ jobs:
                     source-snapshot/current-main/Script.html \
                     source-snapshot/current-main/Style.html \
                     source-snapshot/current-main/Code.js || true
+          else
+            git restore source-snapshot/current-main/Admin.html \
+                        source-snapshot/current-main/Script.html \
+                        source-snapshot/current-main/Style.html \
+                        source-snapshot/current-main/Code.js 2>/dev/null || true
           fi
           git commit -m 'Record existing-member edit deployment: ${{ job.status }}' || exit 0
           git pull --rebase origin main || true
