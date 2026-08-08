@@ -1,3 +1,4 @@
-trigger=2026-08-09T01:09:00+09:00
-reason=remove-stray-apps-script-check-file
+trigger=2026-08-09T01:13:00+09:00
+reason=neutralize-stray-apps-script-check-file
 expected=public-user-url-opens-without-window-referenceerror
+attempt=2
