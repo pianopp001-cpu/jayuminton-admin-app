@@ -99,6 +99,14 @@ function joinedVibrationPattern(type) {
   return pattern;
 }
 
+function notificationRepeatCount(type) {
+  return String(type || '') === 'court_assignment' ? 5 : 3;
+}
+
+function notificationVibrationSet() {
+  return [900, 260, 900, 260, 900];
+}
+
 function notificationTitle(type) {
   return String(type || '') === 'court_assignment'
     ? '🚨 코트 입장 — 지금 이동하세요'
@@ -126,26 +134,37 @@ try {
     const assignmentId = String(data.assignmentId || '');
     const eventKey = data.notificationTag || assignmentId || ('jayuminton-' + type);
 
-    return self.registration.showNotification(notificationTitle(type), {
-      body: data.body || (type === 'court_assignment'
-        ? '코트에 배정되었습니다. 지금 코트로 이동해 주세요.'
-        : '대기1에 들어왔습니다. 곧 경기 순서입니다.'),
-      requireInteraction: true,
-      silent: false,
-      icon: '/icon-198.png',
-      badge: '/badge-96.png',
-      tag: eventKey,
-      renotify: true,
-      vibrate: joinedVibrationPattern(type),
-      timestamp: Date.now(),
-      actions: [
-        { action: 'open', title: '코트현황 보기' }
-      ],
-      data: {
-        assignmentId,
-        type
+    const repeats = notificationRepeatCount(type);
+    return (async () => {
+      for (let index = 0; index < repeats; index += 1) {
+        await self.registration.showNotification(
+          notificationTitle(type) + ' (' + (index + 1) + '/' + repeats + ')',
+          {
+            body: data.body || (type === 'court_assignment'
+              ? '코트에 배정되었습니다. 지금 코트로 이동해 주세요.'
+              : '대기1에 들어왔습니다. 곧 경기 순서입니다.'),
+            requireInteraction: true,
+            silent: false,
+            icon: '/icon-198.png',
+            badge: '/badge-96.png',
+            tag: eventKey + '-alert-' + (index + 1),
+            renotify: true,
+            vibrate: notificationVibrationSet(),
+            timestamp: Date.now(),
+            actions: [
+              { action: 'open', title: '코트현황 보기' }
+            ],
+            data: {
+              assignmentId,
+              type
+            }
+          }
+        );
+        if (index + 1 < repeats) {
+          await new Promise((resolve) => setTimeout(resolve, 1800));
+        }
       }
-    });
+    })();
   });
 } catch (error) {
   console.error('[Jayuminton] Firebase messaging worker initialization failed:', error);
