@@ -136,7 +136,7 @@
   </section>
 
   <section class="card admin-panel">
-    <h2>멤버 등록</h2>
+    <h2>멤버 등록·수정</h2>
 
     <div class="toolbar">
       <input
@@ -170,6 +170,8 @@
       >
         등록
       </button>
+
+      <button id="updateMemberButton" class="primary" type="button" onclick="applyMemberEdit()" disabled>수정</button>
 
       <span
         id="memberCount"
@@ -248,6 +250,8 @@
         <button onclick="resetSelectedGames()">
           게임횟수 모두 0
         </button>
+
+        <button type="button" onclick="selectAllMembers()">멤버 모두 선택</button>
       </div>
     </div>
   </section>
@@ -353,29 +357,7 @@
   </div>
 
   
-  <!-- JAYUMINTON_MEMBER_EDIT_MODAL_EXISTING_ONLY -->
-  <div id="memberEditModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeMemberEdit()">
-    <div class="modal-card member-edit-modal-card" role="dialog" aria-modal="true" aria-labelledby="memberEditTitle">
-      <div class="modal-head">
-        <div>
-          <span class="eyebrow dark-eyebrow">MEMBER EDIT</span>
-          <h2 id="memberEditTitle">멤버 편집</h2>
-        </div>
-        <button type="button" class="modal-close" onclick="closeMemberEdit()">×</button>
-      </div>
-      <div class="member-edit-form">
-        <label>이름 또는 닉네임<input id="editMemberName" maxlength="20" autocomplete="off"></label>
-        <label>성별<select id="editMemberGender"><option value="male">남자</option><option value="female">여자</option></select></label>
-        <label>급수<input id="editMemberGrade" maxlength="12" autocomplete="off"></label>
-        <label>구력<input id="editMemberExperience" maxlength="20" autocomplete="off"></label>
-      </div>
-      <div class="member-edit-actions">
-        <button type="button" class="ghost-button" onclick="closeMemberEdit()">취소</button>
-        <button id="applyMemberEditButton" type="button" class="primary" onclick="applyMemberEdit()">수정</button>
-      </div>
-    </div>
-  </div>
-<div
+  <div
     id="wholeSwapBar"
     class="whole-swap-bar hidden"
     onclick="cancelWholeSwap()"
@@ -558,3 +540,5 @@ const IS_ADMIN = true;
 <?!= include('Script'); ?>
 </body>
 </html>
+
+<!-- onclick="applyMemberEdit()">수정</button> -->

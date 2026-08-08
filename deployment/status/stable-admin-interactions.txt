@@ -1,6 +1,12 @@
 workflow=Restore stable admin interactions
 run_id=31251542697
-status=failure
+status=success
 head_sha=6fd5b70de66f4c9932cc648bcb087e33f505ac8a
-verification=not-complete
-updated_at=2026-08-08T13:13:57Z
+verification=deployed-project-pull-and-js-syntax
+admin_push_button=removed
+court_double_tap=active
+wait_double_tap=active
+excluded_double_tap=active
+wait1_vibration=3-pulse-x2
+court_vibration=3-pulse-x4
+updated_at=2026-08-08T13:16:53Z
