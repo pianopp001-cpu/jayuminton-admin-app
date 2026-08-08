@@ -75,7 +75,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add releases/jayuminton-user-v1.0.0.apk deployment/status/user-apk-v1.0.0.txt
           git commit -m 'Publish verified Jayuminton user APK v1.0.0' || true
-          git pull --rebase origin main
+          git pull --rebase --autostash origin main
           git push origin main
 
       - name: Confirm APK exists on main
@@ -205,5 +205,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/user-apk-install-live.txt source-snapshot/current-main/Script.html source-snapshot/current-main/Index.html
           git commit -m 'Record verified user APK install flow' || true
-          git pull --rebase origin main
+          git pull --rebase --autostash origin main
           git push origin main
