@@ -1,0 +1,2 @@
+Build direct native FCM user APK v1.1.2 and deploy focused user UI changes.
+Trigger: 2026-08-09 Asia/Seoul
