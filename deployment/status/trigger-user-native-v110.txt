@@ -1,6 +1,7 @@
-trigger=2026-08-09T00:45:00+09:00
+trigger=2026-08-09T00:52:00+09:00
 app_name=자유민턴 코트현황
 install_mode=delete-old-then-fresh-install
 wait1=3x3
 court=3x5
 native_fcm=yes
+workflow=verified-v110
