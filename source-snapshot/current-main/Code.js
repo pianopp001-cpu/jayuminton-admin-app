@@ -1661,6 +1661,112 @@ function changeMemberPassword(pin, newPassword) {
   );
 }
 
+function updateMemberSelfProfileUnlocked_(pin, memberId, name, gender, grade, experience) {
+  auth_(pin);
+
+  memberId = String(memberId == null ? '' : memberId).trim();
+  name = String(name == null ? '' : name).trim();
+  gender = gender === 'female' ? 'female' : 'male';
+  grade = String(grade == null ? '' : grade).trim();
+  experience = String(experience == null ? '' : experience).trim();
+
+  if (!memberId) {
+    throw new Error('회원 정보가 없습니다.');
+  }
+  if (name.length > 20) {
+    throw new Error('이름은 20자 이내로 입력하세요.');
+  }
+  if (grade.length > 12) {
+    throw new Error('급수는 12자 이내로 입력하세요.');
+  }
+  if (experience.length > 20) {
+    throw new Error('구력은 20자 이내로 입력하세요.');
+  }
+
+  const members = readMembers_();
+  let found = null;
+  for (let i = 0; i < members.length; i++) {
+    if (String(members[i].id) === memberId) {
+      found = members[i];
+      break;
+    }
+  }
+  if (!found) {
+    throw new Error('회원을 찾을 수 없습니다.');
+  }
+
+  if (name) found.name = name;
+  found.gender = gender;
+  found.grade = grade;
+  found.experience = experience;
+  writeMembers_(members);
+
+  return {
+    id: found.id,
+    name: found.name,
+    gender: gender,
+    grade: grade,
+    experience: experience
+  };
+}
+
+function updateMemberSelfProfile(pin, memberId, name, gender, grade, experience) {
+  return withDocumentLock_(
+    '내 정보 수정',
+    function() {
+      return updateMemberSelfProfileUnlocked_(
+        pin,
+        memberId,
+        name,
+        gender,
+        grade,
+        experience
+      );
+    }
+  );
+}
+
+
+
+function updateMemberProfile(pin, memberId, name, gender, grade, experience) {
+  auth_(pin);
+  return withDocumentLock_('멤버 수정', function() {
+    memberId = String(memberId == null ? '' : memberId).trim();
+    name = String(name == null ? '' : name).trim();
+    gender = String(gender == null ? '' : gender).trim();
+    grade = String(grade == null ? '' : grade).trim();
+    experience = String(experience == null ? '' : experience).trim();
+
+    if (!memberId) throw new Error('수정할 멤버가 없습니다.');
+    if (!name) throw new Error('이름 또는 닉네임을 입력하세요.');
+    if (name.length > 20) throw new Error('이름은 20자 이내로 입력하세요.');
+    if (gender !== 'male' && gender !== 'female') throw new Error('성별을 선택하세요.');
+    if (grade.length > 12) throw new Error('급수는 12자 이내로 입력하세요.');
+    if (experience.length > 20) throw new Error('구력은 20자 이내로 입력하세요.');
+
+    const members = readMembers_();
+    const index = members.findIndex(function(item) {
+      return String(item.id) === memberId;
+    });
+    if (index < 0) throw new Error('수정할 기존 멤버를 찾을 수 없습니다.');
+
+    const duplicate = members.some(function(item, itemIndex) {
+      return itemIndex !== index && String(item.name || '').trim() === name;
+    });
+    if (duplicate) throw new Error('같은 이름의 멤버가 이미 있습니다.');
+
+    // Existing-member-only update: preserve id, game count, status and placement.
+    members[index].name = name;
+    members[index].gender = gender;
+    members[index].grade = grade;
+    members[index].experience = experience;
+
+    writeMembers_(members);
+    if (typeof touch_ === 'function') touch_();
+    return getPublicState();
+  });
+}
+
 function addMember(pin, name, gender, grade, experience) {
   return withDocumentLock_(
     '멤버 등록',

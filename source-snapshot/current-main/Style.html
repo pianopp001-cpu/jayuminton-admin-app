@@ -1150,7 +1150,7 @@ body{
   .quick-move-bar{
     bottom:70px;
     display:grid;
-    grid-template-columns:1fr auto auto;
+    grid-template-columns:1fr auto auto auto;
     gap:5px
   }
   .quick-move-bar span{display:none}
@@ -2303,7 +2303,7 @@ body{
 }
 @media(max-width:620px){
   .quick-move-bar{
-    grid-template-columns:repeat(3,minmax(0,1fr))!important
+    grid-template-columns:repeat(4,minmax(0,1fr))!important
   }
   .quick-move-bar strong{
     grid-column:1/-1!important;
@@ -3311,4 +3311,40 @@ body.action-busy::after{
 #memberApp #memberAppInstallToggle.is-preparing::after{
   content:"";position:absolute;left:0;bottom:0;height:3px;width:var(--install-prep-progress,0%);
   background:currentColor;opacity:.5;transition:width .3s linear;animation:none;
+}
+
+
+/* JAYUMINTON_MEMBER_EDIT_EXISTING_ONLY_STYLE */
+#adminApp .quick-move-bar{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  gap:4px!important;
+  width:min(520px,calc(100% - 10px))!important;
+  padding:5px!important;
+  left:50%!important;
+  transform:translateX(-50%)!important;
+}
+#adminApp .quick-move-bar.hidden{display:none!important}
+#adminApp .quick-move-bar button{
+  flex:1 1 0!important;
+  min-width:0!important;
+  width:auto!important;
+  height:36px!important;
+  min-height:36px!important;
+  padding:0 3px!important;
+  font-size:10px!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+}
+.member-edit-modal-card{width:min(440px,calc(100% - 22px))!important}
+.member-edit-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.member-edit-form label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:900}
+.member-edit-form input,.member-edit-form select{width:100%;min-width:0}
+.member-edit-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.member-edit-actions button{min-width:110px}
+@media(max-width:460px){
+  #adminApp .quick-move-bar{width:calc(100% - 6px)!important;gap:2px!important;padding:4px!important}
+  #adminApp .quick-move-bar button{font-size:9px!important;padding:0 1px!important}
+  .member-edit-form{grid-template-columns:1fr}
 }

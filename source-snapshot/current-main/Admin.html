@@ -345,15 +345,37 @@
     <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>
   </div>
 
-  <div id="quickMoveBar" class="quick-move-bar hidden">
-    <strong id="quickMoveName">선택 인원</strong>
-    <span>길게 누른 멤버 관리</span>
-    <button onclick="sendQuickPickToActive()">배정대기로 빼기</button>
-    <button class="ghost-button" onclick="closeMemberActionBar()">취소</button>
-    <button class="danger" onclick="deleteQuickPickedMembers()">삭제</button>
+  <div id="quickMoveBar" class="quick-move-bar hidden" aria-label="길게 누른 멤버 관리">
+    <button type="button" onclick="sendQuickPickToActive()">배정대기로</button>
+    <button type="button" class="danger" onclick="deleteQuickPickedMembers()">삭제</button>
+    <button type="button" class="ghost-button" onclick="closeMemberActionBar()">취소</button>
+    <button type="button" class="primary" onclick="startMemberEdit()">편집</button>
   </div>
 
-  <div
+  
+  <!-- JAYUMINTON_MEMBER_EDIT_MODAL_EXISTING_ONLY -->
+  <div id="memberEditModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeMemberEdit()">
+    <div class="modal-card member-edit-modal-card" role="dialog" aria-modal="true" aria-labelledby="memberEditTitle">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow dark-eyebrow">MEMBER EDIT</span>
+          <h2 id="memberEditTitle">멤버 편집</h2>
+        </div>
+        <button type="button" class="modal-close" onclick="closeMemberEdit()">×</button>
+      </div>
+      <div class="member-edit-form">
+        <label>이름 또는 닉네임<input id="editMemberName" maxlength="20" autocomplete="off"></label>
+        <label>성별<select id="editMemberGender"><option value="male">남자</option><option value="female">여자</option></select></label>
+        <label>급수<input id="editMemberGrade" maxlength="12" autocomplete="off"></label>
+        <label>구력<input id="editMemberExperience" maxlength="20" autocomplete="off"></label>
+      </div>
+      <div class="member-edit-actions">
+        <button type="button" class="ghost-button" onclick="closeMemberEdit()">취소</button>
+        <button id="applyMemberEditButton" type="button" class="primary" onclick="applyMemberEdit()">수정</button>
+      </div>
+    </div>
+  </div>
+<div
     id="wholeSwapBar"
     class="whole-swap-bar hidden"
     onclick="cancelWholeSwap()"
