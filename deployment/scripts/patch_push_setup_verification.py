@@ -43,8 +43,20 @@ def replace_js_function(source: str, name: str, replacement: str) -> str:
     raise RuntimeError(f"{name} braces are unbalanced")
 
 
+def assert_no_legacy_handoffs(source: str) -> None:
+    forbidden = {
+        "intent://": "Android intent handoff",
+        "drive.google": "Google Drive handoff",
+        "docs.google.com": "Google Docs/Drive handoff",
+    }
+    found = [label for token, label in forbidden.items() if token in source]
+    if found:
+        raise RuntimeError("legacy external handoff remains: " + ", ".join(found))
+
+
 def main(js_path: Path) -> None:
     source = js_path.read_text(encoding="utf-8")
+    assert_no_legacy_handoffs(source)
 
     submit_replacement = f"""/* {MARKER} */
 async function jayumintonPushTokenHash(value) {{
@@ -172,6 +184,7 @@ async function submitRelay(action, token) {{
     elif new_bootstrap not in source:
         raise RuntimeError("pushConnected bootstrap expression changed unexpectedly")
 
+    assert_no_legacy_handoffs(source)
     js_path.write_text(source, encoding="utf-8")
 
     final = js_path.read_text(encoding="utf-8")
