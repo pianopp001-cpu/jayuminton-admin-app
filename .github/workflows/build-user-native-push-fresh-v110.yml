@@ -69,29 +69,11 @@ jobs:
           set -euo pipefail
           PACKAGE='com.jayuminton.user'
           firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
-          find_app_id() {
-            node - "$RUNNER_TEMP/apps.json" "$PACKAGE" <<'NODE'
-          const fs=require('fs');
-          const j=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
-          const pkg=process.argv[3];
-          const candidates=[];
-          function walk(v){
-            if(!v)return;
-            if(Array.isArray(v)){v.forEach(walk);return;}
-            if(typeof v==='object'){
-              if((v.packageName===pkg || v.package_name===pkg || (v.androidClientInfo&&v.androidClientInfo.packageName===pkg)) && (v.appId||v.app_id)) candidates.push(v.appId||v.app_id);
-              Object.values(v).forEach(walk);
-            }
-          }
-          walk(j);
-          if(candidates.length) process.stdout.write(String(candidates[0]));
-NODE
-          }
-          APP_ID="$(find_app_id)"
+          APP_ID="$(jq -r --arg pkg "$PACKAGE" '[.. | objects | select(((.packageName? == $pkg) or (.package_name? == $pkg) or (.androidClientInfo?.packageName? == $pkg)) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
           if [ -z "$APP_ID" ]; then
             firebase apps:create ANDROID '자유민턴 코트현황' --package-name "$PACKAGE" --project "$FIREBASE_PROJECT_ID"
             firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
-            APP_ID="$(find_app_id)"
+            APP_ID="$(jq -r --arg pkg "$PACKAGE" '[.. | objects | select(((.packageName? == $pkg) or (.package_name? == $pkg) or (.androidClientInfo?.packageName? == $pkg)) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
           fi
           test -n "$APP_ID"
           echo "Firebase Android app located for $PACKAGE"
