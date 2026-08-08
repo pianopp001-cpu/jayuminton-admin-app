@@ -5,14 +5,14 @@ import sys
 MARKER = "JAYUMINTON_PUSH_SERVER_VERIFY_V1"
 
 
-def replace_js_function(source: str, name: str, replacement: str) -> str:
+def function_bounds(source: str, name: str):
     token = f"function {name}("
     start = source.find(token)
     if start < 0:
-        raise RuntimeError(f"{name} missing")
+        return None
     brace = source.find("{", start)
     if brace < 0:
-        raise RuntimeError(f"{name} opening brace missing")
+        return None
 
     depth = 0
     quote = None
@@ -29,7 +29,6 @@ def replace_js_function(source: str, name: str, replacement: str) -> str:
                 quote = None
             i += 1
             continue
-
         if ch in ("'", '"', "`"):
             quote = ch
         elif ch == "{":
@@ -37,10 +36,54 @@ def replace_js_function(source: str, name: str, replacement: str) -> str:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return source[:start] + replacement + source[i + 1 :]
+                return start, i + 1
         i += 1
+    return None
 
-    raise RuntimeError(f"{name} braces are unbalanced")
+
+def replace_js_function(source: str, name: str, replacement: str) -> str:
+    bounds = function_bounds(source, name)
+    if not bounds:
+        raise RuntimeError(f"{name} missing or unbalanced")
+    start, end = bounds
+    return source[:start] + replacement + source[end:]
+
+
+def print_legacy_context(source: str) -> None:
+    print("=== LEGACY INSTALL CONTEXT BEGIN ===", file=sys.stderr)
+    for name in (
+        "buildAndroidChromeIntent",
+        "launchChromeFromFirebaseTop",
+        "handleEmbeddedChromeLinkClick",
+        "handleAppInstallButton",
+        "runNativeInstallPrompt",
+    ):
+        bounds = function_bounds(source, name)
+        if bounds:
+            start, end = bounds
+            print(f"--- function {name} ---", file=sys.stderr)
+            print(source[start:end], file=sys.stderr)
+
+    for needle in (
+        "intent://",
+        "appInstallChromeLink.href",
+        "beforeinstallprompt",
+        "promptEvent.prompt()",
+        "promptResult = promptEvent.prompt()",
+    ):
+        offset = 0
+        hit = 0
+        while True:
+            pos = source.find(needle, offset)
+            if pos < 0:
+                break
+            hit += 1
+            left = max(0, pos - 500)
+            right = min(len(source), pos + len(needle) + 700)
+            print(f"--- {needle} hit {hit} ---", file=sys.stderr)
+            print(source[left:right], file=sys.stderr)
+            offset = pos + len(needle)
+    print("=== LEGACY INSTALL CONTEXT END ===", file=sys.stderr)
 
 
 def assert_no_legacy_handoffs(source: str) -> None:
@@ -51,6 +94,7 @@ def assert_no_legacy_handoffs(source: str) -> None:
     }
     found = [label for token, label in forbidden.items() if token in source]
     if found:
+        print_legacy_context(source)
         raise RuntimeError("legacy external handoff remains: " + ", ".join(found))
 
 
