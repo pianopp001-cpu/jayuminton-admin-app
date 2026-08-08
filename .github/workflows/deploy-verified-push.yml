@@ -1,0 +1,231 @@
+name: Deploy verified Jayuminton push
+run-name: Deploy verified push token and vibration fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy-triggers/push-live.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-verified-push-live
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve current endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          jq -e '.mainDeploymentId and .pushDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
+          {
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
+            echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG")"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$CONFIG")/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$CONFIG")/exec"
+          } >> "$GITHUB_ENV"
+
+      - name: Build verified hosting tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
+          ROOT="$RUNNER_TEMP/verified-push-hosting"
+          PUBLIC="$ROOT/public"
+          rm -rf "$ROOT"
+          mkdir -p "$PUBLIC"
+
+          # Copy the static shell, but never publish source fragments/templates.
+          cp -a "$SRC"/. "$PUBLIC"/
+          rm -f "$PUBLIC"/setup-v205.js.gz.b64.part-* "$PUBLIC"/*.template.js
+
+          # Reconstruct the exact current setup source, then add only the verified token check.
+          mapfile -t PARTS < <(find "$SRC" -maxdepth 1 -type f -name 'setup-v205.js.gz.b64.part-*' | sort)
+          if [ "${#PARTS[@]}" -lt 1 ]; then
+            echo 'setup-v205 source fragments are missing' >&2
+            exit 1
+          fi
+          cat "${PARTS[@]}" | tr -d '\r\n' | base64 --decode | gzip --decompress > "$PUBLIC/setup-v205.js"
+          node --check "$PUBLIC/setup-v205.js"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_push_setup_verification.py" "$PUBLIC/setup-v205.js"
+          node --check "$PUBLIC/setup-v205.js"
+
+          # Refuse to deploy old external-app/Drive handoff regressions.
+          if grep -F 'drive.google' "$PUBLIC/setup-v205.js" >/dev/null; then
+            echo 'Google Drive handoff found in PWA setup source' >&2
+            exit 1
+          fi
+
+          # Current endpoints come from the single deploy config secret.
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          public = Path(os.environ['RUNNER_TEMP']) / 'verified-push-hosting' / 'public'
+          template = (public / 'config-v204.template.js').read_text(encoding='utf-8') if (public / 'config-v204.template.js').exists() else Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          cfg = template.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
+          for name in ('config-v202.js','config-v203.js','config-v204.js'):
+              (public / name).write_text(cfg, encoding='utf-8')
+
+          index = (public / 'index.html').read_text(encoding='utf-8')
+          for old in (
+              '/setup-v205.css?v=1637',
+              '/config-v204.js?v=1637',
+              '/setup-v205.js?v=1637',
+          ):
+              index = index.replace(old, old.split('?')[0] + '?v=pushfix-20260808')
+          (public / 'index.html').write_text(index, encoding='utf-8')
+          PY
+
+          # The service worker in the repository is the reviewed 2-set/4-set version.
+          grep -F "JAYUMINTON_SW_VERSION = '1.6.37-pushfix-20260808'" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
+          grep -F 'function joinedVibrationPattern(type)' "$PUBLIC/firebase-messaging-sw.js" >/dev/null
+          grep -F "String(type || '') === 'court_assignment' ? 4 : 2" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
+          grep -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'async function verifyRelayToken(memberId, token)' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F "action:'token_status'" "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'else if (!(await verifyRelayToken(member.id, currentToken)))' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'pushConnected:Boolean(isConnected && localStorage.getItem(STORAGE.token)' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F '/setup-v205.js?v=pushfix-20260808' "$PUBLIC/index.html" >/dev/null
+          grep -F '/config-v204.js?v=pushfix-20260808' "$PUBLIC/index.html" >/dev/null
+          grep -F "$MAIN_DEPLOYMENT_ID" "$PUBLIC/config-v204.js" >/dev/null
+          grep -F "$PUSH_DEPLOYMENT_ID" "$PUBLIC/config-v204.js" >/dev/null
+
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {
+            "hosting": {
+              "public": "public",
+              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+              "cleanUrls": false,
+              "trailingSlash": false,
+              "headers": [
+                {
+                  "source": "/firebase-messaging-sw.js",
+                  "headers": [
+                    {"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}
+                  ]
+                },
+                {
+                  "source": "/setup-v205.js",
+                  "headers": [
+                    {"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}
+                  ]
+                },
+                {
+                  "source": "/config-v204.js",
+                  "headers": [
+                    {"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}
+                  ]
+                },
+                {
+                  "source": "/index.html",
+                  "headers": [
+                    {"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}
+                  ]
+                }
+              ],
+              "rewrites": [
+                {"source": "**", "destination": "/index.html"}
+              ]
+            }
+          }
+          JSON
+
+      - name: Deploy Firebase Hosting only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/verified-push-hosting"
+          firebase deploy \
+            --only hosting \
+            --project "$FIREBASE_PROJECT_ID" \
+            --config "$ROOT/firebase.json" \
+            --non-interactive
+
+      - name: Verify live hosting bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          BASE="${HOSTING_URL%/}"
+          BUST="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-verified-push"
+          curl --fail --location --retry 4 --max-time 90 -H 'Cache-Control: no-cache' "$BASE/?v=$BUST" > "$RUNNER_TEMP/live-index.html"
+          curl --fail --location --retry 4 --max-time 90 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?v=$BUST" > "$RUNNER_TEMP/live-setup.js"
+          curl --fail --location --retry 4 --max-time 90 -H 'Cache-Control: no-cache' "$BASE/config-v204.js?v=$BUST" > "$RUNNER_TEMP/live-config.js"
+          curl --fail --location --retry 4 --max-time 90 -H 'Cache-Control: no-cache' "$BASE/firebase-messaging-sw.js?v=$BUST" > "$RUNNER_TEMP/live-sw.js"
+
+          node --check "$RUNNER_TEMP/live-setup.js"
+          grep -F '/setup-v205.js?v=pushfix-20260808' "$RUNNER_TEMP/live-index.html" >/dev/null
+          grep -F '/config-v204.js?v=pushfix-20260808' "$RUNNER_TEMP/live-index.html" >/dev/null
+          grep -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'async function verifyRelayToken(memberId, token)' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F "action:'token_status'" "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'else if (!(await verifyRelayToken(member.id, currentToken)))' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'pushConnected:Boolean(isConnected && localStorage.getItem(STORAGE.token)' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F "JAYUMINTON_SW_VERSION = '1.6.37-pushfix-20260808'" "$RUNNER_TEMP/live-sw.js" >/dev/null
+          grep -F "String(type || '') === 'court_assignment' ? 4 : 2" "$RUNNER_TEMP/live-sw.js" >/dev/null
+          grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/live-config.js" >/dev/null
+          grep -F "$PUSH_DEPLOYMENT_ID" "$RUNNER_TEMP/live-config.js" >/dev/null
+          echo 'Live Firebase Hosting push verification passed.'
+
+      - name: Record deployment result
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          mkdir -p deployment/status
+          OUT=deployment/status/verified-push-live.txt
+          {
+            echo 'workflow=Deploy verified Jayuminton push'
+            echo 'run_id=${{ github.run_id }}'
+            echo 'status=${{ job.status }}'
+            echo 'head_sha=${{ github.sha }}'
+            if [ '${{ job.status }}' = 'success' ]; then
+              echo 'hosting_verification=live-bytes-checked'
+              echo 'token_registration=server-verified-before-on'
+              echo 'token_refresh=server-verified'
+              echo 'wait1_vibration=3-pulse-x2'
+              echo 'court_vibration=3-pulse-x4'
+            else
+              echo 'hosting_verification=not-complete'
+            fi
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > "$OUT"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$OUT"
+          git commit -m 'Record verified push live deploy: ${{ job.status }}' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
