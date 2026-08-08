@@ -1,0 +1,53 @@
+name: Inspect push registration contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deployment/status/trigger-push-contract.txt'
+      - '.github/workflows/inspect-push-registration.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Reconstruct web push setup and print safe registration contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.js.gz"
+          gzip -dc "$RUNNER_TEMP/setup.js.gz" > "$RUNNER_TEMP/setup.js"
+          node --check "$RUNNER_TEMP/setup.js"
+          python3 - "$RUNNER_TEMP/setup.js" <<'PY'
+          from pathlib import Path
+          import re, sys
+          s=Path(sys.argv[1]).read_text(encoding='utf-8')
+          needles=['register_web_token','unregister_web_token','token_status','getToken(','pushUrl','PUSH_URL','memberId','token']
+          print('SAFE_PUSH_CONTRACT_BEGIN')
+          seen=set()
+          for needle in needles:
+              start=0
+              while True:
+                  i=s.find(needle,start)
+                  if i<0: break
+                  a=max(0,i-420); b=min(len(s),i+700)
+                  block=s[a:b]
+                  # redact long likely secrets/tokens and URLs query values
+                  block=re.sub(r'([A-Za-z0-9_\-]{80,})','[LONG_VALUE_REDACTED]',block)
+                  block=re.sub(r'(key|token|secret|auth)=([^&\"\'\s]+)',r'\1=[REDACTED]',block,flags=re.I)
+                  key=(needle, block[:100])
+                  if key not in seen:
+                      seen.add(key)
+                      print('\n---',needle,'---')
+                      print(block)
+                  start=i+len(needle)
+                  if sum(1 for x in seen if x[0]==needle)>=4: break
+          print('SAFE_PUSH_CONTRACT_END')
+          PY
