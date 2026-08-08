@@ -1,5 +1,5 @@
 conclusion=failure
-run_id=31234018938
-head_sha=c7fed42fbfe80b38f444976ede218d7fc64f472d
-run_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/31234018938
-recorded_at=2026-08-08T02:02:26Z
+run_id=31250540671
+head_sha=73a540f30f0c06ca8c78ef077f962c8d9330f1c4
+run_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/31250540671
+recorded_at=2026-08-08T09:26:15Z
