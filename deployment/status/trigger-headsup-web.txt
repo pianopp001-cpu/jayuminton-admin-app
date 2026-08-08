@@ -1,0 +1,2 @@
+trigger=2026-08-09T01:58:00+09:00
+reason=deploy-notification-popup-vibration-self-test
