@@ -3,7 +3,6 @@ set -euo pipefail
 
 : "${MAIN_DEPLOYMENT_ID:?MAIN_DEPLOYMENT_ID is required}"
 
-ROOT="$PWD"
 JAVA_FILE="app/src/main/java/com/jayuminton/admin/MainActivity.java"
 GRADLE_FILE="app/build.gradle"
 STRINGS_FILE="app/src/main/res/values/strings.xml"
@@ -13,7 +12,6 @@ TARGET_ICON="app/src/main/res/drawable/icon.png"
 OUT_APK="releases/jayuminton-user-v1.0.0.apk"
 STATUS="deployment/status/user-apk-v1.0.0.txt"
 USER_URL="https://script.google.com/macros/s/${MAIN_DEPLOYMENT_ID}/exec?mode=user&userAppVersion=1.0.0&apkUser=1"
-APK_PACKAGE="com.jayuminton.user"
 
 mkdir -p releases deployment/status
 
@@ -22,6 +20,7 @@ test -s "$GRADLE_FILE"
 test -s "$STRINGS_FILE"
 test -s "$MANIFEST_FILE"
 test -s "$SOURCE_B64"
+test -s signing/jayuminton-release.keystore.b64
 
 cat > "$JAVA_FILE" <<JAVA
 package com.jayuminton.admin;
@@ -225,6 +224,11 @@ if grep -F '?mode=admin' "$JAVA_FILE" >/dev/null; then
   echo 'admin mode URL leaked into user APK source' >&2
   exit 1
 fi
+
+# Restore the same verified release-signing key used by the admin APK.
+mkdir -p signing
+base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+test -s signing/jayuminton-release.jks
 
 gradle --no-daemon clean assembleRelease
 
