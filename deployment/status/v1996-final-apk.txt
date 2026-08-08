@@ -1,9 +1,10 @@
 workflow=Build Jayuminton v199.6 final APK
-run_id=31235838350
+run_id=31235949376
 status=failure
-head_sha=e6e4956ec252b729d3b0aa3d85699b890ecfcc0a
+head_sha=9e814ded300b531aa1cadd2bcb16e3f51815a630
 version=199.6
 package=com.jayuminton.admin
 output=releases/jayuminton-v199.6-final-fresh-install.apk
-dog_icon_sha256=4c3d5786562535ab3fbae79eaa4fde4b2161629314d8dd95f0a5aea181b1570a
-updated_at=2026-08-08T02:50:42Z
+dog_source_sha256=4c3d5786562535ab3fbae79eaa4fde4b2161629314d8dd95f0a5aea181b1570a
+dog_art=normalized-png-same-pixels
+updated_at=2026-08-08T02:53:21Z
