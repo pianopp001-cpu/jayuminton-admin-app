@@ -84,13 +84,11 @@ jobs:
               raise SystemExit('Script.html closing tag missing')
           s = s[:end + len('</script>')] + '\n'
 
-          # APK must always start at the PIN login screen. Browser admin sessions are unchanged.
           init = s.find('async function initialize() {')
           if init < 0:
               raise SystemExit('initialize() missing')
           block, bstart, bend = extract_block(s, init)
-          marker = 'JAYUMINTON_NATIVE_FORCE_LOGIN_V1'
-          if marker not in block:
+          if 'JAYUMINTON_NATIVE_FORCE_LOGIN_V1' not in block:
               needle = '  if (IS_ADMIN) {'
               if needle not in block:
                   raise SystemExit('admin initialize branch missing')
@@ -105,7 +103,6 @@ jobs:
               block = block.replace(needle, replacement, 1)
               s = s[:bstart] + block + s[bend:]
 
-          # Long press admin actions must never leak into the user screen.
           a = s.find('function memberLongPressAttributes(memberId) {')
           if a < 0:
               raise SystemExit('memberLongPressAttributes missing')
@@ -122,7 +119,6 @@ jobs:
               block = block.replace('{', '{\n  if (!IS_ADMIN) return;', 1)
               s = s[:bstart] + block + s[bend:]
 
-          # One member can be edited from the same existing registration fields.
           if 'let EDIT_MEMBER_ID' not in s:
               state_anchor = 'let MEMBER_ACTION_IDS = [];'
               if state_anchor not in s:
@@ -206,7 +202,6 @@ async function saveMemberEdit() {
 '''
               s = s.replace(add_anchor, edit_js + add_anchor, 1)
 
-          # When edit mode is active the existing 등록 button saves the edit.
           if 'if (EDIT_MEMBER_ID) return saveMemberEdit();' not in s:
               s, count = re.subn(
                   r'async function addMember\(\) \{\s*',
@@ -217,17 +212,15 @@ async function saveMemberEdit() {
               if count != 1:
                   raise SystemExit('could not patch addMember edit delegation')
 
-          # Mark edit as a mutation so duplicate taps are blocked.
           if "'updateMemberProfile'" not in s:
               mutation_anchor = "'createManualBackup','restoreManualBackup','changeMemberPassword'"
               if mutation_anchor in s:
                   s = s.replace(
                       mutation_anchor,
-                      mutation_anchor[:-1] + ",'updateMemberProfile'",
+                      mutation_anchor + ",'updateMemberProfile'",
                       1,
                   )
 
-          # APK admin push button uses only the exact HTTPS Firebase URL in the same WebView.
           if 'JAYUMINTON_ADMIN_PUSH_APP_BUTTON_V3' not in s:
               insert = s.rfind('</script>')
               launcher = r'''
@@ -370,3 +363,18 @@ function updateMemberProfile(pin, memberId, name, gender, grade, experience) {
           git commit -m 'Sync APK admin login and long-press live fixes'
           git pull --rebase origin main || true
           git push origin main
+
+      - name: Record live deploy result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/jayuminton
+          printf 'status=%s\ncommit=%s\nrun=%s\n' '${{ job.status }}' "$GITHUB_SHA" "$GITHUB_RUN_ID" \
+            > deployment/jayuminton/APK_ADMIN_LIVE_RESULT.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/APK_ADMIN_LIVE_RESULT.txt
+          git commit -m "Record APK admin live deploy: ${{ job.status }}" || exit 0
+          git pull --rebase origin main || true
+          git push origin main || true
