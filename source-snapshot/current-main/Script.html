@@ -5212,7 +5212,7 @@ function closeMemberEdit() {
   }
 }
 
-async async async function applyMemberEdit() {
+async function applyMemberEdit() {
   if (!IS_ADMIN || !EDIT_MEMBER_ID || ACTION_IN_FLIGHT) return;
   const targetId = String(EDIT_MEMBER_ID);
   const name = String(document.getElementById('editMemberName')?.value || '').trim();

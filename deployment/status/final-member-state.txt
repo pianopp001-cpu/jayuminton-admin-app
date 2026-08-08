@@ -1,9 +1,10 @@
 workflow=Deploy final member edit vibration state
-run_id=31235565090
+run_id=31235683065
 status=success
-head_sha=56d6c264a009b039be9c29dd9bcb88f0e41d737d
+head_sha=b4007fcc91649d7c89ae5812e973ea48cfa7df43
 edit=existing-member-overwrite-only
+edit_js=syntax-checked
 wait1_vibration=3-pulse-x2
 court_vibration=3-pulse-x4
 admin_push_button=native-browser-first
-updated_at=2026-08-08T02:42:52Z
+updated_at=2026-08-08T02:45:49Z
