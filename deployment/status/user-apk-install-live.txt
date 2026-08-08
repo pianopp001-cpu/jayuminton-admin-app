@@ -1,0 +1,11 @@
+workflow=Build Jayuminton user APK and deploy install button
+run_id=31263163286
+status=success
+user_apk=releases/jayuminton-user-v1.0.0.apk
+apk_sha256=6b621c46bdfbe0448ccd6d637f0b6dc9677b6289d24424c87f0280f7ad4c5a11
+install_button_before=앱설치-white
+install_button_after_confirm=앱설치-ON-green
+confirmation_signal=JayumintonUserNative/1.0.0+NativeUserApp
+pwa_address_copy_flow=removed-from-install-button
+user_design=unchanged
+updated_at=2026-08-08T14:56:36Z

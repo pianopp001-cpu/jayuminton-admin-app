@@ -207,6 +207,12 @@ const LAST_VOICE_KEY =
 
 const UNIFIED_MEMBER_APP_URL =
   'https://jayuminton-push.web.app/';
+const MEMBER_USER_APK_URL =
+  'https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/releases/jayuminton-user-v1.0.0.apk';
+const MEMBER_USER_APK_HINT =
+  /JayumintonUserNative\/1\.0\.0/i.test(String(navigator.userAgent || '')) ||
+  window.__JAYUMINTON_USER_APK__ === true ||
+  !!window.NativeUserApp;
 const WEB_PUSH_SELECTED_MEMBER_KEY =
   'jayuminton_web_push_selected_member_v1';
 const WEB_PUSH_CONNECTION_KEY =
@@ -230,7 +236,7 @@ const MEMBER_PWA_STANDALONE_HINT = (() => {
     return false;
   }
 })();
-let MEMBER_APP_INSTALL_STATE = {installed:MEMBER_PWA_STANDALONE_HINT, choice:MEMBER_PWA_STANDALONE_HINT?'on':'', platform:'other', browserContext:MEMBER_PWA_STANDALONE_HINT?'standalone':'other', message:'', ready:false, installing:false, armed:false, prepRemaining:30, nativeInstall:false};
+let MEMBER_APP_INSTALL_STATE = {installed:MEMBER_USER_APK_HINT,choice:MEMBER_USER_APK_HINT?'on':'',platform:/Android/i.test(String(navigator.userAgent||''))?'android':'other',browserContext:MEMBER_USER_APK_HINT?'user-apk':'other',message:'',ready:true,installing:false,armed:false,prepRemaining:0,nativeInstall:true};
 
 const COURT_LABELS = {
   1: '1번코트(안쪽)',
@@ -2121,54 +2127,44 @@ function compactMemberSelfSettings() {
 
 function requestMemberAppInstall() {
   publishMemberAppInstallButtonRect();
-  if (MEMBER_PWA_STANDALONE_HINT) {
+
+  if (MEMBER_USER_APK_HINT) {
     MEMBER_APP_INSTALL_STATE.installed = true;
     MEMBER_APP_INSTALL_STATE.choice = 'on';
-    MEMBER_APP_INSTALL_STATE.browserContext = 'standalone';
+    MEMBER_APP_INSTALL_STATE.browserContext = 'user-apk';
+    MEMBER_APP_INSTALL_STATE.ready = true;
+    MEMBER_APP_INSTALL_STATE.installing = false;
+    MEMBER_APP_INSTALL_STATE.prepRemaining = 0;
+    MEMBER_APP_INSTALL_STATE.nativeInstall = true;
     renderMemberSelfSettings();
-  }
-  if (MEMBER_APP_INSTALL_STATE.installed) {
-    showMemberSettingMessage('자유민턴 코트현황 앱이 이미 설치되어 있습니다.');
+    showMemberSettingMessage('자유민턴 사용자 앱이 설치되어 있습니다.');
     return;
   }
 
-  const installUrl = buildMemberInstallEntryUrl();
-  const platform = detectMemberInstallPlatform();
-  const context = detectMemberInstallBrowserContext();
+  MEMBER_APP_INSTALL_STATE.installed = false;
+  MEMBER_APP_INSTALL_STATE.choice = '';
+  MEMBER_APP_INSTALL_STATE.ready = true;
+  MEMBER_APP_INSTALL_STATE.installing = true;
+  MEMBER_APP_INSTALL_STATE.prepRemaining = 0;
+  MEMBER_APP_INSTALL_STATE.nativeInstall = true;
+  renderMemberSelfSettings();
+  showMemberSettingMessage('사용자용 APK 다운로드를 시작합니다. 다운로드 후 설치하고 앱을 열어 주세요.');
 
-  // 카카오톡·당근 등 내부 브라우저에서는 iframe/메시지 중간 단계를 거치지 않는다.
-  // 사용자가 누른 바로 그 동작으로 최상위 화면을 Chrome/Safari로 넘긴다.
-  if (platform === 'android' && context === 'android-embedded') {
-    showMemberSettingMessage('아래 주소를 길게 눌러 복사한 뒤 Chrome 앱을 열어 붙여넣어 주세요: ' + installUrl);
-    return;
-  }
-  if (platform === 'ios' && context === 'ios-embedded') {
-    showMemberSettingMessage('Safari에서 자유민턴 코트현황을 여는 중입니다.');
-    openMemberInstallInSafari(installUrl);
-    return;
-  }
-
-  // Apps Script 사용자 페이지를 단독으로 연 경우에는 설치 가능한 PWA 주소를
-  // 정식 Chrome에서 열어야 한다. 카카오 커스텀 탭이 Chrome UA를 쓰는 경우도 포함한다.
-  if (platform === 'android' && window.top === window) {
-    showMemberSettingMessage('Chrome에서 자유민턴 코트현황을 여는 중입니다.');
-    openMemberInstallInChrome(installUrl);
-    return;
-  }
-
-  const sent = postUnifiedMemberMessage('JAYUMINTON_APP_INSTALL_REQUEST', {
-    platform: platform,
-    browserContext: context,
-    installUrl: installUrl
-  });
-  if (sent) return;
-
-  // 통합 사용자 PWA 밖에서 직접 열린 경우에도 설치 진입 주소로 확실히 이동한다.
   try {
-    window.location.assign(installUrl);
+    if (window.top && window.top.location) {
+      window.top.location.href = MEMBER_USER_APK_URL;
+    } else {
+      window.location.href = MEMBER_USER_APK_URL;
+    }
   } catch (error) {
-    window.open(installUrl, '_blank', 'noopener');
+    try { window.location.href = MEMBER_USER_APK_URL; } catch (_) {}
   }
+
+  setTimeout(function() {
+    if (MEMBER_USER_APK_HINT) return;
+    MEMBER_APP_INSTALL_STATE.installing = false;
+    renderMemberSelfSettings();
+  }, 2500);
 }
 
 function buildMemberInstallEntryUrl() {
@@ -2274,6 +2270,22 @@ function openMemberSelfSettings() {
 }
 
 function renderMemberSelfSettings() {
+  if (MEMBER_USER_APK_HINT) {
+    MEMBER_APP_INSTALL_STATE.installed = true;
+    MEMBER_APP_INSTALL_STATE.choice = 'on';
+    MEMBER_APP_INSTALL_STATE.browserContext = 'user-apk';
+    MEMBER_APP_INSTALL_STATE.ready = true;
+    MEMBER_APP_INSTALL_STATE.installing = false;
+    MEMBER_APP_INSTALL_STATE.prepRemaining = 0;
+    MEMBER_APP_INSTALL_STATE.nativeInstall = true;
+  } else {
+    MEMBER_APP_INSTALL_STATE.installed = false;
+    MEMBER_APP_INSTALL_STATE.choice = '';
+    MEMBER_APP_INSTALL_STATE.ready = true;
+    MEMBER_APP_INSTALL_STATE.nativeInstall = true;
+    MEMBER_APP_INSTALL_STATE.prepRemaining = 0;
+  }
+
   if (IS_ADMIN) return;
   const summary = document.getElementById('memberSelfSummary');
   const summaryText = document.getElementById('memberSelfSummaryText');
@@ -2308,24 +2320,9 @@ function renderMemberSelfSettings() {
     vibrationButton.classList.toggle('is-on', memberVibrationEnabled());
   }
   if (appInstallButton) {
-    let installLabel = '앱 설치';
-    if (MEMBER_APP_INSTALL_STATE.installed) {
-      installLabel = '앱 설치완료';
-    } else if (MEMBER_APP_INSTALL_STATE.installing) {
-      installLabel = '설치 확인';
-    } else if (MEMBER_APP_INSTALL_STATE.browserContext === 'android-embedded') {
-      installLabel = 'Chrome 열기';
-    } else if (MEMBER_APP_INSTALL_STATE.browserContext === 'ios-embedded') {
-      installLabel = 'Safari 열기';
-    } else if (MEMBER_APP_INSTALL_STATE.platform === 'android' &&
-               !MEMBER_APP_INSTALL_STATE.ready &&
-               !MEMBER_APP_INSTALL_STATE.nativeInstall) {
-      const remain = Math.max(0, Math.ceil(Number(MEMBER_APP_INSTALL_STATE.prepRemaining || 0)));
-      installLabel = remain > 0 ? '설치 준비 ' + remain + '초' : '설치 확인 중';
-    } else if (MEMBER_APP_INSTALL_STATE.platform === 'android' ||
-               MEMBER_APP_INSTALL_STATE.platform === 'ios') {
-      installLabel = 'PWA 설치';
-    }
+    let installLabel = MEMBER_APP_INSTALL_STATE.installed
+      ? '앱설치 ON'
+      : (MEMBER_APP_INSTALL_STATE.installing ? '앱설치 중' : '앱설치');
     appInstallButton.textContent = installLabel;
     appInstallButton.classList.toggle('is-on', MEMBER_APP_INSTALL_STATE.installed);
     appInstallButton.classList.toggle('is-installing', MEMBER_APP_INSTALL_STATE.installing);
