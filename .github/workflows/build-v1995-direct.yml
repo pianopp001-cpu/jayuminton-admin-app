@@ -22,12 +22,10 @@ jobs:
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       APK_OUTPUT: releases/jayuminton-v199.6-final-fresh-install.apk
-      DOG_ICON_SHA256: c64778554936a98100ef4a277a007bd4d619e75f22804a8b86deaae86a4af4ed
-      DOG_APK_COMMIT: 8abae213e5e0154c67c6f404f366808a999048e9
-      DOG_APK_PATH: releases/jayuminton-v199.4.apk
+      DOG_ICON_SHA256: 1c7ddefbd9bedb01cd28fd0b8af26eef7c046a86131de9e0782b2e147a47e19e
 
     steps:
-      - name: Checkout full repository history
+      - name: Checkout current main
         uses: actions/checkout@v4
         with:
           ref: main
@@ -55,29 +53,24 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Restore verified original dog icon from successful v199.4 APK
+      - name: Restore dog launcher icon from library source
         shell: bash
         run: |
           set -euo pipefail
-          HIST_APK="$RUNNER_TEMP/jayuminton-v199.4.apk"
-          ICON="$RUNNER_TEMP/original-dog-icon.png"
-          git cat-file -e "$DOG_APK_COMMIT:$DOG_APK_PATH"
-          git show "$DOG_APK_COMMIT:$DOG_APK_PATH" > "$HIST_APK"
-          test -s "$HIST_APK"
-          unzip -t "$HIST_APK" >/dev/null
-          unzip -p "$HIST_APK" res/drawable/icon.png > "$ICON"
+          SRC='app/src/main/res/drawable/icon_from_library.b64'
+          ICON='app/src/main/res/drawable/icon.png'
+          test -s "$SRC"
+          base64 --decode "$SRC" > "$ICON"
           test -s "$ICON"
           ACTUAL=$(sha256sum "$ICON" | awk '{print $1}')
-          echo "historical dog icon sha256=$ACTUAL"
+          echo "library dog icon sha256=$ACTUAL"
           test "$ACTUAL" = "$DOG_ICON_SHA256"
           file "$ICON"
-
-          mkdir -p app/src/main/res/drawable deployment/status
-          cp "$ICON" app/src/main/res/drawable/icon.png
+          mkdir -p deployment/status
           {
-            echo "source_commit=$DOG_APK_COMMIT"
-            echo "source_apk=$DOG_APK_PATH"
-            echo 'source_resource=res/drawable/icon.png'
+            echo 'source=chatgpt-file-library'
+            echo 'source_name=자유민턴 관리자 배드민턴 아이콘.png'
+            echo 'resource=res/drawable/icon.png'
             echo "sha256=$ACTUAL"
           } > deployment/status/v1996-dog-icon-source.txt
 
@@ -175,7 +168,7 @@ jobs:
       - name: Build signed release APK
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Verify signed APK package version signature and exact dog icon
+      - name: Verify signed APK package version signature and dog icon
         shell: bash
         run: |
           set -euo pipefail
@@ -233,8 +226,8 @@ jobs:
             echo 'version=199.6'
             echo 'package=com.jayuminton.admin'
             echo 'output=releases/jayuminton-v199.6-final-fresh-install.apk'
-            echo 'dog_icon_sha256=c64778554936a98100ef4a277a007bd4d619e75f22804a8b86deaae86a4af4ed'
-            echo 'dog_art=exact-resource-from-verified-v199.4-apk'
+            echo 'dog_icon_sha256=1c7ddefbd9bedb01cd28fd0b8af26eef7c046a86131de9e0782b2e147a47e19e'
+            echo 'dog_art=chatgpt-file-library-source'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
           } > deployment/status/v1996-final-apk.txt
           git config user.name 'github-actions[bot]'
