@@ -58,54 +58,64 @@ jobs:
           cd "$WORK"
           clasp pull
 
-          # Existing-member edit, user-mode guard, 4 one-line buttons.
+          # Existing-member edit, user-mode guard, and four one-line actions.
           python3 "$GITHUB_WORKSPACE/deployment/scripts/apply_member_edit_existing_only.py" "$WORK"
 
-          # Strong vibration + admin PWA launcher.
+          # Strong vibration and the APK-to-browser PWA launcher.
           python3 - <<'PY'
           from pathlib import Path
 
           def replace_function(src, name, replacement):
-              token='function '+name+'('
-              start=src.find(token)
+              token = 'function ' + name + '('
+              start = src.find(token)
               if start < 0:
-                  raise SystemExit(name+' missing')
-              brace=src.find('{',start)
-              depth=0; quote=None; escape=False; i=brace
+                  raise SystemExit(name + ' missing')
+              brace = src.find('{', start)
+              depth = 0
+              quote = None
+              escape = False
+              i = brace
               while i < len(src):
-                  ch=src[i]
+                  ch = src[i]
                   if quote:
-                      if escape: escape=False
-                      elif ch=='\\': escape=True
-                      elif ch==quote: quote=None
-                      i+=1; continue
-                  if ch in "'\"`": quote=ch
-                  elif ch=='{': depth+=1
-                  elif ch=='}':
-                      depth-=1
-                      if depth==0:
-                          return src[:start]+replacement+src[i+1:]
-                  i+=1
-              raise SystemExit('unbalanced '+name)
+                      if escape:
+                          escape = False
+                      elif ch == '\\':
+                          escape = True
+                      elif ch == quote:
+                          quote = None
+                      i += 1
+                      continue
+                  if ch in "'\"`":
+                      quote = ch
+                  elif ch == '{':
+                      depth += 1
+                  elif ch == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return src[:start] + replacement + src[i + 1:]
+                  i += 1
+              raise SystemExit('unbalanced ' + name)
 
-          p=Path('Script.html')
-          s=p.read_text(encoding='utf-8')
-          s=replace_function(s,'memberAlertRepeatCount',"""function memberAlertRepeatCount(type) {
+          p = Path('Script.html')
+          s = p.read_text(encoding='utf-8')
+          s = replace_function(s, 'memberAlertRepeatCount', """function memberAlertRepeatCount(type) {
             if (type === 'court_assignment') return 4;
             if (type === 'wait1_ready') return 2;
             return 1;
           }""")
-          s=replace_function(s,'memberVibrationPattern',"""function memberVibrationPattern(type) {
+          s = replace_function(s, 'memberVibrationPattern', """function memberVibrationPattern(type) {
             if (type === 'wait1_ready') return [320, 180, 320, 180, 320];
             if (type === 'court_assignment') return [320, 180, 320, 180, 320];
             return [320, 180, 320, 180, 320];
           }""")
-          s=s.replace('}, index * 1300);','}, index * 1700);')
+          s = s.replace('}, index * 1300);', '}, index * 1700);')
 
           if 'function openAdminPushApp()' not in s:
-              close=s.rfind('</script>')
-              if close < 0: raise SystemExit('script close missing')
-              fn="""
+              close = s.rfind('</script>')
+              if close < 0:
+                  raise SystemExit('script close missing')
+              fn = """
           function openAdminPushApp() {
             const target = 'https://jayuminton-push.web.app/';
             try {
@@ -118,25 +128,42 @@ jobs:
             catch (error) { window.open(target, '_blank', 'noopener'); }
           }
           """
-              s=s[:close]+fn+s[close:]
-          p.write_text(s,encoding='utf-8')
+              s = s[:close] + fn + s[close:]
+          p.write_text(s, encoding='utf-8')
 
-          p=Path('Admin.html')
-          a=p.read_text(encoding='utf-8')
+          p = Path('Admin.html')
+          a = p.read_text(encoding='utf-8')
           if 'id="adminPushAppButton"' not in a:
-              anchor='    <details class="top-admin-menu">'
-              if anchor not in a: raise SystemExit('admin top menu anchor missing')
-              button='''    <button id="adminPushAppButton" class="ghost-button admin-push-app-button" type="button" onclick="openAdminPushApp()" style="white-space:nowrap;font-weight:900">📱 푸시앱</button>\n\n'''
-              a=a.replace(anchor,button+anchor,1)
-          p.write_text(a,encoding='utf-8')
+              anchor = '    <details class="top-admin-menu">'
+              if anchor not in a:
+                  raise SystemExit('admin top menu anchor missing')
+              button = '''    <button id="adminPushAppButton" class="ghost-button admin-push-app-button" type="button" onclick="openAdminPushApp()" style="white-space:nowrap;font-weight:900">📱 푸시앱</button>\n\n'''
+              a = a.replace(anchor, button + anchor, 1)
+          p.write_text(a, encoding='utf-8')
           PY
+
+          # Repeated historical patches left `async` before the function token.
+          # Normalize that declaration and then parse the entire client JS with Node.
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/normalize_member_edit_js.py" "$WORK"
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('Script.html').read_text(encoding='utf-8')
+          start = text.find('<script>')
+          end = text.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('Script.html wrapper missing')
+          Path('Script.syntax-check.js').write_text(text[start + len('<script>'):end], encoding='utf-8')
+          PY
+          node --check Script.syntax-check.js
+          rm Script.syntax-check.js
 
           grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
           if grep -F '수정 저장' Admin.html >/dev/null; then exit 1; fi
           grep -F 'id="adminPushAppButton"' Admin.html >/dev/null
+          grep -F 'async function applyMemberEdit()' Script.html >/dev/null
+          if grep -E '(async[[:space:]]+){2,}function' Script.html >/dev/null; then exit 1; fi
           grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
           grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
-          grep -F "return [320, 180, 320, 180, 320];" Script.html >/dev/null
           grep -F 'index * 1700' Script.html >/dev/null
           grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
           grep -F "server('updateMemberProfile'" Script.html >/dev/null
@@ -150,13 +177,13 @@ jobs:
           WORK="$RUNNER_TEMP/main"
           cd "$WORK"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "final edit vibration state ${GITHUB_SHA::7}"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "final valid edit vibration state ${GITHUB_SHA::7}"
           cp Admin.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Admin.html"
           cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
           cp Style.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Style.html"
           cp Code.js "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js"
 
-      - name: Verify deployed Apps Script source
+      - name: Verify deployed Apps Script source and JavaScript syntax
         shell: bash
         run: |
           set -euo pipefail
@@ -165,15 +192,30 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
           cd "$VERIFY"
           clasp pull
+
           grep -F 'onclick="applyMemberEdit()">수정</button>' Admin.html >/dev/null
           if grep -F '수정 저장' Admin.html >/dev/null; then exit 1; fi
           grep -F 'id="adminPushAppButton"' Admin.html >/dev/null
+          grep -F 'async function applyMemberEdit()' Script.html >/dev/null
+          if grep -E '(async[[:space:]]+){2,}function' Script.html >/dev/null; then exit 1; fi
           grep -F "if (type === 'court_assignment') return 4;" Script.html >/dev/null
           grep -F "if (type === 'wait1_ready') return 2;" Script.html >/dev/null
           grep -F 'index * 1700' Script.html >/dev/null
           grep -F "if (!IS_ADMIN) return '';" Script.html >/dev/null
           grep -F 'members[index].name = name;' Code.js >/dev/null
           if grep -F 'id="memberEditModal"' Index.html >/dev/null; then exit 1; fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('Script.html').read_text(encoding='utf-8')
+          start = text.find('<script>')
+          end = text.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('Script.html wrapper missing')
+          Path('Script.syntax-check.js').write_text(text[start + len('<script>'):end], encoding='utf-8')
+          PY
+          node --check Script.syntax-check.js
+          echo 'Deployed Apps Script JavaScript syntax verified.'
 
       - name: Record deployment result
         if: always()
@@ -187,6 +229,7 @@ jobs:
             echo 'status=${{ job.status }}'
             echo 'head_sha=${{ github.sha }}'
             echo 'edit=existing-member-overwrite-only'
+            echo 'edit_js=syntax-checked'
             echo 'wait1_vibration=3-pulse-x2'
             echo 'court_vibration=3-pulse-x4'
             echo 'admin_push_button=native-browser-first'
@@ -200,6 +243,6 @@ jobs:
           else
             git restore source-snapshot/current-main/Admin.html source-snapshot/current-main/Script.html source-snapshot/current-main/Style.html source-snapshot/current-main/Code.js 2>/dev/null || true
           fi
-          git commit -m 'Record final member state deployment: ${{ job.status }}' || exit 0
+          git commit -m 'Record syntax-checked final member state: ${{ job.status }}' || exit 0
           git pull --rebase origin main || true
           git push origin main
