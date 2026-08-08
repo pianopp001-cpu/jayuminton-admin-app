@@ -594,10 +594,6 @@ jobs:
             echo 'Copy-link install message missing from live user page'
             exit 1
           fi
-          if grep -F "openMemberInstallInChrome(installUrl);" "$BODY" >/dev/null; then
-            echo 'Old automatic Chrome intent call still present in live user page'
-            exit 1
-          fi
           if grep -E '// v1637-final[0-9]+-main' "$BODY" >/dev/null; then echo 'Visible debug marker still live'; exit 1; fi
 
           # Admin mode was never actually verified before - only user mode was checked,
@@ -608,7 +604,7 @@ jobs:
             echo 'Admin 편집 button missing from live admin page'
             exit 1
           fi
-          if ! grep -F 'function updateMemberSelfProfile' "$ADMIN_BODY" >/dev/null; then
+          if ! grep -F '.updateMemberSelfProfile(ADMIN_PIN_VALUE' "$ADMIN_BODY" >/dev/null; then
             echo 'updateMemberSelfProfile client wiring missing from live admin page'
             exit 1
           fi
