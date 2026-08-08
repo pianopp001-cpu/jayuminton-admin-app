@@ -183,6 +183,7 @@ jobs:
           Path('check.js').write_text(s[a+8:b],encoding='utf-8')
           PY
           node --check check.js
+          rm -f check.js
           grep -F 'jayuminton-courtstatus-v1.1.1-fresh-install.apk' Script.html >/dev/null
           grep -F 'JAYUMINTON_NATIVE_USER_PUSH_SYNC_V110' Script.html >/dev/null
           grep -F 'window.NativeUserApp.setMember' Script.html >/dev/null
