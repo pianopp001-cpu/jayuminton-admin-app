@@ -1,0 +1,9 @@
+workflow=Build verified Jayuminton v199.8
+run_id=31260456160
+status=failure
+build_step=failure
+build_exit_code=1
+head_sha=948739e4414164189fcce5811cdeb63f6f7d17d1
+apk_exists=no
+detailed_verification_status=absent
+updated_at=2026-08-08T13:49:56Z
