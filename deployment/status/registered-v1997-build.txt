@@ -1,0 +1,10 @@
+workflow=Build verified Jayuminton v199.7
+run_id=31259405189
+status=success
+build_step=success
+build_exit_code=0
+head_sha=a4eb42203df7b5242a68ac81a86da89f7a257921
+apk_exists=yes
+apk_sha256=91a3c89bda75d2c5dad8258de76eaa2fe94d1c8a4b682604631afa57eedcd128
+detailed_verification_status=present
+updated_at=2026-08-08T13:23:59Z

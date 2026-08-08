@@ -1,0 +1,8 @@
+safe_error_extract=v1
+Pinned launcher icon verified: 128x152 sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
+Launcher icon pixels verified: 128x152
+admin_session=server-validated-localstorage-persistent
+voice_volume_step=6
+media_duck_volume_step=6
+launcher_label=자유민턴 관리자
+launcher_icon_sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
