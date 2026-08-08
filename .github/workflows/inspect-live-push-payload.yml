@@ -1,6 +1,10 @@
 name: Inspect live push payload structure
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy-triggers/push-inspect.txt'
   pull_request:
     branches: [main]
     paths:
