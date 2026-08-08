@@ -1,0 +1,229 @@
+name: Build fresh Jayuminton court status native push v1.1.0
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deployment/status/trigger-user-native-v110.txt'
+      - '.github/workflows/build-user-native-push-fresh-v110.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-native-v110
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId and .pushScriptId and .pushDeploymentId and .firebaseProjectId and .pushUrl' "$CONFIG" >/dev/null
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
+            echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$CONFIG")"
+            echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG")"
+            echo "PUSH_URL=$(jq -r '.pushUrl' "$CONFIG")"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
+          } >> "$GITHUB_ENV"
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Install Firebase and clasp tools
+        run: npm install --global firebase-tools@latest @google/clasp@latest
+
+      - name: Ensure Firebase Android app and download google-services config
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE='com.jayuminton.user'
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          find_app_id() {
+            node - "$RUNNER_TEMP/apps.json" "$PACKAGE" <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          const pkg=process.argv[3];
+          const candidates=[];
+          function walk(v){
+            if(!v)return;
+            if(Array.isArray(v)){v.forEach(walk);return;}
+            if(typeof v==='object'){
+              if((v.packageName===pkg || v.package_name===pkg || (v.androidClientInfo&&v.androidClientInfo.packageName===pkg)) && (v.appId||v.app_id)) candidates.push(v.appId||v.app_id);
+              Object.values(v).forEach(walk);
+            }
+          }
+          walk(j);
+          if(candidates.length) process.stdout.write(String(candidates[0]));
+NODE
+          }
+          APP_ID="$(find_app_id)"
+          if [ -z "$APP_ID" ]; then
+            firebase apps:create ANDROID '자유민턴 코트현황' --package-name "$PACKAGE" --project "$FIREBASE_PROJECT_ID"
+            firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+            APP_ID="$(find_app_id)"
+          fi
+          test -n "$APP_ID"
+          echo "Firebase Android app located for $PACKAGE"
+          firebase apps:sdkconfig ANDROID "$APP_ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('app/google-services.json').read_text(encoding='utf-8'))
+          packages=[]
+          for client in data.get('client',[]):
+              info=((client.get('client_info') or {}).get('android_client_info') or {})
+              if info.get('package_name'): packages.append(info['package_name'])
+          if 'com.jayuminton.user' not in packages:
+              raise SystemExit('google-services.json package mismatch')
+          print('google-services.json package verified')
+          PY
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME/platform-tools"
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -n "$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | head -1)"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Verify live push sender is high priority 3x3 3x5
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/verify-push"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          grep -F "repeatCount: event.type === 'court_assignment' ? '5' : '3'" Code.js >/dev/null
+          grep -F "priority: 'high'" Code.js >/dev/null
+          grep -F "ttl: '600s'" Code.js >/dev/null
+
+      - name: Build and verify fresh-install native FCM APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash deployment/scripts/build_user_native_push_fresh_v110.sh
+          test -s releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk
+          grep -F 'status=success' deployment/status/user-native-push-v1.1.0.txt >/dev/null
+          grep -F 'launcher_label=자유민턴 코트현황' deployment/status/user-native-push-v1.1.0.txt >/dev/null
+          grep -F 'install_mode=uninstall-old-then-fresh-install' deployment/status/user-native-push-v1.1.0.txt >/dev/null
+          grep -F 'wait1_vibration=3-long-pulses-x3-groups' deployment/status/user-native-push-v1.1.0.txt >/dev/null
+          grep -F 'court_vibration=3-long-pulses-x5-groups' deployment/status/user-native-push-v1.1.0.txt >/dev/null
+          cp releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk "$RUNNER_TEMP/user-native.apk"
+          cp deployment/status/user-native-push-v1.1.0.txt "$RUNNER_TEMP/user-native-status.txt"
+
+      - name: Publish verified APK before changing live install button
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          cp "$RUNNER_TEMP/user-native.apk" releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk
+          cp "$RUNNER_TEMP/user-native-status.txt" deployment/status/user-native-push-v1.1.0.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk deployment/status/user-native-push-v1.1.0.txt
+          git commit -m 'Publish verified fresh-install native push user APK v1.1.0' || true
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Confirm published APK byte-for-byte
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git show origin/main:releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk > "$RUNNER_TEMP/remote.apk"
+          test -s "$RUNNER_TEMP/remote.apk"
+          test "$(sha256sum "$RUNNER_TEMP/remote.apk" | awk '{print $1}')" = "$(sha256sum "$RUNNER_TEMP/user-native.apk" | awk '{print $1}')"
+
+      - name: Patch live user page for native bridge and fresh-install APK only
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main-live"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          sha256sum Admin.html Style.html Code.js Index.html > "$RUNNER_TEMP/non-script-before.sha"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_alert_3x3_3x5.py" "$WORK"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_native_user_push_bridge.py" "$WORK"
+          sha256sum Admin.html Style.html Code.js Index.html > "$RUNNER_TEMP/non-script-after.sha"
+          cmp "$RUNNER_TEMP/non-script-before.sha" "$RUNNER_TEMP/non-script-after.sha"
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('Script.html').read_text(encoding='utf-8')
+          a=s.find('<script>');b=s.rfind('</script>')
+          if a<0 or b<=a: raise SystemExit('Script wrapper missing')
+          Path('check.js').write_text(s[a+8:b],encoding='utf-8')
+          PY
+          node --check check.js
+          grep -F 'jayuminton-courtstatus-v1.1.0-fresh-install.apk' Script.html >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_USER_PUSH_SYNC_V110' Script.html >/dev/null
+          grep -F 'window.NativeUserApp.setMember' Script.html >/dev/null
+          grep -F "if (type === 'court_assignment') return 5;" Script.html >/dev/null
+          grep -F "if (type === 'wait1_ready') return 3;" Script.html >/dev/null
+
+      - name: Deploy and re-pull user page
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/main-live"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "fresh native FCM user APK v1.1.0 $GITHUB_RUN_ID"
+          VERIFY="$RUNNER_TEMP/verify-main"
+          mkdir -p "$VERIFY"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
+          cd "$VERIFY"
+          clasp pull
+          grep -F 'jayuminton-courtstatus-v1.1.0-fresh-install.apk' Script.html >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_USER_PUSH_SYNC_V110' Script.html >/dev/null
+          grep -F 'window.NativeUserApp.setMember' Script.html >/dev/null
+          grep -F "if (type === 'court_assignment') return 5;" Script.html >/dev/null
+          grep -F "if (type === 'wait1_ready') return 3;" Script.html >/dev/null
+
+      - name: Upload fresh-install APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-courtstatus-v1.1.0-fresh-install
+          path: releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk
+          if-no-files-found: error
+          retention-days: 30
