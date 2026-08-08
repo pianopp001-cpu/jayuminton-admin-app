@@ -42,7 +42,14 @@ jobs:
 
       - name: Build and verify v199.6
         id: build_apk
-        run: bash deployment/scripts/run_verified_v1996_fixed.sh
+        shell: bash
+        run: |
+          set +e
+          LOG="$RUNNER_TEMP/v1996-build.log"
+          bash deployment/scripts/run_verified_v1996_fixed.sh 2>&1 | tee "$LOG"
+          RC=${PIPESTATUS[0]}
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
+          exit "$RC"
 
       - name: Upload verified APK
         if: success()
@@ -53,19 +60,23 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Record build result and verified APK
+      - name: Record build result diagnostics and verified APK
         if: always()
         shell: bash
         run: |
           set -u
           mkdir -p deployment/status
           STATUS=deployment/status/registered-v1996-build.txt
+          DIAG=deployment/status/registered-v1996-diagnostic.txt
           APK=releases/jayuminton-v199.6-verified.apk
+          LOG="$RUNNER_TEMP/v1996-build.log"
+
           {
             echo 'workflow=Build verified Jayuminton v199.6 through registered workflow'
             echo 'run_id=${{ github.run_id }}'
             echo 'status=${{ job.status }}'
             echo 'build_step=${{ steps.build_apk.outcome }}'
+            echo 'build_exit_code=${{ steps.build_apk.outputs.exit_code }}'
             echo 'head_sha=${{ github.sha }}'
             if [ -s "$APK" ]; then
               echo 'apk_exists=yes'
@@ -81,15 +92,28 @@ jobs:
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
           } > "$STATUS"
 
+          {
+            echo 'safe_error_extract=v1'
+            echo 'Only error-oriented build lines are retained; full environment/log is not committed.'
+            if [ -s "$LOG" ]; then
+              grep -Ei '(^|[[:space:]])(FAILURE:|BUILD FAILED|Execution failed|What went wrong|ERROR:|error:|Could not|No such file|not found|FAILED$|ResourceCompilation|mergeReleaseResources|compileRelease|AAPT|Exception|launcher icon|stale admin|ADMIN_URL replacement)' "$LOG" \
+                | tail -n 120 \
+                | sed -E 's/(storePassword|keyPassword)[^[:space:]]*/\1=[REDACTED]/g' \
+                || true
+            else
+              echo 'build_log=missing'
+            fi
+          } > "$DIAG"
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$STATUS"
+          git add "$STATUS" "$DIAG"
           if [ -s "$APK" ]; then
             git add "$APK"
           fi
           if [ -s deployment/status/apk-v1996.txt ]; then
             git add deployment/status/apk-v1996.txt
           fi
-          git commit -m 'Record registered v199.6 build: ${{ job.status }}' || exit 0
+          git commit -m 'Record registered v199.6 build diagnostics: ${{ job.status }}' || exit 0
           git pull --rebase origin main || true
           git push origin main
