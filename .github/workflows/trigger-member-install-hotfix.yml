@@ -1,10 +1,6 @@
 name: Build verified Jayuminton v199.6 through registered workflow
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/trigger-member-install-hotfix.yml'
   workflow_dispatch: {}
 
 permissions:
