@@ -41,9 +41,11 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build and verify v199.6
+        id: build_apk
         run: bash deployment/scripts/run_verified_v1996_fixed.sh
 
       - name: Upload verified APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: jayuminton-v199.6-verified
@@ -51,12 +53,43 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Commit verified APK and status
+      - name: Record build result and verified APK
+        if: always()
+        shell: bash
         run: |
-          set -euo pipefail
+          set -u
+          mkdir -p deployment/status
+          STATUS=deployment/status/registered-v1996-build.txt
+          APK=releases/jayuminton-v199.6-verified.apk
+          {
+            echo 'workflow=Build verified Jayuminton v199.6 through registered workflow'
+            echo 'run_id=${{ github.run_id }}'
+            echo 'status=${{ job.status }}'
+            echo 'build_step=${{ steps.build_apk.outcome }}'
+            echo 'head_sha=${{ github.sha }}'
+            if [ -s "$APK" ]; then
+              echo 'apk_exists=yes'
+              echo "apk_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+            else
+              echo 'apk_exists=no'
+            fi
+            if [ -s deployment/status/apk-v1996.txt ]; then
+              echo 'detailed_verification_status=present'
+            else
+              echo 'detailed_verification_status=absent'
+            fi
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > "$STATUS"
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/jayuminton-v199.6-verified.apk deployment/status/apk-v1996.txt
-          git commit -m 'Add fully verified Jayuminton v199.6 APK' || exit 0
+          git add "$STATUS"
+          if [ -s "$APK" ]; then
+            git add "$APK"
+          fi
+          if [ -s deployment/status/apk-v1996.txt ]; then
+            git add deployment/status/apk-v1996.txt
+          fi
+          git commit -m 'Record registered v199.6 build: ${{ job.status }}' || exit 0
           git pull --rebase origin main || true
           git push origin main
