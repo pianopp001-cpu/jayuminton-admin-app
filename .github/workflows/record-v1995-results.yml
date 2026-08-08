@@ -1,0 +1,41 @@
+name: Record v199.5 workflow results
+
+on:
+  workflow_run:
+    workflows:
+      - 'Build signed Jayuminton v199.5 fresh APK'
+      - 'Deploy Jayuminton v199.5 user admin PWA fixes'
+    types: [completed]
+
+permissions:
+  contents: write
+
+actions: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Record result
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          NAME='${{ github.event.workflow_run.name }}'
+          if [[ "$NAME" == Build* ]]; then FILE='deployment/status/v1995-apk-build.txt'; else FILE='deployment/status/v1995-live-deploy.txt'; fi
+          {
+            echo "workflow=$NAME"
+            echo "conclusion=${{ github.event.workflow_run.conclusion }}"
+            echo "run_id=${{ github.event.workflow_run.id }}"
+            echo "head_sha=${{ github.event.workflow_run.head_sha }}"
+            echo "updated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > "$FILE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$FILE"
+          git commit -m "Record v199.5 workflow result: ${{ github.event.workflow_run.conclusion }}" || exit 0
+          git pull --rebase origin main || true
+          git push origin main
