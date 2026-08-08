@@ -279,6 +279,7 @@ let WAIT_SELECTED_B = new Set();
 let QUICK_PICK = null;
 let LAST_UNDO_STATE = null;
 let WHOLE_SWAP_PICK = null;
+let LAST_EXCLUDED_MEMBER_TAP = { memberId:'', tappedAt:0 };
 let LAST_COURT_MEMBER_TAP = {
   memberId: '',
   tappedAt: 0
@@ -1269,6 +1270,33 @@ function quickPickMember(type, index, memberId, event) {
 
   if (source.memberId === memberId) return;
   quickMoveOrSwap(source.memberId, type, index, memberId);
+}
+
+function handleExcludedMemberTap(memberId, event) {
+  if (!IS_ADMIN) return;
+  if (consumeLongPressClick(memberId, event)) return;
+  if (assignMemberToChosenEmpty(memberId, event)) return;
+
+  const now = Date.now();
+  const isDoubleTap =
+    LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+    now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+
+  LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+    ? { memberId:'', tappedAt:0 }
+    : { memberId:memberId, tappedAt:now };
+
+  if (isDoubleTap) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    cancelQuickPick();
+    runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+    return;
+  }
+
+  toggleSelected(memberId);
 }
 
 function handleCourtMemberTap(courtNo, memberId, event) {
@@ -4338,7 +4366,7 @@ function renderExcluded() {
               member.id +
               '"' +
               memberLongPressAttributes(member.id) +
-              ' onclick="handleSelectableMemberClick(\'' +
+              ' onclick="handleExcludedMemberTap(\'' +
               member.id +
               '\',event)">' +
               '<span class="name">' +
