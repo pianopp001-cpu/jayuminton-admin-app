@@ -1,0 +1,67 @@
+name: Emergency fix member nine-column save range
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-fix-member-save-range.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-emergency-member-save-range
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+
+      - name: Change only the member write range from 8 to 9
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          WORK="$RUNNER_TEMP/main-live"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          test "$(cat check.js)" = '// Intentionally empty server-side placeholder.'
+          find . -maxdepth 1 -type f ! -name '.clasp.json' ! -name 'Code.js' -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/before.sha"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Code.js')
+          s=p.read_text(encoding='utf-8')
+          old='.getRange(2, 1, rows.length, 8)'
+          new='.getRange(2, 1, rows.length, 9)'
+          if s.count(old) != 1:
+              raise SystemExit('Expected one eight-column member write range, found ' + str(s.count(old)))
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          find . -maxdepth 1 -type f ! -name '.clasp.json' ! -name 'Code.js' -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/after.sha"
+          cmp "$RUNNER_TEMP/before.sha" "$RUNNER_TEMP/after.sha"
+          node --check Code.js
+          grep -F '.getRange(2, 1, rows.length, 9)' Code.js >/dev/null
+          ! grep -F '.getRange(2, 1, rows.length, 8)' Code.js
+
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "emergency member 9-column save range $GITHUB_RUN_ID"
