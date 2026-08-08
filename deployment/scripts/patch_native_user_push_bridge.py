@@ -8,7 +8,7 @@ s = p.read_text(encoding='utf-8')
 
 s = re.sub(
     r"const MEMBER_USER_APK_URL\s*=\s*\n\s*'[^']+';",
-    "const MEMBER_USER_APK_URL =\n  'https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/releases/jayuminton-courtstatus-v1.1.0-fresh-install.apk';",
+    "const MEMBER_USER_APK_URL =\n  'https://jayuminton-push.web.app/jayuminton-courtstatus-v1.1.0-fresh-install.apk';",
     s,
     count=1,
 )
