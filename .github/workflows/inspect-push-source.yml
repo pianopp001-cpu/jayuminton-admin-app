@@ -1,0 +1,107 @@
+name: Inspect Jayuminton push source
+run-name: Inspect push token and notification flow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-push-source.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Reconstruct setup source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=deployment/jayuminton/v1637-web
+          mapfile -t PARTS < <(find "$SRC" -maxdepth 1 -type f -name 'setup-v205.js.gz.b64.part-*' | sort)
+          if [ "${#PARTS[@]}" -lt 1 ]; then
+            echo 'No setup-v205 split source found.' >&2
+            exit 1
+          fi
+          cat "${PARTS[@]}" | tr -d '\r\n' | base64 --decode | gzip --decompress > "$RUNNER_TEMP/setup-v205.js"
+          test -s "$RUNNER_TEMP/setup-v205.js"
+          node --check "$RUNNER_TEMP/setup-v205.js"
+          echo "parts=${#PARTS[@]}"
+          echo "bytes=$(wc -c < "$RUNNER_TEMP/setup-v205.js")"
+
+      - name: Inspect token and bridge flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          JS="$RUNNER_TEMP/setup-v205.js"
+          mkdir -p deployment/status
+          OUT=deployment/status/push-source-inspection.txt
+
+          has() {
+            local pattern="$1"
+            if grep -F "$pattern" "$JS" >/dev/null; then echo yes; else echo no; fi
+          }
+
+          {
+            echo 'workflow=Inspect Jayuminton push source'
+            echo 'run_id=${{ github.run_id }}'
+            echo 'status=success'
+            echo "getToken=$(has 'getToken')"
+            echo "notification_permission=$(has 'Notification.requestPermission')"
+            echo "push_setup_request=$(has 'JAYUMINTON_PUSH_SETUP_REQUEST')"
+            echo "member_selected=$(has 'JAYUMINTON_MEMBER_SELECTED')"
+            echo "push_connect_result=$(has 'JAYUMINTON_PUSH_CONNECT_RESULT')"
+            echo "push_disconnect_request=$(has 'JAYUMINTON_PUSH_DISCONNECT_REQUEST')"
+            echo "service_worker_registration=$(has 'serviceWorker')"
+            echo "relay_url_reference=$(has 'relayUrl')"
+            echo
+            echo '--- getToken context ---'
+            grep -n -C 24 -F 'getToken' "$JS" || true
+            echo
+            echo '--- push setup request context ---'
+            grep -n -C 30 -F 'JAYUMINTON_PUSH_SETUP_REQUEST' "$JS" || true
+            echo
+            echo '--- member selected context ---'
+            grep -n -C 24 -F 'JAYUMINTON_MEMBER_SELECTED' "$JS" || true
+            echo
+            echo '--- connect result context ---'
+            grep -n -C 24 -F 'JAYUMINTON_PUSH_CONNECT_RESULT' "$JS" || true
+          } > "$OUT"
+
+          grep -F 'getToken=yes' "$OUT" >/dev/null
+          grep -F 'notification_permission=yes' "$OUT" >/dev/null
+          grep -F 'push_setup_request=yes' "$OUT" >/dev/null
+          grep -F 'member_selected=yes' "$OUT" >/dev/null
+          grep -F 'push_connect_result=yes' "$OUT" >/dev/null
+          grep -F 'service_worker_registration=yes' "$OUT" >/dev/null
+          grep -F 'relay_url_reference=yes' "$OUT" >/dev/null
+
+      - name: Commit inspection result
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          mkdir -p deployment/status
+          OUT=deployment/status/push-source-inspection.txt
+          if [ ! -f "$OUT" ]; then
+            {
+              echo 'workflow=Inspect Jayuminton push source'
+              echo 'run_id=${{ github.run_id }}'
+              echo 'status=failure'
+              echo 'inspection=not-complete'
+            } > "$OUT"
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$OUT"
+          git commit -m 'Record push source inspection: ${{ job.status }}' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
