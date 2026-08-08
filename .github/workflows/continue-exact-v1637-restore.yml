@@ -79,8 +79,7 @@ jobs:
 
           # Visible v1.6.37 UI files must stay byte-for-byte unchanged.
           printf '%s  %s\n' \
-            '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html \
-            'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' Style.html | sha256sum --check
+            '6b61b90e1b6a0955ba0c00524e3556605f46eafa3b969f60a3c420aeb654ae6c' Index.html | sha256sum --check
 
           # Code.js now needs one small additive function (member self profile edit), so
           # it is no longer byte-locked - but we still confirm it starts from the known
@@ -98,6 +97,15 @@ jobs:
           if [ "$ADMIN_HASH" != '34d5a1469b1abdefc57fe3ca2395fe3ec6c00ef6cd14855fb554af70086e38d0' ] && \
              ! grep -qF 'onclick="startMemberEdit()"' Admin.html; then
             echo 'Admin.html is neither the known v1.6.37 baseline nor already patched' >&2
+            exit 1
+          fi
+
+          # Style.html needs a tiny CSS tweak so the quick-move bar fits 4 buttons
+          # (배정대기로 빼기/편집/취소/삭제) on one row instead of wrapping.
+          STYLE_HASH=$(sha256sum Style.html | awk '{print $1}')
+          if [ "$STYLE_HASH" != 'f74408c53654e38ff1646f31693b1ed6701e6a625efeb28258edc62bffe12625' ] && \
+             ! grep -qF 'grid-template-columns:1fr auto auto auto;' Style.html; then
+            echo 'Style.html is neither the known v1.6.37 baseline nor already patched' >&2
             exit 1
           fi
 
@@ -315,18 +323,13 @@ jobs:
           if 'publishMemberAppInstallButtonRect();' not in after:
               s=s[:brace+1]+"\n  publishMemberAppInstallButtonRect();"+s[brace+1:]
 
-          # (Earlier user-facing self-edit button was replaced: the person only wants
-          # the admin long-press menu's existing 배정대기로 빼기/취소/삭제 to also get
-          # an 편집 option, using the existing add-member toolbar inputs.)
-
-          # 1) global state for "currently editing this member id"
+          # Keep the admin long-press edit feature (배정대기로 빼기/취소/삭제/편집).
           old_g='let MEMBER_ACTION_IDS = [];'
           if old_g not in s:
               raise SystemExit('MEMBER_ACTION_IDS declaration missing')
           if 'let EDIT_MEMBER_ID' not in s:
               s=s.replace(old_g,old_g+'\nlet EDIT_MEMBER_ID = null;',1)
 
-          # 2) addMember() delegates to saveMemberEdit() while an edit is in progress
           old_fn='async function addMember() {\n  if (ADD_MEMBER_IN_FLIGHT) return;\n'
           new_fn='async function addMember() {\n  if (EDIT_MEMBER_ID) return saveMemberEdit();\n  if (ADD_MEMBER_IN_FLIGHT) return;\n'
           if new_fn not in s:
@@ -334,8 +337,6 @@ jobs:
                   raise SystemExit('addMember start changed unexpectedly')
               s=s.replace(old_fn,new_fn,1)
 
-          # 3) startMemberEdit / cancelMemberEdit / saveMemberEdit, reusing the existing
-          # add-member toolbar (#newName/#newGender/#newGrade/#newExperience/#addMemberButton)
           if 'function startMemberEdit()' not in s:
               edit_block='\n'.join([
                 'function startMemberEdit() {',
@@ -435,6 +436,27 @@ jobs:
                 '',
               ])
               s=s.replace('async function addMember() {',edit_block+'async function addMember() {',1)
+
+          # SAFETY NET: force-remove any "내 정보 수정" UI from the user-facing page,
+          # no matter what form it currently exists in (some earlier, unknown session
+          # may have added it directly to the live deployment; this does not rely on
+          # knowing its exact existing markup).
+          import re as _re
+          for _m in list(_re.finditer(r'<[a-zA-Z][^>]*>[^<]*내\s*정보\s*수정[^<]*</[a-zA-Z]+>', s)):
+              s = s[:_m.start()] + s[_m.end():]
+          for _m in list(_re.finditer(r"function ensureMemberProfileEditor\(\)\s*\{", s)):
+              depth=0
+              i=s.find('{', _m.start())
+              j=i
+              while j < len(s):
+                  if s[j] == '{': depth += 1
+                  elif s[j] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          break
+                  j += 1
+              s = s[:_m.start()] + s[j+1:]
+          s = s.replace("  ensureMemberProfileEditor();\n", "")
 
           p.write_text(s,encoding='utf-8')
           PY
@@ -585,6 +607,112 @@ jobs:
               ])
               s=s.replace(old,new,1)
               p.write_text(s,encoding='utf-8')
+          PY
+
+          # Fit 4 quick-move-bar buttons (배정대기로 빼기/편집/취소/삭제) on one row.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Style.html')
+          s=p.read_text(encoding='utf-8')
+
+          old1='\n'.join([
+            '  .quick-move-bar{',
+            '    bottom:70px;',
+            '    display:grid;',
+            '    grid-template-columns:1fr auto auto;',
+            '    gap:5px',
+            '  }',
+          ])
+          new1='\n'.join([
+            '  .quick-move-bar{',
+            '    bottom:70px;',
+            '    display:grid;',
+            '    grid-template-columns:1fr auto auto auto;',
+            '    gap:5px',
+            '  }',
+          ])
+          if new1 not in s:
+              if old1 not in s:
+                  raise SystemExit('quick-move-bar grid (1) changed unexpectedly')
+              s=s.replace(old1,new1,1)
+
+          old2='\n'.join([
+            '  .quick-move-bar{',
+            '    grid-template-columns:repeat(3,minmax(0,1fr))!important',
+            '  }',
+          ])
+          new2='\n'.join([
+            '  .quick-move-bar{',
+            '    grid-template-columns:repeat(4,minmax(0,1fr))!important',
+            '  }',
+          ])
+          if new2 not in s:
+              if old2 not in s:
+                  raise SystemExit('quick-move-bar grid (2) changed unexpectedly')
+              s=s.replace(old2,new2,1)
+
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          # Vibration: wait1 gets a shorter 2-pulse cue, court entry gets a stronger
+          # 4-pulse cue, instead of both sharing the same 3-pulse pattern.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+
+          old1='\n'.join([
+            'function memberVibrationPattern() {',
+            '  return [320, 170, 320, 170, 320];',
+            '}',
+          ])
+          new1='\n'.join([
+            'function memberVibrationPattern(type) {',
+            "  if (type === 'wait1_ready') return [320, 200, 320];",
+            "  if (type === 'court_assignment') return [320, 170, 320, 170, 320, 170, 320];",
+            '  return [320, 170, 320, 170, 320];',
+            '}',
+          ])
+          if new1 not in s:
+              if old1 not in s:
+                  raise SystemExit('memberVibrationPattern changed unexpectedly')
+              s=s.replace(old1,new1,1)
+
+          old2='\n'.join([
+            'function playSingleMemberAlertCue() {',
+            '  try {',
+            '    if (memberVibrationEnabled() && navigator.vibrate) {',
+            '      navigator.vibrate(memberVibrationPattern());',
+            '    }',
+            '  } catch (error) {}',
+          ])
+          new2='\n'.join([
+            'function playSingleMemberAlertCue(type) {',
+            '  try {',
+            '    if (memberVibrationEnabled() && navigator.vibrate) {',
+            '      navigator.vibrate(memberVibrationPattern(type));',
+            '    }',
+            '  } catch (error) {}',
+          ])
+          if new2 not in s:
+              if old2 not in s:
+                  raise SystemExit('playSingleMemberAlertCue changed unexpectedly')
+              s=s.replace(old2,new2,1)
+
+          old3='\n'.join([
+            '      playSingleMemberAlertCue();',
+            '      showSingleNativeMemberNotification(title, body, eventId, index + 1);',
+          ])
+          new3='\n'.join([
+            '      playSingleMemberAlertCue(type);',
+            '      showSingleNativeMemberNotification(title, body, eventId, index + 1);',
+          ])
+          if new3 not in s:
+              if old3 not in s:
+                  raise SystemExit('playMemberAlertCue call site changed unexpectedly')
+              s=s.replace(old3,new3,1)
+
+          p.write_text(s,encoding='utf-8')
           PY
 
           clasp push --force
