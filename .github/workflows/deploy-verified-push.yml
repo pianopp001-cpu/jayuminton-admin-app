@@ -68,11 +68,9 @@ jobs:
           rm -rf "$ROOT"
           mkdir -p "$PUBLIC"
 
-          # Copy the static shell, but never publish source fragments/templates.
           cp -a "$SRC"/. "$PUBLIC"/
           rm -f "$PUBLIC"/setup-v205.js.gz.b64.part-* "$PUBLIC"/*.template.js
 
-          # Reconstruct the exact current setup source, then add only the verified token check.
           mapfile -t PARTS < <(find "$SRC" -maxdepth 1 -type f -name 'setup-v205.js.gz.b64.part-*' | sort)
           if [ "${#PARTS[@]}" -lt 1 ]; then
             echo 'setup-v205 source fragments are missing' >&2
@@ -83,18 +81,22 @@ jobs:
           python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_push_setup_verification.py" "$PUBLIC/setup-v205.js"
           node --check "$PUBLIC/setup-v205.js"
 
-          # Refuse to deploy old external-app/Drive handoff regressions.
-          if grep -F 'drive.google' "$PUBLIC/setup-v205.js" >/dev/null; then
-            echo 'Google Drive handoff found in PWA setup source' >&2
-            exit 1
-          fi
+          # Native PWA install only: never publish intent, Drive, resolver, or transparent handoff code.
+          for forbidden in 'intent://' 'S.browser_fallback_url' 'drive.google' 'docs.google.com' 'appInstallChromeLink.href = links.intentUrl' 'window.location.href = links.intentUrl'; do
+            if grep -F "$forbidden" "$PUBLIC/setup-v205.js" >/dev/null; then
+              echo "Forbidden install handoff remains: $forbidden" >&2
+              exit 1
+            fi
+          done
+          grep -F 'JAYUMINTON_NATIVE_PWA_ONLY_V1' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F "window.addEventListener('beforeinstallprompt', captureAndroidInstallPrompt);" "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'promptResult = promptEvent.prompt();' "$PUBLIC/setup-v205.js" >/dev/null
 
-          # Current endpoints come from the single deploy config secret.
           python3 - <<'PY'
           from pathlib import Path
           import os
           public = Path(os.environ['RUNNER_TEMP']) / 'verified-push-hosting' / 'public'
-          template = (public / 'config-v204.template.js').read_text(encoding='utf-8') if (public / 'config-v204.template.js').exists() else Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          template = Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
           cfg = template.replace('__MEMBER_PAGE_URL__', os.environ['MAIN_URL']).replace('__RELAY_URL__', os.environ['PUSH_URL'])
           for name in ('config-v202.js','config-v203.js','config-v204.js'):
               (public / name).write_text(cfg, encoding='utf-8')
@@ -109,7 +111,6 @@ jobs:
           (public / 'index.html').write_text(index, encoding='utf-8')
           PY
 
-          # The service worker in the repository is the reviewed 2-set/4-set version.
           grep -F "JAYUMINTON_SW_VERSION = '1.6.37-pushfix-20260808'" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
           grep -F 'function joinedVibrationPattern(type)' "$PUBLIC/firebase-messaging-sw.js" >/dev/null
           grep -F "String(type || '') === 'court_assignment' ? 4 : 2" "$PUBLIC/firebase-messaging-sw.js" >/dev/null
@@ -133,32 +134,22 @@ jobs:
               "headers": [
                 {
                   "source": "/firebase-messaging-sw.js",
-                  "headers": [
-                    {"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}
-                  ]
+                  "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]
                 },
                 {
                   "source": "/setup-v205.js",
-                  "headers": [
-                    {"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}
-                  ]
+                  "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]
                 },
                 {
                   "source": "/config-v204.js",
-                  "headers": [
-                    {"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}
-                  ]
+                  "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]
                 },
                 {
                   "source": "/index.html",
-                  "headers": [
-                    {"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}
-                  ]
+                  "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]
                 }
               ],
-              "rewrites": [
-                {"source": "**", "destination": "/index.html"}
-              ]
+              "rewrites": [{"source": "**", "destination": "/index.html"}]
             }
           }
           JSON
@@ -189,11 +180,19 @@ jobs:
           node --check "$RUNNER_TEMP/live-setup.js"
           grep -F '/setup-v205.js?v=pushfix-20260808' "$RUNNER_TEMP/live-index.html" >/dev/null
           grep -F '/config-v204.js?v=pushfix-20260808' "$RUNNER_TEMP/live-index.html" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_PWA_ONLY_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'promptResult = promptEvent.prompt();' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F 'JAYUMINTON_PUSH_SERVER_VERIFY_V1' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F 'async function verifyRelayToken(memberId, token)' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F "action:'token_status'" "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F 'else if (!(await verifyRelayToken(member.id, currentToken)))' "$RUNNER_TEMP/live-setup.js" >/dev/null
           grep -F 'pushConnected:Boolean(isConnected && localStorage.getItem(STORAGE.token)' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          for forbidden in 'intent://' 'S.browser_fallback_url' 'drive.google' 'docs.google.com' 'appInstallChromeLink.href = links.intentUrl' 'window.location.href = links.intentUrl'; do
+            if grep -F "$forbidden" "$RUNNER_TEMP/live-setup.js" >/dev/null; then
+              echo "Forbidden live install handoff remains: $forbidden" >&2
+              exit 1
+            fi
+          done
           grep -F "JAYUMINTON_SW_VERSION = '1.6.37-pushfix-20260808'" "$RUNNER_TEMP/live-sw.js" >/dev/null
           grep -F "String(type || '') === 'court_assignment' ? 4 : 2" "$RUNNER_TEMP/live-sw.js" >/dev/null
           grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/live-config.js" >/dev/null
@@ -214,6 +213,8 @@ jobs:
             echo 'head_sha=${{ github.sha }}'
             if [ '${{ job.status }}' = 'success' ]; then
               echo 'hosting_verification=live-bytes-checked'
+              echo 'pwa_install=chrome-native-prompt-only'
+              echo 'legacy_handoff=intent-drive-resolver-absent'
               echo 'token_registration=server-verified-before-on'
               echo 'token_refresh=server-verified'
               echo 'wait1_vibration=3-pulse-x2'
