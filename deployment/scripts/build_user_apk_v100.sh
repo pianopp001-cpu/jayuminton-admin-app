@@ -147,7 +147,7 @@ JAVA
 
 cat > "$STRINGS_FILE" <<'XML'
 <resources>
-    <string name="app_name">자유민턴 사용자</string>
+    <string name="app_name">자유민턴 코트현황</string>
 </resources>
 XML
 
@@ -216,7 +216,7 @@ PY
 grep -F "applicationId 'com.jayuminton.user'" "$GRADLE_FILE" >/dev/null
 grep -F 'versionCode 100' "$GRADLE_FILE" >/dev/null
 grep -F "versionName '1.0.0'" "$GRADLE_FILE" >/dev/null
-grep -F '자유민턴 사용자' "$STRINGS_FILE" >/dev/null
+grep -F '자유민턴 코트현황' "$STRINGS_FILE" >/dev/null
 grep -F 'JayumintonUserNative/1.0.0' "$JAVA_FILE" >/dev/null
 grep -F "$MAIN_DEPLOYMENT_ID" "$JAVA_FILE" >/dev/null
 grep -F 'NativeUserApp' "$JAVA_FILE" >/dev/null
@@ -244,7 +244,7 @@ test -x "$APKSIGNER"
 "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/user-badging.txt"
 
 grep -F "package: name='com.jayuminton.user' versionCode='100' versionName='1.0.0'" "$RUNNER_TEMP/user-badging.txt" >/dev/null
-grep -F "application-label:'자유민턴 사용자'" "$RUNNER_TEMP/user-badging.txt" >/dev/null
+grep -F "application-label:'자유민턴 코트현황'" "$RUNNER_TEMP/user-badging.txt" >/dev/null
 
 unzip -p "$APK" classes.dex > "$RUNNER_TEMP/user-classes.dex"
 strings "$RUNNER_TEMP/user-classes.dex" > "$RUNNER_TEMP/user-classes.txt"
@@ -299,7 +299,7 @@ user_agent=JayumintonUserNative/1.0.0
 native_install_signal=NativeUserApp
 web_storage=preserved_on_launch
 cache_mode=LOAD_NO_CACHE
-launcher_label=자유민턴 사용자
+launcher_label=자유민턴 코트현황
 launcher_icon_layout=dog-full-square-128x128
 apk_sha256=$APK_SHA
 signer_sha256=$SIGNER_SHA
