@@ -1,10 +1,10 @@
 workflow=Build Jayuminton v199.6 final APK
-run_id=31236210358
+run_id=31237528618
 status=failure
-head_sha=4061fff3e2d8d2c9d4c4cf8a24082eecc9b0f32e
+head_sha=98d3047111ddfdd59571f34722d1f9b30cde0fc3
 version=199.6
 package=com.jayuminton.admin
 output=releases/jayuminton-v199.6-final-fresh-install.apk
-dog_icon_sha256=c64778554936a98100ef4a277a007bd4d619e75f22804a8b86deaae86a4af4ed
-dog_art=exact-resource-from-verified-v199.4-apk
-updated_at=2026-08-08T03:00:25Z
+dog_icon_sha256=1c7ddefbd9bedb01cd28fd0b8af26eef7c046a86131de9e0782b2e147a47e19e
+dog_art=chatgpt-file-library-source
+updated_at=2026-08-08T03:36:02Z
