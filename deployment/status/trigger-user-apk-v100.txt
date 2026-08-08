@@ -1,1 +1,1 @@
-trigger=user-apk-v1.0.0 direct install button
+trigger=user-apk-v1.0.0 direct install button retry=latest-workflow
