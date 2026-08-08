@@ -1,0 +1,104 @@
+name: Fix live user Apps Script check file
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deployment/status/trigger-remove-check-js.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-fix-live-check-js
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+
+      - name: Resolve live user deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+
+      - name: Pull live project and remove stray check file
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main-script"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          echo 'Before cleanup:'
+          find . -maxdepth 1 -type f -printf '%f\n' | sort
+          rm -f check.js check.gs check.html Script.syntax-check.js
+          test -s Code.js
+          test -s Index.html
+          test -s Script.html
+          test ! -e check.js
+          test ! -e check.gs
+
+      - name: Push clean Apps Script and update same deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/main-script"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "remove stray check file $GITHUB_RUN_ID"
+
+      - name: Re-pull and verify check file is gone
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERIFY="$RUNNER_TEMP/verify-main"
+          rm -rf "$VERIFY" && mkdir -p "$VERIFY"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
+          cd "$VERIFY"
+          clasp pull
+          test ! -e check.js
+          test ! -e check.gs
+          test ! -e Script.syntax-check.js
+          grep -F 'function doGet(e)' Code.js >/dev/null
+          grep -F '<script>' Script.html >/dev/null
+
+      - name: Verify public user URL no longer throws check/window error
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec?verify=$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --retry-delay 2 --max-time 90 -H 'Cache-Control: no-cache' "$URL" -o "$RUNNER_TEMP/user-live.html"
+          test -s "$RUNNER_TEMP/user-live.html"
+          if grep -Fi 'window is not defined' "$RUNNER_TEMP/user-live.html" >/dev/null; then
+            echo 'Live URL still contains window is not defined' >&2
+            exit 1
+          fi
+          if grep -Fi "'check' 파일" "$RUNNER_TEMP/user-live.html" >/dev/null; then
+            echo 'Live URL still contains check file error' >&2
+            exit 1
+          fi
+          grep -F '자유민턴' "$RUNNER_TEMP/user-live.html" >/dev/null
+          echo 'Live user URL opened successfully without stray check/window error.'
