@@ -1,0 +1,2 @@
+trigger=2026-08-09T00:16:00+09:00
+fresh_install=yes
