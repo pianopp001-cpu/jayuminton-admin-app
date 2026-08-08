@@ -1,4 +1,4 @@
-name: Build signed Jayuminton v199.4 APK
+name: Build signed Jayuminton v199.5 fresh APK
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-v1994-apk
+  group: jayuminton-v1995-apk
   cancel-in-progress: true
 
 jobs:
@@ -22,12 +22,14 @@ jobs:
     timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      DOG_ICON_SHA256: c64778554936a98100ef4a277a007bd4d619e75f22804a8b86deaae86a4af4ed
 
     steps:
-      - name: Checkout
+      - name: Checkout full history
         uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -52,7 +54,60 @@ jobs:
           jq -e '.mainDeploymentId' "$CONFIG" >/dev/null
           echo "ADMIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
 
-      - name: Prepare v199.4 source
+      - name: Restore exact original dog launcher icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/res/drawable
+          FOUND="$RUNNER_TEMP/dog-icon.png"
+          rm -f "$FOUND"
+
+          check_apk() {
+            local apk="$1"
+            local tmp="$RUNNER_TEMP/icon-candidate.png"
+            rm -f "$tmp"
+            unzip -p "$apk" res/drawable/icon.png > "$tmp" 2>/dev/null || return 0
+            test -s "$tmp" || return 0
+            local sum
+            sum=$(sha256sum "$tmp" | awk '{print $1}')
+            if [ "$sum" = "$DOG_ICON_SHA256" ]; then
+              cp "$tmp" "$FOUND"
+              echo "Original dog icon restored from $apk"
+            fi
+          }
+
+          # First scan APKs currently kept in the repository.
+          while IFS= read -r apk; do
+            [ -f "$FOUND" ] && break
+            check_apk "$apk"
+          done < <(find releases -type f -name '*.apk' 2>/dev/null | sort)
+
+          # If necessary, scan recent APK history. This preserves the exact old dog image,
+          # not a redrawn replacement.
+          if [ ! -f "$FOUND" ]; then
+            COUNT=0
+            while IFS= read -r commit; do
+              COUNT=$((COUNT+1))
+              [ "$COUNT" -gt 180 ] && break
+              while IFS= read -r apkpath; do
+                [ -f "$FOUND" ] && break 2
+                tmpapk="$RUNNER_TEMP/history.apk"
+                git show "$commit:$apkpath" > "$tmpapk" 2>/dev/null || continue
+                check_apk "$tmpapk"
+              done < <(git ls-tree -r --name-only "$commit" 2>/dev/null | grep -E '^releases/.*\.apk$' | head -n 20 || true)
+            done < <(git rev-list --all)
+          fi
+
+          if [ ! -f "$FOUND" ]; then
+            echo 'Exact original dog icon was not found in APK history.'
+            exit 1
+          fi
+
+          cp "$FOUND" app/src/main/res/drawable/icon.png
+          file app/src/main/res/drawable/icon.png
+          test "$(sha256sum app/src/main/res/drawable/icon.png | awk '{print $1}')" = "$DOG_ICON_SHA256"
+
+      - name: Prepare v199.5 fresh-install source
         shell: bash
         run: |
           set -euo pipefail
@@ -66,11 +121,9 @@ jobs:
 
           java_path = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           text = java_path.read_text(encoding='utf-8')
-
-          # Always point the APK at the same current MAIN deployment used by GitHub deploys.
           admin_url = (
               'https://script.google.com/macros/s/' + deployment_id +
-              '/exec?mode=admin&appVersion=199.4&freshAdmin=1'
+              '/exec?mode=admin&appVersion=199.5&freshAdmin=1'
           )
           text, count = re.subn(
               r'https://script\.google\.com/macros/s/[^"\\]+/exec\?mode=admin[^"\\]*',
@@ -83,55 +136,30 @@ jobs:
 
           text = re.sub(
               r'JayumintonNative/[0-9A-Za-z.\-]+(?: FreshAdmin/[0-9A-Za-z.\-]+)?',
-              'JayumintonNative/199.4 FreshAdmin/1994',
+              'JayumintonNative/199.5 FreshAdmin/1995',
               text,
           )
-
-          # APK WebView must never reuse an old administrator HTML/JS bundle or auth session.
-          text = text.replace('settings.setCacheMode(WebSettings.LOAD_DEFAULT);',
-                              'settings.setCacheMode(WebSettings.LOAD_NO_CACHE);')
-          ua_anchor = 'settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);'
-          if 'settings.setCacheMode(WebSettings.LOAD_NO_CACHE);' not in text:
-              text = text.replace(ua_anchor, ua_anchor + '\n        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);', 1)
-
-          config_anchor = 'CookieManager cookieManager = CookieManager.getInstance();'
-          if 'WebStorage.getInstance().deleteAllData();' not in text:
-              text = text.replace(
-                  config_anchor,
-                  'webView.clearCache(true);\n        webView.clearHistory();\n        WebStorage.getInstance().deleteAllData();\n\n        ' + config_anchor,
-                  1,
-              )
-          if 'cookieManager.removeSessionCookies(null);' not in text:
-              text = text.replace(
-                  'cookieManager.setAcceptThirdPartyCookies(webView, true);',
-                  'cookieManager.setAcceptThirdPartyCookies(webView, true);\n        cookieManager.removeSessionCookies(null);\n        cookieManager.flush();',
-                  1,
-              )
-
-          # Every APK launch gets a unique URL too, as a second cache barrier.
-          if 'System.currentTimeMillis()' not in text or 'freshAdminUrl' not in text:
-              text = re.sub(
-                  r'webView\.loadUrl\(ADMIN_URL\);',
-                  'webView.loadUrl(ADMIN_URL + "&cacheBust=" + System.currentTimeMillis());',
-                  text,
-                  count=1,
-              )
-
+          text = re.sub(
+              r'private static final String APK_WEB_BUILD = "[^"]+";',
+              'private static final String APK_WEB_BUILD = "1995-fresh-admin";',
+              text,
+              count=1,
+          )
           java_path.write_text(text, encoding='utf-8')
 
           gradle_path = Path('app/build.gradle')
           gradle = gradle_path.read_text(encoding='utf-8')
-          # Match the actual installed v199 package supplied by the user so it can replace it.
+          # User will delete the old APK first. Keep one stable package for future upgrades.
           gradle = re.sub(
               r"applicationId\s+['\"][^'\"]+['\"]",
               "applicationId 'com.jayuminton.admin199'",
               gradle,
               count=1,
           )
-          gradle = re.sub(r'versionCode\s+\d+', 'versionCode 1994', gradle, count=1)
+          gradle = re.sub(r'versionCode\s+\d+', 'versionCode 1995', gradle, count=1)
           gradle = re.sub(
               r"versionName\s+['\"][^'\"]+['\"]",
-              "versionName '199.4'",
+              "versionName '199.5'",
               gradle,
               count=1,
           )
@@ -139,12 +167,12 @@ jobs:
           PY
 
           grep -F "applicationId 'com.jayuminton.admin199'" app/build.gradle
-          grep -F 'versionCode 1994' app/build.gradle
-          grep -F "versionName '199.4'" app/build.gradle
+          grep -F 'versionCode 1995' app/build.gradle
+          grep -F "versionName '199.5'" app/build.gradle
           grep -F "$ADMIN_DEPLOYMENT_ID" app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'WebSettings.LOAD_NO_CACHE' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'WebStorage.getInstance().deleteAllData()' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'cookieManager.removeSessionCookies(null)' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'NativeBrowser' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'jayuminton-push.web.app' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'android:icon="@drawable/icon"' app/src/main/AndroidManifest.xml
 
       - name: Restore release signing key
         shell: bash
@@ -157,7 +185,7 @@ jobs:
       - name: Build signed release APK
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Verify signed APK
+      - name: Verify signed APK and dog icon
         shell: bash
         run: |
           set -euo pipefail
@@ -166,21 +194,22 @@ jobs:
           unzip -t "$APK" >/dev/null
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           "$APKSIGNER" verify --verbose --print-certs "$APK"
-          strings "$APK" | grep -F 'com.jayuminton.admin199' >/dev/null || true
+          unzip -p "$APK" res/drawable/icon.png > "$RUNNER_TEMP/final-icon.png"
+          test "$(sha256sum "$RUNNER_TEMP/final-icon.png" | awk '{print $1}')" = "$DOG_ICON_SHA256"
           ls -lh "$APK"
 
-      - name: Save APK
+      - name: Save fresh-install APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p releases
-          cp app/build/outputs/apk/release/app-release.apk releases/jayuminton-v199.4.apk
+          cp app/build/outputs/apk/release/app-release.apk releases/jayuminton-v199.5-fresh-install.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-v199.4
-          path: releases/jayuminton-v199.4.apk
+          name: jayuminton-v199.5-fresh-install
+          path: releases/jayuminton-v199.5-fresh-install.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -190,7 +219,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/jayuminton-v199.4.apk
-          git commit -m 'Add verified Jayuminton v199.4 APK' || exit 0
+          git add releases/jayuminton-v199.5-fresh-install.apk
+          git commit -m 'Add verified Jayuminton v199.5 fresh-install APK' || exit 0
           git pull --rebase origin main || true
           git push origin main
