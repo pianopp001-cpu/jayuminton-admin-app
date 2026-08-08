@@ -1,22 +1,33 @@
-name: Build reinstallable v199 PIN Fix APK
+name: Build signed Jayuminton v199.4 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
+    paths:
+      - '.github/workflows/build-apk.yml'
+      - 'app/**'
 
 permissions:
   contents: write
+
+concurrency:
+  group: jayuminton-v1994-apk
+  cancel-in-progress: true
 
 jobs:
   build:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -32,91 +43,154 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Apply v199 PIN session and CSS repair
+      - name: Resolve current admin deployment
+        shell: bash
         run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          jq -e '.mainDeploymentId' "$CONFIG" >/dev/null
+          echo "ADMIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+
+      - name: Prepare v199.4 source
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
+          import os, re
+
+          deployment_id = os.environ['ADMIN_DEPLOYMENT_ID'].strip()
+          if not deployment_id:
+              raise SystemExit('ADMIN_DEPLOYMENT_ID is empty')
 
           java_path = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           text = java_path.read_text(encoding='utf-8')
 
-          text = re.sub(
-              r'https://script\.google\.com/macros/s/[^"\\]+/exec\?mode=admin(?:&appVersion=[^"\\]+)?',
-              'https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=admin&appVersion=199.3',
+          # Always point the APK at the same current MAIN deployment used by GitHub deploys.
+          admin_url = (
+              'https://script.google.com/macros/s/' + deployment_id +
+              '/exec?mode=admin&appVersion=199.4&freshAdmin=1'
+          )
+          text, count = re.subn(
+              r'https://script\.google\.com/macros/s/[^"\\]+/exec\?mode=admin[^"\\]*',
+              admin_url,
               text,
-              count=1
+              count=1,
           )
-          text = re.sub(r'JayumintonNative/[0-9A-Za-z.\-]+', 'JayumintonNative/199.3', text)
+          if count != 1:
+              raise SystemExit('ADMIN_URL replacement failed')
 
-          marker = 'settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/199.3");'
-          if 'settings.setCacheMode(WebSettings.LOAD_DEFAULT);' not in text:
-              text = text.replace(marker, marker + '\n        settings.setCacheMode(WebSettings.LOAD_DEFAULT);')
-
-          text = text.replace('webView.clearCache(true);\n        ', '')
-
-          cookie_marker = 'cookieManager.setAcceptThirdPartyCookies(webView, true);'
-          if 'cookieManager.flush();' not in text:
-              text = text.replace(cookie_marker, cookie_marker + '\n        cookieManager.flush();')
-
-          old_js = (
-              '"window.__JAYUMINTON_NATIVE_APP__=true;" +\n'
-              '                        "document.documentElement.setAttribute(\'data-native-app\',\'1\');"'
+          text = re.sub(
+              r'JayumintonNative/[0-9A-Za-z.\-]+(?: FreshAdmin/[0-9A-Za-z.\-]+)?',
+              'JayumintonNative/199.4 FreshAdmin/1994',
+              text,
           )
-          new_js = (
-              '"window.__JAYUMINTON_NATIVE_APP__=true;" +\n'
-              '                        "document.documentElement.setAttribute(\'data-native-app\',\'1\');" +\n'
-              '                        "(function(){" +\n'
-              '                        "var repairCss=function(){try{var nodes=[].slice.call(document.body.childNodes);var css=\'\';var remove=[];nodes.forEach(function(n){var t=(n.nodeType===3?n.nodeValue:(n.nodeType===1?n.textContent:\'\'))||\'\';var s=t.trim();if((s.indexOf(\':root{\')===0||s.indexOf(\':root {\')===0)&&s.indexOf(\'--primary\')>-1&&s.indexOf(\'.header-replay-button\')>-1){css+=s;remove.push(n);}});if(css){var st=document.getElementById(\'jayuminton-repaired-style\');if(!st){st=document.createElement(\'style\');st.id=\'jayuminton-repaired-style\';document.head.appendChild(st);}st.textContent=css;remove.forEach(function(n){if(n&&n.parentNode)n.parentNode.removeChild(n);});return true;}}catch(e){}return false;};" +\n'
-              '                        "var readSession=function(){var keys=[\'jayuminton_admin_session_v1\',\'adminSession\',\'adminPin\',\'adminPIN\'];for(var i=0;i<keys.length;i++){try{var v=localStorage.getItem(keys[i])||sessionStorage.getItem(keys[i]);if(v)return String(v);}catch(e){}}try{if(typeof ADMIN_PIN_VALUE!==\'undefined\'&&ADMIN_PIN_VALUE)return String(ADMIN_PIN_VALUE);}catch(e){}return \'\';};" +\n'
-              '                        "var install=function(){repairCss();if(typeof window.runAction!==\'function\')return false;if(window.__JAYUMINTON_V199_PIN_FIX__)return true;window.__JAYUMINTON_V199_PIN_FIX__=true;" +\n'
-              '                        "var original=window.addMember;window.addMember=async function(){var c=readSession();var n=document.getElementById(\'newName\'),g=document.getElementById(\'newGender\'),r=document.getElementById(\'newGrade\'),x=document.getElementById(\'newExperience\');if(!c&&typeof original===\'function\')return original.apply(this,arguments);return window.runAction(\'addMember\',[c,n?String(n.value||\'\').trim():\'\',g?String(g.value||\'\'):\'\',r?String(r.value||\'\').trim():\'\',x?String(x.value||\'\').trim():\'\']);};return true;};" +\n'
-              '                        "repairCss();var t=setInterval(function(){repairCss();if(install())clearInterval(t);},100);setTimeout(function(){clearInterval(t);repairCss();},15000);" +\n'
-              '                        "})();"'
-          )
-          if old_js in text:
-              text = text.replace(old_js, new_js)
-          elif '__JAYUMINTON_V199_PIN_FIX__' not in text:
-              raise SystemExit('WebView injection marker not found')
+
+          # APK WebView must never reuse an old administrator HTML/JS bundle or auth session.
+          text = text.replace('settings.setCacheMode(WebSettings.LOAD_DEFAULT);',
+                              'settings.setCacheMode(WebSettings.LOAD_NO_CACHE);')
+          ua_anchor = 'settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);'
+          if 'settings.setCacheMode(WebSettings.LOAD_NO_CACHE);' not in text:
+              text = text.replace(ua_anchor, ua_anchor + '\n        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);', 1)
+
+          config_anchor = 'CookieManager cookieManager = CookieManager.getInstance();'
+          if 'WebStorage.getInstance().deleteAllData();' not in text:
+              text = text.replace(
+                  config_anchor,
+                  'webView.clearCache(true);\n        webView.clearHistory();\n        WebStorage.getInstance().deleteAllData();\n\n        ' + config_anchor,
+                  1,
+              )
+          if 'cookieManager.removeSessionCookies(null);' not in text:
+              text = text.replace(
+                  'cookieManager.setAcceptThirdPartyCookies(webView, true);',
+                  'cookieManager.setAcceptThirdPartyCookies(webView, true);\n        cookieManager.removeSessionCookies(null);\n        cookieManager.flush();',
+                  1,
+              )
+
+          # Every APK launch gets a unique URL too, as a second cache barrier.
+          if 'System.currentTimeMillis()' not in text or 'freshAdminUrl' not in text:
+              text = re.sub(
+                  r'webView\.loadUrl\(ADMIN_URL\);',
+                  'webView.loadUrl(ADMIN_URL + "&cacheBust=" + System.currentTimeMillis());',
+                  text,
+                  count=1,
+              )
 
           java_path.write_text(text, encoding='utf-8')
 
           gradle_path = Path('app/build.gradle')
           gradle = gradle_path.read_text(encoding='utf-8')
-          gradle = re.sub(r'versionCode\s+\d+', 'versionCode 1993', gradle, count=1)
-          gradle = re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '199.3'", gradle, count=1)
+          # Match the actual installed v199 package supplied by the user so it can replace it.
+          gradle = re.sub(
+              r"applicationId\s+['\"][^'\"]+['\"]",
+              "applicationId 'com.jayuminton.admin199'",
+              gradle,
+              count=1,
+          )
+          gradle = re.sub(r'versionCode\s+\d+', 'versionCode 1994', gradle, count=1)
+          gradle = re.sub(
+              r"versionName\s+['\"][^'\"]+['\"]",
+              "versionName '199.4'",
+              gradle,
+              count=1,
+          )
           gradle_path.write_text(gradle, encoding='utf-8')
           PY
 
-      - name: Build fresh-install APK
-        run: gradle --no-daemon :app:assembleDebug
+          grep -F "applicationId 'com.jayuminton.admin199'" app/build.gradle
+          grep -F 'versionCode 1994' app/build.gradle
+          grep -F "versionName '199.4'" app/build.gradle
+          grep -F "$ADMIN_DEPLOYMENT_ID" app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'WebSettings.LOAD_NO_CACHE' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'WebStorage.getInstance().deleteAllData()' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'cookieManager.removeSessionCookies(null)' app/src/main/java/com/jayuminton/admin/MainActivity.java
 
-      - name: Verify APK
+      - name: Restore release signing key
+        shell: bash
         run: |
-          APK=app/build/outputs/apk/debug/app-debug.apk
+          set -euo pipefail
+          mkdir -p signing
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          keytool -list -keystore signing/jayuminton-release.jks -storepass 'JayuMinton14!' -alias jayuminton >/dev/null
+
+      - name: Build signed release APK
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Verify signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
-          unzip -t "$APK"
+          unzip -t "$APK" >/dev/null
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-          "$APKSIGNER" verify --verbose "$APK"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          strings "$APK" | grep -F 'com.jayuminton.admin199' >/dev/null || true
           ls -lh "$APK"
 
       - name: Save APK
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p releases
-          cp app/build/outputs/apk/debug/app-debug.apk releases/jayuminton-v199.3-reinstall.apk
+          cp app/build/outputs/apk/release/app-release.apk releases/jayuminton-v199.4.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-v199.3-reinstall
-          path: releases/jayuminton-v199.3-reinstall.apk
+          name: jayuminton-v199.4
+          path: releases/jayuminton-v199.4.apk
           if-no-files-found: error
           retention-days: 30
 
       - name: Commit verified APK
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add releases/jayuminton-v199.3-reinstall.apk
-          git commit -m "Add verified Jayuminton v199.3 reinstall APK" || exit 0
-          git push
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/jayuminton-v199.4.apk
+          git commit -m 'Add verified Jayuminton v199.4 APK' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
