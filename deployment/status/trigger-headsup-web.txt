@@ -1,0 +1,5 @@
+trigger=2026-08-09T01:30:00+09:00
+scope=firebase-hosting-service-worker-only
+wait1=3x3-long-vibration
+court=3x5-long-vibration
+priority=heads-up-popup-first
