@@ -1,5 +1,5 @@
-const JAYUMINTON_SW_VERSION = '1.6.37-pushfix-20260808';
-const JAYUMINTON_CACHE = 'jayuminton-shell-v205-pushfix-20260808';
+const JAYUMINTON_SW_VERSION = '1.6.37-pushfix-3x3-3x5-20260809';
+const JAYUMINTON_CACHE = 'jayuminton-shell-pushfix-3x3-3x5-20260809';
 const JAYUMINTON_SHELL = [
   '/',
   '/index.html',
@@ -84,15 +84,16 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 function threePulseSet() {
-  return [320, 180, 320, 180, 320];
+  // Web APIs do not expose vibration amplitude. Longer pulses are used for a stronger-feeling cue.
+  return [650, 220, 650, 220, 650];
 }
 
 function joinedVibrationPattern(type) {
-  const sets = String(type || '') === 'court_assignment' ? 4 : 2;
+  const sets = String(type || '') === 'court_assignment' ? 5 : 3;
   const pulse = threePulseSet();
   const pattern = [];
   for (let setIndex = 0; setIndex < sets; setIndex += 1) {
-    if (setIndex > 0) pattern.push(1700);
+    if (setIndex > 0) pattern.push(1100);
     pattern.push(...pulse);
   }
   return pattern;
@@ -136,7 +137,6 @@ try {
     });
   });
 } catch (error) {
-  // PWA installation and basic service-worker control must still work even if the Firebase CDN is temporarily unavailable.
   console.error('[Jayuminton] Firebase messaging worker initialization failed:', error);
 }
 
