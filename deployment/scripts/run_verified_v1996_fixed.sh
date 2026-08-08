@@ -113,16 +113,31 @@ if square_needle not in src:
     raise SystemExit('legacy square icon validation block missing')
 src = src.replace(square_needle, square_replacement, 1)
 
+packaged_icon_needle = 'unzip -p "$APK" res/drawable/icon.png > "$RUNNER_TEMP/final-icon.png"\n'
+packaged_icon_replacement = r'''ICON_PATH="$(sed -n "s/^application-icon-160:'\([^']*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt" | head -1)"
+if [ -z "$ICON_PATH" ]; then
+  ICON_PATH="$(sed -n "s/^application:.* icon='\([^']*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt" | head -1)"
+fi
+test -n "$ICON_PATH"
+echo "Packaged launcher icon path: $ICON_PATH"
+unzip -p "$APK" "$ICON_PATH" > "$RUNNER_TEMP/final-icon.png"
+'''
+if packaged_icon_needle not in src:
+    raise SystemExit('legacy packaged icon extraction line missing')
+src = src.replace(packaged_icon_needle, packaged_icon_replacement, 1)
+
 if 'rm -f "$SOURCE_B64"' not in src:
     raise SystemExit('resource cleanup patch missing')
 if 'a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e' not in src:
     raise SystemExit('pinned icon hash validation missing')
 if "launcher icon dimensions changed unexpectedly" not in src:
     raise SystemExit('rectangular icon validation patch missing')
+if 'Packaged launcher icon path:' not in src:
+    raise SystemExit('dynamic packaged icon verification patch missing')
 
 Path(sys.argv[2]).write_text(src, encoding='utf-8')
 PY
 
 chmod +x "$FIXED"
-echo 'Verified build wrapper: pinned 128x152 icon is base64-normalized, PNG chunk/CRC/SHA-256 validated, then the .b64 keeper is removed from the runner drawable tree.'
+echo 'Verified build wrapper: pinned icon is validated, optimized APK icon path is resolved from aapt badging, and packaged pixels are compared.'
 bash "$FIXED"
