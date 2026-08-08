@@ -1,8 +1,8 @@
 workflow=Build verified Jayuminton v199.6 through registered workflow
 run_id=31254211921
 status=failure
-build_step=failure
+build_step=skipped
 head_sha=00a7daa48f9902a30623446f9e3b09eb3dade27a
 apk_exists=no
 detailed_verification_status=absent
-updated_at=2026-08-08T11:11:41Z
+updated_at=2026-08-08T11:15:01Z
