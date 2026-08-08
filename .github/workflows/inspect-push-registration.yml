@@ -14,6 +14,9 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,7 +32,7 @@ jobs:
           from pathlib import Path
           import re, sys
           s=Path(sys.argv[1]).read_text(encoding='utf-8')
-          needles=['register_web_token','unregister_web_token','token_status','getToken(','pushUrl','PUSH_URL','memberId','token']
+          needles=['register_web_token','unregister_web_token','token_status','getToken(','memberId','submitRelay']
           print('SAFE_PUSH_CONTRACT_BEGIN')
           seen=set()
           for needle in needles:
@@ -39,7 +42,6 @@ jobs:
                   if i<0: break
                   a=max(0,i-420); b=min(len(s),i+700)
                   block=s[a:b]
-                  # redact long likely secrets/tokens and URLs query values
                   block=re.sub(r'([A-Za-z0-9_\-]{80,})','[LONG_VALUE_REDACTED]',block)
                   block=re.sub(r'(key|token|secret|auth)=([^&\"\'\s]+)',r'\1=[REDACTED]',block,flags=re.I)
                   key=(needle, block[:100])
@@ -51,3 +53,55 @@ jobs:
                   if sum(1 for x in seen if x[0]==needle)>=4: break
           print('SAFE_PUSH_CONTRACT_END')
           PY
+
+      - name: Inspect deploy config key availability only
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          echo 'SAFE_CONFIG_KEYS_BEGIN'
+          jq -r 'keys[]' "$RUNNER_TEMP/deploy.json" | sort
+          echo 'SAFE_CONFIG_KEYS_END'
+          if jq -e '.pushScriptId // empty' "$RUNNER_TEMP/deploy.json" >/dev/null; then
+            echo 'push_script_id_available=yes'
+          else
+            echo 'push_script_id_available=no'
+          fi
+
+      - name: Inspect push sender payload shape when source is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId // empty' "$RUNNER_TEMP/deploy.json")"
+          if [ -z "$PUSH_SCRIPT_ID" ]; then
+            echo 'push source inspection skipped: no pushScriptId in deploy config'
+            exit 0
+          fi
+          npm install --global @google/clasp@latest >/dev/null 2>&1
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          WORK="$RUNNER_TEMP/push-script"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull >/dev/null
+          echo 'SAFE_PUSH_SENDER_SHAPE_BEGIN'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          for p in Path('.').glob('*'):
+              if not p.is_file() or p.suffix not in ('.js','.html'): continue
+              s=p.read_text(encoding='utf-8',errors='ignore')
+              for needle in ('fcm.googleapis.com','android',"priority",'webpush','message'):
+                  pos=0; shown=0
+                  while shown<3:
+                      i=s.find(needle,pos)
+                      if i<0: break
+                      block=s[max(0,i-350):min(len(s),i+650)]
+                      block=re.sub(r'([A-Za-z0-9_\-]{80,})','[LONG_VALUE_REDACTED]',block)
+                      block=re.sub(r'Bearer\s+[^\"\'\s]+','Bearer [REDACTED]',block,flags=re.I)
+                      print(f'--- {p.name} :: {needle} ---')
+                      print(block)
+                      pos=i+len(needle); shown+=1
+          PY
+          echo 'SAFE_PUSH_SENDER_SHAPE_END'
