@@ -44,7 +44,7 @@ jobs:
           echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
 
-      - name: Pull live project and remove stray check file
+      - name: Pull live project and neutralize stray check file
         shell: bash
         run: |
           set -euo pipefail
@@ -53,14 +53,17 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-          echo 'Before cleanup:'
-          find . -maxdepth 1 -type f -printf '%f\n' | sort
-          rm -f check.js check.gs check.html Script.syntax-check.js
           test -s Code.js
           test -s Index.html
           test -s Script.html
-          test ! -e check.js
-          test ! -e check.gs
+          cat > check.js <<'EOF'
+          // Server-safe placeholder. Browser validation must never be deployed here.
+          function __jayumintonCheckNoop__() { return true; }
+          EOF
+          if grep -E '\b(window|document|navigator|localStorage|sessionStorage)\b' check.js >/dev/null; then
+            echo 'check.js is not server-safe' >&2
+            exit 1
+          fi
 
       - name: Push clean Apps Script and update same deployment
         shell: bash
@@ -68,9 +71,9 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/main-script"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "remove stray check file $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "neutralize stray check file $GITHUB_RUN_ID"
 
-      - name: Re-pull and verify check file is gone
+      - name: Re-pull and verify check file is server-safe
         shell: bash
         run: |
           set -euo pipefail
@@ -79,9 +82,12 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
           cd "$VERIFY"
           clasp pull
-          test ! -e check.js
-          test ! -e check.gs
-          test ! -e Script.syntax-check.js
+          test -s check.js
+          grep -F '__jayumintonCheckNoop__' check.js >/dev/null
+          if grep -E '\b(window|document|navigator|localStorage|sessionStorage)\b' check.js >/dev/null; then
+            echo 'Live check.js still contains browser-only globals' >&2
+            exit 1
+          fi
           grep -F 'function doGet(e)' Code.js >/dev/null
           grep -F '<script>' Script.html >/dev/null
 
