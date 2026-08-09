@@ -1,0 +1,159 @@
+--- captureStatePushSnapshot_ ---
+function captureStatePushSnapshot_() {
+  return {
+    members: readMembers_(),
+    courts: readCourts_(),
+    waitGroups: readWaitGroups_()
+  };
+}
+
+--- sendStateTransitionPushes_ ---
+function sendStateTransitionPushes_(before, after) {
+  if (!before || !after) return;
+  const members = statePushMemberMap_(after);
+  const beforeWait1 = {};
+  (before.waitGroups && before.waitGroups[0] || []).forEach(function(id) {
+    beforeWait1[String(id)] = true;
+  });
+  const wait1Entrants = [];
+  (after.waitGroups && after.waitGroups[0] || []).forEach(function(id) {
+    id = String(id);
+    if (!beforeWait1[id] && members[id]) wait1Entrants.push(members[id]);
+  });
+  if (wait1Entrants.length) {
+    postStatePushEvent_({
+      type: 'wait1_ready',
+      assignmentId: 'wait1-' + Date.now() + '-' + wait1Entrants.map(function(x) { return x.id; }).join('-'),
+      courtNo: '',
+      expectedCourtNo: '',
+      members: wait1Entrants
+    });
+  }
+
+  const beforeCourts = statePushCourtMap_(before);
+  const afterCourts = statePushCourtMap_(after);
+  const byCourt = {};
+  Object.keys(afterCourts).forEach(function(id) {
+    const courtNo = afterCourts[id];
+    if (beforeCourts[id] !== courtNo && members[id]) {
+      if (!byCourt[courtNo]) byCourt[courtNo] = [];
+      byCourt[courtNo].push(members[id]);
+    }
+  });
+  Object.keys(byCourt).forEach(function(courtNo) {
+    postStatePushEvent_({
+      type: 'court_assignment',
+      assignmentId: 'court-' + courtNo + '-' + Date.now() + '-' + byCourt[courtNo].map(function(x) { return x.id; }).join('-'),
+      courtNo: courtNo,
+      expectedCourtNo: courtNo,
+      members: byCourt[courtNo]
+    });
+  });
+}
+
+--- withDocumentLock_ ---
+function withDocumentLock_(actionName, callback) {
+  const lock = LockService.getDocumentLock();
+
+  if (!lock.tryLock(15000)) {
+    throw new Error(
+      '다른 작업을 처리 중입니다. 잠시 후 다시 눌러주세요.'
+    );
+  }
+
+  try {
+    ensureSetup_();
+    const pushBefore = shouldCheckStatePush_(actionName)
+      ? captureStatePushSnapshot_()
+      : null;
+
+    const result = callback();
+    if (pushBefore) {
+      sendStateTransitionPushes_(pushBefore, captureStatePushSnapshot_());
+    }
+
+    if (shouldLogSuccess_(actionName)) {
+      logAction_(
+        actionName,
+        '정상 처리'
+      );
+    }
+
+    return result;
+  } catch (error) {
+    logAction_(
+      actionName,
+      '오류: ' + String(error.message || error)
+    );
+
+    throw error;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+--- finishCourtUnlocked_ ---
+function finishCourtUnlocked_(pin, courtNo) {
+  auth_(pin);
+
+  courtNo = String(courtNo);
+
+  if (
+    ['1', '2', '3', '4'].indexOf(courtNo) < 0
+  ) {
+    throw new Error('잘못된 코트 번호입니다.');
+  }
+
+  const courts = readCourts_();
+  const startedAt = readCourtStartedAt_();
+  const waitGroups = readWaitGroups_();
+  const finished = courts[courtNo] || [];
+
+  if (finished.length !== GROUP_SIZE) {
+    throw new Error(
+      '4명이 모두 배정된 코트만 경기 종료할 수 있습니다.'
+    );
+  }
+
+  const members = readMembers_();
+
+  members.forEach(function(member) {
+    if (finished.indexOf(member.id) >= 0) {
+      member.games =
+        (Number(member.games) || 0) + 1;
+      member.status = 'active';
+    }
+  });
+
+  const waitOne = waitGroups[0] || [];
+
+  if (waitOne.length === GROUP_SIZE) {
+    courts[courtNo] = waitOne.slice();
+    startedAt[courtNo] = new Date().toISOString();
+
+    members.forEach(function(member) {
+      if (waitOne.indexOf(member.id) >= 0) {
+        member.status = 'playing';
+      }
+    });
+
+    const shifted = [
+      (waitGroups[1] || []).slice(),
+      (waitGroups[2] || []).slice(),
+      (waitGroups[3] || []).slice(),
+      (waitGroups[4] || []).slice(),
+      []
+    ];
+
+    writeWaitGroups_(shifted);
+  } else {
+    courts[courtNo] = [];
+    startedAt[courtNo] = '';
+  }
+
+  writeCourts_(courts, startedAt);
+  writeMembers_(members);
+  touch_();
+
+  return getPublicState();
+}
