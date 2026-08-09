@@ -1,11 +1,11 @@
-name: Inspect live native FCM failure path
-# verify contract v2
+name: Inspect live native device path summary
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/inspect-live-native-fcm-failure.yml'
+      - 'deployment/status/trigger-live-native-device-path.txt'
   workflow_dispatch: {}
 
 permissions:
@@ -14,63 +14,53 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Pull live push source and extract safe failure path
+
+      - name: Fetch only privacy-safe live native path summary
         shell: bash
         run: |
           set -euo pipefail
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$RUNNER_TEMP/deploy.json")"
-          npm install --global @google/clasp@latest >/dev/null
-          WORK="$RUNNER_TEMP/push"
-          mkdir -p "$WORK"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
-          cd "$WORK"
-          clasp pull >/dev/null
-          python3 - "$GITHUB_WORKSPACE/deployment/status/live-native-fcm-failure-path.txt" <<'PY'
-          from pathlib import Path
-          import re,sys
-          source='\n'.join(p.read_text(encoding='utf-8',errors='ignore') for p in Path('.').glob('*.js'))
-          out=[]
-          for name in ('sendAssignmentEventWithoutDiagnostics_','makeWebFcmRequest_','nativeAndroidPackageForUserAgent_'):
-              m=re.search(r'function\s+'+re.escape(name)+r'\s*\(',source)
-              if not m: continue
-              i=m.start(); depth=0; quote=None; esc=False; end=None
-              for j in range(source.find('{',i),len(source)):
-                  ch=source[j]
-                  if quote:
-                      if esc: esc=False
-                      elif ch=='\\': esc=True
-                      elif ch==quote: quote=None
-                      continue
-                  if ch in "'\"\`": quote=ch; continue
-                  if ch=='{': depth+=1
-                  elif ch=='}':
-                      depth-=1
-                      if depth==0: end=j+1; break
-              block=source[i:end or i+6000]
-              block=re.sub(r'Bearer\s+[^\"\'\s]+','Bearer [REDACTED]',block,flags=re.I)
-              block=re.sub(r'([A-Za-z0-9_\-]{100,})','[LONG_VALUE_REDACTED]',block)
-              out.append('--- '+name+' ---\n'+block)
-          Path(sys.argv[1]).write_text('\n\n'.join(out),encoding='utf-8')
-          PY
-      - name: Publish safe inspection
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$RUNNER_TEMP/deploy.json")"
+          test -n "$PUSH_DEPLOYMENT_ID"
+          test "$PUSH_DEPLOYMENT_ID" != "null"
+          URL="https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec?action=native_delivery_summary&run=$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --retry-delay 2 "$URL" -o "$RUNNER_TEMP/native-summary.json"
+          jq -e '.ok == true and (.deviceAckHistory | type == "array")' "$RUNNER_TEMP/native-summary.json" >/dev/null
+          jq '{
+            ok,
+            generatedAt,
+            totalTokens,
+            nativeUserTokens,
+            nativeMemberTokens,
+            browserTokens,
+            newestNativeUserAgeSeconds,
+            lastDelivery,
+            lastDeviceAck,
+            deviceAckHistory:(.deviceAckHistory[-80:] // [])
+          }' "$RUNNER_TEMP/native-summary.json" > deployment/status/live-native-device-path-summary.json
+
+          # Reject accidental raw identifiers/tokens: the V2 endpoint is expected
+          # to expose only fingerprints and aggregate delivery counters.
+          if jq -e '.. | objects | has("memberId") or has("memberName") or has("token")' \
+              deployment/status/live-native-device-path-summary.json >/dev/null; then
+            echo 'unsafe identifier field found in diagnostic summary' >&2
+            exit 1
+          fi
+
+      - name: Publish safe live path snapshot
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/live-native-fcm-failure-path.txt
-          git commit -m 'Record live native FCM failure path' || true
+          git add deployment/status/live-native-device-path-summary.json
+          git commit -m 'Record live native device path summary' || true
           git pull --rebase origin main
           git push origin main
