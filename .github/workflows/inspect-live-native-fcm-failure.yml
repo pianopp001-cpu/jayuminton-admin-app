@@ -1,4 +1,5 @@
 name: Inspect live native FCM failure path
+# verify contract v2
 
 on:
   push:
