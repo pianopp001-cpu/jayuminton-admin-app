@@ -1,0 +1,6 @@
+status=success
+all_locked_transitions_inspected=yes
+wait1_actual_entry_only=yes
+court_actual_entry_only=yes
+admin_ui_changed=no
+deployed_at=2026-08-09T15:54:41Z
