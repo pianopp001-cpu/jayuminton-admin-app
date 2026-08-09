@@ -72,6 +72,12 @@ jobs:
                       x = re.sub(r"(['\"])[A-Za-z0-9_\-]{80,}\1", r"\1[REDACTED_TOKEN]\1", x)
                       chunks.append(f'{j+1}: {x[:320]}')
                   chunks.append('---')
+          code = Path('Code.js')
+          if code.exists():
+              code_lines = code.read_text(encoding='utf-8').splitlines()
+              chunks.append('=== Code.js lock body exact ===')
+              for j in range(190, min(len(code_lines), 285)):
+                  chunks.append(f'{j+1}: {code_lines[j][:320]}')
           out.parent.mkdir(parents=True, exist_ok=True)
           out.write_text('\n'.join(chunks) + '\n', encoding='utf-8')
           PY
