@@ -1,24 +1,24 @@
-name: Build one-time v1.2.3 native receive path diagnostic
+name: Build one-time v1.2.4 native receive path diagnostic
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/build-user-native-push-v120-diagnostic.yml'
-      - 'deployment/scripts/patch_build_user_native_v123_diagnostic.py'
+      - 'deployment/scripts/patch_build_user_native_v124_diagnostic.py'
   pull_request:
     branches: [main]
     paths:
-      - 'deployment/status/trigger-user-native-v123-diagnostic.txt'
+      - 'deployment/status/trigger-user-native-v124-diagnostic.txt'
       - '.github/workflows/build-user-native-push-v120-diagnostic.yml'
-      - 'deployment/scripts/patch_build_user_native_v123_diagnostic.py'
+      - 'deployment/scripts/patch_build_user_native_v124_diagnostic.py'
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-user-native-v123-diagnostic
+  group: jayuminton-user-native-v124-diagnostic
   cancel-in-progress: false
 
 jobs:
@@ -41,7 +41,7 @@ jobs:
           node-version: '22'
 
       - name: Initialize build checkpoint
-        run: echo 'node-ready' > "$RUNNER_TEMP/native-v123-stage.txt"
+        run: echo 'node-ready' > "$RUNNER_TEMP/native-v124-stage.txt"
 
       - name: Resolve deployment configuration
         shell: bash
@@ -59,7 +59,7 @@ jobs:
             echo "PUSH_URL=$(jq -r '.pushUrl' "$CONFIG")"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
           } >> "$GITHUB_ENV"
-          echo 'config-ready' > "$RUNNER_TEMP/native-v123-stage.txt"
+          echo 'config-ready' > "$RUNNER_TEMP/native-v124-stage.txt"
 
       - name: Authenticate Firebase
         uses: google-github-actions/auth@v2
@@ -69,7 +69,7 @@ jobs:
       - name: Install Firebase and clasp tools
         run: |
           npm install --global firebase-tools@latest @google/clasp@latest
-          echo 'tools-ready' > "$RUNNER_TEMP/native-v123-stage.txt"
+          echo 'tools-ready' > "$RUNNER_TEMP/native-v124-stage.txt"
 
       - name: Ensure Firebase Android app and download google-services config
         shell: bash
@@ -97,7 +97,7 @@ jobs:
               raise SystemExit('google-services.json package mismatch')
           print('google-services.json package verified for com.jayuminton.user')
           PY
-          echo 'firebase-app-ready' > "$RUNNER_TEMP/native-v123-stage.txt"
+          echo 'firebase-app-ready' > "$RUNNER_TEMP/native-v124-stage.txt"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -112,7 +112,7 @@ jobs:
           test -d "$ANDROID_HOME/platform-tools"
           test -d "$ANDROID_HOME/platforms/android-35"
           test -n "$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | head -1)"
-          echo 'android-sdk-ready' > "$RUNNER_TEMP/native-v123-stage.txt"
+          echo 'android-sdk-ready' > "$RUNNER_TEMP/native-v124-stage.txt"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -133,14 +133,14 @@ jobs:
           grep -F 'JAYUMINTON_NATIVE_DEVICE_ACK_V2' Code.js >/dev/null
           grep -F 'deviceAckHistory' Code.js >/dev/null
           grep -F 'confirm_action' Code.js >/dev/null
-          echo 'push-diagnostics-ready' > "$RUNNER_TEMP/native-v123-stage.txt"
+          echo 'push-diagnostics-ready' > "$RUNNER_TEMP/native-v124-stage.txt"
 
-      - name: Build and verify one-time diagnostic APK
+      - name: Build and verify diagnostic APK on latest candidate chain
         shell: bash
         run: |
           set -euo pipefail
-          exec > >(tee "$RUNNER_TEMP/native-v123-build.log") 2>&1
-          echo 'native-build-started' > "$RUNNER_TEMP/native-v123-stage.txt"
+          exec > >(tee "$RUNNER_TEMP/native-v124-build.log") 2>&1
+          echo 'native-build-started' > "$RUNNER_TEMP/native-v124-stage.txt"
           python3 deployment/scripts/patch_build_user_native_v111.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v112.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v113.py deployment/scripts/build_user_native_push_fresh_v110.sh
@@ -153,12 +153,15 @@ jobs:
           python3 deployment/scripts/patch_build_user_native_v120_diagnostic.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v121.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v122.py deployment/scripts/build_user_native_push_fresh_v110.sh
-          python3 deployment/scripts/patch_build_user_native_v123_diagnostic.py deployment/scripts/build_user_native_push_fresh_v110.sh
+          python3 deployment/scripts/patch_build_user_native_v123.py deployment/scripts/build_user_native_push_fresh_v110.sh
+          python3 deployment/scripts/patch_build_user_native_v124_diagnostic.py deployment/scripts/build_user_native_push_fresh_v110.sh
 
-          grep -F 'VERSION="1.2.3"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
-          grep -F 'VERSION_CODE="123"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
+          grep -F 'VERSION="1.2.4"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
+          grep -F 'VERSION_CODE="124"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
+          grep -F 'AtomicBoolean(false)' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
           grep -F 'reportPath("fcm_received"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
           grep -F 'reportPath("notification_posted"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
+          grep -F 'reportPath("full_screen_attempted"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
           grep -F 'reportPath("confirm_action"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
           grep -F 'reportPath("vibration_cancelled"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
           grep -F '"token_register_requested"' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
@@ -169,45 +172,45 @@ jobs:
           grep -F 'courtNo + "번 코트로 들어가세요."' deployment/scripts/build_user_native_push_fresh_v110.sh >/dev/null
 
           bash deployment/scripts/build_user_native_push_fresh_v110.sh
-          test -s releases/jayuminton-courtstatus-v1.2.3-diagnostic.apk
-          grep -F 'status=success' deployment/status/user-native-push-v1.2.3-diagnostic.txt >/dev/null
-          grep -F 'version=1.2.3' deployment/status/user-native-push-v1.2.3-diagnostic.txt >/dev/null
-          grep -F 'version_code=123' deployment/status/user-native-push-v1.2.3-diagnostic.txt >/dev/null
-          grep -F 'application_id=com.jayuminton.user' deployment/status/user-native-push-v1.2.3-diagnostic.txt >/dev/null
-          grep -F 'launcher_label=자유민턴 코트현황' deployment/status/user-native-push-v1.2.3-diagnostic.txt >/dev/null
-          grep -F 'install_mode=uninstall-old-then-fresh-install' deployment/status/user-native-push-v1.2.3-diagnostic.txt >/dev/null
+          test -s releases/jayuminton-courtstatus-v1.2.4-diagnostic.apk
+          grep -F 'status=success' deployment/status/user-native-push-v1.2.4-diagnostic.txt >/dev/null
+          grep -F 'version=1.2.4' deployment/status/user-native-push-v1.2.4-diagnostic.txt >/dev/null
+          grep -F 'version_code=124' deployment/status/user-native-push-v1.2.4-diagnostic.txt >/dev/null
+          grep -F 'application_id=com.jayuminton.user' deployment/status/user-native-push-v1.2.4-diagnostic.txt >/dev/null
+          grep -F 'launcher_label=자유민턴 코트현황' deployment/status/user-native-push-v1.2.4-diagnostic.txt >/dev/null
+          grep -F 'install_mode=uninstall-old-then-fresh-install' deployment/status/user-native-push-v1.2.4-diagnostic.txt >/dev/null
 
-          APK='releases/jayuminton-courtstatus-v1.2.3-diagnostic.apk'
-          unzip -p "$APK" classes.dex > "$RUNNER_TEMP/v123-classes.dex"
-          strings "$RUNNER_TEMP/v123-classes.dex" > "$RUNNER_TEMP/v123-classes.txt"
-          grep -F 'NativeDeliveryReporter' "$RUNNER_TEMP/v123-classes.txt" >/dev/null
-          grep -F 'fcm_received' "$RUNNER_TEMP/v123-classes.txt" >/dev/null
-          grep -F 'notification_posted' "$RUNNER_TEMP/v123-classes.txt" >/dev/null
-          grep -F 'full_screen_attempted' "$RUNNER_TEMP/v123-classes.txt" >/dev/null
-          grep -F 'confirm_action' "$RUNNER_TEMP/v123-classes.txt" >/dev/null
-          grep -F 'vibration_cancelled' "$RUNNER_TEMP/v123-classes.txt" >/dev/null
-          grep -F 'token_register_requested' "$RUNNER_TEMP/v123-classes.txt" >/dev/null
-          grep -F '확인 · 진동 끄기' "$RUNNER_TEMP/v123-classes.txt" >/dev/null
-          if grep -F '?mode=admin' "$RUNNER_TEMP/v123-classes.txt" >/dev/null; then
+          APK='releases/jayuminton-courtstatus-v1.2.4-diagnostic.apk'
+          unzip -p "$APK" classes.dex > "$RUNNER_TEMP/v124-classes.dex"
+          strings "$RUNNER_TEMP/v124-classes.dex" > "$RUNNER_TEMP/v124-classes.txt"
+          grep -F 'NativeDeliveryReporter' "$RUNNER_TEMP/v124-classes.txt" >/dev/null
+          grep -F 'fcm_received' "$RUNNER_TEMP/v124-classes.txt" >/dev/null
+          grep -F 'notification_posted' "$RUNNER_TEMP/v124-classes.txt" >/dev/null
+          grep -F 'full_screen_attempted' "$RUNNER_TEMP/v124-classes.txt" >/dev/null
+          grep -F 'confirm_action' "$RUNNER_TEMP/v124-classes.txt" >/dev/null
+          grep -F 'vibration_cancelled' "$RUNNER_TEMP/v124-classes.txt" >/dev/null
+          grep -F 'token_register_requested' "$RUNNER_TEMP/v124-classes.txt" >/dev/null
+          grep -F '확인 · 진동 끄기' "$RUNNER_TEMP/v124-classes.txt" >/dev/null
+          if grep -F '?mode=admin' "$RUNNER_TEMP/v124-classes.txt" >/dev/null; then
             echo 'admin URL leaked into user diagnostic APK' >&2
             exit 1
           fi
 
-          cp "$APK" "$RUNNER_TEMP/user-native-v123.apk"
-          cp deployment/status/user-native-push-v1.2.3-diagnostic.txt "$RUNNER_TEMP/user-native-v123-status.txt"
-          echo 'native-build-verified' > "$RUNNER_TEMP/native-v123-stage.txt"
+          cp "$APK" "$RUNNER_TEMP/user-native-v124.apk"
+          cp deployment/status/user-native-push-v1.2.4-diagnostic.txt "$RUNNER_TEMP/user-native-v124-status.txt"
+          echo 'native-build-verified' > "$RUNNER_TEMP/native-v124-stage.txt"
 
       - name: Publish diagnostic APK without changing live install button
         shell: bash
         run: |
           set -euo pipefail
           git reset --hard HEAD
-          cp "$RUNNER_TEMP/user-native-v123.apk" releases/jayuminton-courtstatus-v1.2.3-diagnostic.apk
-          cp "$RUNNER_TEMP/user-native-v123-status.txt" deployment/status/user-native-push-v1.2.3-diagnostic.txt
+          cp "$RUNNER_TEMP/user-native-v124.apk" releases/jayuminton-courtstatus-v1.2.4-diagnostic.apk
+          cp "$RUNNER_TEMP/user-native-v124-status.txt" deployment/status/user-native-push-v1.2.4-diagnostic.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/jayuminton-courtstatus-v1.2.3-diagnostic.apk deployment/status/user-native-push-v1.2.3-diagnostic.txt
-          git commit -m 'Publish one-time native receive path diagnostic APK v1.2.3' || true
+          git add releases/jayuminton-courtstatus-v1.2.4-diagnostic.apk deployment/status/user-native-push-v1.2.4-diagnostic.txt
+          git commit -m 'Publish one-time native receive path diagnostic APK v1.2.4' || true
           git pull --rebase origin main
           git push origin main
 
@@ -216,9 +219,9 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin main
-          git show origin/main:releases/jayuminton-courtstatus-v1.2.3-diagnostic.apk > "$RUNNER_TEMP/remote-v123.apk"
-          test -s "$RUNNER_TEMP/remote-v123.apk"
-          test "$(sha256sum "$RUNNER_TEMP/remote-v123.apk" | awk '{print $1}')" = "$(sha256sum "$RUNNER_TEMP/user-native-v123.apk" | awk '{print $1}')"
+          git show origin/main:releases/jayuminton-courtstatus-v1.2.4-diagnostic.apk > "$RUNNER_TEMP/remote-v124.apk"
+          test -s "$RUNNER_TEMP/remote-v124.apk"
+          test "$(sha256sum "$RUNNER_TEMP/remote-v124.apk" | awk '{print $1}')" = "$(sha256sum "$RUNNER_TEMP/user-native-v124.apk" | awk '{print $1}')"
 
       - name: Publish sanitized diagnostic build failure
         if: failure()
@@ -228,25 +231,25 @@ jobs:
           git reset --hard HEAD
           {
             echo 'status=failure'
-            echo 'stage='"$(cat "$RUNNER_TEMP/native-v123-stage.txt" 2>/dev/null || echo unknown)"
+            echo 'stage='"$(cat "$RUNNER_TEMP/native-v124-stage.txt" 2>/dev/null || echo unknown)"
             echo '--- build log tail ---'
-            if [ -f "$RUNNER_TEMP/native-v123-build.log" ]; then
-              tail -n 240 "$RUNNER_TEMP/native-v123-build.log"
+            if [ -f "$RUNNER_TEMP/native-v124-build.log" ]; then
+              tail -n 240 "$RUNNER_TEMP/native-v124-build.log"
             else
               echo 'build log was not created'
             fi
-          } > deployment/status/native-v123-diagnostic-build-failure.txt
+          } > deployment/status/native-v124-diagnostic-build-failure.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/native-v123-diagnostic-build-failure.txt
-          git commit -m 'Record v1.2.3 native diagnostic build failure' || true
+          git add deployment/status/native-v124-diagnostic-build-failure.txt
+          git commit -m 'Record v1.2.4 native diagnostic build failure' || true
           git pull --rebase origin main
           git push origin main
 
       - name: Upload one-time diagnostic APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-courtstatus-v1.2.3-diagnostic
-          path: releases/jayuminton-courtstatus-v1.2.3-diagnostic.apk
+          name: jayuminton-courtstatus-v1.2.4-diagnostic
+          path: releases/jayuminton-courtstatus-v1.2.4-diagnostic.apk
           if-no-files-found: error
           retention-days: 30
