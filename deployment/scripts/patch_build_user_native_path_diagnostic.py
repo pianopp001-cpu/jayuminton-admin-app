@@ -91,9 +91,11 @@ if s.count(member_instrumented) != 1:
     raise SystemExit("native diagnostic instrumented-member restore anchor missing")
 s = s.replace(member_instrumented, member_restored, 1)
 
-# Remove the temporary submitAsync call. The real v1.1.5 JSONObject registration
-# remains the sole registration request, preceded by request telemetry.
+# Remove the temporary submitAsync call and redundant older guard. The real
+# v1.1.5 JSONObject registration remains the sole request, preceded by request
+# telemetry.
 register_instrumented = '''        if (id.isEmpty() || name.isEmpty() || token.isEmpty()) return;
+        if (id.isEmpty() || token.isEmpty()) return;
         NativeDeliveryReporter.reportPath("token_register_requested", "", "", id, id,
                 true, false, false, false, false, false,
                 "native_registrar", "");
@@ -118,7 +120,7 @@ dummy_end += len('JAYUMINTON_NATIVE_DIAG_HTTP_DUMMY_END */')
 s = s[:dummy_start] + s[dummy_end:]
 
 # Record the outcome of the real v1.1.5 JSONObject registration response. This
-# gives request -> HTTP/application outcome without changing retry or token logic.
+# gives request -> HTTP/application outcome without changing token logic.
 registration_result = '''            JSONObject registered = submit("register_web_token", id, name, token);
             boolean registrationOk = registered.optBoolean("ok", false);'''
 registration_result_logged = '''            JSONObject registered = submit("register_web_token", id, name, token);
