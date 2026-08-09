@@ -60,7 +60,7 @@ jobs:
               for i, line in enumerate(lines):
                   if not any(n.lower() in line.lower() for n in needles):
                       continue
-                  lo, hi = max(0, i-5), min(len(lines), i+11)
+                  lo, hi = max(0, i-5), min(len(lines), i+80)
                   key = (lo, hi)
                   if key in seen:
                       continue
