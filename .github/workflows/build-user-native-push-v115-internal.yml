@@ -1,4 +1,4 @@
-name: Build internal FCM acceptance-verified APK v1.1.5 no-overlay
+name: Build production-event-only native FCM APK v1.1.5 no-overlay
 
 on:
   push:
