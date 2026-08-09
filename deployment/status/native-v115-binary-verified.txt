@@ -1,0 +1,11 @@
+status=success
+version=1.1.5
+apk_sha256=46576cddbcc89b5e93e7c2e99ecf174e7ced32904509cc045ff633f52f23b309
+server_test_action=yes
+fcm_acceptance_required=yes
+fcm_failure_recorded=yes
+system_channels=yes
+background_service=yes
+live_install_link_changed=no
+verified_at=2026-08-09T03:51:22Z
+missing=
