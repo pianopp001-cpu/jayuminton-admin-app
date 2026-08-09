@@ -1,0 +1,50 @@
+name: Deploy native device delivery acknowledgement
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-native-device-ack.yml'
+      - 'deployment/scripts/patch_native_device_ack.py'
+      - 'deploy-triggers/native-device-ack.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Patch only push diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          ID="$(jq -r '.pushScriptId' "$C")"; DEPLOY="$(jq -r '.pushDeploymentId' "$C")"
+          W="$RUNNER_TEMP/push"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$ID" > "$W/.clasp.json"
+          cd "$W"; clasp pull
+          sha256sum appsscript.json > "$RUNNER_TEMP/manifest.before"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_native_device_ack.py" "$W"
+          node --check Code.js
+          sha256sum appsscript.json > "$RUNNER_TEMP/manifest.after"
+          cmp "$RUNNER_TEMP/manifest.before" "$RUNNER_TEMP/manifest.after"
+          clasp push --force
+          clasp create-deployment --deploymentId "$DEPLOY" --description "native device ack $GITHUB_RUN_ID"
+          echo "PUSH_URL=https://script.google.com/macros/s/$DEPLOY/exec" >> "$GITHUB_ENV"
+      - name: Verify summary endpoint shape
+        run: |
+          sleep 8
+          curl --fail --location --retry 5 "$PUSH_URL?action=native_delivery_summary&run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/summary.json"
+          jq -e '.ok == true and has("lastDeviceAck")' "$RUNNER_TEMP/summary.json" >/dev/null
