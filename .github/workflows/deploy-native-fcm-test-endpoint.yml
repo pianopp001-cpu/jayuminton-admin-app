@@ -1,4 +1,4 @@
-name: Deploy native FCM end-to-end test endpoint with member match
+name: Deploy native FCM end-to-end test endpoint with validated member match
 
 on:
   push:
