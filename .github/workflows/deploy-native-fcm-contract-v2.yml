@@ -1,0 +1,55 @@
+name: Deploy corrected native FCM HTTP v1 contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-native-fcm-contract-v2.yml'
+      - 'deployment/scripts/patch_live_native_fcm_contract_v2.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Patch only native/browser FCM payload contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          ID="$(jq -r '.pushScriptId' "$C")"
+          DEPLOY="$(jq -r '.pushDeploymentId' "$C")"
+          W="$RUNNER_TEMP/push"
+          mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          sha256sum appsscript.json > "$RUNNER_TEMP/manifest.before"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_live_native_fcm_contract_v2.py" "$W"
+          node --check Code.js
+          grep -F "restrictedPackageName = 'com.jayuminton.user'" Code.js >/dev/null
+          ! grep -F 'restricted_package_name' Code.js
+          sha256sum appsscript.json > "$RUNNER_TEMP/manifest.after"
+          cmp "$RUNNER_TEMP/manifest.before" "$RUNNER_TEMP/manifest.after"
+          clasp push --force
+          clasp create-deployment --deploymentId "$DEPLOY" --description "native FCM contract v2 $GITHUB_RUN_ID"
+          echo "PUSH_URL=https://script.google.com/macros/s/$DEPLOY/exec" >> "$GITHUB_ENV"
+      - name: Verify live deployment
+        shell: bash
+        run: |
+          sleep 8
+          curl --fail --location --retry 5 "$PUSH_URL?action=native_delivery_summary&run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/summary.json"
+          jq -e '.ok == true' "$RUNNER_TEMP/summary.json" >/dev/null
