@@ -158,13 +158,13 @@ jobs:
           python3 deployment/scripts/patch_build_user_native_v121.py deployment/scripts/build_user_native_push_fresh_v110.sh
           bash deployment/scripts/build_user_native_push_fresh_v110.sh
           test -s releases/jayuminton-courtstatus-v1.2.1-fresh-install.apk
-          grep -F 'status=success' deployment/status/user-native-push-v1.2.1-fresh-install.txt >/dev/null
-          grep -F 'launcher_label=자유민턴 코트현황' deployment/status/user-native-push-v1.2.1-fresh-install.txt >/dev/null
-          grep -F 'install_mode=uninstall-old-then-fresh-install' deployment/status/user-native-push-v1.2.1-fresh-install.txt >/dev/null
-          grep -F 'wait1_vibration=3-long-pulses-x3-groups' deployment/status/user-native-push-v1.2.1-fresh-install.txt >/dev/null
-          grep -F 'court_vibration=3-long-pulses-x5-groups' deployment/status/user-native-push-v1.2.1-fresh-install.txt >/dev/null
+          grep -F 'status=success' deployment/status/user-native-push-v1.2.1.txt >/dev/null
+          grep -F 'launcher_label=자유민턴 코트현황' deployment/status/user-native-push-v1.2.1.txt >/dev/null
+          grep -F 'install_mode=uninstall-old-then-fresh-install' deployment/status/user-native-push-v1.2.1.txt >/dev/null
+          grep -F 'wait1_vibration=3-long-pulses-x3-groups' deployment/status/user-native-push-v1.2.1.txt >/dev/null
+          grep -F 'court_vibration=3-long-pulses-x5-groups' deployment/status/user-native-push-v1.2.1.txt >/dev/null
           cp releases/jayuminton-courtstatus-v1.2.1-fresh-install.apk "$RUNNER_TEMP/user-native.apk"
-          cp deployment/status/user-native-push-v1.2.1-fresh-install.txt "$RUNNER_TEMP/user-native-status.txt"
+          cp deployment/status/user-native-push-v1.2.1.txt "$RUNNER_TEMP/user-native-status.txt"
 
       - name: Publish v1.2.1 candidate without changing live install button
         shell: bash
@@ -172,10 +172,10 @@ jobs:
           set -euo pipefail
           git reset --hard HEAD
           cp "$RUNNER_TEMP/user-native.apk" releases/jayuminton-courtstatus-v1.2.1-fresh-install.apk
-          cp "$RUNNER_TEMP/user-native-status.txt" deployment/status/user-native-push-v1.2.1-fresh-install.txt
+          cp "$RUNNER_TEMP/user-native-status.txt" deployment/status/user-native-push-v1.2.1.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/jayuminton-courtstatus-v1.2.1-fresh-install.apk deployment/status/user-native-push-v1.2.1-fresh-install.txt
+          git add releases/jayuminton-courtstatus-v1.2.1-fresh-install.apk deployment/status/user-native-push-v1.2.1.txt
           git commit -m 'Publish verified fresh-install native push user APK v1.2.1' || true
           git pull --rebase origin main
           git push origin main
