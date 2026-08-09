@@ -78,54 +78,19 @@ replacement = '''    private static void registerCurrent(Context context) {
                 return;
             }
 
-            String testedKey = id + ":" + sha256(token);
             SharedPreferences latest = prefs(app);
-            boolean alreadyTested = testedKey.equals(latest.getString(KEY_TESTED_KEY, ""));
-            JSONObject tested = alreadyTested ? null : submit("test_native_push", id, name, token);
-            boolean deliveryAccepted = alreadyTested || (tested != null
-                    && tested.optBoolean("ok", false)
-                    && !tested.optString("messageId", "").isEmpty());
             latest.edit()
-                    .putBoolean(KEY_REGISTERED, deliveryAccepted)
-                    .putString(KEY_STATUS, deliveryAccepted ? "fcm_accepted" : "fcm_test_failed")
-                    .putString(KEY_TESTED_KEY, deliveryAccepted ? testedKey : "")
-                    .putString(KEY_FCM_MESSAGE_ID, tested == null ? latest.getString(KEY_FCM_MESSAGE_ID, "") : tested.optString("messageId", ""))
-                    .putString(KEY_FCM_ERROR, tested == null ? "" : tested.optString("error", ""))
+                    .putBoolean(KEY_REGISTERED, true)
+                    .putString(KEY_STATUS, "token_registered")
+                    .putString(KEY_TESTED_KEY, "")
+                    .putString(KEY_FCM_MESSAGE_ID, "")
+                    .putString(KEY_FCM_ERROR, "")
                     .apply();
         });
     }
 
 '''
 s = s[:start] + replacement + s[end:]
-
-old = '''        @JavascriptInterface public void testNativeAlert() {
-            NativeAlertProbe.show(MainActivity.this, "자유민턴 테스트", "팝업·강한 진동이 정상 작동합니다.", "manual-test");
-        }
-    }'''
-new = '''        @JavascriptInterface public void testNativeAlert() {
-            NativeAlertProbe.show(MainActivity.this, "자유민턴 테스트", "팝업·강한 진동이 정상 작동합니다.", "manual-test");
-        }
-        @JavascriptInterface public void retryServerPushTest() {
-            NativePushRegistrar.retryCurrent(MainActivity.this);
-        }
-    }'''
-if 'retryServerPushTest()' not in s:
-    if old not in s:
-        raise SystemExit("v115 diagnostic bridge insertion point missing")
-    s = s.replace(old, new, 1)
-
-anchor = '''    public static String registrationStatus(Context context) {'''
-retry = '''    public static void retryCurrent(Context context) {
-        Context app = context.getApplicationContext();
-        prefs(app).edit().putString(KEY_TESTED_KEY, "").putString(KEY_STATUS, "retrying").apply();
-        registerCurrent(app);
-    }
-
-'''
-if 'public static void retryCurrent(Context context)' not in s:
-    if s.count(anchor) != 1:
-        raise SystemExit("v115 retry insertion point missing")
-    s = s.replace(anchor, retry + anchor, 1)
 
 old = '''            result.put("vibrationEnabled", p.getBoolean(KEY_VIBRATION, true));
             return result.toString();'''
@@ -210,14 +175,13 @@ s = s[:start] + submit + s[end:]
 for marker in (
     'VERSION="1.1.5"', 'VERSION_CODE="115"',
     'action, String memberId, String memberName, String token)',
-    'submit("test_native_push", id, name, token)',
-    '"fcm_accepted"', 'result.put("fcmMessageId"',
+    '"token_registered"', 'result.put("fcmMessageId"',
     'JayumintonNativeAndroid/1.1.5',
-    'retryServerPushTest()', 'notificationPermission',
+    'notificationPermission',
     'waitChannelImportance',
 ):
     if marker not in s:
         raise SystemExit("missing native v1.1.5 marker: " + marker)
 
 path.write_text(s, encoding="utf-8")
-print("Prepared native v1.1.5 with server-confirmed FCM delivery acceptance.")
+print("Prepared native v1.1.5 with token registration and no automatic test push.")
