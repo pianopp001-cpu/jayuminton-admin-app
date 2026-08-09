@@ -76,6 +76,10 @@ jobs:
           grep -F 'jayuminton_court_system_v114' Code.js >/dev/null
           grep -F "notification_priority: 'PRIORITY_MAX'" Code.js >/dev/null
           grep -F 'vibrate_timings:' Code.js >/dev/null
+          if grep -F 'default_sound:' Code.js >/dev/null; then
+            echo 'Conflicting Android default_sound payload remains' >&2
+            exit 1
+          fi
 
           clasp push --force
           deployed=0
@@ -97,6 +101,10 @@ jobs:
           grep -F 'jayuminton_court_system_v114' Code.js >/dev/null
           grep -F "notification_priority: 'PRIORITY_MAX'" Code.js >/dev/null
           grep -F 'vibrate_timings:' Code.js >/dev/null
+          if grep -F 'default_sound:' Code.js >/dev/null; then
+            echo 'Conflicting Android default_sound payload was deployed' >&2
+            exit 1
+          fi
 
           cd "$GITHUB_WORKSPACE"
           printf 'status=success\nmode=android-system-notification\npackage=com.jayuminton.user\nwait_channel=jayuminton_wait1_system_v114\ncourt_channel=jayuminton_court_system_v114\npriority=high\nnotification_priority=PRIORITY_MAX\nsystem_tray_background=yes\nlong_vibration=yes\ndeployed_at=%s\n' "$(date -u +%FT%TZ)" > deployment/status/android-system-background-push-v114.txt
