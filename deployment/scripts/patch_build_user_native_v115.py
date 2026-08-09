@@ -26,6 +26,24 @@ for old, new in (
 ):
     s = s.replace(old, new)
 
+# Native diagnostics report real Android permission/channel state instead of
+# inferring readiness from the existence of Java code.
+old = '''import android.content.Context;
+import android.content.SharedPreferences;
+import android.net.Uri;'''
+new = '''import android.Manifest;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;'''
+if 'import android.app.NotificationManager;' not in s:
+    if old not in s:
+        raise SystemExit("v115 Android diagnostic imports insertion point missing")
+    s = s.replace(old, new, 1)
+
 old = '''    private static final String KEY_TESTED_KEY = "tested_registration_key";
     private static final String RELAY_URL = "${PUSH_URL}";'''
 new = '''    private static final String KEY_TESTED_KEY = "tested_registration_key";
@@ -80,11 +98,80 @@ replacement = '''    private static void registerCurrent(Context context) {
 '''
 s = s[:start] + replacement + s[end:]
 
+old = '''        @JavascriptInterface public void testNativeAlert() {
+            NativeAlertProbe.show(MainActivity.this, "자유민턴 테스트", "팝업·강한 진동이 정상 작동합니다.", "manual-test");
+        }
+    }'''
+new = '''        @JavascriptInterface public void testNativeAlert() {
+            NativeAlertProbe.show(MainActivity.this, "자유민턴 테스트", "팝업·강한 진동이 정상 작동합니다.", "manual-test");
+        }
+        @JavascriptInterface public void retryServerPushTest() {
+            NativePushRegistrar.retryCurrent(MainActivity.this);
+        }
+    }'''
+if 'retryServerPushTest()' not in s:
+    if old not in s:
+        raise SystemExit("v115 diagnostic bridge insertion point missing")
+    s = s.replace(old, new, 1)
+
+old = '''                    null
+                );
+            }
+        });'''
+new = '''                    null
+                );
+                view.evaluateJavascript(
+                    "(function(){if(window.__JAYUMINTON_NATIVE_STATUS_UI__)return;window.__JAYUMINTON_NATIVE_STATUS_UI__=1;" +
+                    "var box=document.createElement('div');box.id='jayuminton-native-status';" +
+                    "box.style.cssText='position:fixed;left:8px;right:8px;bottom:76px;z-index:2147483646;background:#102a43;color:white;padding:9px 10px;border-radius:10px;font:12px sans-serif;box-shadow:0 3px 12px #0005';" +
+                    "var label=document.createElement('div');label.textContent='알림 연결 확인 중…';box.appendChild(label);" +
+                    "var local=document.createElement('button');local.textContent='휴대폰 자체 테스트';local.style.cssText='margin-top:7px;margin-right:6px;padding:5px 8px';local.onclick=function(){NativeUserApp.testNativeAlert();};box.appendChild(local);" +
+                    "var server=document.createElement('button');server.textContent='서버 실제발송 재확인';server.style.cssText='margin-top:7px;padding:5px 8px';server.onclick=function(){NativeUserApp.retryServerPushTest();label.textContent='서버 실제발송 확인 중…';};box.appendChild(server);" +
+                    "document.body.appendChild(box);function refresh(){try{var s=JSON.parse(NativeUserApp.getPushRegistrationStatus());" +
+                    "var ok=s.status==='fcm_accepted'&&s.notificationPermission&&s.waitChannelImportance>=4&&s.courtChannelImportance>=4;" +
+                    "label.textContent=(ok?'✅ ':'⚠️ ')+s.status+' · 권한 '+(s.notificationPermission?'허용':'거부')+' · 채널 '+s.waitChannelImportance+'/'+s.courtChannelImportance+(s.fcmError?' · '+s.fcmError:'');" +
+                    "box.style.background=ok?'#146c43':'#8a3b12';}catch(e){label.textContent='⚠️ 상태 읽기 실패';}}refresh();setInterval(refresh,1500);})();",
+                    null
+                );
+            }
+        });'''
+if 'jayuminton-native-status' not in s:
+    if s.count(old) != 1:
+        raise SystemExit("v115 diagnostic UI insertion point missing")
+    s = s.replace(old, new, 1)
+
+anchor = '''    public static String registrationStatus(Context context) {'''
+retry = '''    public static void retryCurrent(Context context) {
+        Context app = context.getApplicationContext();
+        prefs(app).edit().putString(KEY_TESTED_KEY, "").putString(KEY_STATUS, "retrying").apply();
+        registerCurrent(app);
+    }
+
+'''
+if 'public static void retryCurrent(Context context)' not in s:
+    if s.count(anchor) != 1:
+        raise SystemExit("v115 retry insertion point missing")
+    s = s.replace(anchor, retry + anchor, 1)
+
 old = '''            result.put("vibrationEnabled", p.getBoolean(KEY_VIBRATION, true));
             return result.toString();'''
 new = '''            result.put("vibrationEnabled", p.getBoolean(KEY_VIBRATION, true));
             result.put("fcmMessageId", p.getString(KEY_FCM_MESSAGE_ID, ""));
             result.put("fcmError", p.getString(KEY_FCM_ERROR, ""));
+            boolean permissionGranted = Build.VERSION.SDK_INT < 33 ||
+                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+            result.put("notificationPermission", permissionGranted);
+            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            int waitImportance = -1;
+            int courtImportance = -1;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager != null) {
+                NotificationChannel wait = manager.getNotificationChannel(NativeSystemChannels.WAIT);
+                NotificationChannel court = manager.getNotificationChannel(NativeSystemChannels.COURT);
+                waitImportance = wait == null ? -1 : wait.getImportance();
+                courtImportance = court == null ? -1 : court.getImportance();
+            }
+            result.put("waitChannelImportance", waitImportance);
+            result.put("courtChannelImportance", courtImportance);
             return result.toString();'''
 if 'result.put("fcmMessageId"' not in s:
     if old not in s:
@@ -152,6 +239,8 @@ for marker in (
     'submit("test_native_push", id, name, token)',
     '"fcm_accepted"', 'result.put("fcmMessageId"',
     'JayumintonNativeAndroid/1.1.5',
+    'retryServerPushTest()', 'notificationPermission',
+    'waitChannelImportance', 'jayuminton-native-status',
 ):
     if marker not in s:
         raise SystemExit("missing native v1.1.5 marker: " + marker)
