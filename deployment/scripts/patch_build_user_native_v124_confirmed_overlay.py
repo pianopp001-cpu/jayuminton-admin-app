@@ -8,18 +8,18 @@ s = path.read_text(encoding="utf-8")
 for old, new in (
     ("v1.2.2-overlay.apk", "v1.2.4-confirmed-overlay.apk"),
     ("user-native-push-v1.2.2.txt", "user-native-push-v1.2.4.txt"),
-    ('VERSION="1.2.2"', 'VERSION="1.2.3"'),
+    ('VERSION="1.2.2"', 'VERSION="1.2.4"'),
     ('VERSION_CODE="122"', 'VERSION_CODE="124"'),
     ("versionCode 122", "versionCode 124"),
     ("versionCode='122'", "versionCode='124'"),
-    ("versionName '1.2.2'", "versionName '1.2.3'"),
-    ("versionName='1.2.2'", "versionName='1.2.3'"),
-    ('USER_APP_VERSION = "1.2.2"', 'USER_APP_VERSION = "1.2.3"'),
-    ("JayumintonUserNative/1.2.2", "JayumintonUserNative/1.2.3"),
-    ("JayumintonNativeAndroid/1.2.2", "JayumintonNativeAndroid/1.2.3"),
-    ('APP_VERSION = "1.2.2"', 'APP_VERSION = "1.2.3"'),
-    ("version=1.2.2", "version=1.2.3"),
-    ("version_code=122", "version_code=123"),
+    ("versionName '1.2.2'", "versionName '1.2.4'"),
+    ("versionName='1.2.2'", "versionName='1.2.4'"),
+    ('USER_APP_VERSION = "1.2.2"', 'USER_APP_VERSION = "1.2.4"'),
+    ("JayumintonUserNative/1.2.2", "JayumintonUserNative/1.2.4"),
+    ("JayumintonNativeAndroid/1.2.2", "JayumintonNativeAndroid/1.2.4"),
+    ('APP_VERSION = "1.2.2"', 'APP_VERSION = "1.2.4"'),
+    ("version=1.2.2", "version=1.2.4"),
+    ("version_code=122", "version_code=124"),
     ("jayuminton_wait1_native_v122", "jayuminton_wait1_native_v124"),
     ("jayuminton_court_native_v122", "jayuminton_court_native_v124"),
 ):
@@ -118,7 +118,7 @@ if s.count(old) != 1:
 s = s.replace(old, new, 1)
 
 for marker in (
-    'VERSION="1.2.3"', 'VERSION_CODE="124"',
+    'VERSION="1.2.4"', 'VERSION_CODE="124"',
     'AtomicBoolean(false)',
     'CountDownLatch(1)',
     'finished.await(2500',
