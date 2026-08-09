@@ -1,0 +1,8 @@
+status=success
+native_fcm_mode=data-only-high-priority
+background_service_invoked=yes
+explicit_native_vibration=yes
+browser_push_preserved=yes
+admin_files_changed=no
+apk_reinstall_required=no
+deployed_at=2026-08-09T12:51:03Z
