@@ -1,4 +1,4 @@
-name: Verify internal APK FCM acceptance path
+name: Verify internal APK FCM acceptance path redirect-fixed
 
 on:
   push:
@@ -30,6 +30,8 @@ jobs:
           : > "$RUNNER_TEMP/missing.txt"
           for marker in \
             'test_native_push' \
+            'setInstanceFollowRedirects' \
+            'Location' \
             'fcm_accepted' \
             'fcm_test_failed' \
             'fcm_test_message_id' \
