@@ -26,35 +26,6 @@ for old, new in (
 ):
     s = s.replace(old, new)
 
-# Native diagnostics report real Android permission/channel state instead of
-# inferring readiness from the existence of Java code.
-old = '''import android.content.Context;
-import android.content.SharedPreferences;
-import android.net.Uri;'''
-new = '''import android.Manifest;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.content.Context;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.net.Uri;
-import android.os.Build;'''
-if old in s:
-    s = s.replace(old, new, 1)
-elif new not in s:
-    raise SystemExit("v115 Android diagnostic imports insertion point missing")
-
-old = '''    private static final String KEY_TESTED_KEY = "tested_registration_key";
-    private static final String RELAY_URL = "${PUSH_URL}";'''
-new = '''    private static final String KEY_TESTED_KEY = "tested_registration_key";
-    private static final String KEY_FCM_MESSAGE_ID = "fcm_test_message_id";
-    private static final String KEY_FCM_ERROR = "fcm_test_error";
-    private static final String RELAY_URL = "${PUSH_URL}";'''
-if "KEY_FCM_MESSAGE_ID" not in s:
-    if old not in s:
-        raise SystemExit("v115 preference insertion point missing")
-    s = s.replace(old, new, 1)
-
 start = s.find("    private static void registerCurrent(Context context) {")
 end = s.find("    public static String registrationStatus(Context context) {", start)
 if start < 0 or end < 0:
@@ -73,7 +44,6 @@ replacement = '''    private static void registerCurrent(Context context) {
             if (!registrationOk) {
                 prefs(app).edit().putBoolean(KEY_REGISTERED, false)
                         .putString(KEY_STATUS, "registration_failed")
-                        .putString(KEY_FCM_ERROR, registered.optString("error", "registration_failed"))
                         .apply();
                 return;
             }
@@ -83,39 +53,12 @@ replacement = '''    private static void registerCurrent(Context context) {
                     .putBoolean(KEY_REGISTERED, true)
                     .putString(KEY_STATUS, "token_registered")
                     .putString(KEY_TESTED_KEY, "")
-                    .putString(KEY_FCM_MESSAGE_ID, "")
-                    .putString(KEY_FCM_ERROR, "")
                     .apply();
         });
     }
 
 '''
 s = s[:start] + replacement + s[end:]
-
-old = '''            result.put("vibrationEnabled", p.getBoolean(KEY_VIBRATION, true));
-            return result.toString();'''
-new = '''            result.put("vibrationEnabled", p.getBoolean(KEY_VIBRATION, true));
-            result.put("fcmMessageId", p.getString(KEY_FCM_MESSAGE_ID, ""));
-            result.put("fcmError", p.getString(KEY_FCM_ERROR, ""));
-            boolean permissionGranted = Build.VERSION.SDK_INT < 33 ||
-                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-            result.put("notificationPermission", permissionGranted);
-            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-            int waitImportance = -1;
-            int courtImportance = -1;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager != null) {
-                NotificationChannel wait = manager.getNotificationChannel(NativeSystemChannels.WAIT);
-                NotificationChannel court = manager.getNotificationChannel(NativeSystemChannels.COURT);
-                waitImportance = wait == null ? -1 : wait.getImportance();
-                courtImportance = court == null ? -1 : court.getImportance();
-            }
-            result.put("waitChannelImportance", waitImportance);
-            result.put("courtChannelImportance", courtImportance);
-            return result.toString();'''
-if 'result.put("fcmMessageId"' not in s:
-    if old not in s:
-        raise SystemExit("v115 status insertion point missing")
-    s = s.replace(old, new, 1)
 
 start = s.find("    private static void submit(String action,")
 end = s.find("\n    }\n}\nJAVA", start)
@@ -175,10 +118,8 @@ s = s[:start] + submit + s[end:]
 for marker in (
     'VERSION="1.1.5"', 'VERSION_CODE="115"',
     'action, String memberId, String memberName, String token)',
-    '"token_registered"', 'result.put("fcmMessageId"',
+    '"token_registered"',
     'JayumintonNativeAndroid/1.1.5',
-    'notificationPermission',
-    'waitChannelImportance',
 ):
     if marker not in s:
         raise SystemExit("missing native v1.1.5 marker: " + marker)
