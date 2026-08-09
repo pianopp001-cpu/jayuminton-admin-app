@@ -1,4 +1,4 @@
-name: Build internal FCM acceptance-verified APK v1.1.5 visible-diagnostics-fixed
+name: Build internal FCM acceptance-verified APK v1.1.5 no-overlay
 
 on:
   push:
