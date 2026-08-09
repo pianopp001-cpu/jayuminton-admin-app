@@ -1,4 +1,4 @@
-name: Verify internal APK FCM acceptance path visible-diagnostics
+name: Verify clean no-overlay APK background FCM path
 
 on:
   push:
@@ -31,10 +31,6 @@ jobs:
           for marker in \
             'test_native_push' \
             'setInstanceFollowRedirects' \
-            'retryServerPushTest' \
-            'notificationPermission' \
-            'waitChannelImportance' \
-            'jayuminton-native-status' \
             'Location' \
             'fcm_accepted' \
             'fcm_test_failed' \
@@ -47,6 +43,13 @@ jobs:
           do
             if ! grep -F "$marker" "$RUNNER_TEMP/classes.txt" >/dev/null; then
               echo "$marker" >> "$RUNNER_TEMP/missing.txt"
+              missing=1
+            fi
+          done
+          for forbidden in 'jayuminton-native-status' '알림 연결 확인 중' '휴대폰 자체 테스트' '서버 실제발송 재확인'
+          do
+            if grep -F "$forbidden" "$RUNNER_TEMP/classes.txt" >/dev/null; then
+              echo "forbidden:$forbidden" >> "$RUNNER_TEMP/missing.txt"
               missing=1
             fi
           done
