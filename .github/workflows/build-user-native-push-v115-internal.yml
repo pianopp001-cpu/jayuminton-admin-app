@@ -38,6 +38,9 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Initialize build checkpoint
+        run: echo 'node-ready' > "$RUNNER_TEMP/native-v115-stage.txt"
+
       - name: Resolve deployment configuration
         shell: bash
         run: |
@@ -55,13 +58,17 @@ jobs:
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
           } >> "$GITHUB_ENV"
 
+          echo 'config-ready' > "$RUNNER_TEMP/native-v115-stage.txt"
+
       - name: Authenticate Firebase
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
       - name: Install Firebase and clasp tools
-        run: npm install --global firebase-tools@latest @google/clasp@latest
+        run: |
+          npm install --global firebase-tools@latest @google/clasp@latest
+          echo 'tools-ready' > "$RUNNER_TEMP/native-v115-stage.txt"
 
       - name: Ensure Firebase Android app and download google-services config
         shell: bash
@@ -91,6 +98,8 @@ jobs:
           print('google-services.json package verified')
           PY
 
+          echo 'firebase-app-ready' > "$RUNNER_TEMP/native-v115-stage.txt"
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -105,10 +114,15 @@ jobs:
           test -d "$ANDROID_HOME/platforms/android-35"
           test -n "$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | head -1)"
 
+          echo 'android-sdk-ready' > "$RUNNER_TEMP/native-v115-stage.txt"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+
+      - name: Mark Gradle ready
+        run: echo 'gradle-ready' > "$RUNNER_TEMP/native-v115-stage.txt"
 
       - name: Verify live push sender is high priority 3x3 3x5
         shell: bash
@@ -123,10 +137,13 @@ jobs:
           grep -F "priority: 'high'" Code.js >/dev/null
           grep -F "ttl: '600s'" Code.js >/dev/null
 
+          echo 'push-sender-ready' > "$RUNNER_TEMP/native-v115-stage.txt"
+
       - name: Build and verify fresh-install native FCM APK
         shell: bash
         run: |
           set -euo pipefail
+          echo 'native-build-started' > "$RUNNER_TEMP/native-v115-stage.txt"
           python3 deployment/scripts/patch_build_user_native_v111.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v112.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v113.py deployment/scripts/build_user_native_push_fresh_v110.sh
@@ -172,7 +189,7 @@ jobs:
           git reset --hard HEAD
           {
             echo 'status=failure'
-            echo 'stage=native-v115-build'
+            echo 'stage='"$(cat "$RUNNER_TEMP/native-v115-stage.txt" 2>/dev/null || echo unknown)"
             echo '--- build log tail ---'
             if [ -f "$RUNNER_TEMP/native-v115-build.log" ]; then
               tail -n 240 "$RUNNER_TEMP/native-v115-build.log"
