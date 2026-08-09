@@ -1,0 +1,46 @@
+name: Verify internal APK FCM acceptance path
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-user-native-v115-internal.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Inspect published APK bytecode
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="releases/jayuminton-courtstatus-v1.1.5-fresh-install.apk"
+          test -s "$APK"
+          unzip -p "$APK" classes.dex > "$RUNNER_TEMP/classes.dex"
+          strings "$RUNNER_TEMP/classes.dex" > "$RUNNER_TEMP/classes.txt"
+          grep -F 'test_native_push' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'fcm_accepted' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'fcm_test_failed' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'fcm_test_message_id' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'jayuminton_wait1_system_v114' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'jayuminton_court_system_v114' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'JayumintonNativeAndroid/1.1.5' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'NativeSystemChannels' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'JayumintonFirebaseMessagingService' "$RUNNER_TEMP/classes.txt" >/dev/null
+          SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          test "$SHA" = '6e418ea2019df4b6873c5b5c0eb3112cdc3fba31c66d91a73d07750df5b84355'
+          printf 'status=success\nversion=1.1.5\napk_sha256=%s\nserver_test_action=yes\nfcm_acceptance_required=yes\nfcm_failure_recorded=yes\nsystem_channels=yes\nbackground_service=yes\nlive_install_link_changed=no\nverified_at=%s\n' "$SHA" "$(date -u +%FT%TZ)" > deployment/status/native-v115-binary-verified.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/native-v115-binary-verified.txt
+          git commit -m 'Verify native v1.1.5 FCM acceptance bytecode'
+          git pull --rebase origin main
+          git push origin main
