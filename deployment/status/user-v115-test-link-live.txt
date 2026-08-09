@@ -1,6 +1,6 @@
 status=success
 version=1.1.5
-filename=jayuminton-courtstatus-v1.1.5-test.apk
+filename=jayuminton-courtstatus-v1.1.5-fresh-install.apk
 changed_files=Script.html
 admin_files_changed=no
-deployed_at=2026-08-09T04:20:46Z
+deployed_at=2026-08-09T04:31:20Z
