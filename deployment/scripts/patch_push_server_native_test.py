@@ -38,6 +38,19 @@ function testNativePush_(body) {
     throw new Error('memberId and token are required for native push test.');
   }
 
+  const registeredForMember = loadWebPushTokens_().some(function(record) {
+    return record && String(record.memberId || '') === memberId && record.token === token;
+  });
+  if (!registeredForMember) {
+    return {
+      ok: false,
+      stage: 'registration_lookup',
+      status: 0,
+      messageId: '',
+      error: 'TOKEN_NOT_REGISTERED_FOR_MEMBER'
+    };
+  }
+
   // Possession of the device FCM token is required.  The endpoint sends only
   // a fixed diagnostic message back to that same device; callers cannot
   // choose arbitrary notification content.
@@ -82,6 +95,8 @@ required = (
     "action === 'test_native_push'",
     "function testNativePush_(body)",
     "stage: 'fcm_send'",
+    "stage: 'registration_lookup'",
+    'TOKEN_NOT_REGISTERED_FOR_MEMBER',
     "response.getResponseCode()",
     "messageId: messageId",
 )
