@@ -9,4 +9,21 @@ stage=pulled-live-main
 └─ Script.html
 └─ Style.html
 Pulled 7 files.
+--- current APK link contexts ---
+2:/* Android APK Native TTS bridge.
+158:  /* This callback still works when the APK invokes it in the same frame.
+210:const MEMBER_USER_APK_URL =
+211:  'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.5-fresh-install.apk?build=f5c77cab';
+212:const MEMBER_USER_APK_HINT =
+214:  window.__JAYUMINTON_USER_APK__ === true ||
+239:let MEMBER_APP_INSTALL_STATE = {installed:MEMBER_USER_APK_HINT,choice:MEMBER_USER_APK_HINT?'on':'',platform:/Android/i.test(String(navigator.userAgent||''))?'android':'other',browserContext:MEMBER_USER_APK_HINT?'user-apk':'other',message:'',ready:true,installing:false,armed:false,prepRemaining:0,nativeInstall:true};
+2155:  if (MEMBER_USER_APK_HINT) {
+2158:    MEMBER_APP_INSTALL_STATE.browserContext = 'user-apk';
+2175:  showMemberSettingMessage('사용자용 APK 다운로드를 시작합니다. 다운로드 후 설치하고 앱을 열어 주세요.');
+2179:      window.top.location.href = MEMBER_USER_APK_URL;
+2181:      window.location.href = MEMBER_USER_APK_URL;
+2184:    try { window.location.href = MEMBER_USER_APK_URL; } catch (_) {}
+2188:    if (MEMBER_USER_APK_HINT) return;
+2297:  if (MEMBER_USER_APK_HINT) {
+2300:    MEMBER_APP_INSTALL_STATE.browserContext = 'user-apk';
 APK link not found exactly once
