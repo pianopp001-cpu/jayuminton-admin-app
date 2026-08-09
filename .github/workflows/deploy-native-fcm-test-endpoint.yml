@@ -1,4 +1,4 @@
-name: Deploy native FCM end-to-end test endpoint
+name: Deploy native FCM end-to-end test endpoint with member match
 
 on:
   push:
@@ -59,6 +59,7 @@ jobs:
           node --check Code.js
           grep -F "action === 'test_native_push'" Code.js >/dev/null
           grep -F "stage: 'fcm_send'" Code.js >/dev/null
+          grep -F 'TOKEN_NOT_REGISTERED_FOR_MEMBER' Code.js >/dev/null
           grep -F 'delete requestOptions.url' Code.js >/dev/null
           grep -F 'jayuminton_wait1_system_v114' Code.js >/dev/null
           grep -F 'jayuminton_court_system_v114' Code.js >/dev/null
