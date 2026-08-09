@@ -33,12 +33,21 @@ jobs:
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
           test -n "$MAIN_SCRIPT_ID"
+          test -n "$PUSH_SCRIPT_ID"
           WORK="$RUNNER_TEMP/main"
           mkdir -p "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
+          PUSH_WORK="$RUNNER_TEMP/push"
+          mkdir -p "$PUSH_WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\\n' "$PUSH_SCRIPT_ID" > "$PUSH_WORK/.clasp.json"
+          cd "$PUSH_WORK"
+          clasp pull
+          cp Code.js "$WORK/PushCode.js"
+          cd "$WORK"
           OUT="$GITHUB_WORKSPACE/deployment/status/live-admin-push-event-context.txt"
           python3 - "$OUT" <<'PY'
           from pathlib import Path
@@ -47,10 +56,10 @@ jobs:
           needles = (
               'wait1_ready', 'court_assignment', 'sendPush', 'pushUrl',
               'push_url', 'UrlFetchApp', 'fetch(', 'assignmentId',
-              'memberIds', 'memberId', 'members:', 'withDocumentLock_', 'writeWaitGroups_', 'writeCourts_', 'touch_', 'readWaitGroups_', 'readCourts_'
+              'memberIds', 'memberId', 'members:', 'withDocumentLock_', 'writeWaitGroups_', 'writeCourts_', 'touch_', 'readWaitGroups_', 'readCourts_', 'doPost', 'verifyAdminSecret_', 'jsonOutput_', 'sendWebPushEvent_'
           )
           chunks = []
-          for name in ('Code.js', 'Script.html'):
+          for name in ('Code.js', 'Script.html', 'PushCode.js'):
               p = Path(name)
               if not p.exists():
                   continue
@@ -72,6 +81,13 @@ jobs:
                       x = re.sub(r"(['\"])[A-Za-z0-9_\-]{80,}\1", r"\1[REDACTED_TOKEN]\1", x)
                       chunks.append(f'{j+1}: {x[:320]}')
                   chunks.append('---')
+          push = Path('PushCode.js')
+          if push.exists():
+              push_lines = push.read_text(encoding='utf-8').splitlines()
+              chunks.append('=== PushCode.js handler exact ===')
+              for j in range(0, min(len(push_lines), 180)):
+                  x = re.sub(r'https://[^\\s\\\'"]+', '[REDACTED_URL]', push_lines[j])
+                  chunks.append(f'{j+1}: {x[:320]}')
           code = Path('Code.js')
           if code.exists():
               code_lines = code.read_text(encoding='utf-8').splitlines()
