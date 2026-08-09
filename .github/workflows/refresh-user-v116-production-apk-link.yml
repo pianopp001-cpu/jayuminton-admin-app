@@ -42,6 +42,8 @@ jobs:
           cd "$WORK"
           clasp pull
           echo pulled-live-main > "$RUNNER_TEMP/v116-link-stage.txt"
+          echo '--- current APK link contexts ---'
+          grep -inE 'apk|courtstatus|raw.githubusercontent' Script.html | head -n 40 || true
           cp Code.js "$RUNNER_TEMP/Code.before.js"
           cp Admin.html "$RUNNER_TEMP/Admin.before.html"
           cp Style.html "$RUNNER_TEMP/Style.before.html"
