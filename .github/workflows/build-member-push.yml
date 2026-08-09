@@ -1,0 +1,71 @@
+name: Build member push APK
+
+on:
+  push:
+    branches: [claude-background-push]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Restore signing key
+        run: |
+          mkdir -p signing
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+
+      - name: Restore member google-services.json
+        shell: bash
+        run: |
+          test -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64"
+          echo "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > member/google-services.json
+          test -s member/google-services.json
+          grep -F 'com.jayuminton.member' member/google-services.json
+
+      - name: Build signed member APK
+        run: gradle --no-daemon :member:assembleRelease
+
+      - name: Verify signed APK
+        run: |
+          APK=member/build/outputs/apk/release/member-release.apk
+          test -s "$APK"
+          unzip -t "$APK"
+          echo "package/permissions:"
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
+          "$AAPT" dump badging "$APK" | grep -E "package:|uses-permission"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose "$APK"
+          echo "sha256: $(sha256sum "$APK" | awk '{print $1}')"
+          ls -lh "$APK"
+
+      - name: Upload member APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-member-push-verify
+          path: member/build/outputs/apk/release/member-release.apk
+          if-no-files-found: error
+          retention-days: 14
