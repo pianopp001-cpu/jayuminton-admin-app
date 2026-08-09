@@ -1,4 +1,4 @@
-name: Build production-event-only native FCM APK v1.1.5 no-overlay
+name: Build production-only native FCM APK v1.1.5 clean
 
 on:
   push:
