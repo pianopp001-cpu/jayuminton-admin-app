@@ -1,0 +1,8 @@
+status=success
+main_server_transition_detection=yes
+push_relay_authenticated=yes
+wait1_event=yes
+court_event=yes
+automatic_test_push=no
+admin_ui_files_changed=no
+deployed_at=2026-08-09T04:47:41Z
