@@ -1,4 +1,4 @@
-name: Deploy Android system-rendered background push
+name: Deploy Android system-rendered background push (validated)
 
 on:
   push:
