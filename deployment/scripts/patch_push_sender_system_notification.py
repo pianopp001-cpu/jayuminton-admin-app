@@ -33,6 +33,11 @@ if 'jayuminton_court_system_v114' not in s:
         raise SystemExit('Android sender block expected once, found ' + str(s.count(old)))
     s = s.replace(old, new, 1)
 
+# Repair an already-deployed v1.1.4 block as well.  Earlier revisions wrote
+# both fields, so merely skipping an existing channel marker leaves FCM with
+# the invalid combination.
+s = s.replace("          default_sound: true,\n", "")
+
 for marker in (
     "restricted_package_name: 'com.jayuminton.user'",
     'jayuminton_court_system_v114',
