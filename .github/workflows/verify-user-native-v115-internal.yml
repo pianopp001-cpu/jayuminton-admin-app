@@ -26,21 +26,33 @@ jobs:
           test -s "$APK"
           unzip -p "$APK" classes.dex > "$RUNNER_TEMP/classes.dex"
           strings "$RUNNER_TEMP/classes.dex" > "$RUNNER_TEMP/classes.txt"
-          grep -F 'test_native_push' "$RUNNER_TEMP/classes.txt" >/dev/null
-          grep -F 'fcm_accepted' "$RUNNER_TEMP/classes.txt" >/dev/null
-          grep -F 'fcm_test_failed' "$RUNNER_TEMP/classes.txt" >/dev/null
-          grep -F 'fcm_test_message_id' "$RUNNER_TEMP/classes.txt" >/dev/null
-          grep -F 'jayuminton_wait1_system_v114' "$RUNNER_TEMP/classes.txt" >/dev/null
-          grep -F 'jayuminton_court_system_v114' "$RUNNER_TEMP/classes.txt" >/dev/null
-          grep -F 'JayumintonNativeAndroid/1.1.5' "$RUNNER_TEMP/classes.txt" >/dev/null
-          grep -F 'NativeSystemChannels' "$RUNNER_TEMP/classes.txt" >/dev/null
-          grep -F 'JayumintonFirebaseMessagingService' "$RUNNER_TEMP/classes.txt" >/dev/null
+          missing=0
+          : > "$RUNNER_TEMP/missing.txt"
+          for marker in \
+            'test_native_push' \
+            'fcm_accepted' \
+            'fcm_test_failed' \
+            'fcm_test_message_id' \
+            'jayuminton_wait1_system_v114' \
+            'jayuminton_court_system_v114' \
+            'JayumintonNativeAndroid/1.1.5' \
+            'NativeSystemChannels' \
+            'JayumintonFirebaseMessagingService'
+          do
+            if ! grep -F "$marker" "$RUNNER_TEMP/classes.txt" >/dev/null; then
+              echo "$marker" >> "$RUNNER_TEMP/missing.txt"
+              missing=1
+            fi
+          done
           SHA="$(sha256sum "$APK" | awk '{print $1}')"
           test "$SHA" = '6e418ea2019df4b6873c5b5c0eb3112cdc3fba31c66d91a73d07750df5b84355'
-          printf 'status=success\nversion=1.1.5\napk_sha256=%s\nserver_test_action=yes\nfcm_acceptance_required=yes\nfcm_failure_recorded=yes\nsystem_channels=yes\nbackground_service=yes\nlive_install_link_changed=no\nverified_at=%s\n' "$SHA" "$(date -u +%FT%TZ)" > deployment/status/native-v115-binary-verified.txt
+          RESULT=success
+          if [ "$missing" != 0 ]; then RESULT=failure; fi
+          printf 'status=%s\nversion=1.1.5\napk_sha256=%s\nserver_test_action=yes\nfcm_acceptance_required=yes\nfcm_failure_recorded=yes\nsystem_channels=yes\nbackground_service=yes\nlive_install_link_changed=no\nverified_at=%s\nmissing=%s\n' "$RESULT" "$SHA" "$(date -u +%FT%TZ)" "$(tr '\n' ',' < "$RUNNER_TEMP/missing.txt")" > deployment/status/native-v115-binary-verified.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/native-v115-binary-verified.txt
           git commit -m 'Verify native v1.1.5 FCM acceptance bytecode'
           git pull --rebase origin main
           git push origin main
+          test "$missing" = 0
