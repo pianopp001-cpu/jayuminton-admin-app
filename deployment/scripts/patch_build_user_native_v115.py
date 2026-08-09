@@ -39,10 +39,10 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;'''
-if 'import android.app.NotificationManager;' not in s:
-    if old not in s:
-        raise SystemExit("v115 Android diagnostic imports insertion point missing")
+if old in s:
     s = s.replace(old, new, 1)
+elif new not in s:
+    raise SystemExit("v115 Android diagnostic imports insertion point missing")
 
 old = '''    private static final String KEY_TESTED_KEY = "tested_registration_key";
     private static final String RELAY_URL = "${PUSH_URL}";'''
