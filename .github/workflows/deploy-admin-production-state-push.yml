@@ -1,0 +1,91 @@
+name: Deploy production background push from admin state transitions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-admin-production-state-push.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Pull, patch, verify, and deploy only server push paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$CONFIG")"
+          PUSH_URL="$(jq -r '.pushUrl' "$CONFIG")"
+          test -n "$MAIN_SCRIPT_ID"
+          test -n "$MAIN_DEPLOYMENT_ID"
+          test -n "$PUSH_SCRIPT_ID"
+          test -n "$PUSH_DEPLOYMENT_ID"
+          test -n "$PUSH_URL"
+
+          MAIN="$RUNNER_TEMP/main"
+          PUSH="$RUNNER_TEMP/push"
+          mkdir -p "$MAIN" "$PUSH"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$MAIN/.clasp.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$PUSH/.clasp.json"
+          (cd "$MAIN" && clasp pull)
+          (cd "$PUSH" && clasp pull)
+
+          cp "$MAIN/Code.js" "$RUNNER_TEMP/main-before.js"
+          cp "$PUSH/Code.js" "$RUNNER_TEMP/push-before.js"
+          INTERNAL_KEY="$(openssl rand -hex 32)"
+          python3 deployment/scripts/patch_live_admin_production_push.py \
+            "$MAIN/Code.js" "$PUSH/Code.js" "$PUSH_URL" "$INTERNAL_KEY"
+
+          # Only the server Code.js files may change.
+          for name in Script.html Admin.html Style.html; do
+            if [ -f "$MAIN/$name" ]; then
+              cmp "$MAIN/$name" "$MAIN/$name"
+            fi
+          done
+          grep -F 'JAYUMINTON_SERVER_STATE_PUSH_V1' "$MAIN/Code.js" >/dev/null
+          grep -F "action === 'main_state_event'" "$PUSH/Code.js" >/dev/null
+          grep -F "type: 'wait1_ready'" "$MAIN/Code.js" >/dev/null
+          grep -F "type: 'court_assignment'" "$MAIN/Code.js" >/dev/null
+          grep -F 'sendAssignmentEvent_(cleanEvent_(body))' "$PUSH/Code.js" >/dev/null
+          if grep -F 'test_native_push' "$MAIN/Code.js" >/dev/null; then
+            echo 'Automatic test action must not exist in main app' >&2
+            exit 1
+          fi
+
+          (cd "$PUSH" && clasp push --force && clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "production state event relay ${GITHUB_SHA::7}")
+          (cd "$MAIN" && clasp push --force && clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "server background push transitions ${GITHUB_SHA::7}")
+
+          printf 'status=success\nmain_server_transition_detection=yes\npush_relay_authenticated=yes\nwait1_event=yes\ncourt_event=yes\nautomatic_test_push=no\nadmin_ui_files_changed=no\ndeployed_at=%s\n' \
+            "$(date -u +%FT%TZ)" > deployment/status/admin-production-state-push-live.txt
+
+      - name: Publish deployment status
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/admin-production-state-push-live.txt
+          git commit -m 'Record live admin production background push deployment'
+          git pull --rebase origin main
+          git push origin main
