@@ -1,0 +1,2518 @@
+=== Code.js ===
+27: 
+28:   if (!isAdmin) {
+29:     template.memberPageUrl = ScriptApp.getService().getUrl() || '';
+30:     template.pushReturn = JSON.stringify({
+31:       connected: Boolean(e && e.parameter && e.parameter.push === 'on'),
+32:       memberId: String(e && e.parameter && e.parameter.pushMemberId || ''),
+33:       memberName: String(e && e.parameter && e.parameter.pushMemberName || '')
+34:     });
+35:   }
+36: 
+37:   return template
+38:     .evaluate()
+39:     .setTitle(
+40:       isAdmin
+41:         ? '자유민턴 코트배정 관리자'
+42:         : '자유민턴 코트배정 현황'
+---
+351:       legacy
+352:         .getRange('A:B')
+353:         .getDisplayValues();
+354: 
+355:     const keysToClear = {
+356:       MEMBERS: '[]',
+357:       COURTS: '{"1":[],"2":[],"3":[],"4":[]}',
+358:       WAIT_GROUPS: '[[],[],[],[],[]]',
+359:       HISTORY: '[]'
+360:     };
+361: 
+362:     for (
+363:       let index = 1;
+364:       index < values.length;
+365:       index++
+366:     ) {
+---
+910:         return validIds[id];
+911:       });
+912:     });
+913: 
+914:   return {
+915:     members: members,
+916:     courts: courts,
+917:     waitGroups: cleanWait,
+918:     courtStartedAt: courtStartedAt,
+919:     updatedAt:
+920:       getSetting_('UPDATED_AT') ||
+921:       new Date().toISOString(),
+922:     maxMembers: MAX_MEMBERS
+923:   };
+924: }
+925: 
+---
+917:     waitGroups: cleanWait,
+918:     courtStartedAt: courtStartedAt,
+919:     updatedAt:
+920:       getSetting_('UPDATED_AT') ||
+921:       new Date().toISOString(),
+922:     maxMembers: MAX_MEMBERS
+923:   };
+924: }
+925: 
+926: function makeState_(members, courts, waitGroups, courtStartedAt) {
+927:   return {
+928:     members: members,
+929:     courts: courts,
+930:     waitGroups: waitGroups,
+931:     courtStartedAt: courtStartedAt,
+932:     updatedAt: new Date().toISOString(),
+---
+923:   };
+924: }
+925: 
+926: function makeState_(members, courts, waitGroups, courtStartedAt) {
+927:   return {
+928:     members: members,
+929:     courts: courts,
+930:     waitGroups: waitGroups,
+931:     courtStartedAt: courtStartedAt,
+932:     updatedAt: new Date().toISOString(),
+933:     maxMembers: MAX_MEMBERS
+934:   };
+935: }
+936: 
+937: function smartAssignSelected(pin, ids, preferredCourt) {
+938:   return withDocumentLock_(
+---
+928:     members: members,
+929:     courts: courts,
+930:     waitGroups: waitGroups,
+931:     courtStartedAt: courtStartedAt,
+932:     updatedAt: new Date().toISOString(),
+933:     maxMembers: MAX_MEMBERS
+934:   };
+935: }
+936: 
+937: function smartAssignSelected(pin, ids, preferredCourt) {
+938:   return withDocumentLock_(
+939:     '4명 빠른 자동 배정',
+940:     function() {
+941:       auth_(pin);
+942:       ids = normalizeIds_(ids);
+943:       preferredCourt = String(preferredCourt || '');
+---
+1121:    */
+1122:   return {
+1123:     ok: true,
+1124:     member: member,
+1125:     updatedAt: new Date().toISOString(),
+1126:     maxMembers: MAX_MEMBERS
+1127:   };
+1128: }
+1129: 
+1130: function setMemberStatusUnlocked_(pin, ids, status) {
+1131:   auth_(pin);
+1132: 
+1133:   ids = normalizeIds_(ids);
+1134: 
+1135:   if (!ids.length) {
+1136:     throw new Error('멤버를 선택하세요.');
+---
+1503:   const courts = readCourts_();
+1504:   const startedAt = readCourtStartedAt_();
+1505: 
+1506:   courts[courtNo] =
+1507:     (courts[courtNo] || [])
+1508:       .filter(function(memberId) {
+1509:         return memberId !== id;
+1510:       });
+1511: 
+1512:   startedAt[courtNo] = '';
+1513:   writeCourts_(courts, startedAt);
+1514:   updateMemberStatuses_([id], 'active');
+1515:   touch_();
+1516: 
+1517:   return getPublicState();
+1518: }
+---
+1504:   const startedAt = readCourtStartedAt_();
+1505: 
+1506:   courts[courtNo] =
+1507:     (courts[courtNo] || [])
+1508:       .filter(function(memberId) {
+1509:         return memberId !== id;
+1510:       });
+1511: 
+1512:   startedAt[courtNo] = '';
+1513:   writeCourts_(courts, startedAt);
+1514:   updateMemberStatuses_([id], 'active');
+1515:   touch_();
+1516: 
+1517:   return getPublicState();
+1518: }
+1519: 
+---
+1529: 
+1530:   const waitGroups = readWaitGroups_();
+1531: 
+1532:   waitGroups[groupIndex] =
+1533:     waitGroups[groupIndex]
+1534:       .filter(function(memberId) {
+1535:         return memberId !== id;
+1536:       });
+1537: 
+1538:   writeWaitGroups_(waitGroups);
+1539:   updateMemberStatuses_([id], 'active');
+1540:   touch_();
+1541: 
+1542:   return getPublicState();
+1543: }
+1544: 
+---
+1530:   const waitGroups = readWaitGroups_();
+1531: 
+1532:   waitGroups[groupIndex] =
+1533:     waitGroups[groupIndex]
+1534:       .filter(function(memberId) {
+1535:         return memberId !== id;
+1536:       });
+1537: 
+1538:   writeWaitGroups_(waitGroups);
+1539:   updateMemberStatuses_([id], 'active');
+1540:   touch_();
+1541: 
+1542:   return getPublicState();
+1543: }
+1544: 
+1545: function decreaseSelectedGameCountsUnlocked_(
+---
+1662:       );
+1663:     }
+1664:   );
+1665: }
+1666: 
+1667: function updateMemberSelfProfileUnlocked_(pin, memberId, name, gender, grade, experience) {
+1668:   auth_(pin);
+1669: 
+1670:   memberId = String(memberId == null ? '' : memberId).trim();
+1671:   name = String(name == null ? '' : name).trim();
+1672:   gender = gender === 'female' ? 'female' : 'male';
+1673:   grade = String(grade == null ? '' : grade).trim();
+1674:   experience = String(experience == null ? '' : experience).trim();
+1675: 
+1676:   if (!memberId) {
+1677:     throw new Error('회원 정보가 없습니다.');
+---
+1665: }
+1666: 
+1667: function updateMemberSelfProfileUnlocked_(pin, memberId, name, gender, grade, experience) {
+1668:   auth_(pin);
+1669: 
+1670:   memberId = String(memberId == null ? '' : memberId).trim();
+1671:   name = String(name == null ? '' : name).trim();
+1672:   gender = gender === 'female' ? 'female' : 'male';
+1673:   grade = String(grade == null ? '' : grade).trim();
+1674:   experience = String(experience == null ? '' : experience).trim();
+1675: 
+1676:   if (!memberId) {
+1677:     throw new Error('회원 정보가 없습니다.');
+1678:   }
+1679:   if (name.length > 20) {
+1680:     throw new Error('이름은 20자 이내로 입력하세요.');
+---
+1671:   name = String(name == null ? '' : name).trim();
+1672:   gender = gender === 'female' ? 'female' : 'male';
+1673:   grade = String(grade == null ? '' : grade).trim();
+1674:   experience = String(experience == null ? '' : experience).trim();
+1675: 
+1676:   if (!memberId) {
+1677:     throw new Error('회원 정보가 없습니다.');
+1678:   }
+1679:   if (name.length > 20) {
+1680:     throw new Error('이름은 20자 이내로 입력하세요.');
+1681:   }
+1682:   if (grade.length > 12) {
+1683:     throw new Error('급수는 12자 이내로 입력하세요.');
+1684:   }
+1685:   if (experience.length > 20) {
+1686:     throw new Error('구력은 20자 이내로 입력하세요.');
+---
+1687:   }
+1688: 
+1689:   const members = readMembers_();
+1690:   let found = null;
+1691:   for (let i = 0; i < members.length; i++) {
+1692:     if (String(members[i].id) === memberId) {
+1693:       found = members[i];
+1694:       break;
+1695:     }
+1696:   }
+1697:   if (!found) {
+1698:     throw new Error('회원을 찾을 수 없습니다.');
+1699:   }
+1700: 
+1701:   if (name) found.name = name;
+1702:   found.gender = gender;
+---
+1711:     grade: grade,
+1712:     experience: experience
+1713:   };
+1714: }
+1715: 
+1716: function updateMemberSelfProfile(pin, memberId, name, gender, grade, experience) {
+1717:   return withDocumentLock_(
+1718:     '내 정보 수정',
+1719:     function() {
+1720:       return updateMemberSelfProfileUnlocked_(
+1721:         pin,
+1722:         memberId,
+1723:         name,
+1724:         gender,
+1725:         grade,
+1726:         experience
+---
+1717:   return withDocumentLock_(
+1718:     '내 정보 수정',
+1719:     function() {
+1720:       return updateMemberSelfProfileUnlocked_(
+1721:         pin,
+1722:         memberId,
+1723:         name,
+1724:         gender,
+1725:         grade,
+1726:         experience
+1727:       );
+1728:     }
+1729:   );
+1730: }
+1731: 
+1732: 
+---
+1729:   );
+1730: }
+1731: 
+1732: 
+1733: 
+1734: function updateMemberProfile(pin, memberId, name, gender, grade, experience, isNew) {
+1735:   auth_(pin);
+1736:   return withDocumentLock_('멤버 수정', function() {
+1737:     memberId = String(memberId == null ? '' : memberId).trim();
+1738:     name = String(name == null ? '' : name).trim();
+1739:     gender = String(gender == null ? '' : gender).trim();
+1740:     grade = String(grade == null ? '' : grade).trim();
+1741:     experience = String(experience == null ? '' : experience).trim();
+1742: 
+1743:     if (!memberId) throw new Error('수정할 멤버가 없습니다.');
+1744:     if (!name) throw new Error('이름 또는 닉네임을 입력하세요.');
+---
+1732: 
+1733: 
+1734: function updateMemberProfile(pin, memberId, name, gender, grade, experience, isNew) {
+1735:   auth_(pin);
+1736:   return withDocumentLock_('멤버 수정', function() {
+1737:     memberId = String(memberId == null ? '' : memberId).trim();
+1738:     name = String(name == null ? '' : name).trim();
+1739:     gender = String(gender == null ? '' : gender).trim();
+1740:     grade = String(grade == null ? '' : grade).trim();
+1741:     experience = String(experience == null ? '' : experience).trim();
+1742: 
+1743:     if (!memberId) throw new Error('수정할 멤버가 없습니다.');
+1744:     if (!name) throw new Error('이름 또는 닉네임을 입력하세요.');
+1745:     if (name.length > 20) throw new Error('이름은 20자 이내로 입력하세요.');
+1746:     if (gender !== 'male' && gender !== 'female') throw new Error('성별을 선택하세요.');
+1747:     if (grade.length > 12) throw new Error('급수는 12자 이내로 입력하세요.');
+---
+1738:     name = String(name == null ? '' : name).trim();
+1739:     gender = String(gender == null ? '' : gender).trim();
+1740:     grade = String(grade == null ? '' : grade).trim();
+1741:     experience = String(experience == null ? '' : experience).trim();
+1742: 
+1743:     if (!memberId) throw new Error('수정할 멤버가 없습니다.');
+1744:     if (!name) throw new Error('이름 또는 닉네임을 입력하세요.');
+1745:     if (name.length > 20) throw new Error('이름은 20자 이내로 입력하세요.');
+1746:     if (gender !== 'male' && gender !== 'female') throw new Error('성별을 선택하세요.');
+1747:     if (grade.length > 12) throw new Error('급수는 12자 이내로 입력하세요.');
+1748:     if (experience.length > 20) throw new Error('구력은 20자 이내로 입력하세요.');
+1749: 
+1750:     const members = readMembers_();
+1751:     const index = members.findIndex(function(item) {
+1752:       return String(item.id) === memberId;
+1753:     });
+---
+1747:     if (grade.length > 12) throw new Error('급수는 12자 이내로 입력하세요.');
+1748:     if (experience.length > 20) throw new Error('구력은 20자 이내로 입력하세요.');
+1749: 
+1750:     const members = readMembers_();
+1751:     const index = members.findIndex(function(item) {
+1752:       return String(item.id) === memberId;
+1753:     });
+1754:     if (index < 0) throw new Error('수정할 기존 멤버를 찾을 수 없습니다.');
+1755: 
+1756:     const duplicate = members.some(function(item, itemIndex) {
+1757:       return itemIndex !== index && String(item.name || '').trim() === name;
+1758:     });
+1759:     if (duplicate) throw new Error('같은 이름의 멤버가 이미 있습니다.');
+1760: 
+1761:     // Existing-member-only update: preserve id, game count, status and placement.
+1762:     members[index].name = name;
+---
+2116:   );
+2117: }
+2118: 
+2119: function moveOrSwapMember(
+2120:   pin,
+2121:   memberId,
+2122:   targetType,
+2123:   targetIndex,
+2124:   targetMemberId
+2125: ) {
+2126:   return withDocumentLock_(
+2127:     '빠른 드래그 이동·교환',
+2128:     function() {
+2129:       auth_(pin);
+2130: 
+2131:       memberId = String(memberId || '');
+---
+2119: function moveOrSwapMember(
+2120:   pin,
+2121:   memberId,
+2122:   targetType,
+2123:   targetIndex,
+2124:   targetMemberId
+2125: ) {
+2126:   return withDocumentLock_(
+2127:     '빠른 드래그 이동·교환',
+2128:     function() {
+2129:       auth_(pin);
+2130: 
+2131:       memberId = String(memberId || '');
+2132:       targetType = String(targetType || '');
+2133:       targetIndex = String(targetIndex == null ? '' : targetIndex);
+2134:       targetMemberId = String(targetMemberId || '');
+---
+2126:   return withDocumentLock_(
+2127:     '빠른 드래그 이동·교환',
+2128:     function() {
+2129:       auth_(pin);
+2130: 
+2131:       memberId = String(memberId || '');
+2132:       targetType = String(targetType || '');
+2133:       targetIndex = String(targetIndex == null ? '' : targetIndex);
+2134:       targetMemberId = String(targetMemberId || '');
+2135: 
+2136:       if (!memberId || memberId === targetMemberId) {
+2137:         throw new Error('이동할 다른 인원을 선택하세요.');
+2138:       }
+2139: 
+2140:       if (['court', 'wait', 'active'].indexOf(targetType) < 0) {
+2141:         throw new Error('잘못된 이동 위치입니다.');
+---
+2129:       auth_(pin);
+2130: 
+2131:       memberId = String(memberId || '');
+2132:       targetType = String(targetType || '');
+2133:       targetIndex = String(targetIndex == null ? '' : targetIndex);
+2134:       targetMemberId = String(targetMemberId || '');
+2135: 
+2136:       if (!memberId || memberId === targetMemberId) {
+2137:         throw new Error('이동할 다른 인원을 선택하세요.');
+2138:       }
+2139: 
+2140:       if (['court', 'wait', 'active'].indexOf(targetType) < 0) {
+2141:         throw new Error('잘못된 이동 위치입니다.');
+2142:       }
+2143: 
+2144:       const members = readMembers_();
+---
+2131:       memberId = String(memberId || '');
+2132:       targetType = String(targetType || '');
+2133:       targetIndex = String(targetIndex == null ? '' : targetIndex);
+2134:       targetMemberId = String(targetMemberId || '');
+2135: 
+2136:       if (!memberId || memberId === targetMemberId) {
+2137:         throw new Error('이동할 다른 인원을 선택하세요.');
+2138:       }
+2139: 
+2140:       if (['court', 'wait', 'active'].indexOf(targetType) < 0) {
+2141:         throw new Error('잘못된 이동 위치입니다.');
+2142:       }
+2143: 
+2144:       const members = readMembers_();
+2145:       const courts = readCourts_();
+2146:       const waitGroups = readWaitGroups_();
+---
+2149: 
+2150:       members.forEach(function(member) {
+2151:         validIds[member.id] = true;
+2152:       });
+2153: 
+2154:       if (!validIds[memberId] || (targetMemberId && !validIds[targetMemberId])) {
+2155:         throw new Error('멤버 정보를 찾을 수 없습니다.');
+2156:       }
+2157: 
+2158:       function locate(id) {
+2159:         let result = { type: 'active', index: '', position: -1 };
+2160: 
+2161:         Object.keys(courts).some(function(key) {
+2162:           const position = (courts[key] || []).indexOf(id);
+2163:           if (position >= 0) {
+2164:             result = { type: 'court', index: key, position: position };
+---
+2185:         if (location.type === 'court') return courts[location.index];
+2186:         if (location.type === 'wait') return waitGroups[Number(location.index)];
+2187:         return null;
+2188:       }
+2189: 
+2190:       const source = locate(memberId);
+2191:       const targetLocation = {
+2192:         type: targetType,
+2193:         index: targetIndex,
+2194:         position: -1
+2195:       };
+2196: 
+2197:       if (
+2198:         targetType === 'court' &&
+2199:         ['1', '2', '3', '4'].indexOf(targetIndex) < 0
+2200:       ) {
+---
+2206:         (Number(targetIndex) < 0 || Number(targetIndex) >= WAIT_GROUP_COUNT)
+2207:       ) {
+2208:         throw new Error('잘못된 대기조 번호입니다.');
+2209:       }
+2210: 
+2211:       if (targetMemberId) {
+2212:         const other = locate(targetMemberId);
+2213:         const sourceGroup = groupOf(source);
+2214:         const otherGroup = groupOf(other);
+2215: 
+2216:         if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+2217:         if (otherGroup) otherGroup[other.position] = memberId;
+2218: 
+2219:         if (!sourceGroup && otherGroup) {
+2220:           otherGroup[other.position] = memberId;
+2221:         }
+---
+2207:       ) {
+2208:         throw new Error('잘못된 대기조 번호입니다.');
+2209:       }
+2210: 
+2211:       if (targetMemberId) {
+2212:         const other = locate(targetMemberId);
+2213:         const sourceGroup = groupOf(source);
+2214:         const otherGroup = groupOf(other);
+2215: 
+2216:         if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+2217:         if (otherGroup) otherGroup[other.position] = memberId;
+2218: 
+2219:         if (!sourceGroup && otherGroup) {
+2220:           otherGroup[other.position] = memberId;
+2221:         }
+2222: 
+---
+2211:       if (targetMemberId) {
+2212:         const other = locate(targetMemberId);
+2213:         const sourceGroup = groupOf(source);
+2214:         const otherGroup = groupOf(other);
+2215: 
+2216:         if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+2217:         if (otherGroup) otherGroup[other.position] = memberId;
+2218: 
+2219:         if (!sourceGroup && otherGroup) {
+2220:           otherGroup[other.position] = memberId;
+2221:         }
+2222: 
+2223:         if (sourceGroup && !otherGroup) {
+2224:           sourceGroup[source.position] = targetMemberId;
+2225:         }
+2226:       } else {
+---
+2212:         const other = locate(targetMemberId);
+2213:         const sourceGroup = groupOf(source);
+2214:         const otherGroup = groupOf(other);
+2215: 
+2216:         if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+2217:         if (otherGroup) otherGroup[other.position] = memberId;
+2218: 
+2219:         if (!sourceGroup && otherGroup) {
+2220:           otherGroup[other.position] = memberId;
+2221:         }
+2222: 
+2223:         if (sourceGroup && !otherGroup) {
+2224:           sourceGroup[source.position] = targetMemberId;
+2225:         }
+2226:       } else {
+2227:         const destination = groupOf(targetLocation);
+---
+2215: 
+2216:         if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+2217:         if (otherGroup) otherGroup[other.position] = memberId;
+2218: 
+2219:         if (!sourceGroup && otherGroup) {
+2220:           otherGroup[other.position] = memberId;
+2221:         }
+2222: 
+2223:         if (sourceGroup && !otherGroup) {
+2224:           sourceGroup[source.position] = targetMemberId;
+2225:         }
+2226:       } else {
+2227:         const destination = groupOf(targetLocation);
+2228: 
+2229:         if (destination && destination.length >= GROUP_SIZE) {
+2230:           throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+---
+2219:         if (!sourceGroup && otherGroup) {
+2220:           otherGroup[other.position] = memberId;
+2221:         }
+2222: 
+2223:         if (sourceGroup && !otherGroup) {
+2224:           sourceGroup[source.position] = targetMemberId;
+2225:         }
+2226:       } else {
+2227:         const destination = groupOf(targetLocation);
+2228: 
+2229:         if (destination && destination.length >= GROUP_SIZE) {
+2230:           throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+2231:         }
+2232: 
+2233:         const sourceGroup = groupOf(source);
+2234:         if (sourceGroup) sourceGroup.splice(source.position, 1);
+---
+2230:           throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+2231:         }
+2232: 
+2233:         const sourceGroup = groupOf(source);
+2234:         if (sourceGroup) sourceGroup.splice(source.position, 1);
+2235:         if (destination) destination.push(memberId);
+2236:       }
+2237: 
+2238:       Object.keys(courts).forEach(function(key) {
+2239:         markCourtStartedIfFull_(courts, startedAt, key);
+2240:       });
+2241: 
+2242:       const playing = {};
+2243:       const waiting = {};
+2244:       Object.keys(courts).forEach(function(key) {
+2245:         (courts[key] || []).forEach(function(id) { playing[id] = true; });
+---
+2250: 
+2251:       members.forEach(function(member) {
+2252:         if (playing[member.id]) member.status = 'playing';
+2253:         else if (waiting[member.id]) member.status = 'waiting';
+2254:         else if (
+2255:           member.id === memberId ||
+2256:           member.id === targetMemberId
+2257:         ) member.status = 'active';
+2258:       });
+2259: 
+2260:       writeCourts_(courts, startedAt);
+2261:       writeWaitGroups_(waitGroups);
+2262:       writeMembers_(members);
+2263:       touch_();
+2264: 
+2265:       return makeState_(members, courts, waitGroups, startedAt);
+---
+2251:       members.forEach(function(member) {
+2252:         if (playing[member.id]) member.status = 'playing';
+2253:         else if (waiting[member.id]) member.status = 'waiting';
+2254:         else if (
+2255:           member.id === memberId ||
+2256:           member.id === targetMemberId
+2257:         ) member.status = 'active';
+2258:       });
+2259: 
+2260:       writeCourts_(courts, startedAt);
+2261:       writeWaitGroups_(waitGroups);
+2262:       writeMembers_(members);
+2263:       touch_();
+2264: 
+2265:       return makeState_(members, courts, waitGroups, startedAt);
+2266:     }
+---
+=== Script.html ===
+251: let MEMBER_INFO_OPEN_ID = '';
+252: let ADD_MEMBER_IN_FLIGHT = false;
+253: const COURT_ENTRANCE_SIDE_KEY = 'jayuminton_court_entrance_side_v1';
+254: 
+255: let STATE = {
+256:   members: [],
+257:   courts: {
+258:     1: [],
+259:     2: [],
+260:     3: [],
+261:     4: []
+262:   },
+263:   waitGroups: [
+264:     [],
+265:     [],
+266:     [],
+---
+271:     1: '',
+272:     2: '',
+273:     3: '',
+274:     4: ''
+275:   },
+276:   maxMembers: 500
+277: };
+278: 
+279: let SELECTED = new Set();
+280: 
+281: let PARTIAL_SELECTED_A = new Set();
+282: let PARTIAL_SELECTED_B = new Set();
+283: let WAIT_SELECTED_A = new Set();
+284: let WAIT_SELECTED_B = new Set();
+285: let QUICK_PICK = null;
+286: let LAST_UNDO_STATE = null;
+---
+283: let WAIT_SELECTED_A = new Set();
+284: let WAIT_SELECTED_B = new Set();
+285: let QUICK_PICK = null;
+286: let LAST_UNDO_STATE = null;
+287: let WHOLE_SWAP_PICK = null;
+288: let LAST_EXCLUDED_MEMBER_TAP = { memberId:'', tappedAt:0 };
+289: let LAST_COURT_MEMBER_TAP = {
+290:   memberId: '',
+291:   tappedAt: 0
+292: };
+293: let LAST_WAIT_MEMBER_TAP = {
+294:   memberId: '',
+295:   tappedAt: 0
+296: };
+297: let LAST_EMPTY_SLOT_TAP = {
+298:   key: '',
+---
+285: let QUICK_PICK = null;
+286: let LAST_UNDO_STATE = null;
+287: let WHOLE_SWAP_PICK = null;
+288: let LAST_EXCLUDED_MEMBER_TAP = { memberId:'', tappedAt:0 };
+289: let LAST_COURT_MEMBER_TAP = {
+290:   memberId: '',
+291:   tappedAt: 0
+292: };
+293: let LAST_WAIT_MEMBER_TAP = {
+294:   memberId: '',
+295:   tappedAt: 0
+296: };
+297: let LAST_EMPTY_SLOT_TAP = {
+298:   key: '',
+299:   tappedAt: 0
+300: };
+---
+289: let LAST_COURT_MEMBER_TAP = {
+290:   memberId: '',
+291:   tappedAt: 0
+292: };
+293: let LAST_WAIT_MEMBER_TAP = {
+294:   memberId: '',
+295:   tappedAt: 0
+296: };
+297: let LAST_EMPTY_SLOT_TAP = {
+298:   key: '',
+299:   tappedAt: 0
+300: };
+301: let QUICK_FILTER = 'all';
+302: let AUTO_ASSIGN_TARGET = null;
+303: let MEMBER_ACTION_IDS = [];
+304: let EDIT_MEMBER_ID = null;
+---
+340:     ) {
+341:       return null;
+342:     }
+343:     return {
+344:       courtNo: courtNo,
+345:       members: saved.members
+346:         .map(function(member) {
+347:           return {
+348:             name: String(member && member.name || ''),
+349:             gender:
+350:               member && member.gender === 'female'
+351:                 ? 'female'
+352:                 : 'male'
+353:           };
+354:         })
+355:         .filter(function(member) {
+---
+412: );
+413: 
+414: function rememberVoiceAnnouncement(courtNo, members) {
+415:   LAST_VOICE_ANNOUNCEMENT = {
+416:     courtNo: Number(courtNo),
+417:     members: (members || []).map(function(member) {
+418:       return {
+419:         name: String(member.name || ''),
+420:         gender:
+421:           member.gender === 'female' ? 'female' : 'male'
+422:       };
+423:     })
+424:   };
+425:   try {
+426:     localStorage.setItem(
+427:       LAST_VOICE_KEY,
+---
+1059:   const badge = memberNewBadgeHtml(member);
+1060:   if (!parts.length) return badge;
+1061:   return badge + '<span class="member-info-detail">' + parts.join(' · ') + '</span>';
+1062: }
+1063: 
+1064: function toggleMemberInfo(memberId, event) {
+1065:   /* 카드 정보는 항상 표시하므로 클릭 시 전체 화면을 다시 그리지 않는다. */
+1066:   return;
+1067: }
+1068: 
+1069: let MEMBER_SELF_LAST_TAP_ID = '';
+1070: let MEMBER_SELF_LAST_TAP_AT = 0;
+1071: 
+1072: function handleMemberSelfCardTap(memberId, event) {
+1073:   if (IS_ADMIN) return;
+1074:   const now = Date.now();
+---
+1067: }
+1068: 
+1069: let MEMBER_SELF_LAST_TAP_ID = '';
+1070: let MEMBER_SELF_LAST_TAP_AT = 0;
+1071: 
+1072: function handleMemberSelfCardTap(memberId, event) {
+1073:   if (IS_ADMIN) return;
+1074:   const now = Date.now();
+1075:   const same = MEMBER_SELF_LAST_TAP_ID === String(memberId) && now - MEMBER_SELF_LAST_TAP_AT <= 520;
+1076:   MEMBER_SELF_LAST_TAP_ID = String(memberId);
+1077:   MEMBER_SELF_LAST_TAP_AT = now;
+1078:   if (!same) return;
+1079:   MEMBER_SELF_LAST_TAP_ID = '';
+1080:   MEMBER_SELF_LAST_TAP_AT = 0;
+1081:   if (event) { event.preventDefault(); event.stopPropagation(); }
+1082:   selectMemberSelf(memberId);
+---
+1070: let MEMBER_SELF_LAST_TAP_AT = 0;
+1071: 
+1072: function handleMemberSelfCardTap(memberId, event) {
+1073:   if (IS_ADMIN) return;
+1074:   const now = Date.now();
+1075:   const same = MEMBER_SELF_LAST_TAP_ID === String(memberId) && now - MEMBER_SELF_LAST_TAP_AT <= 520;
+1076:   MEMBER_SELF_LAST_TAP_ID = String(memberId);
+1077:   MEMBER_SELF_LAST_TAP_AT = now;
+1078:   if (!same) return;
+1079:   MEMBER_SELF_LAST_TAP_ID = '';
+1080:   MEMBER_SELF_LAST_TAP_AT = 0;
+1081:   if (event) { event.preventDefault(); event.stopPropagation(); }
+1082:   selectMemberSelf(memberId);
+1083:   showMemberSettingMessage('내 이름·알림 ON·진동 ON으로 저장했습니다.', false);
+1084: }
+1085: 
+---
+1071: 
+1072: function handleMemberSelfCardTap(memberId, event) {
+1073:   if (IS_ADMIN) return;
+1074:   const now = Date.now();
+1075:   const same = MEMBER_SELF_LAST_TAP_ID === String(memberId) && now - MEMBER_SELF_LAST_TAP_AT <= 520;
+1076:   MEMBER_SELF_LAST_TAP_ID = String(memberId);
+1077:   MEMBER_SELF_LAST_TAP_AT = now;
+1078:   if (!same) return;
+1079:   MEMBER_SELF_LAST_TAP_ID = '';
+1080:   MEMBER_SELF_LAST_TAP_AT = 0;
+1081:   if (event) { event.preventDefault(); event.stopPropagation(); }
+1082:   selectMemberSelf(memberId);
+1083:   showMemberSettingMessage('내 이름·알림 ON·진동 ON으로 저장했습니다.', false);
+1084: }
+1085: 
+1086: function memberSelfDoubleTapAttributes(memberId) {
+---
+1077:   MEMBER_SELF_LAST_TAP_AT = now;
+1078:   if (!same) return;
+1079:   MEMBER_SELF_LAST_TAP_ID = '';
+1080:   MEMBER_SELF_LAST_TAP_AT = 0;
+1081:   if (event) { event.preventDefault(); event.stopPropagation(); }
+1082:   selectMemberSelf(memberId);
+1083:   showMemberSettingMessage('내 이름·알림 ON·진동 ON으로 저장했습니다.', false);
+1084: }
+1085: 
+1086: function memberSelfDoubleTapAttributes(memberId) {
+1087:   if (IS_ADMIN || !memberId) return '';
+1088:   return ' onpointerup="handleMemberSelfCardTap(\'' + memberId + '\',event)"';
+1089: }
+1090: 
+1091: function memberLongPressAttributes(memberId) {
+1092:   if (!IS_ADMIN) return '';
+---
+1081:   if (event) { event.preventDefault(); event.stopPropagation(); }
+1082:   selectMemberSelf(memberId);
+1083:   showMemberSettingMessage('내 이름·알림 ON·진동 ON으로 저장했습니다.', false);
+1084: }
+1085: 
+1086: function memberSelfDoubleTapAttributes(memberId) {
+1087:   if (IS_ADMIN || !memberId) return '';
+1088:   return ' onpointerup="handleMemberSelfCardTap(\'' + memberId + '\',event)"';
+1089: }
+1090: 
+1091: function memberLongPressAttributes(memberId) {
+1092:   if (!IS_ADMIN) return '';
+1093:   return (
+1094:     ' onpointerdown="startMemberLongPress(\'' + memberId + '\',event)"' +
+1095:     ' onpointermove="moveMemberLongPress(event)"' +
+1096:     ' onpointerup="finishMemberLongPress()"' +
+---
+1082:   selectMemberSelf(memberId);
+1083:   showMemberSettingMessage('내 이름·알림 ON·진동 ON으로 저장했습니다.', false);
+1084: }
+1085: 
+1086: function memberSelfDoubleTapAttributes(memberId) {
+1087:   if (IS_ADMIN || !memberId) return '';
+1088:   return ' onpointerup="handleMemberSelfCardTap(\'' + memberId + '\',event)"';
+1089: }
+1090: 
+1091: function memberLongPressAttributes(memberId) {
+1092:   if (!IS_ADMIN) return '';
+1093:   return (
+1094:     ' onpointerdown="startMemberLongPress(\'' + memberId + '\',event)"' +
+1095:     ' onpointermove="moveMemberLongPress(event)"' +
+1096:     ' onpointerup="finishMemberLongPress()"' +
+1097:     ' onpointercancel="finishMemberLongPress()"' +
+---
+1083:   showMemberSettingMessage('내 이름·알림 ON·진동 ON으로 저장했습니다.', false);
+1084: }
+1085: 
+1086: function memberSelfDoubleTapAttributes(memberId) {
+1087:   if (IS_ADMIN || !memberId) return '';
+1088:   return ' onpointerup="handleMemberSelfCardTap(\'' + memberId + '\',event)"';
+1089: }
+1090: 
+1091: function memberLongPressAttributes(memberId) {
+1092:   if (!IS_ADMIN) return '';
+1093:   return (
+1094:     ' onpointerdown="startMemberLongPress(\'' + memberId + '\',event)"' +
+1095:     ' onpointermove="moveMemberLongPress(event)"' +
+1096:     ' onpointerup="finishMemberLongPress()"' +
+1097:     ' onpointercancel="finishMemberLongPress()"' +
+1098:     ' oncontextmenu="event.preventDefault()"'
+---
+1086: function memberSelfDoubleTapAttributes(memberId) {
+1087:   if (IS_ADMIN || !memberId) return '';
+1088:   return ' onpointerup="handleMemberSelfCardTap(\'' + memberId + '\',event)"';
+1089: }
+1090: 
+1091: function memberLongPressAttributes(memberId) {
+1092:   if (!IS_ADMIN) return '';
+1093:   return (
+1094:     ' onpointerdown="startMemberLongPress(\'' + memberId + '\',event)"' +
+1095:     ' onpointermove="moveMemberLongPress(event)"' +
+1096:     ' onpointerup="finishMemberLongPress()"' +
+1097:     ' onpointercancel="finishMemberLongPress()"' +
+1098:     ' oncontextmenu="event.preventDefault()"'
+1099:   );
+1100: }
+1101: 
+---
+1089: }
+1090: 
+1091: function memberLongPressAttributes(memberId) {
+1092:   if (!IS_ADMIN) return '';
+1093:   return (
+1094:     ' onpointerdown="startMemberLongPress(\'' + memberId + '\',event)"' +
+1095:     ' onpointermove="moveMemberLongPress(event)"' +
+1096:     ' onpointerup="finishMemberLongPress()"' +
+1097:     ' onpointercancel="finishMemberLongPress()"' +
+1098:     ' oncontextmenu="event.preventDefault()"'
+1099:   );
+1100: }
+1101: 
+1102: function startMemberLongPress(memberId, event) {
+1103:   if (!IS_ADMIN) return;
+1104:   finishMemberLongPress();
+---
+1097:     ' onpointercancel="finishMemberLongPress()"' +
+1098:     ' oncontextmenu="event.preventDefault()"'
+1099:   );
+1100: }
+1101: 
+1102: function startMemberLongPress(memberId, event) {
+1103:   if (!IS_ADMIN) return;
+1104:   finishMemberLongPress();
+1105: 
+1106:   MEMBER_LONG_PRESS_TRACK = {
+1107:     memberId: memberId,
+1108:     x: event ? event.clientX : 0,
+1109:     y: event ? event.clientY : 0
+1110:   };
+1111: 
+1112:   MEMBER_LONG_PRESS_TIMER = setTimeout(function() {
+---
+1102: function startMemberLongPress(memberId, event) {
+1103:   if (!IS_ADMIN) return;
+1104:   finishMemberLongPress();
+1105: 
+1106:   MEMBER_LONG_PRESS_TRACK = {
+1107:     memberId: memberId,
+1108:     x: event ? event.clientX : 0,
+1109:     y: event ? event.clientY : 0
+1110:   };
+1111: 
+1112:   MEMBER_LONG_PRESS_TIMER = setTimeout(function() {
+1113:     MEMBER_LONG_PRESS_TIMER = null;
+1114:     MEMBER_ACTION_IDS = [memberId];
+1115:     MEMBER_LONG_PRESS_BLOCK_UNTIL = Date.now() + 700;
+1116: 
+1117:     if (navigator.vibrate) {
+---
+1109:     y: event ? event.clientY : 0
+1110:   };
+1111: 
+1112:   MEMBER_LONG_PRESS_TIMER = setTimeout(function() {
+1113:     MEMBER_LONG_PRESS_TIMER = null;
+1114:     MEMBER_ACTION_IDS = [memberId];
+1115:     MEMBER_LONG_PRESS_BLOCK_UNTIL = Date.now() + 700;
+1116: 
+1117:     if (navigator.vibrate) {
+1118:       navigator.vibrate(25);
+1119:     }
+1120: 
+1121:     document
+1122:       .querySelectorAll('[data-member-id="' + memberId + '"]')
+1123:       .forEach(function(element) {
+1124:         element.classList.add('long-pressed');
+---
+1117:     if (navigator.vibrate) {
+1118:       navigator.vibrate(25);
+1119:     }
+1120: 
+1121:     document
+1122:       .querySelectorAll('[data-member-id="' + memberId + '"]')
+1123:       .forEach(function(element) {
+1124:         element.classList.add('long-pressed');
+1125:       });
+1126:     renderQuickMoveBar();
+1127:   }, 600);
+1128: }
+1129: 
+1130: function moveMemberLongPress(event) {
+1131:   if (!MEMBER_LONG_PRESS_TRACK || !event) return;
+1132: 
+---
+1144:     MEMBER_LONG_PRESS_TIMER = null;
+1145:   }
+1146:   MEMBER_LONG_PRESS_TRACK = null;
+1147: }
+1148: 
+1149: function consumeLongPressClick(memberId, event) {
+1150:   if (
+1151:     Date.now() <= MEMBER_LONG_PRESS_BLOCK_UNTIL &&
+1152:     MEMBER_ACTION_IDS.indexOf(memberId) >= 0
+1153:   ) {
+1154:     if (event) {
+1155:       event.preventDefault();
+1156:       event.stopPropagation();
+1157:     }
+1158:     MEMBER_LONG_PRESS_BLOCK_UNTIL = 0;
+1159:     return true;
+---
+1147: }
+1148: 
+1149: function consumeLongPressClick(memberId, event) {
+1150:   if (
+1151:     Date.now() <= MEMBER_LONG_PRESS_BLOCK_UNTIL &&
+1152:     MEMBER_ACTION_IDS.indexOf(memberId) >= 0
+1153:   ) {
+1154:     if (event) {
+1155:       event.preventDefault();
+1156:       event.stopPropagation();
+1157:     }
+1158:     MEMBER_LONG_PRESS_BLOCK_UNTIL = 0;
+1159:     return true;
+1160:   }
+1161:   return false;
+1162: }
+---
+1159:     return true;
+1160:   }
+1161:   return false;
+1162: }
+1163: 
+1164: function handleSelectableMemberClick(memberId, event) {
+1165:   if (consumeLongPressClick(memberId, event)) return;
+1166:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1167:   toggleSelected(memberId);
+1168: }
+1169: 
+1170: function assignMemberToChosenEmpty(memberId, event) {
+1171:   if (!AUTO_ASSIGN_TARGET) return false;
+1172: 
+1173:   const targetType = AUTO_ASSIGN_TARGET.type;
+1174:   const targetIndex = AUTO_ASSIGN_TARGET.index;
+---
+1160:   }
+1161:   return false;
+1162: }
+1163: 
+1164: function handleSelectableMemberClick(memberId, event) {
+1165:   if (consumeLongPressClick(memberId, event)) return;
+1166:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1167:   toggleSelected(memberId);
+1168: }
+1169: 
+1170: function assignMemberToChosenEmpty(memberId, event) {
+1171:   if (!AUTO_ASSIGN_TARGET) return false;
+1172: 
+1173:   const targetType = AUTO_ASSIGN_TARGET.type;
+1174:   const targetIndex = AUTO_ASSIGN_TARGET.index;
+1175:   const targetGroup =
+---
+1161:   return false;
+1162: }
+1163: 
+1164: function handleSelectableMemberClick(memberId, event) {
+1165:   if (consumeLongPressClick(memberId, event)) return;
+1166:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1167:   toggleSelected(memberId);
+1168: }
+1169: 
+1170: function assignMemberToChosenEmpty(memberId, event) {
+1171:   if (!AUTO_ASSIGN_TARGET) return false;
+1172: 
+1173:   const targetType = AUTO_ASSIGN_TARGET.type;
+1174:   const targetIndex = AUTO_ASSIGN_TARGET.index;
+1175:   const targetGroup =
+1176:     targetType === 'court'
+---
+1162: }
+1163: 
+1164: function handleSelectableMemberClick(memberId, event) {
+1165:   if (consumeLongPressClick(memberId, event)) return;
+1166:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1167:   toggleSelected(memberId);
+1168: }
+1169: 
+1170: function assignMemberToChosenEmpty(memberId, event) {
+1171:   if (!AUTO_ASSIGN_TARGET) return false;
+1172: 
+1173:   const targetType = AUTO_ASSIGN_TARGET.type;
+1174:   const targetIndex = AUTO_ASSIGN_TARGET.index;
+1175:   const targetGroup =
+1176:     targetType === 'court'
+1177:       ? (STATE.courts[targetIndex] || [])
+---
+1165:   if (consumeLongPressClick(memberId, event)) return;
+1166:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1167:   toggleSelected(memberId);
+1168: }
+1169: 
+1170: function assignMemberToChosenEmpty(memberId, event) {
+1171:   if (!AUTO_ASSIGN_TARGET) return false;
+1172: 
+1173:   const targetType = AUTO_ASSIGN_TARGET.type;
+1174:   const targetIndex = AUTO_ASSIGN_TARGET.index;
+1175:   const targetGroup =
+1176:     targetType === 'court'
+1177:       ? (STATE.courts[targetIndex] || [])
+1178:       : (STATE.waitGroups[targetIndex] || []);
+1179: 
+1180:   if (targetGroup.indexOf(memberId) >= 0) {
+---
+1175:   const targetGroup =
+1176:     targetType === 'court'
+1177:       ? (STATE.courts[targetIndex] || [])
+1178:       : (STATE.waitGroups[targetIndex] || []);
+1179: 
+1180:   if (targetGroup.indexOf(memberId) >= 0) {
+1181:     alert('이미 선택한 위치에 있는 멤버입니다.');
+1182:     return true;
+1183:   }
+1184: 
+1185:   if (targetGroup.length >= 4) {
+1186:     AUTO_ASSIGN_TARGET = null;
+1187:     alert('선택한 위치에는 빈자리가 없습니다.');
+1188:     renderState();
+1189:     return true;
+1190:   }
+---
+1197:   if (targetGroup.length === 3) {
+1198:     AUTO_ASSIGN_TARGET = null;
+1199:   }
+1200: 
+1201:   QUICK_PICK = null;
+1202:   SELECTED.delete(memberId);
+1203:   batchAssignToTarget(
+1204:     [memberId],
+1205:     targetType,
+1206:     targetIndex
+1207:   );
+1208:   return true;
+1209: }
+1210: 
+1211: function memberCard(
+1212:   member,
+---
+1199:   }
+1200: 
+1201:   QUICK_PICK = null;
+1202:   SELECTED.delete(memberId);
+1203:   batchAssignToTarget(
+1204:     [memberId],
+1205:     targetType,
+1206:     targetIndex
+1207:   );
+1208:   return true;
+1209: }
+1210: 
+1211: function memberCard(
+1212:   member,
+1213:   showGames,
+1214:   clickable
+---
+1266:     element.classList.remove('quick-picked');
+1267:   });
+1268:   renderQuickMoveBar();
+1269: }
+1270: 
+1271: function quickPickMember(type, index, memberId, event) {
+1272:   if (event && event.target && event.target.closest('button.small')) return;
+1273: 
+1274:   if (
+1275:     QUICK_PICK &&
+1276:     QUICK_PICK.type === type &&
+1277:     QUICK_PICK.index === String(index) &&
+1278:     QUICK_PICK.memberId === memberId
+1279:   ) {
+1280:     clearQuickPickOnly();
+1281:     return;
+---
+1273: 
+1274:   if (
+1275:     QUICK_PICK &&
+1276:     QUICK_PICK.type === type &&
+1277:     QUICK_PICK.index === String(index) &&
+1278:     QUICK_PICK.memberId === memberId
+1279:   ) {
+1280:     clearQuickPickOnly();
+1281:     return;
+1282:   }
+1283: 
+1284:   if (!QUICK_PICK) {
+1285:     QUICK_PICK = { type: type, index: String(index), memberId: memberId };
+1286:     document
+1287:       .querySelectorAll('[data-member-id="' + memberId + '"]')
+1288:       .forEach(function(element) {
+---
+1280:     clearQuickPickOnly();
+1281:     return;
+1282:   }
+1283: 
+1284:   if (!QUICK_PICK) {
+1285:     QUICK_PICK = { type: type, index: String(index), memberId: memberId };
+1286:     document
+1287:       .querySelectorAll('[data-member-id="' + memberId + '"]')
+1288:       .forEach(function(element) {
+1289:         element.classList.add('quick-picked');
+1290:       });
+1291:     renderQuickMoveBar();
+1292:     return;
+1293:   }
+1294: 
+1295:   const source = QUICK_PICK;
+---
+1282:   }
+1283: 
+1284:   if (!QUICK_PICK) {
+1285:     QUICK_PICK = { type: type, index: String(index), memberId: memberId };
+1286:     document
+1287:       .querySelectorAll('[data-member-id="' + memberId + '"]')
+1288:       .forEach(function(element) {
+1289:         element.classList.add('quick-picked');
+1290:       });
+1291:     renderQuickMoveBar();
+1292:     return;
+1293:   }
+1294: 
+1295:   const source = QUICK_PICK;
+1296:   clearQuickPickOnly();
+1297: 
+---
+1293:   }
+1294: 
+1295:   const source = QUICK_PICK;
+1296:   clearQuickPickOnly();
+1297: 
+1298:   if (source.memberId === memberId) return;
+1299:   quickMoveOrSwap(source.memberId, type, index, memberId);
+1300: }
+1301: 
+1302: function handleExcludedMemberTap(memberId, event) {
+1303:   if (!IS_ADMIN) return;
+1304:   if (consumeLongPressClick(memberId, event)) return;
+1305:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1306:   const now = Date.now();
+1307:   const isDoubleTap = LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+1308:     now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+---
+1294: 
+1295:   const source = QUICK_PICK;
+1296:   clearQuickPickOnly();
+1297: 
+1298:   if (source.memberId === memberId) return;
+1299:   quickMoveOrSwap(source.memberId, type, index, memberId);
+1300: }
+1301: 
+1302: function handleExcludedMemberTap(memberId, event) {
+1303:   if (!IS_ADMIN) return;
+1304:   if (consumeLongPressClick(memberId, event)) return;
+1305:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1306:   const now = Date.now();
+1307:   const isDoubleTap = LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+1308:     now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+1309:   LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+---
+1297: 
+1298:   if (source.memberId === memberId) return;
+1299:   quickMoveOrSwap(source.memberId, type, index, memberId);
+1300: }
+1301: 
+1302: function handleExcludedMemberTap(memberId, event) {
+1303:   if (!IS_ADMIN) return;
+1304:   if (consumeLongPressClick(memberId, event)) return;
+1305:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1306:   const now = Date.now();
+1307:   const isDoubleTap = LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+1308:     now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+1309:   LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+1310:     ? { memberId:'', tappedAt:0 }
+1311:     : { memberId:memberId, tappedAt:now };
+1312:   if (isDoubleTap) {
+---
+1299:   quickMoveOrSwap(source.memberId, type, index, memberId);
+1300: }
+1301: 
+1302: function handleExcludedMemberTap(memberId, event) {
+1303:   if (!IS_ADMIN) return;
+1304:   if (consumeLongPressClick(memberId, event)) return;
+1305:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1306:   const now = Date.now();
+1307:   const isDoubleTap = LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+1308:     now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+1309:   LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+1310:     ? { memberId:'', tappedAt:0 }
+1311:     : { memberId:memberId, tappedAt:now };
+1312:   if (isDoubleTap) {
+1313:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1314:     cancelQuickPick();
+---
+1300: }
+1301: 
+1302: function handleExcludedMemberTap(memberId, event) {
+1303:   if (!IS_ADMIN) return;
+1304:   if (consumeLongPressClick(memberId, event)) return;
+1305:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1306:   const now = Date.now();
+1307:   const isDoubleTap = LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+1308:     now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+1309:   LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+1310:     ? { memberId:'', tappedAt:0 }
+1311:     : { memberId:memberId, tappedAt:now };
+1312:   if (isDoubleTap) {
+1313:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1314:     cancelQuickPick();
+1315:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+---
+1302: function handleExcludedMemberTap(memberId, event) {
+1303:   if (!IS_ADMIN) return;
+1304:   if (consumeLongPressClick(memberId, event)) return;
+1305:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1306:   const now = Date.now();
+1307:   const isDoubleTap = LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+1308:     now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+1309:   LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+1310:     ? { memberId:'', tappedAt:0 }
+1311:     : { memberId:memberId, tappedAt:now };
+1312:   if (isDoubleTap) {
+1313:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1314:     cancelQuickPick();
+1315:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1316:     return;
+1317:   }
+---
+1305:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1306:   const now = Date.now();
+1307:   const isDoubleTap = LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+1308:     now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+1309:   LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+1310:     ? { memberId:'', tappedAt:0 }
+1311:     : { memberId:memberId, tappedAt:now };
+1312:   if (isDoubleTap) {
+1313:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1314:     cancelQuickPick();
+1315:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1316:     return;
+1317:   }
+1318:   toggleSelected(memberId);
+1319: }
+1320: 
+---
+1306:   const now = Date.now();
+1307:   const isDoubleTap = LAST_EXCLUDED_MEMBER_TAP.memberId === memberId &&
+1308:     now - LAST_EXCLUDED_MEMBER_TAP.tappedAt <= 420;
+1309:   LAST_EXCLUDED_MEMBER_TAP = isDoubleTap
+1310:     ? { memberId:'', tappedAt:0 }
+1311:     : { memberId:memberId, tappedAt:now };
+1312:   if (isDoubleTap) {
+1313:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1314:     cancelQuickPick();
+1315:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1316:     return;
+1317:   }
+1318:   toggleSelected(memberId);
+1319: }
+1320: 
+1321: function handleCourtMemberTap(courtNo, memberId, event) {
+---
+1310:     ? { memberId:'', tappedAt:0 }
+1311:     : { memberId:memberId, tappedAt:now };
+1312:   if (isDoubleTap) {
+1313:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1314:     cancelQuickPick();
+1315:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1316:     return;
+1317:   }
+1318:   toggleSelected(memberId);
+1319: }
+1320: 
+1321: function handleCourtMemberTap(courtNo, memberId, event) {
+1322:   if (event && event.target && event.target.closest('button.small')) return;
+1323:   if (consumeLongPressClick(memberId, event)) return;
+1324:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1325:   const now = Date.now();
+---
+1313:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1314:     cancelQuickPick();
+1315:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1316:     return;
+1317:   }
+1318:   toggleSelected(memberId);
+1319: }
+1320: 
+1321: function handleCourtMemberTap(courtNo, memberId, event) {
+1322:   if (event && event.target && event.target.closest('button.small')) return;
+1323:   if (consumeLongPressClick(memberId, event)) return;
+1324:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1325:   const now = Date.now();
+1326:   const isDoubleTap = LAST_COURT_MEMBER_TAP.memberId === memberId &&
+1327:     now - LAST_COURT_MEMBER_TAP.tappedAt <= 420;
+1328:   LAST_COURT_MEMBER_TAP = isDoubleTap
+---
+1316:     return;
+1317:   }
+1318:   toggleSelected(memberId);
+1319: }
+1320: 
+1321: function handleCourtMemberTap(courtNo, memberId, event) {
+1322:   if (event && event.target && event.target.closest('button.small')) return;
+1323:   if (consumeLongPressClick(memberId, event)) return;
+1324:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1325:   const now = Date.now();
+1326:   const isDoubleTap = LAST_COURT_MEMBER_TAP.memberId === memberId &&
+1327:     now - LAST_COURT_MEMBER_TAP.tappedAt <= 420;
+1328:   LAST_COURT_MEMBER_TAP = isDoubleTap
+1329:     ? { memberId:'', tappedAt:0 }
+1330:     : { memberId:memberId, tappedAt:now };
+1331:   if (isDoubleTap) {
+---
+1318:   toggleSelected(memberId);
+1319: }
+1320: 
+1321: function handleCourtMemberTap(courtNo, memberId, event) {
+1322:   if (event && event.target && event.target.closest('button.small')) return;
+1323:   if (consumeLongPressClick(memberId, event)) return;
+1324:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1325:   const now = Date.now();
+1326:   const isDoubleTap = LAST_COURT_MEMBER_TAP.memberId === memberId &&
+1327:     now - LAST_COURT_MEMBER_TAP.tappedAt <= 420;
+1328:   LAST_COURT_MEMBER_TAP = isDoubleTap
+1329:     ? { memberId:'', tappedAt:0 }
+1330:     : { memberId:memberId, tappedAt:now };
+1331:   if (isDoubleTap) {
+1332:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1333:     cancelQuickPick();
+---
+1319: }
+1320: 
+1321: function handleCourtMemberTap(courtNo, memberId, event) {
+1322:   if (event && event.target && event.target.closest('button.small')) return;
+1323:   if (consumeLongPressClick(memberId, event)) return;
+1324:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1325:   const now = Date.now();
+1326:   const isDoubleTap = LAST_COURT_MEMBER_TAP.memberId === memberId &&
+1327:     now - LAST_COURT_MEMBER_TAP.tappedAt <= 420;
+1328:   LAST_COURT_MEMBER_TAP = isDoubleTap
+1329:     ? { memberId:'', tappedAt:0 }
+1330:     : { memberId:memberId, tappedAt:now };
+1331:   if (isDoubleTap) {
+1332:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1333:     cancelQuickPick();
+1334:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+---
+1321: function handleCourtMemberTap(courtNo, memberId, event) {
+1322:   if (event && event.target && event.target.closest('button.small')) return;
+1323:   if (consumeLongPressClick(memberId, event)) return;
+1324:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1325:   const now = Date.now();
+1326:   const isDoubleTap = LAST_COURT_MEMBER_TAP.memberId === memberId &&
+1327:     now - LAST_COURT_MEMBER_TAP.tappedAt <= 420;
+1328:   LAST_COURT_MEMBER_TAP = isDoubleTap
+1329:     ? { memberId:'', tappedAt:0 }
+1330:     : { memberId:memberId, tappedAt:now };
+1331:   if (isDoubleTap) {
+1332:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1333:     cancelQuickPick();
+1334:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1335:     return;
+1336:   }
+---
+1324:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1325:   const now = Date.now();
+1326:   const isDoubleTap = LAST_COURT_MEMBER_TAP.memberId === memberId &&
+1327:     now - LAST_COURT_MEMBER_TAP.tappedAt <= 420;
+1328:   LAST_COURT_MEMBER_TAP = isDoubleTap
+1329:     ? { memberId:'', tappedAt:0 }
+1330:     : { memberId:memberId, tappedAt:now };
+1331:   if (isDoubleTap) {
+1332:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1333:     cancelQuickPick();
+1334:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1335:     return;
+1336:   }
+1337:   quickPickMember('court', courtNo, memberId, event);
+1338: }
+1339: 
+---
+1325:   const now = Date.now();
+1326:   const isDoubleTap = LAST_COURT_MEMBER_TAP.memberId === memberId &&
+1327:     now - LAST_COURT_MEMBER_TAP.tappedAt <= 420;
+1328:   LAST_COURT_MEMBER_TAP = isDoubleTap
+1329:     ? { memberId:'', tappedAt:0 }
+1330:     : { memberId:memberId, tappedAt:now };
+1331:   if (isDoubleTap) {
+1332:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1333:     cancelQuickPick();
+1334:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1335:     return;
+1336:   }
+1337:   quickPickMember('court', courtNo, memberId, event);
+1338: }
+1339: 
+1340: function handleWaitMemberTap(groupIndex, memberId, event) {
+---
+1329:     ? { memberId:'', tappedAt:0 }
+1330:     : { memberId:memberId, tappedAt:now };
+1331:   if (isDoubleTap) {
+1332:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1333:     cancelQuickPick();
+1334:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1335:     return;
+1336:   }
+1337:   quickPickMember('court', courtNo, memberId, event);
+1338: }
+1339: 
+1340: function handleWaitMemberTap(groupIndex, memberId, event) {
+1341:   if (event && event.target && event.target.closest('button.small')) return;
+1342:   if (consumeLongPressClick(memberId, event)) return;
+1343:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1344:   const now = Date.now();
+---
+1332:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1333:     cancelQuickPick();
+1334:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1335:     return;
+1336:   }
+1337:   quickPickMember('court', courtNo, memberId, event);
+1338: }
+1339: 
+1340: function handleWaitMemberTap(groupIndex, memberId, event) {
+1341:   if (event && event.target && event.target.closest('button.small')) return;
+1342:   if (consumeLongPressClick(memberId, event)) return;
+1343:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1344:   const now = Date.now();
+1345:   const isDoubleTap = LAST_WAIT_MEMBER_TAP.memberId === memberId &&
+1346:     now - LAST_WAIT_MEMBER_TAP.tappedAt <= 420;
+1347:   LAST_WAIT_MEMBER_TAP = isDoubleTap
+---
+1335:     return;
+1336:   }
+1337:   quickPickMember('court', courtNo, memberId, event);
+1338: }
+1339: 
+1340: function handleWaitMemberTap(groupIndex, memberId, event) {
+1341:   if (event && event.target && event.target.closest('button.small')) return;
+1342:   if (consumeLongPressClick(memberId, event)) return;
+1343:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1344:   const now = Date.now();
+1345:   const isDoubleTap = LAST_WAIT_MEMBER_TAP.memberId === memberId &&
+1346:     now - LAST_WAIT_MEMBER_TAP.tappedAt <= 420;
+1347:   LAST_WAIT_MEMBER_TAP = isDoubleTap
+1348:     ? { memberId:'', tappedAt:0 }
+1349:     : { memberId:memberId, tappedAt:now };
+1350:   if (isDoubleTap) {
+---
+1337:   quickPickMember('court', courtNo, memberId, event);
+1338: }
+1339: 
+1340: function handleWaitMemberTap(groupIndex, memberId, event) {
+1341:   if (event && event.target && event.target.closest('button.small')) return;
+1342:   if (consumeLongPressClick(memberId, event)) return;
+1343:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1344:   const now = Date.now();
+1345:   const isDoubleTap = LAST_WAIT_MEMBER_TAP.memberId === memberId &&
+1346:     now - LAST_WAIT_MEMBER_TAP.tappedAt <= 420;
+1347:   LAST_WAIT_MEMBER_TAP = isDoubleTap
+1348:     ? { memberId:'', tappedAt:0 }
+1349:     : { memberId:memberId, tappedAt:now };
+1350:   if (isDoubleTap) {
+1351:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1352:     cancelQuickPick();
+---
+1338: }
+1339: 
+1340: function handleWaitMemberTap(groupIndex, memberId, event) {
+1341:   if (event && event.target && event.target.closest('button.small')) return;
+1342:   if (consumeLongPressClick(memberId, event)) return;
+1343:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1344:   const now = Date.now();
+1345:   const isDoubleTap = LAST_WAIT_MEMBER_TAP.memberId === memberId &&
+1346:     now - LAST_WAIT_MEMBER_TAP.tappedAt <= 420;
+1347:   LAST_WAIT_MEMBER_TAP = isDoubleTap
+1348:     ? { memberId:'', tappedAt:0 }
+1349:     : { memberId:memberId, tappedAt:now };
+1350:   if (isDoubleTap) {
+1351:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1352:     cancelQuickPick();
+1353:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+---
+1340: function handleWaitMemberTap(groupIndex, memberId, event) {
+1341:   if (event && event.target && event.target.closest('button.small')) return;
+1342:   if (consumeLongPressClick(memberId, event)) return;
+1343:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1344:   const now = Date.now();
+1345:   const isDoubleTap = LAST_WAIT_MEMBER_TAP.memberId === memberId &&
+1346:     now - LAST_WAIT_MEMBER_TAP.tappedAt <= 420;
+1347:   LAST_WAIT_MEMBER_TAP = isDoubleTap
+1348:     ? { memberId:'', tappedAt:0 }
+1349:     : { memberId:memberId, tappedAt:now };
+1350:   if (isDoubleTap) {
+1351:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1352:     cancelQuickPick();
+1353:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1354:     return;
+1355:   }
+---
+1343:   if (assignMemberToChosenEmpty(memberId, event)) return;
+1344:   const now = Date.now();
+1345:   const isDoubleTap = LAST_WAIT_MEMBER_TAP.memberId === memberId &&
+1346:     now - LAST_WAIT_MEMBER_TAP.tappedAt <= 420;
+1347:   LAST_WAIT_MEMBER_TAP = isDoubleTap
+1348:     ? { memberId:'', tappedAt:0 }
+1349:     : { memberId:memberId, tappedAt:now };
+1350:   if (isDoubleTap) {
+1351:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1352:     cancelQuickPick();
+1353:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1354:     return;
+1355:   }
+1356:   quickPickMember('wait', groupIndex, memberId, event);
+1357: }
+1358: 
+---
+1344:   const now = Date.now();
+1345:   const isDoubleTap = LAST_WAIT_MEMBER_TAP.memberId === memberId &&
+1346:     now - LAST_WAIT_MEMBER_TAP.tappedAt <= 420;
+1347:   LAST_WAIT_MEMBER_TAP = isDoubleTap
+1348:     ? { memberId:'', tappedAt:0 }
+1349:     : { memberId:memberId, tappedAt:now };
+1350:   if (isDoubleTap) {
+1351:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1352:     cancelQuickPick();
+1353:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1354:     return;
+1355:   }
+1356:   quickPickMember('wait', groupIndex, memberId, event);
+1357: }
+1358: 
+1359: function handleEmptySlotTap(type, index, slotIndex, event) {
+---
+1348:     ? { memberId:'', tappedAt:0 }
+1349:     : { memberId:memberId, tappedAt:now };
+1350:   if (isDoubleTap) {
+1351:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1352:     cancelQuickPick();
+1353:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1354:     return;
+1355:   }
+1356:   quickPickMember('wait', groupIndex, memberId, event);
+1357: }
+1358: 
+1359: function handleEmptySlotTap(type, index, slotIndex, event) {
+1360:   if (event) {
+1361:     event.preventDefault();
+1362:     event.stopPropagation();
+1363:   }
+---
+1351:     if (event) { event.preventDefault(); event.stopPropagation(); }
+1352:     cancelQuickPick();
+1353:     runAction('setMemberStatus', [ADMIN_PIN_VALUE, [memberId], 'active']);
+1354:     return;
+1355:   }
+1356:   quickPickMember('wait', groupIndex, memberId, event);
+1357: }
+1358: 
+1359: function handleEmptySlotTap(type, index, slotIndex, event) {
+1360:   if (event) {
+1361:     event.preventDefault();
+1362:     event.stopPropagation();
+1363:   }
+1364: 
+1365:   let ids = [];
+1366: 
+---
+1363:   }
+1364: 
+1365:   let ids = [];
+1366: 
+1367:   if (QUICK_PICK) {
+1368:     ids = [QUICK_PICK.memberId];
+1369:   } else {
+1370:     ids = Array.from(SELECTED);
+1371:   }
+1372: 
+1373:   if (!ids.length) {
+1374:     const sameTarget =
+1375:       AUTO_ASSIGN_TARGET &&
+1376:       AUTO_ASSIGN_TARGET.type === type &&
+1377:       AUTO_ASSIGN_TARGET.index === Number(index) &&
+1378:       AUTO_ASSIGN_TARGET.slotIndex === Number(slotIndex);
+---
+1435:     '<small>한번 탭</small>' +
+1436:     '</div>'
+1437:   );
+1438: }
+1439: 
+1440: function locateMemberInState(memberId) {
+1441:   for (let courtNo = 1; courtNo <= 4; courtNo++) {
+1442:     const position = (STATE.courts[courtNo] || []).indexOf(memberId);
+1443:     if (position >= 0) {
+1444:       return { type:'court', index:String(courtNo), position:position };
+1445:     }
+1446:   }
+1447:   for (let groupIndex = 0; groupIndex < STATE.waitGroups.length; groupIndex++) {
+1448:     const position = (STATE.waitGroups[groupIndex] || []).indexOf(memberId);
+1449:     if (position >= 0) {
+1450:       return { type:'wait', index:String(groupIndex), position:position };
+---
+1437:   );
+1438: }
+1439: 
+1440: function locateMemberInState(memberId) {
+1441:   for (let courtNo = 1; courtNo <= 4; courtNo++) {
+1442:     const position = (STATE.courts[courtNo] || []).indexOf(memberId);
+1443:     if (position >= 0) {
+1444:       return { type:'court', index:String(courtNo), position:position };
+1445:     }
+1446:   }
+1447:   for (let groupIndex = 0; groupIndex < STATE.waitGroups.length; groupIndex++) {
+1448:     const position = (STATE.waitGroups[groupIndex] || []).indexOf(memberId);
+1449:     if (position >= 0) {
+1450:       return { type:'wait', index:String(groupIndex), position:position };
+1451:     }
+1452:   }
+---
+1443:     if (position >= 0) {
+1444:       return { type:'court', index:String(courtNo), position:position };
+1445:     }
+1446:   }
+1447:   for (let groupIndex = 0; groupIndex < STATE.waitGroups.length; groupIndex++) {
+1448:     const position = (STATE.waitGroups[groupIndex] || []).indexOf(memberId);
+1449:     if (position >= 0) {
+1450:       return { type:'wait', index:String(groupIndex), position:position };
+1451:     }
+1452:   }
+1453:   return { type:'active', index:'', position:-1 };
+1454: }
+1455: 
+1456: function stateGroup(location) {
+1457:   if (location.type === 'court') return STATE.courts[Number(location.index)];
+1458:   if (location.type === 'wait') return STATE.waitGroups[Number(location.index)];
+---
+1457:   if (location.type === 'court') return STATE.courts[Number(location.index)];
+1458:   if (location.type === 'wait') return STATE.waitGroups[Number(location.index)];
+1459:   return null;
+1460: }
+1461: 
+1462: function applyMoveOrSwapLocally(memberId, targetType, targetIndex, targetMemberId) {
+1463:   const source = locateMemberInState(memberId);
+1464:   const sourceGroup = stateGroup(source);
+1465: 
+1466:   if (targetMemberId) {
+1467:     const other = locateMemberInState(targetMemberId);
+1468:     const otherGroup = stateGroup(other);
+1469:     if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+1470:     if (otherGroup) otherGroup[other.position] = memberId;
+1471:   } else {
+1472:     const target = { type:targetType, index:String(targetIndex), position:-1 };
+---
+1458:   if (location.type === 'wait') return STATE.waitGroups[Number(location.index)];
+1459:   return null;
+1460: }
+1461: 
+1462: function applyMoveOrSwapLocally(memberId, targetType, targetIndex, targetMemberId) {
+1463:   const source = locateMemberInState(memberId);
+1464:   const sourceGroup = stateGroup(source);
+1465: 
+1466:   if (targetMemberId) {
+1467:     const other = locateMemberInState(targetMemberId);
+1468:     const otherGroup = stateGroup(other);
+1469:     if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+1470:     if (otherGroup) otherGroup[other.position] = memberId;
+1471:   } else {
+1472:     const target = { type:targetType, index:String(targetIndex), position:-1 };
+1473:     const targetGroup = stateGroup(target);
+---
+1461: 
+1462: function applyMoveOrSwapLocally(memberId, targetType, targetIndex, targetMemberId) {
+1463:   const source = locateMemberInState(memberId);
+1464:   const sourceGroup = stateGroup(source);
+1465: 
+1466:   if (targetMemberId) {
+1467:     const other = locateMemberInState(targetMemberId);
+1468:     const otherGroup = stateGroup(other);
+1469:     if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+1470:     if (otherGroup) otherGroup[other.position] = memberId;
+1471:   } else {
+1472:     const target = { type:targetType, index:String(targetIndex), position:-1 };
+1473:     const targetGroup = stateGroup(target);
+1474:     if (targetGroup && targetGroup.length >= 4) {
+1475:       throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+1476:     }
+---
+1462: function applyMoveOrSwapLocally(memberId, targetType, targetIndex, targetMemberId) {
+1463:   const source = locateMemberInState(memberId);
+1464:   const sourceGroup = stateGroup(source);
+1465: 
+1466:   if (targetMemberId) {
+1467:     const other = locateMemberInState(targetMemberId);
+1468:     const otherGroup = stateGroup(other);
+1469:     if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+1470:     if (otherGroup) otherGroup[other.position] = memberId;
+1471:   } else {
+1472:     const target = { type:targetType, index:String(targetIndex), position:-1 };
+1473:     const targetGroup = stateGroup(target);
+1474:     if (targetGroup && targetGroup.length >= 4) {
+1475:       throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+1476:     }
+1477:     if (sourceGroup) sourceGroup.splice(source.position, 1);
+---
+1464:   const sourceGroup = stateGroup(source);
+1465: 
+1466:   if (targetMemberId) {
+1467:     const other = locateMemberInState(targetMemberId);
+1468:     const otherGroup = stateGroup(other);
+1469:     if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+1470:     if (otherGroup) otherGroup[other.position] = memberId;
+1471:   } else {
+1472:     const target = { type:targetType, index:String(targetIndex), position:-1 };
+1473:     const targetGroup = stateGroup(target);
+1474:     if (targetGroup && targetGroup.length >= 4) {
+1475:       throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+1476:     }
+1477:     if (sourceGroup) sourceGroup.splice(source.position, 1);
+1478:     if (targetGroup) targetGroup.push(memberId);
+1479:   }
+---
+1465: 
+1466:   if (targetMemberId) {
+1467:     const other = locateMemberInState(targetMemberId);
+1468:     const otherGroup = stateGroup(other);
+1469:     if (sourceGroup) sourceGroup[source.position] = targetMemberId;
+1470:     if (otherGroup) otherGroup[other.position] = memberId;
+1471:   } else {
+1472:     const target = { type:targetType, index:String(targetIndex), position:-1 };
+1473:     const targetGroup = stateGroup(target);
+1474:     if (targetGroup && targetGroup.length >= 4) {
+1475:       throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+1476:     }
+1477:     if (sourceGroup) sourceGroup.splice(source.position, 1);
+1478:     if (targetGroup) targetGroup.push(memberId);
+1479:   }
+1480: 
+---
+1473:     const targetGroup = stateGroup(target);
+1474:     if (targetGroup && targetGroup.length >= 4) {
+1475:       throw new Error('선택한 위치는 이미 4명이 모두 찼습니다.');
+1476:     }
+1477:     if (sourceGroup) sourceGroup.splice(source.position, 1);
+1478:     if (targetGroup) targetGroup.push(memberId);
+1479:   }
+1480: 
+1481:   const playing = new Set();
+1482:   const waiting = new Set();
+1483:   Object.keys(STATE.courts).forEach(function(key) {
+1484:     (STATE.courts[key] || []).forEach(function(id) { playing.add(id); });
+1485:   });
+1486:   STATE.waitGroups.forEach(function(group) {
+1487:     (group || []).forEach(function(id) { waiting.add(id); });
+1488:   });
+---
+1487:     (group || []).forEach(function(id) { waiting.add(id); });
+1488:   });
+1489:   STATE.members.forEach(function(member) {
+1490:     if (playing.has(member.id)) member.status = 'playing';
+1491:     else if (waiting.has(member.id)) member.status = 'waiting';
+1492:     else if (member.id === memberId || member.id === targetMemberId) {
+1493:       member.status = 'active';
+1494:     }
+1495:   });
+1496: }
+1497: 
+1498: function applyBatchAssignLocally(ids, targetType, targetIndex) {
+1499:   const moving = new Set(ids);
+1500: 
+1501:   Object.keys(STATE.courts).forEach(function(key) {
+1502:     STATE.courts[key] =
+---
+1580:     renderState();
+1581:     alert(error.message || error);
+1582:   }
+1583: }
+1584: 
+1585: async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId) {
+1586:   const previousState = JSON.parse(JSON.stringify(STATE));
+1587:   try {
+1588:     applyMoveOrSwapLocally(
+1589:       memberId,
+1590:       targetType,
+1591:       targetIndex,
+1592:       targetMemberId || ''
+1593:     );
+1594:     renderState();
+1595:     const state = await server('moveOrSwapMember', [
+---
+1584: 
+1585: async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId) {
+1586:   const previousState = JSON.parse(JSON.stringify(STATE));
+1587:   try {
+1588:     applyMoveOrSwapLocally(
+1589:       memberId,
+1590:       targetType,
+1591:       targetIndex,
+1592:       targetMemberId || ''
+1593:     );
+1594:     renderState();
+1595:     const state = await server('moveOrSwapMember', [
+1596:       ADMIN_PIN_VALUE,
+1597:       memberId,
+1598:       targetType,
+1599:       String(targetIndex),
+---
+1587:   try {
+1588:     applyMoveOrSwapLocally(
+1589:       memberId,
+1590:       targetType,
+1591:       targetIndex,
+1592:       targetMemberId || ''
+1593:     );
+1594:     renderState();
+1595:     const state = await server('moveOrSwapMember', [
+1596:       ADMIN_PIN_VALUE,
+1597:       memberId,
+1598:       targetType,
+1599:       String(targetIndex),
+1600:       targetMemberId || ''
+1601:     ]);
+1602:     renderState(state);
+---
+1592:       targetMemberId || ''
+1593:     );
+1594:     renderState();
+1595:     const state = await server('moveOrSwapMember', [
+1596:       ADMIN_PIN_VALUE,
+1597:       memberId,
+1598:       targetType,
+1599:       String(targetIndex),
+1600:       targetMemberId || ''
+1601:     ]);
+1602:     renderState(state);
+1603:     setUndoState(previousState);
+1604:   } catch (error) {
+1605:     STATE = previousState;
+1606:     renderState();
+1607:     alert(error.message || error);
+---
+1595:     const state = await server('moveOrSwapMember', [
+1596:       ADMIN_PIN_VALUE,
+1597:       memberId,
+1598:       targetType,
+1599:       String(targetIndex),
+1600:       targetMemberId || ''
+1601:     ]);
+1602:     renderState(state);
+1603:     setUndoState(previousState);
+1604:   } catch (error) {
+1605:     STATE = previousState;
+1606:     renderState();
+1607:     alert(error.message || error);
+1608:   }
+1609: }
+1610: 
+---
+1690:   ]);
+1691: }
+1692: 
+1693: function assignToQuickTarget(type, index) {
+1694:   if (QUICK_PICK) {
+1695:     const memberId = QUICK_PICK.memberId;
+1696:     cancelQuickPick();
+1697:     quickMoveOrSwap(memberId, type, index, '');
+1698:     return;
+1699:   }
+1700: 
+1701:   if (!SELECTED.size) return;
+1702: 
+1703:   const action =
+1704:     type === 'court'
+1705:       ? 'assignMembersToCourt'
+---
+1692: 
+1693: function assignToQuickTarget(type, index) {
+1694:   if (QUICK_PICK) {
+1695:     const memberId = QUICK_PICK.memberId;
+1696:     cancelQuickPick();
+1697:     quickMoveOrSwap(memberId, type, index, '');
+1698:     return;
+1699:   }
+1700: 
+1701:   if (!SELECTED.size) return;
+1702: 
+1703:   const action =
+1704:     type === 'court'
+1705:       ? 'assignMembersToCourt'
+1706:       : 'assignMembersToWaitGroup';
+1707: 
+---
+1959: function memberVibrationEnabled() {
+1960:   try { return localStorage.getItem(MEMBER_VIBRATION_ENABLED_KEY) !== 'false'; }
+1961:   catch (error) { return true; }
+1962: }
+1963: 
+1964: function storedSelfMemberId() {
+1965:   const member = currentStoredWebPushMember();
+1966:   return member ? String(member.id) : '';
+1967: }
+1968: 
+1969: function isSelfMember(member) {
+1970:   return !!member && String(member.id) === storedSelfMemberId();
+1971: }
+1972: 
+1973: function unlockMemberAlertAudio() {
+1974:   try {
+---
+1965:   const member = currentStoredWebPushMember();
+1966:   return member ? String(member.id) : '';
+1967: }
+1968: 
+1969: function isSelfMember(member) {
+1970:   return !!member && String(member.id) === storedSelfMemberId();
+1971: }
+1972: 
+1973: function unlockMemberAlertAudio() {
+1974:   try {
+1975:     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+1976:     if (AudioContextClass && !window.__jayumintonMemberAudioContext) {
+1977:       window.__jayumintonMemberAudioContext = new AudioContextClass();
+1978:     }
+1979:     if (window.__jayumintonMemberAudioContext &&
+1980:         window.__jayumintonMemberAudioContext.state === 'suspended') {
+---
+2024:   event.preventDefault();
+2025:   renderMemberSelfMatches();
+2026:   showMemberSettingMessage('검색 결과에서 내 이름을 직접 눌러 주세요.', false);
+2027: }
+2028: 
+2029: function selectMemberSelf(memberId) {
+2030:   if (IS_ADMIN) return;
+2031:   const member = (STATE.members || []).find(function(item) {
+2032:     return item && String(item.id) === String(memberId);
+2033:   });
+2034:   if (!member) return;
+2035:   const memberInput = document.getElementById('memberSelfSearchInput');
+2036:   if (memberInput) {
+2037:     memberInput.dataset.userEditing = '0';
+2038:     memberInput.value = String(member.name || '').trim();
+2039:   }
+---
+2027: }
+2028: 
+2029: function selectMemberSelf(memberId) {
+2030:   if (IS_ADMIN) return;
+2031:   const member = (STATE.members || []).find(function(item) {
+2032:     return item && String(item.id) === String(memberId);
+2033:   });
+2034:   if (!member) return;
+2035:   const memberInput = document.getElementById('memberSelfSearchInput');
+2036:   if (memberInput) {
+2037:     memberInput.dataset.userEditing = '0';
+2038:     memberInput.value = String(member.name || '').trim();
+2039:   }
+2040:   try {
+2041:     localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+2042:       id: String(member.id),
+---
+2197:   target.searchParams.set('external', '1');
+2198:   target.searchParams.set('source', 'embedded');
+2199:   target.searchParams.set('app', 'user');
+2200:   target.searchParams.set('mode', 'user');
+2201:   const selected = currentStoredWebPushMember();
+2202:   if (selected && selected.id) target.searchParams.set('memberId', String(selected.id));
+2203:   if (selected && selected.name) target.searchParams.set('memberName', String(selected.name));
+2204:   const sessionToken = currentMemberSessionToken();
+2205:   if (sessionToken) target.searchParams.set('memberSession', sessionToken);
+2206:   return target.toString();
+2207: }
+2208: 
+2209: function detectMemberInstallPlatform() {
+2210:   if (MEMBER_APP_INSTALL_STATE.platform === 'android' || MEMBER_APP_INSTALL_STATE.platform === 'ios') {
+2211:     return MEMBER_APP_INSTALL_STATE.platform;
+2212:   }
+---
+2379: }
+2380: 
+2381: function currentWebPushConnection() {
+2382:   try {
+2383:     const saved = JSON.parse(localStorage.getItem(WEB_PUSH_CONNECTION_KEY) || 'null');
+2384:     return saved && saved.connected && saved.memberId
+2385:       ? saved
+2386:       : null;
+2387:   } catch (error) {
+2388:     return null;
+2389:   }
+2390: }
+2391: 
+2392: function applyWebPushReturn() {
+2393:   if (IS_ADMIN) return;
+2394:   let returned = window.JAYUMINTON_PUSH_RETURN || {};
+---
+2405:       window.name = '';
+2406:     }
+2407:   } catch (error) {
+2408:     returned = returned || {};
+2409:   }
+2410:   if (!returned.connected || !returned.memberId) return;
+2411:   const connection = {
+2412:     connected: true,
+2413:     memberId: String(returned.memberId),
+2414:     memberName: String(returned.memberName || '').trim(),
+2415:     connectedAt: Date.now()
+2416:   };
+2417:   try {
+2418:     localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify(connection));
+2419:     localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+2420:       id: connection.memberId,
+---
+2408:     returned = returned || {};
+2409:   }
+2410:   if (!returned.connected || !returned.memberId) return;
+2411:   const connection = {
+2412:     connected: true,
+2413:     memberId: String(returned.memberId),
+2414:     memberName: String(returned.memberName || '').trim(),
+2415:     connectedAt: Date.now()
+2416:   };
+2417:   try {
+2418:     localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify(connection));
+2419:     localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+2420:       id: connection.memberId,
+2421:       name: connection.memberName
+2422:     }));
+2423:   } catch (error) {}
+---
+2415:     connectedAt: Date.now()
+2416:   };
+2417:   try {
+2418:     localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify(connection));
+2419:     localStorage.setItem(WEB_PUSH_SELECTED_MEMBER_KEY, JSON.stringify({
+2420:       id: connection.memberId,
+2421:       name: connection.memberName
+2422:     }));
+2423:   } catch (error) {}
+2424: }
+2425: 
+2426: function syncUnifiedMemberBridge() {
+2427:   if (IS_ADMIN) return;
+2428:   postUnifiedMemberMessage('JAYUMINTON_MEMBER_BRIDGE_READY', {
+2429:     authVersion: currentMemberAuthVersion(),
+2430:     member: currentStoredWebPushMember()
+---
+2541:       }
+2542:       if (setupButton) {
+2543:         setupButton.textContent = '🔔 순서알람 연결';
+2544:         setupButton.classList.remove('push-connected');
+2545:       }
+2546:     } else if (connection && String(connection.memberId) === String(selectedMember.id)) {
+2547:       status.textContent = selectedMember.name + '님 알림 예정';
+2548:       status.classList.add('is-connected');
+2549:       if (connectionBadge) {
+2550:         connectionBadge.textContent = '● 연결 ON';
+2551:         connectionBadge.className = 'push-connection-badge is-on';
+2552:       }
+2553:       if (setupButton) {
+2554:         setupButton.textContent = '● 연결 ON';
+2555:         setupButton.classList.add('push-connected');
+2556:       }
+---
+2634:     }
+2635:     if (data.pushConnected && data.pushMember && data.pushMember.id) {
+2636:       try {
+2637:         localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify({
+2638:           connected: true,
+2639:           memberId: String(data.pushMember.id),
+2640:           memberName: String(data.pushMember.name || ''),
+2641:           connectedAt: Date.now()
+2642:         }));
+2643:       } catch (error) {}
+2644:       renderWebPushMemberOptions();
+2645:     }
+2646:     MEMBER_APP_INSTALL_STATE = {
+2647:       installed:MEMBER_PWA_STANDALONE_HINT || !!data.appInstalled,
+2648:       choice:MEMBER_PWA_STANDALONE_HINT ? 'on' : String(data.appInstallChoice || ''),
+2649:       platform:String(data.appInstallPlatform || 'other'),
+---
+2664:     const status = document.getElementById('webPushStatus');
+2665:     if (data.connected && data.member && data.member.id) {
+2666:       try {
+2667:         localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify({
+2668:           connected: true,
+2669:           memberId: String(data.member.id),
+2670:           memberName: String(data.member.name || ''),
+2671:           connectedAt: Date.now()
+2672:         }));
+2673:       } catch (error) {}
+2674:       renderWebPushMemberOptions();
+2675:     } else if (data.connected === false) {
+2676:       try { localStorage.removeItem(WEB_PUSH_CONNECTION_KEY); } catch (error) {}
+2677:       renderWebPushMemberOptions();
+2678:     } else if (status) {
+2679:       status.textContent = String(data.message || '개인 알림 상태가 갱신되었습니다.');
+---
+2706:     );
+2707:     if (data.connected && data.member && data.member.id) {
+2708:       try {
+2709:         localStorage.setItem(WEB_PUSH_CONNECTION_KEY, JSON.stringify({
+2710:           connected:true,
+2711:           memberId:String(data.member.id),
+2712:           memberName:String(data.member.name || ''),
+2713:           connectedAt:Date.now()
+2714:         }));
+2715:       } catch (error) {}
+2716:     } else if (data.connected === false) {
+2717:       try { localStorage.removeItem(WEB_PUSH_CONNECTION_KEY); } catch (error) {}
+2718:     }
+2719:     renderMemberSelfSettings();
+2720:     return;
+2721:   }
+---
+2762:     new ResizeObserver(reportUnifiedContentHeight).observe(document.body);
+2763:   }
+2764:   setInterval(reportUnifiedContentHeight, 2500);
+2765: }
+2766: 
+2767: function memberLocation(state, memberId) {
+2768:   if (!state || !memberId) return {type: 'none', index: -1};
+2769:   const id = String(memberId);
+2770:   for (let courtNo = 1; courtNo <= 4; courtNo += 1) {
+2771:     if ((state.courts && state.courts[courtNo] || []).some(function(value) {
+2772:       return String(value) === id;
+2773:     })) return {type: 'court', index: courtNo};
+2774:   }
+2775:   const waits = Array.isArray(state.waitGroups) ? state.waitGroups : [];
+2776:   for (let waitIndex = 0; waitIndex < waits.length; waitIndex += 1) {
+2777:     if ((waits[waitIndex] || []).some(function(value) {
+---
+2763:   }
+2764:   setInterval(reportUnifiedContentHeight, 2500);
+2765: }
+2766: 
+2767: function memberLocation(state, memberId) {
+2768:   if (!state || !memberId) return {type: 'none', index: -1};
+2769:   const id = String(memberId);
+2770:   for (let courtNo = 1; courtNo <= 4; courtNo += 1) {
+2771:     if ((state.courts && state.courts[courtNo] || []).some(function(value) {
+2772:       return String(value) === id;
+2773:     })) return {type: 'court', index: courtNo};
+2774:   }
+2775:   const waits = Array.isArray(state.waitGroups) ? state.waitGroups : [];
+2776:   for (let waitIndex = 0; waitIndex < waits.length; waitIndex += 1) {
+2777:     if ((waits[waitIndex] || []).some(function(value) {
+2778:       return String(value) === id;
+---
+2764:   setInterval(reportUnifiedContentHeight, 2500);
+2765: }
+2766: 
+2767: function memberLocation(state, memberId) {
+2768:   if (!state || !memberId) return {type: 'none', index: -1};
+2769:   const id = String(memberId);
+2770:   for (let courtNo = 1; courtNo <= 4; courtNo += 1) {
+2771:     if ((state.courts && state.courts[courtNo] || []).some(function(value) {
+2772:       return String(value) === id;
+2773:     })) return {type: 'court', index: courtNo};
+2774:   }
+2775:   const waits = Array.isArray(state.waitGroups) ? state.waitGroups : [];
+2776:   for (let waitIndex = 0; waitIndex < waits.length; waitIndex += 1) {
+2777:     if ((waits[waitIndex] || []).some(function(value) {
+2778:       return String(value) === id;
+2779:     })) return {type: 'wait', index: waitIndex};
+---
+2793:   });
+2794:   return candidates.length ? candidates[0].courtNo : 0;
+2795: }
+2796: 
+2797: function memberAlertRepeatCount(type) {
+2798:   if (type === 'court_assignment') return 5;
+2799:   if (type === 'wait1_ready') return 3;
+2800:   return 1;
+2801: }
+2802: 
+2803: function memberVibrationPattern(type) {
+2804:   return [650, 220, 650, 220, 650];
+2805: }
+2806: 
+2807: function playSingleMemberAlertCue(type) {
+2808:   try {
+---
+2794:   return candidates.length ? candidates[0].courtNo : 0;
+2795: }
+2796: 
+2797: function memberAlertRepeatCount(type) {
+2798:   if (type === 'court_assignment') return 5;
+2799:   if (type === 'wait1_ready') return 3;
+2800:   return 1;
+2801: }
+2802: 
+2803: function memberVibrationPattern(type) {
+2804:   return [650, 220, 650, 220, 650];
+2805: }
+2806: 
+2807: function playSingleMemberAlertCue(type) {
+2808:   try {
+2809:     if (memberVibrationEnabled() && navigator.vibrate) {
+---
+2880:       after.type === 'wait' && after.index === 0) {
+2881:     showMemberForegroundAlert(
+2882:       '대기 1순위 안내',
+2883:       '대기1순위 입니다. 라켓 들고 준비해주세요.',
+2884:       'wait1_' + member.id + '_' + String(nextState.updatedAt || Date.now()),
+2885:       'wait1_ready'
+2886:     );
+2887:   }
+2888: 
+2889:   if (before.type === 'wait' && before.index === 0 && after.type === 'court') {
+2890:     const courtNo = Number(after.index);
+2891:     showMemberForegroundAlert(
+2892:       '코트 배정 안내',
+2893:       courtNo + '번 코트가 나왔습니다. ' + courtNo + '번코트로 이동해주세요!',
+2894:       'court_' + courtNo + '_' + member.id + '_' +
+2895:         String(nextState.updatedAt || Date.now()),
+---
+2891:     showMemberForegroundAlert(
+2892:       '코트 배정 안내',
+2893:       courtNo + '번 코트가 나왔습니다. ' + courtNo + '번코트로 이동해주세요!',
+2894:       'court_' + courtNo + '_' + member.id + '_' +
+2895:         String(nextState.updatedAt || Date.now()),
+2896:       'court_assignment'
+2897:     );
+2898:   }
+2899: }
+2900: 
+2901: async function refreshMemberState() {
+2902:   if (IS_ADMIN) return;
+2903:   const button = document.getElementById('memberRefreshButton');
+2904:   if (button) {
+2905:     button.disabled = true;
+2906:     button.textContent = '갱신 중...';
+---
+2925:   }
+2926: 
+2927:   if (!IS_ADMIN && window.parent !== window) {
+2928:     window.parent.postMessage({
+2929:       type:'JAYUMINTON_MEMBER_LIST',
+2930:       members:(STATE.members || []).map(function(item) {
+2931:         return {id:String(item.id), name:String(item.name || '')};
+2932:       })
+2933:     }, '*');
+2934:   }
+2935: 
+2936:   renderCourts();
+2937:   renderWaitGroups();
+2938:   renderActive();
+2939:   renderExcluded();
+2940:   renderInactive();
+---
+2947:   renderQuickMoveBar();
+2948:   renderWholeSwapBar();
+2949: 
+2950:   if (QUICK_PICK) {
+2951:     document
+2952:       .querySelectorAll('[data-member-id="' + QUICK_PICK.memberId + '"]')
+2953:       .forEach(function(element) {
+2954:         element.classList.add('quick-picked');
+2955:       });
+2956:   }
+2957: 
+2958:   const count =
+2959:     document.getElementById(
+2960:       'memberCount'
+2961:     );
+2962: 
+---
+5168:   if (!IS_ADMIN) return;
+5169:   if (MEMBER_ACTION_IDS.length !== 1) {
+5170:     alert('편집할 멤버 한 명을 길게 눌러 주세요.');
+5171:     return;
+5172:   }
+5173:   const memberId = String(MEMBER_ACTION_IDS[0] || '');
+5174:   const member = (STATE.members || []).find(function(item) {
+5175:     return String(item.id || '') === memberId;
+5176:   });
+5177:   if (!member) { alert('멤버 정보를 찾을 수 없습니다.'); return; }
+5178:   EDIT_MEMBER_ID = memberId;
+5179:   const name = document.getElementById('newName');
+5180:   const gender = document.getElementById('newGender');
+5181:   const grade = document.getElementById('newGrade');
+5182:   const experience = document.getElementById('newExperience');
+5183:   const isNew = document.getElementById('newIsNew');
+---
+5170:     alert('편집할 멤버 한 명을 길게 눌러 주세요.');
+5171:     return;
+5172:   }
+5173:   const memberId = String(MEMBER_ACTION_IDS[0] || '');
+5174:   const member = (STATE.members || []).find(function(item) {
+5175:     return String(item.id || '') === memberId;
+5176:   });
+5177:   if (!member) { alert('멤버 정보를 찾을 수 없습니다.'); return; }
+5178:   EDIT_MEMBER_ID = memberId;
+5179:   const name = document.getElementById('newName');
+5180:   const gender = document.getElementById('newGender');
+5181:   const grade = document.getElementById('newGrade');
+5182:   const experience = document.getElementById('newExperience');
+5183:   const isNew = document.getElementById('newIsNew');
+5184:   const updateButton = document.getElementById('updateMemberButton');
+5185:   if (!name || !gender || !grade || !experience || !isNew || !updateButton) {
+---
+5173:   const memberId = String(MEMBER_ACTION_IDS[0] || '');
+5174:   const member = (STATE.members || []).find(function(item) {
+5175:     return String(item.id || '') === memberId;
+5176:   });
+5177:   if (!member) { alert('멤버 정보를 찾을 수 없습니다.'); return; }
+5178:   EDIT_MEMBER_ID = memberId;
+5179:   const name = document.getElementById('newName');
+5180:   const gender = document.getElementById('newGender');
+5181:   const grade = document.getElementById('newGrade');
+5182:   const experience = document.getElementById('newExperience');
+5183:   const isNew = document.getElementById('newIsNew');
+5184:   const updateButton = document.getElementById('updateMemberButton');
+5185:   if (!name || !gender || !grade || !experience || !isNew || !updateButton) {
+5186:     alert('멤버 등록·수정 입력칸을 찾을 수 없습니다.');
+5187:     return;
+5188:   }
+---
+5878:     }
+5879:   }
+5880:   syncPrimaryEmptyTarget();
+5881: }
+5882: 
+5883: assignMemberToChosenEmpty = function(memberId, event) {
+5884:   pruneEmptySlotTargets();
+5885:   if (!EMPTY_SLOT_TARGETS.length) return false;
+5886: 
+5887:   const target = copyEmptySlotTarget(EMPTY_SLOT_TARGETS[0]);
+5888:   const targetGroup = targetGroupForEmpty(target);
+5889: 
+5890:   if (targetGroup.indexOf(memberId) >= 0) {
+5891:     alert('이미 선택한 위치에 있는 멤버입니다.');
+5892:     return true;
+5893:   }
+---
+5885:   if (!EMPTY_SLOT_TARGETS.length) return false;
+5886: 
+5887:   const target = copyEmptySlotTarget(EMPTY_SLOT_TARGETS[0]);
+5888:   const targetGroup = targetGroupForEmpty(target);
+5889: 
+5890:   if (targetGroup.indexOf(memberId) >= 0) {
+5891:     alert('이미 선택한 위치에 있는 멤버입니다.');
+5892:     return true;
+5893:   }
+5894: 
+5895:   if (targetGroup.length >= 4) {
+5896:     removeEmptyTargetsForGroup(target.type, target.index);
+5897:     renderCourts();
+5898:     renderWaitGroups();
+5899:     return assignMemberToChosenEmpty(memberId, event);
+5900:   }
+---
+5894: 
+5895:   if (targetGroup.length >= 4) {
+5896:     removeEmptyTargetsForGroup(target.type, target.index);
+5897:     renderCourts();
+5898:     renderWaitGroups();
+5899:     return assignMemberToChosenEmpty(memberId, event);
+5900:   }
+5901: 
+5902:   if (event) {
+5903:     event.preventDefault();
+5904:     event.stopPropagation();
+5905:   }
+5906: 
+5907:   /* 배열은 빈칸을 건너뛸 수 없으므로 현재 그룹의 첫 빈자리를 채우고,
+5908:      사용자가 연속 선택한 다음 빈자리를 다음 대상에 남긴다. */
+5909:   removeEmptySlotTarget(target.type, target.index, target.slotIndex);
+---
+5910:   if (targetGroup.length >= 3) {
+5911:     removeEmptyTargetsForGroup(target.type, target.index);
+5912:   }
+5913: 
+5914:   QUICK_PICK = null;
+5915:   SELECTED.delete(memberId);
+5916:   batchAssignToTarget([memberId], target.type, target.index);
+5917:   return true;
+5918: };
+5919: 
+5920: handleEmptySlotTap = function(type, index, slotIndex, event) {
+5921:   if (event) {
+5922:     event.preventDefault();
+5923:     event.stopPropagation();
+5924:   }
+5925: 
+---
+5911:     removeEmptyTargetsForGroup(target.type, target.index);
+5912:   }
+5913: 
+5914:   QUICK_PICK = null;
+5915:   SELECTED.delete(memberId);
+5916:   batchAssignToTarget([memberId], target.type, target.index);
+5917:   return true;
+5918: };
+5919: 
+5920: handleEmptySlotTap = function(type, index, slotIndex, event) {
+5921:   if (event) {
+5922:     event.preventDefault();
+5923:     event.stopPropagation();
+5924:   }
+5925: 
+5926:   const ids = QUICK_PICK ? [QUICK_PICK.memberId] : Array.from(SELECTED);
+---
+5921:   if (event) {
+5922:     event.preventDefault();
+5923:     event.stopPropagation();
+5924:   }
+5925: 
+5926:   const ids = QUICK_PICK ? [QUICK_PICK.memberId] : Array.from(SELECTED);
+5927: 
+5928:   if (!ids.length) {
+5929:     toggleEmptySlotTarget(type, index, slotIndex);
+5930:     renderCourts();
+5931:     renderWaitGroups();
+5932:     return;
+5933:   }
+5934: 
+5935:   const targetGroup = type === 'court'
+5936:     ? (STATE.courts[Number(index)] || [])
+---
