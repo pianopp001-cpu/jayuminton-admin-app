@@ -1,0 +1,7 @@
+status=success
+version=1.1.9
+apk_sha256=e9c822526fd44ebb267cb9c5369172fe18030a0c17bed9d840e8b67cf4826fed
+changed_files=Script.html
+admin_logic_changed=no
+notification_stop_action=yes
+deployed_at=2026-08-09T17:34:33Z
