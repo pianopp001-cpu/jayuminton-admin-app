@@ -1,0 +1,121 @@
+status=failure
+stage=native-build-started
+--- build log tail ---
+Prepared native background push APK build v1.1.1.
+Prepared native v1.1.2 with direct member bridge and registration retries.
+Prepared native v1.1.3 with verified registration and local alert probe.
+Prepared native v1.1.4 with pre-created Android system notification channels.
+Prepared native v1.1.5 with token registration and no automatic test push.
+Prepared native v1.1.6 with unconditional alarm-usage assignment vibration.
+Prepared v1.1.7 persistent alert with uncancelled explicit vibration.
+Prepared v1.1.8 with correct wait1 wording, stale-member guard and until-dismissed vibration.
+Prepared v1.1.9 with always-available notification stop action.
+Prepared safe v1.2.0 native delivery diagnostic APK.
+Prepared v1.2.1 with Android full-screen access flow and strict member resync.
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.7/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+WARNING: We recommend using a newer Android Gradle plugin to use compileSdk = 35
+
+This Android Gradle plugin (8.5.2) was tested up to compileSdk = 34.
+
+You are strongly encouraged to update your project to use a newer
+Android Gradle plugin that has been tested with compileSdk = 35.
+
+If you are already using the latest version of the Android Gradle plugin,
+you may need to wait until a newer version with support for compileSdk = 35 is available.
+
+For more information refer to the compatibility table:
+https://d.android.com/r/tools/api-level-support
+
+To suppress this warning, add/update
+    android.suppressUnsupportedCompileSdk=35
+to this project's gradle.properties.
+> Task :app:clean UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:javaPreCompileRelease
+> Task :app:generateReleaseResValues
+> Task :app:checkReleaseAarMetadata
+> Task :app:processReleaseGoogleServices
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:packageReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :app:parseReleaseLocalResources
+> Task :app:mergeReleaseResources
+> Task :app:processReleaseMainManifest
+> Task :app:processReleaseManifest
+> Task :app:extractProguardFiles
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:mergeReleaseNativeLibs
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:desugarReleaseFileDependencies
+> Task :app:mergeReleaseStartupProfile
+
+> Task :app:stripReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libdatastore_shared_counter.so.
+
+> Task :app:processReleaseManifestForPackage
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets
+> Task :app:compressReleaseAssets
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:processReleaseResources
+> Task :app:processReleaseJavaRes NO-SOURCE
+
+> Task :app:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:mergeExtDexRelease
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics
+> Task :app:mergeReleaseJavaResource
+> Task :app:optimizeReleaseResources
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease
+> Task :app:lintVitalRelease
+> Task :app:assembleRelease
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_8-1786300725186.json
+
+BUILD SUCCESSFUL in 23s
+48 actionable tasks: 47 executed, 1 up-to-date
+workflow=Build Jayuminton court status native push fresh install
+status=success
+version=1.2.1
+version_code=121
+application_id=com.jayuminton.user
+launcher_label=자유민턴 코트현황
+install_mode=uninstall-old-then-fresh-install
+native_fcm=yes
+android_fcm_priority=high
+notification_channel_importance=high
+wait1_vibration=3-long-pulses-x3-groups
+court_vibration=3-long-pulses-x5-groups
+native_vibration_amplitude=255-when-supported
+pulse_ms=650
+intra_pulse_gap_ms=220
+group_gap_ms=1100
+notification_permission=android-13-runtime-request
+web_storage=fresh-after-uninstall
+launcher_icon=dog-full-square-128x128
+apk_sha256=c3248fad34a4600a2db5d260fee93b5c11f5cbe199d93449d9b8fe57539e7c14
+signer_sha256=D47ADB93363FF397601E63667E79F27F99AE499AADC1FD0013861809950FC787
+updated_at=2026-08-09T18:39:06Z
+grep: deployment/status/user-native-push-v1.2.1-fresh-install.txt: No such file or directory
