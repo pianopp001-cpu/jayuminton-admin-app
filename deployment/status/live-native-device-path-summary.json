@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "generatedAt": "2026-08-09T20:39:12.521Z",
+  "totalTokens": 9,
+  "nativeUserTokens": 5,
+  "nativeMemberTokens": 0,
+  "browserTokens": 4,
+  "newestNativeUserAgeSeconds": 940,
+  "lastDelivery": {
+    "recordedAt": "2026-08-09T20:22:22.623Z",
+    "eventType": "court_assignment",
+    "eventMemberCount": 4,
+    "matchedTokens": 1,
+    "nativeUserTargets": 1,
+    "sent": 1,
+    "failed": 0,
+    "ok": true
+  },
+  "lastDeviceAck": null,
+  "deviceAckHistory": []
+}
