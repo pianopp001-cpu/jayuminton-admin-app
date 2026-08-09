@@ -38,13 +38,20 @@ jobs:
           sha256sum appsscript.json > "$RUNNER_TEMP/manifest.before"
           python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_native_device_ack.py" "$W"
           node --check Code.js
+          grep -F 'JAYUMINTON_NATIVE_DEVICE_ACK_V2' Code.js >/dev/null
+          grep -F 'deviceAckHistory' Code.js >/dev/null
+          grep -F 'targetMemberHash' Code.js >/dev/null
+          grep -F 'confirm_action' Code.js >/dev/null
           sha256sum appsscript.json > "$RUNNER_TEMP/manifest.after"
           cmp "$RUNNER_TEMP/manifest.before" "$RUNNER_TEMP/manifest.after"
           clasp push --force
-          clasp create-deployment --deploymentId "$DEPLOY" --description "native device ack $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$DEPLOY" --description "native device ack v2 $GITHUB_RUN_ID"
           echo "PUSH_URL=https://script.google.com/macros/s/$DEPLOY/exec" >> "$GITHUB_ENV"
       - name: Verify summary endpoint shape
+        shell: bash
         run: |
+          set -euo pipefail
           sleep 8
           curl --fail --location --retry 5 "$PUSH_URL?action=native_delivery_summary&run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/summary.json"
-          jq -e '.ok == true and has("lastDeviceAck")' "$RUNNER_TEMP/summary.json" >/dev/null
+          jq -e '.ok == true and has("lastDeviceAck") and (.deviceAckHistory | type == "array")' "$RUNNER_TEMP/summary.json" >/dev/null
+          jq '{ok, generatedAt, tokenCounts:{totalTokens,nativeUserTokens,nativeMemberTokens,browserTokens}, lastDelivery, lastDeviceAck, deviceAckHistoryCount:(.deviceAckHistory|length)}' "$RUNNER_TEMP/summary.json"
