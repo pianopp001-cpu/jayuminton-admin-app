@@ -1,0 +1,68 @@
+name: Inspect live FCM response handling
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-live-fcm-response.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Pull and inspect response handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          WORK="$RUNNER_TEMP/push"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          node --check Code.js
+          python3 - "$WORK/Code.js" "$GITHUB_WORKSPACE/deployment/status/push-fcm-response-context.txt" <<'PY'
+          from pathlib import Path
+          import re,sys
+          source=Path(sys.argv[1]).read_text(encoding='utf-8')
+          lines=source.splitlines()
+          hits=[i for i,line in enumerate(lines) if 'UrlFetchApp.fetch' in line or 'getResponseCode' in line or 'getContentText' in line]
+          out=['status=success','fetch_hits='+str(sum('UrlFetchApp.fetch' in x for x in lines)),'response_code_hits='+str(sum('getResponseCode' in x for x in lines)),'content_text_hits='+str(sum('getContentText' in x for x in lines))]
+          covered=set()
+          for hit in hits:
+              start=max(0,hit-18); end=min(len(lines),hit+26)
+              key=(start,end)
+              if key in covered: continue
+              covered.add(key)
+              out.append('\n--- lines %d-%d ---' % (start+1,end))
+              for n in range(start,end):
+                  line=lines[n]
+                  line=re.sub(r'ya29\.[A-Za-z0-9._-]+','[REDACTED_TOKEN]',line)
+                  out.append('%d:%s' % (n+1,line))
+          Path(sys.argv[2]).write_text('\n'.join(out)+'\n',encoding='utf-8')
+          PY
+          cd "$GITHUB_WORKSPACE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/push-fcm-response-context.txt
+          git commit -m 'Inspect live FCM response handling'
+          git pull --rebase origin main
+          git push origin main
