@@ -1,0 +1,82 @@
+name: Inspect live main state push
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-live-main-state-push.yml'
+      - 'deploy-triggers/inspect-live-main-state-push.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Pull and inspect state transition functions only
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainScriptId')"
+          test -n "$MAIN_SCRIPT_ID"
+          WORK="$RUNNER_TEMP/main"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          source = Path('Code.js').read_text(encoding='utf-8')
+          names = (
+              'shouldCheckStatePush_', 'captureStatePushSnapshot_',
+              'statePushMemberMap_', 'statePushCourtMap_',
+              'sendStateTransitionPushes_', 'withDocumentLock_'
+          )
+
+          def extract(name):
+              match = re.search(r'function\\s+' + re.escape(name) + r'\\s*\\([^)]*\\)\\s*\\{', source)
+              if not match:
+                  return 'NOT_FOUND: ' + name
+              depth = 0
+              quote = None
+              escaped = False
+              for index in range(match.end() - 1, len(source)):
+                  char = source[index]
+                  if quote:
+                      if escaped:
+                          escaped = False
+                      elif char == '\\\\':
+                          escaped = True
+                      elif char == quote:
+                          quote = None
+                      continue
+                  if char in ('"', "'", '`'):
+                      quote = char
+                  elif char == '{':
+                      depth += 1
+                  elif char == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return source[match.start():index + 1]
+              return 'UNTERMINATED: ' + name
+
+          for name in names:
+              block = extract(name)
+              block = re.sub(r"(['\"])[^'\"\\n]{40,}\\1", r"\\1[REDACTED]\\1", block)
+              print('--- ' + name + ' ---')
+              print(block)
+          PY
