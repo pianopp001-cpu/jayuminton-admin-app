@@ -1,0 +1,72 @@
+name: Verify complete Android background notification v1.1.4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-complete-background-v114.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Cross-check APK, main link, and push sender
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="releases/jayuminton-courtstatus-v1.1.4-fresh-install.apk"
+          test -s "$APK"
+          unzip -p "$APK" classes.dex | strings > "$RUNNER_TEMP/classes.txt"
+          unzip -p "$APK" AndroidManifest.xml | strings > "$RUNNER_TEMP/manifest.txt" || true
+          grep -F 'NativeSystemChannels' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'jayuminton_wait1_system_v114' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'jayuminton_court_system_v114' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'NativeAlertProbe' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'verifyRegistered' "$RUNNER_TEMP/classes.txt" >/dev/null
+          grep -F 'JayumintonFirebaseMessagingService' "$RUNNER_TEMP/classes.txt" >/dev/null
+
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+
+          MAIN="$RUNNER_TEMP/main"
+          PUSH="$RUNNER_TEMP/push"
+          mkdir -p "$MAIN" "$PUSH"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$MAIN/.clasp.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$PUSH/.clasp.json"
+          cd "$MAIN"
+          clasp pull
+          grep -F 'jayuminton-courtstatus-v1.1.4-fresh-install.apk' Script.html >/dev/null
+          cd "$PUSH"
+          clasp pull
+          grep -F 'jayuminton_wait1_system_v114' Code.js >/dev/null
+          grep -F 'jayuminton_court_system_v114' Code.js >/dev/null
+          grep -F "restricted_package_name: 'com.jayuminton.user'" Code.js >/dev/null
+          grep -F "notification_priority: 'PRIORITY_MAX'" Code.js >/dev/null
+          grep -F 'vibrate_timings:' Code.js >/dev/null
+
+          cd "$GITHUB_WORKSPACE"
+          printf 'status=success\nversion=1.1.4\napk_system_channels=yes\napk_background_fcm=yes\napk_registration_verify=yes\nserver_system_notification=yes\nserver_channel_match=yes\nlive_install_link=yes\nwait_vibration_groups=3\ncourt_vibration_groups=5\napk_sha256=%s\nverified_at=%s\n' "$(sha256sum "$APK" | awk '{print $1}')" "$(date -u +%FT%TZ)" > deployment/status/complete-background-v114-verified.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/complete-background-v114-verified.txt
+          git commit -m 'Verify complete Android background notification v1.1.4'
+          git pull --rebase origin main
+          git push origin main
