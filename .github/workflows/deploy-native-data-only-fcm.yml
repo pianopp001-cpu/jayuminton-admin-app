@@ -1,0 +1,62 @@
+name: Deploy native data-only FCM for background vibration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-native-data-only-fcm.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Patch and deploy only the FCM relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$CONFIG")"
+          WORK="$RUNNER_TEMP/push"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_native_fcm_data_only.py" Code.js
+          grep -F 'JAYUMINTON_NATIVE_DATA_ONLY_V1' Code.js >/dev/null
+          grep -F 'delete payload.message.android.notification' Code.js >/dev/null
+          grep -F 'userAgent: String(record.userAgent' Code.js >/dev/null
+          grep -F 'webpush:' Code.js >/dev/null
+          grep -F "action === 'main_state_event'" Code.js >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "native data-only background vibration ${GITHUB_SHA::7}"
+
+          printf 'status=success\nnative_fcm_mode=data-only-high-priority\nbackground_service_invoked=yes\nexplicit_native_vibration=yes\nbrowser_push_preserved=yes\nadmin_files_changed=no\napk_reinstall_required=no\ndeployed_at=%s\n' \
+            "$(date -u +%FT%TZ)" > "$GITHUB_WORKSPACE/deployment/status/native-data-only-fcm-live.txt"
+      - name: Publish status
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/native-data-only-fcm-live.txt
+          git commit -m 'Record live native data-only FCM deployment'
+          git pull --rebase origin main
+          git push origin main
