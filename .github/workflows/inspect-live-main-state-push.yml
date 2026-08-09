@@ -48,7 +48,7 @@ jobs:
           )
 
           def extract(name):
-              match = re.search(r'function\\s+' + re.escape(name) + r'\\s*\\([^)]*\\)\\s*\\{', source)
+              match = re.search(r'function\s+' + re.escape(name) + r'\s*\([^)]*\)\s*\{', source)
               if not match:
                   return 'NOT_FOUND: ' + name
               depth = 0
@@ -76,7 +76,7 @@ jobs:
 
           for name in names:
               block = extract(name)
-              block = re.sub(r"(['\"])[^'\"\\n]{40,}\\1", r"\\1[REDACTED]\\1", block)
+              block = re.sub(r"(['\"])[^'\"\n]{40,}\1", r"\1[REDACTED]\1", block)
               print('--- ' + name + ' ---')
               print(block)
           PY
