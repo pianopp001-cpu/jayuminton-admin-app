@@ -1,0 +1,7 @@
+status=success
+version=1.1.5
+apk_sha256=f5c77cab41ef07992479bd39ba3a460c72f9cfe28720a2c8e3b349ab50ee3ae2
+cache_key=f5c77cab
+changed_files=Script.html
+admin_logic_changed=no
+deployed_at=2026-08-09T04:49:02Z
