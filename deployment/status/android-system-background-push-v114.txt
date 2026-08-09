@@ -7,4 +7,4 @@ priority=high
 notification_priority=PRIORITY_MAX
 system_tray_background=yes
 long_vibration=yes
-deployed_at=2026-08-09T02:27:26Z
+deployed_at=2026-08-09T03:25:19Z
