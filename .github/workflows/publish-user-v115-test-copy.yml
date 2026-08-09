@@ -1,4 +1,4 @@
-name: Publish uniquely named v1.1.5 test APK
+name: Publish clean no-overlay v1.1.5 test APK
 
 on:
   push:
