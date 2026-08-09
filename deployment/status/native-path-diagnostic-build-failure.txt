@@ -14,4 +14,5 @@ Prepared safe v1.2.0 native delivery diagnostic APK.
 Prepared v1.2.1 with Android full-screen access flow and strict member resync.
 Prepared v1.2.2 deterministic overlay stop UI and safe vibration fallback.
 Prepared v1.2.3 with verified overlay add before repeating vibration.
-native diagnostic verified-register anchor missing
+Prepared v1.2.4 receive-path diagnostic on the verified v1.2.3 overlay base; live routing untouched.
+native diagnostic v115-register restore anchor missing
