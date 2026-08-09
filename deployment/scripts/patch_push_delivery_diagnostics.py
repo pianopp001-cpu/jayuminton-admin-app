@@ -16,7 +16,7 @@ if marker not in source:
     if not match:
         raise SystemExit("doGet function not found")
     branch = r'''
-  if (String(e && e.parameter && e.parameter.action || '') === 'native_delivery_summary') {
+  const nativeDiagnosticRequest_ = arguments[0] || {};\n  if (String(nativeDiagnosticRequest_.parameter && nativeDiagnosticRequest_.parameter.action || '') === 'native_delivery_summary') {
     return ContentService.createTextOutput(JSON.stringify(nativeDeliverySummary_()))
       .setMimeType(ContentService.MimeType.JSON);
   }
