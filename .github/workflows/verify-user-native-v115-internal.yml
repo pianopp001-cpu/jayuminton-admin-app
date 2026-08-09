@@ -1,4 +1,4 @@
-name: Verify clean APK production background FCM path without test alerts
+name: Verify rebuilt production-only APK background FCM path
 
 on:
   push:
