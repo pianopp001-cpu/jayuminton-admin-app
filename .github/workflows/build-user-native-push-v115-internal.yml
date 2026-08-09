@@ -143,13 +143,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/native-v115-build.log") 2>&1
           echo 'native-build-started' > "$RUNNER_TEMP/native-v115-stage.txt"
           python3 deployment/scripts/patch_build_user_native_v111.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v112.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v113.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v114.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v115.py deployment/scripts/build_user_native_push_fresh_v110.sh
-          bash deployment/scripts/build_user_native_push_fresh_v110.sh 2>&1 | tee "$RUNNER_TEMP/native-v115-build.log"
+          bash deployment/scripts/build_user_native_push_fresh_v110.sh
           test -s releases/jayuminton-courtstatus-v1.1.5-fresh-install.apk
           grep -F 'status=success' deployment/status/user-native-push-v1.1.5.txt >/dev/null
           grep -F 'launcher_label=자유민턴 코트현황' deployment/status/user-native-push-v1.1.5.txt >/dev/null
