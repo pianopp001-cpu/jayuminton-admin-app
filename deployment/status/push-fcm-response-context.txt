@@ -1,9 +1,9 @@
 status=success
-fetch_hits=2
-response_code_hits=2
-content_text_hits=2
+fetch_hits=3
+response_code_hits=3
+content_text_hits=3
 
---- lines 1-71 ---
+--- lines 1-126 ---
 1:const JAYUMINTON_PUSH_CONFIG = Object.freeze({
 2:  projectId: 'jayuminton-push',
 3:  tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -48,35 +48,90 @@ content_text_hits=2
 42:    if (action === 'unregister_web_token') {
 43:      return jsonOutput_(unregisterWebToken_(body));
 44:    }
-45:
-46:    verifyAdminSecret_(e);
-47:    const event = cleanEvent_(body);
-48:    return jsonOutput_(sendAssignmentEvent_(event));
-49:  } catch (error) {
-50:    console.error(error && error.stack ? error.stack : String(error));
-51:    return jsonOutput_({
-52:      ok: false,
-53:      error: String(error && error.message ? error.message : error)
-54:    });
-55:  }
-56:}
-57:
-58:function verifyPushConfiguration() {
-59:  const properties = PropertiesService.getScriptProperties();
-60:  const sharedSecret = String(
-61:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
-62:  );
-63:  const serviceAccountJson = String(
-64:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
-65:  );
-66:
-67:  if (!sharedSecret) {
-68:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
-69:  }
-70:  if (!serviceAccountJson) {
-71:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+45:    if (action === 'test_native_push') {
+46:      return jsonOutput_(testNativePush_(body));
+47:    }
+48:
+49:    verifyAdminSecret_(e);
+50:    const event = cleanEvent_(body);
+51:    return jsonOutput_(sendAssignmentEvent_(event));
+52:  } catch (error) {
+53:    console.error(error && error.stack ? error.stack : String(error));
+54:    return jsonOutput_({
+55:      ok: false,
+56:      error: String(error && error.message ? error.message : error)
+57:    });
+58:  }
+59:}
+60:
+61:/* JAYUMINTON_NATIVE_FCM_TEST_V1 */
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
 
---- lines 7-85 ---
+--- lines 7-140 ---
 7:  webTokenProperty: 'JAYUMINTON_WEB_PUSH_TOKENS_V1',
 8:  appUrl: 'https://jayuminton-push.web.app/',
 9:  maxTokensPerMember: 5,
@@ -115,49 +170,104 @@ content_text_hits=2
 42:    if (action === 'unregister_web_token') {
 43:      return jsonOutput_(unregisterWebToken_(body));
 44:    }
-45:
-46:    verifyAdminSecret_(e);
-47:    const event = cleanEvent_(body);
-48:    return jsonOutput_(sendAssignmentEvent_(event));
-49:  } catch (error) {
-50:    console.error(error && error.stack ? error.stack : String(error));
-51:    return jsonOutput_({
-52:      ok: false,
-53:      error: String(error && error.message ? error.message : error)
-54:    });
-55:  }
-56:}
-57:
-58:function verifyPushConfiguration() {
-59:  const properties = PropertiesService.getScriptProperties();
-60:  const sharedSecret = String(
-61:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
-62:  );
-63:  const serviceAccountJson = String(
-64:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
-65:  );
-66:
-67:  if (!sharedSecret) {
-68:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
-69:  }
-70:  if (!serviceAccountJson) {
-71:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
-72:  }
-73:
-74:  const credentials = JSON.parse(serviceAccountJson);
-75:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
-76:    throw new Error('Service-account project_id must be jayuminton-push.');
-77:  }
-78:
-79:  const token = getFcmAccessToken_(true);
-80:  return {
-81:    ok: Boolean(token),
-82:    projectId: credentials.project_id,
-83:    clientEmail: credentials.client_email,
-84:    registeredTokens: countWebPushTokens_()
-85:  };
+45:    if (action === 'test_native_push') {
+46:      return jsonOutput_(testNativePush_(body));
+47:    }
+48:
+49:    verifyAdminSecret_(e);
+50:    const event = cleanEvent_(body);
+51:    return jsonOutput_(sendAssignmentEvent_(event));
+52:  } catch (error) {
+53:    console.error(error && error.stack ? error.stack : String(error));
+54:    return jsonOutput_({
+55:      ok: false,
+56:      error: String(error && error.message ? error.message : error)
+57:    });
+58:  }
+59:}
+60:
+61:/* JAYUMINTON_NATIVE_FCM_TEST_V1 */
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
 
---- lines 15-93 ---
+--- lines 15-148 ---
 15: * Health check.
 16: */
 17:function doGet() {
@@ -188,57 +298,114 @@ content_text_hits=2
 42:    if (action === 'unregister_web_token') {
 43:      return jsonOutput_(unregisterWebToken_(body));
 44:    }
-45:
-46:    verifyAdminSecret_(e);
-47:    const event = cleanEvent_(body);
-48:    return jsonOutput_(sendAssignmentEvent_(event));
-49:  } catch (error) {
-50:    console.error(error && error.stack ? error.stack : String(error));
-51:    return jsonOutput_({
-52:      ok: false,
-53:      error: String(error && error.message ? error.message : error)
-54:    });
-55:  }
-56:}
-57:
-58:function verifyPushConfiguration() {
-59:  const properties = PropertiesService.getScriptProperties();
-60:  const sharedSecret = String(
-61:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
-62:  );
-63:  const serviceAccountJson = String(
-64:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
-65:  );
-66:
-67:  if (!sharedSecret) {
-68:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
-69:  }
-70:  if (!serviceAccountJson) {
-71:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
-72:  }
-73:
-74:  const credentials = JSON.parse(serviceAccountJson);
-75:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
-76:    throw new Error('Service-account project_id must be jayuminton-push.');
-77:  }
-78:
-79:  const token = getFcmAccessToken_(true);
-80:  return {
-81:    ok: Boolean(token),
-82:    projectId: credentials.project_id,
-83:    clientEmail: credentials.client_email,
-84:    registeredTokens: countWebPushTokens_()
-85:  };
-86:}
-87:
-88:function registerWebToken_(body) {
-89:  const memberId = cleanText_(body.memberId, 200);
-90:  const memberName = cleanText_(body.memberName, 80);
-91:  const token = cleanToken_(body.token);
-92:  const userAgent = cleanText_(body.userAgent, 300);
-93:
+45:    if (action === 'test_native_push') {
+46:      return jsonOutput_(testNativePush_(body));
+47:    }
+48:
+49:    verifyAdminSecret_(e);
+50:    const event = cleanEvent_(body);
+51:    return jsonOutput_(sendAssignmentEvent_(event));
+52:  } catch (error) {
+53:    console.error(error && error.stack ? error.stack : String(error));
+54:    return jsonOutput_({
+55:      ok: false,
+56:      error: String(error && error.message ? error.message : error)
+57:    });
+58:  }
+59:}
+60:
+61:/* JAYUMINTON_NATIVE_FCM_TEST_V1 */
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
 
---- lines 18-96 ---
+--- lines 16-149 ---
+16: */
+17:function doGet() {
 18:  return jsonOutput_({
 19:    ok: true,
 20:    service: 'jayuminton-free-web-push-relay',
@@ -266,681 +433,3449 @@ content_text_hits=2
 42:    if (action === 'unregister_web_token') {
 43:      return jsonOutput_(unregisterWebToken_(body));
 44:    }
-45:
-46:    verifyAdminSecret_(e);
-47:    const event = cleanEvent_(body);
-48:    return jsonOutput_(sendAssignmentEvent_(event));
-49:  } catch (error) {
-50:    console.error(error && error.stack ? error.stack : String(error));
-51:    return jsonOutput_({
-52:      ok: false,
-53:      error: String(error && error.message ? error.message : error)
-54:    });
-55:  }
-56:}
-57:
-58:function verifyPushConfiguration() {
-59:  const properties = PropertiesService.getScriptProperties();
-60:  const sharedSecret = String(
-61:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
-62:  );
-63:  const serviceAccountJson = String(
-64:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
-65:  );
-66:
-67:  if (!sharedSecret) {
-68:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
-69:  }
-70:  if (!serviceAccountJson) {
-71:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
-72:  }
-73:
-74:  const credentials = JSON.parse(serviceAccountJson);
-75:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
-76:    throw new Error('Service-account project_id must be jayuminton-push.');
-77:  }
-78:
-79:  const token = getFcmAccessToken_(true);
-80:  return {
-81:    ok: Boolean(token),
-82:    projectId: credentials.project_id,
-83:    clientEmail: credentials.client_email,
-84:    registeredTokens: countWebPushTokens_()
-85:  };
-86:}
-87:
-88:function registerWebToken_(body) {
-89:  const memberId = cleanText_(body.memberId, 200);
-90:  const memberName = cleanText_(body.memberName, 80);
-91:  const token = cleanToken_(body.token);
-92:  const userAgent = cleanText_(body.userAgent, 300);
-93:
-94:  if (!memberId || !memberName || !token) {
-95:    throw new Error('memberId, memberName and token are required.');
-96:  }
+45:    if (action === 'test_native_push') {
+46:      return jsonOutput_(testNativePush_(body));
+47:    }
+48:
+49:    verifyAdminSecret_(e);
+50:    const event = cleanEvent_(body);
+51:    return jsonOutput_(sendAssignmentEvent_(event));
+52:  } catch (error) {
+53:    console.error(error && error.stack ? error.stack : String(error));
+54:    return jsonOutput_({
+55:      ok: false,
+56:      error: String(error && error.message ? error.message : error)
+57:    });
+58:  }
+59:}
+60:
+61:/* JAYUMINTON_NATIVE_FCM_TEST_V1 */
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
 
---- lines 169-247 ---
-169:    if (!record || !record.token || seenTokens[record.token]) return;
-170:    if (now - Number(record.updatedAt || 0) >
-171:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
-172:    const member = memberIds[String(record.memberId || '')];
-173:    if (!member) return;
-174:    seenTokens[record.token] = true;
-175:    targets.push({
-176:      token: record.token,
-177:      member: member
-178:    });
-179:  });
-180:
-181:  if (!targets.length) {
-182:    return {
-183:      ok: true,
-184:      assignmentId: event.assignmentId,
-185:      sent: 0,
-186:      failed: 0,
-187:      noRegisteredBrowser: event.members.length
-188:    };
-189:  }
-190:
-191:  const accessToken = getFcmAccessToken_();
-192:  const requests = targets.map(function(target) {
-193:    return makeWebFcmRequest_(
-194:      event,
-195:      target.member,
-196:      target.token,
-197:      accessToken
-198:    );
-199:  });
-200:  const responses = UrlFetchApp.fetchAll(requests);
-201:
-202:  const failedTokens = [];
-203:  let sent = 0;
-204:  responses.forEach(function(response, index) {
-205:    const status = response.getResponseCode();
-206:    if (status >= 200 && status < 300) {
-207:      sent += 1;
-208:      return;
-209:    }
-210:
-211:    const text = response.getContentText();
-212:    const target = targets[index];
-213:    console.error(JSON.stringify({
-214:      message: 'FCM web send failed',
-215:      assignmentId: event.assignmentId,
-216:      memberId: target.member.id,
-217:      status: status,
-218:      response: text
-219:    }));
-220:
-221:    if (status === 404 || status === 410 ||
-222:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
-223:      failedTokens.push(target.token);
-224:    }
+--- lines 18-151 ---
+18:  return jsonOutput_({
+19:    ok: true,
+20:    service: 'jayuminton-free-web-push-relay',
+21:    projectId: JAYUMINTON_PUSH_CONFIG.projectId,
+22:    registeredTokens: countWebPushTokens_()
+23:  });
+24:}
+25:
+26:/**
+27: * Handles:
+28: * 1) Public browser token registration/unregistration.
+29: * 2) Protected admin assignment events.
+30: */
+31:function doPost(e) {
+32:  try {
+33:    const rawBody = e && e.parameter && e.parameter.payload
+34:      ? String(e.parameter.payload || '')
+35:      : String(e && e.postData ? (e.postData.contents || '') : '');
+36:    const body = JSON.parse(rawBody || '{}');
+37:    const action = String(body.action || '').trim();
+38:
+39:    if (action === 'register_web_token') {
+40:      return jsonOutput_(registerWebToken_(body));
+41:    }
+42:    if (action === 'unregister_web_token') {
+43:      return jsonOutput_(unregisterWebToken_(body));
+44:    }
+45:    if (action === 'test_native_push') {
+46:      return jsonOutput_(testNativePush_(body));
+47:    }
+48:
+49:    verifyAdminSecret_(e);
+50:    const event = cleanEvent_(body);
+51:    return jsonOutput_(sendAssignmentEvent_(event));
+52:  } catch (error) {
+53:    console.error(error && error.stack ? error.stack : String(error));
+54:    return jsonOutput_({
+55:      ok: false,
+56:      error: String(error && error.message ? error.message : error)
+57:    });
+58:  }
+59:}
+60:
+61:/* JAYUMINTON_NATIVE_FCM_TEST_V1 */
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+
+--- lines 19-152 ---
+19:    ok: true,
+20:    service: 'jayuminton-free-web-push-relay',
+21:    projectId: JAYUMINTON_PUSH_CONFIG.projectId,
+22:    registeredTokens: countWebPushTokens_()
+23:  });
+24:}
+25:
+26:/**
+27: * Handles:
+28: * 1) Public browser token registration/unregistration.
+29: * 2) Protected admin assignment events.
+30: */
+31:function doPost(e) {
+32:  try {
+33:    const rawBody = e && e.parameter && e.parameter.payload
+34:      ? String(e.parameter.payload || '')
+35:      : String(e && e.postData ? (e.postData.contents || '') : '');
+36:    const body = JSON.parse(rawBody || '{}');
+37:    const action = String(body.action || '').trim();
+38:
+39:    if (action === 'register_web_token') {
+40:      return jsonOutput_(registerWebToken_(body));
+41:    }
+42:    if (action === 'unregister_web_token') {
+43:      return jsonOutput_(unregisterWebToken_(body));
+44:    }
+45:    if (action === 'test_native_push') {
+46:      return jsonOutput_(testNativePush_(body));
+47:    }
+48:
+49:    verifyAdminSecret_(e);
+50:    const event = cleanEvent_(body);
+51:    return jsonOutput_(sendAssignmentEvent_(event));
+52:  } catch (error) {
+53:    console.error(error && error.stack ? error.stack : String(error));
+54:    return jsonOutput_({
+55:      ok: false,
+56:      error: String(error && error.message ? error.message : error)
+57:    });
+58:  }
+59:}
+60:
+61:/* JAYUMINTON_NATIVE_FCM_TEST_V1 */
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+152:        now - Number(record.updatedAt || 0) <=
+
+--- lines 58-191 ---
+58:  }
+59:}
+60:
+61:/* JAYUMINTON_NATIVE_FCM_TEST_V1 */
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+152:        now - Number(record.updatedAt || 0) <=
+153:          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+154:        record.token !== token;
+155:    });
+156:
+157:    active.push({
+158:      memberId: memberId,
+159:      memberName: memberName,
+160:      token: token,
+161:      userAgent: userAgent,
+162:      updatedAt: now
+163:    });
+164:
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+
+--- lines 61-194 ---
+61:/* JAYUMINTON_NATIVE_FCM_TEST_V1 */
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+152:        now - Number(record.updatedAt || 0) <=
+153:          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+154:        record.token !== token;
+155:    });
+156:
+157:    active.push({
+158:      memberId: memberId,
+159:      memberName: memberName,
+160:      token: token,
+161:      userAgent: userAgent,
+162:      updatedAt: now
+163:    });
+164:
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+
+--- lines 62-195 ---
+62:function testNativePush_(body) {
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+152:        now - Number(record.updatedAt || 0) <=
+153:          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+154:        record.token !== token;
+155:    });
+156:
+157:    active.push({
+158:      memberId: memberId,
+159:      memberName: memberName,
+160:      token: token,
+161:      userAgent: userAgent,
+162:      updatedAt: now
+163:    });
+164:
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+
+--- lines 63-196 ---
+63:  const memberId = cleanText_(body.memberId, 200);
+64:  const memberName = cleanText_(body.memberName, 80) || '사용자';
+65:  const token = cleanToken_(body.token);
+66:  if (!memberId || !token) {
+67:    throw new Error('memberId and token are required for native push test.');
+68:  }
+69:
+70:  // Possession of the device FCM token is required.  The endpoint sends only
+71:  // a fixed diagnostic message back to that same device; callers cannot
+72:  // choose arbitrary notification content.
+73:  const now = Date.now();
+74:  const event = {
+75:    type: 'court_assignment',
+76:    assignmentId: 'native-test-' + now,
+77:    courtNo: '테스트',
+78:    expectedCourtNo: '',
+79:    members: [{id: memberId, name: memberName}]
+80:  };
+81:  const member = {id: memberId, name: memberName};
+82:  const request = makeWebFcmRequest_(event, member, token, getFcmAccessToken_());
+83:  const requestOptions = Object.assign({}, request);
+84:  delete requestOptions.url;
+85:  const response = UrlFetchApp.fetch(request.url, requestOptions);
+86:  const status = response.getResponseCode();
+87:  const responseText = response.getContentText();
+88:  let messageId = '';
+89:  let fcmError = '';
+90:  try {
+91:    const parsed = JSON.parse(responseText || '{}');
+92:    messageId = String(parsed.name || '');
+93:    fcmError = String(parsed.error && (parsed.error.status || parsed.error.message) || '');
+94:  } catch (_) {}
+95:  return {
+96:    ok: status >= 200 && status < 300 && Boolean(messageId),
+97:    stage: 'fcm_send',
+98:    status: status,
+99:    messageId: messageId,
+100:    error: fcmError
+101:  };
+102:}
+103:
+104:function verifyPushConfiguration() {
+105:  const properties = PropertiesService.getScriptProperties();
+106:  const sharedSecret = String(
+107:    properties.getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+108:  );
+109:  const serviceAccountJson = String(
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+152:        now - Number(record.updatedAt || 0) <=
+153:          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+154:        record.token !== token;
+155:    });
+156:
+157:    active.push({
+158:      memberId: memberId,
+159:      memberName: memberName,
+160:      token: token,
+161:      userAgent: userAgent,
+162:      updatedAt: now
+163:    });
+164:
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+196:      action: 'unregistered',
+
+--- lines 110-243 ---
+110:    properties.getProperty('FCM_SERVICE_ACCOUNT_JSON') || ''
+111:  );
+112:
+113:  if (!sharedSecret) {
+114:    throw new Error('JAYUMINTON_PUSH_SHARED_SECRET Script Property is missing.');
+115:  }
+116:  if (!serviceAccountJson) {
+117:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+118:  }
+119:
+120:  const credentials = JSON.parse(serviceAccountJson);
+121:  if (credentials.project_id !== JAYUMINTON_PUSH_CONFIG.projectId) {
+122:    throw new Error('Service-account project_id must be jayuminton-push.');
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+152:        now - Number(record.updatedAt || 0) <=
+153:          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+154:        record.token !== token;
+155:    });
+156:
+157:    active.push({
+158:      memberId: memberId,
+159:      memberName: memberName,
+160:      token: token,
+161:      userAgent: userAgent,
+162:      updatedAt: now
+163:    });
+164:
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+196:      action: 'unregistered',
+197:      removed: records.length - next.length
+198:    };
+199:  } finally {
+200:    lock.releaseLock();
+201:  }
+202:}
+203:
+204:function sendAssignmentEvent_(event) {
+205:  const records = loadWebPushTokens_();
+206:  const now = Date.now();
+207:  const memberIds = {};
+208:  event.members.forEach(function(member) {
+209:    memberIds[member.id] = member;
+210:  });
+211:
+212:  const targets = [];
+213:  const seenTokens = {};
+214:  records.forEach(function(record) {
+215:    if (!record || !record.token || seenTokens[record.token]) return;
+216:    if (now - Number(record.updatedAt || 0) >
+217:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+218:    const member = memberIds[String(record.memberId || '')];
+219:    if (!member) return;
+220:    seenTokens[record.token] = true;
+221:    targets.push({
+222:      token: record.token,
+223:      member: member
+224:    });
 225:  });
 226:
-227:  if (failedTokens.length) {
-228:    removeInvalidTokens_(failedTokens);
-229:  }
-230:
-231:  return {
-232:    ok: sent === targets.length,
-233:    assignmentId: event.assignmentId,
-234:    sent: sent,
-235:    failed: targets.length - sent
-236:  };
-237:}
-238:
-239:function makeWebFcmRequest_(event, member, token, accessToken) {
-240:  const isWait = event.type === 'wait1_ready';
-241:  const courtNo = isWait
-242:    ? event.expectedCourtNo
-243:    : event.courtNo;
-244:  const title = isWait
-245:    ? '대기 1순위 안내'
-246:    : '코트 배정 긴급 안내';
-247:  const body = isWait
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
 
---- lines 176-254 ---
-176:      token: record.token,
-177:      member: member
-178:    });
-179:  });
-180:
-181:  if (!targets.length) {
-182:    return {
-183:      ok: true,
-184:      assignmentId: event.assignmentId,
-185:      sent: 0,
-186:      failed: 0,
-187:      noRegisteredBrowser: event.members.length
-188:    };
-189:  }
-190:
-191:  const accessToken = getFcmAccessToken_();
-192:  const requests = targets.map(function(target) {
-193:    return makeWebFcmRequest_(
-194:      event,
-195:      target.member,
-196:      target.token,
-197:      accessToken
-198:    );
-199:  });
-200:  const responses = UrlFetchApp.fetchAll(requests);
-201:
-202:  const failedTokens = [];
-203:  let sent = 0;
-204:  responses.forEach(function(response, index) {
-205:    const status = response.getResponseCode();
-206:    if (status >= 200 && status < 300) {
-207:      sent += 1;
-208:      return;
-209:    }
-210:
-211:    const text = response.getContentText();
-212:    const target = targets[index];
-213:    console.error(JSON.stringify({
-214:      message: 'FCM web send failed',
-215:      assignmentId: event.assignmentId,
-216:      memberId: target.member.id,
-217:      status: status,
-218:      response: text
-219:    }));
-220:
-221:    if (status === 404 || status === 410 ||
-222:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
-223:      failedTokens.push(target.token);
-224:    }
+--- lines 123-256 ---
+123:  }
+124:
+125:  const token = getFcmAccessToken_(true);
+126:  return {
+127:    ok: Boolean(token),
+128:    projectId: credentials.project_id,
+129:    clientEmail: credentials.client_email,
+130:    registeredTokens: countWebPushTokens_()
+131:  };
+132:}
+133:
+134:function registerWebToken_(body) {
+135:  const memberId = cleanText_(body.memberId, 200);
+136:  const memberName = cleanText_(body.memberName, 80);
+137:  const token = cleanToken_(body.token);
+138:  const userAgent = cleanText_(body.userAgent, 300);
+139:
+140:  if (!memberId || !memberName || !token) {
+141:    throw new Error('memberId, memberName and token are required.');
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+152:        now - Number(record.updatedAt || 0) <=
+153:          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+154:        record.token !== token;
+155:    });
+156:
+157:    active.push({
+158:      memberId: memberId,
+159:      memberName: memberName,
+160:      token: token,
+161:      userAgent: userAgent,
+162:      updatedAt: now
+163:    });
+164:
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+196:      action: 'unregistered',
+197:      removed: records.length - next.length
+198:    };
+199:  } finally {
+200:    lock.releaseLock();
+201:  }
+202:}
+203:
+204:function sendAssignmentEvent_(event) {
+205:  const records = loadWebPushTokens_();
+206:  const now = Date.now();
+207:  const memberIds = {};
+208:  event.members.forEach(function(member) {
+209:    memberIds[member.id] = member;
+210:  });
+211:
+212:  const targets = [];
+213:  const seenTokens = {};
+214:  records.forEach(function(record) {
+215:    if (!record || !record.token || seenTokens[record.token]) return;
+216:    if (now - Number(record.updatedAt || 0) >
+217:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+218:    const member = memberIds[String(record.memberId || '')];
+219:    if (!member) return;
+220:    seenTokens[record.token] = true;
+221:    targets.push({
+222:      token: record.token,
+223:      member: member
+224:    });
 225:  });
 226:
-227:  if (failedTokens.length) {
-228:    removeInvalidTokens_(failedTokens);
-229:  }
-230:
-231:  return {
-232:    ok: sent === targets.length,
-233:    assignmentId: event.assignmentId,
-234:    sent: sent,
-235:    failed: targets.length - sent
-236:  };
-237:}
-238:
-239:function makeWebFcmRequest_(event, member, token, accessToken) {
-240:  const isWait = event.type === 'wait1_ready';
-241:  const courtNo = isWait
-242:    ? event.expectedCourtNo
-243:    : event.courtNo;
-244:  const title = isWait
-245:    ? '대기 1순위 안내'
-246:    : '코트 배정 긴급 안내';
-247:  const body = isWait
-248:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
-249:    : courtNo + '번 코트가 나왔습니다. ' +
-250:      courtNo + '번코트로 이동해주세요!';
-251:
-252:  const data = {
-253:    type: event.type,
-254:    assignmentId: event.assignmentId,
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
 
---- lines 181-259 ---
-181:  if (!targets.length) {
-182:    return {
-183:      ok: true,
-184:      assignmentId: event.assignmentId,
-185:      sent: 0,
-186:      failed: 0,
-187:      noRegisteredBrowser: event.members.length
-188:    };
-189:  }
-190:
-191:  const accessToken = getFcmAccessToken_();
-192:  const requests = targets.map(function(target) {
-193:    return makeWebFcmRequest_(
-194:      event,
-195:      target.member,
-196:      target.token,
-197:      accessToken
-198:    );
-199:  });
-200:  const responses = UrlFetchApp.fetchAll(requests);
-201:
-202:  const failedTokens = [];
-203:  let sent = 0;
-204:  responses.forEach(function(response, index) {
-205:    const status = response.getResponseCode();
-206:    if (status >= 200 && status < 300) {
-207:      sent += 1;
-208:      return;
-209:    }
-210:
-211:    const text = response.getContentText();
-212:    const target = targets[index];
-213:    console.error(JSON.stringify({
-214:      message: 'FCM web send failed',
-215:      assignmentId: event.assignmentId,
-216:      memberId: target.member.id,
-217:      status: status,
-218:      response: text
-219:    }));
-220:
-221:    if (status === 404 || status === 410 ||
-222:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
-223:      failedTokens.push(target.token);
-224:    }
+--- lines 142-275 ---
+142:  }
+143:
+144:  const lock = LockService.getScriptLock();
+145:  lock.waitLock(10000);
+146:  try {
+147:    const records = loadWebPushTokens_();
+148:    const now = Date.now();
+149:    const active = records.filter(function(record) {
+150:      return record &&
+151:        record.token &&
+152:        now - Number(record.updatedAt || 0) <=
+153:          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+154:        record.token !== token;
+155:    });
+156:
+157:    active.push({
+158:      memberId: memberId,
+159:      memberName: memberName,
+160:      token: token,
+161:      userAgent: userAgent,
+162:      updatedAt: now
+163:    });
+164:
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+196:      action: 'unregistered',
+197:      removed: records.length - next.length
+198:    };
+199:  } finally {
+200:    lock.releaseLock();
+201:  }
+202:}
+203:
+204:function sendAssignmentEvent_(event) {
+205:  const records = loadWebPushTokens_();
+206:  const now = Date.now();
+207:  const memberIds = {};
+208:  event.members.forEach(function(member) {
+209:    memberIds[member.id] = member;
+210:  });
+211:
+212:  const targets = [];
+213:  const seenTokens = {};
+214:  records.forEach(function(record) {
+215:    if (!record || !record.token || seenTokens[record.token]) return;
+216:    if (now - Number(record.updatedAt || 0) >
+217:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+218:    const member = memberIds[String(record.memberId || '')];
+219:    if (!member) return;
+220:    seenTokens[record.token] = true;
+221:    targets.push({
+222:      token: record.token,
+223:      member: member
+224:    });
 225:  });
 226:
-227:  if (failedTokens.length) {
-228:    removeInvalidTokens_(failedTokens);
-229:  }
-230:
-231:  return {
-232:    ok: sent === targets.length,
-233:    assignmentId: event.assignmentId,
-234:    sent: sent,
-235:    failed: targets.length - sent
-236:  };
-237:}
-238:
-239:function makeWebFcmRequest_(event, member, token, accessToken) {
-240:  const isWait = event.type === 'wait1_ready';
-241:  const courtNo = isWait
-242:    ? event.expectedCourtNo
-243:    : event.courtNo;
-244:  const title = isWait
-245:    ? '대기 1순위 안내'
-246:    : '코트 배정 긴급 안내';
-247:  const body = isWait
-248:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
-249:    : courtNo + '번 코트가 나왔습니다. ' +
-250:      courtNo + '번코트로 이동해주세요!';
-251:
-252:  const data = {
-253:    type: event.type,
-254:    assignmentId: event.assignmentId,
-255:    memberId: member.id,
-256:    memberName: member.name,
-257:    title: title,
-258:    body: body,
-259:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
-
---- lines 187-265 ---
-187:      noRegisteredBrowser: event.members.length
-188:    };
-189:  }
-190:
-191:  const accessToken = getFcmAccessToken_();
-192:  const requests = targets.map(function(target) {
-193:    return makeWebFcmRequest_(
-194:      event,
-195:      target.member,
-196:      target.token,
-197:      accessToken
-198:    );
-199:  });
-200:  const responses = UrlFetchApp.fetchAll(requests);
-201:
-202:  const failedTokens = [];
-203:  let sent = 0;
-204:  responses.forEach(function(response, index) {
-205:    const status = response.getResponseCode();
-206:    if (status >= 200 && status < 300) {
-207:      sent += 1;
-208:      return;
-209:    }
-210:
-211:    const text = response.getContentText();
-212:    const target = targets[index];
-213:    console.error(JSON.stringify({
-214:      message: 'FCM web send failed',
-215:      assignmentId: event.assignmentId,
-216:      memberId: target.member.id,
-217:      status: status,
-218:      response: text
-219:    }));
-220:
-221:    if (status === 404 || status === 410 ||
-222:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
-223:      failedTokens.push(target.token);
-224:    }
-225:  });
-226:
-227:  if (failedTokens.length) {
-228:    removeInvalidTokens_(failedTokens);
-229:  }
-230:
-231:  return {
-232:    ok: sent === targets.length,
-233:    assignmentId: event.assignmentId,
-234:    sent: sent,
-235:    failed: targets.length - sent
-236:  };
-237:}
-238:
-239:function makeWebFcmRequest_(event, member, token, accessToken) {
-240:  const isWait = event.type === 'wait1_ready';
-241:  const courtNo = isWait
-242:    ? event.expectedCourtNo
-243:    : event.courtNo;
-244:  const title = isWait
-245:    ? '대기 1순위 안내'
-246:    : '코트 배정 긴급 안내';
-247:  const body = isWait
-248:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
-249:    : courtNo + '번 코트가 나왔습니다. ' +
-250:      courtNo + '번코트로 이동해주세요!';
-251:
-252:  const data = {
-253:    type: event.type,
-254:    assignmentId: event.assignmentId,
-255:    memberId: member.id,
-256:    memberName: member.name,
-257:    title: title,
-258:    body: body,
-259:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
-260:    courtNo: String(event.courtNo || ''),
-261:    expectedCourtNo: String(event.expectedCourtNo || ''),
-262:    repeatCount: '1',
-263:    notificationTag: event.assignmentId,
-264:    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
-265:  };
-
---- lines 215-293 ---
-215:      assignmentId: event.assignmentId,
-216:      memberId: target.member.id,
-217:      status: status,
-218:      response: text
-219:    }));
-220:
-221:    if (status === 404 || status === 410 ||
-222:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
-223:      failedTokens.push(target.token);
-224:    }
-225:  });
-226:
-227:  if (failedTokens.length) {
-228:    removeInvalidTokens_(failedTokens);
-229:  }
-230:
-231:  return {
-232:    ok: sent === targets.length,
-233:    assignmentId: event.assignmentId,
-234:    sent: sent,
-235:    failed: targets.length - sent
-236:  };
-237:}
-238:
-239:function makeWebFcmRequest_(event, member, token, accessToken) {
-240:  const isWait = event.type === 'wait1_ready';
-241:  const courtNo = isWait
-242:    ? event.expectedCourtNo
-243:    : event.courtNo;
-244:  const title = isWait
-245:    ? '대기 1순위 안내'
-246:    : '코트 배정 긴급 안내';
-247:  const body = isWait
-248:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
-249:    : courtNo + '번 코트가 나왔습니다. ' +
-250:      courtNo + '번코트로 이동해주세요!';
-251:
-252:  const data = {
-253:    type: event.type,
-254:    assignmentId: event.assignmentId,
-255:    memberId: member.id,
-256:    memberName: member.name,
-257:    title: title,
-258:    body: body,
-259:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
-260:    courtNo: String(event.courtNo || ''),
-261:    expectedCourtNo: String(event.expectedCourtNo || ''),
-262:    repeatCount: '1',
-263:    notificationTag: event.assignmentId,
-264:    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
-265:  };
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
 266:
-267:  const payload = {
-268:    message: {
-269:      token: token,
-270:      data: data,
-271:      android: {
-272:        priority: 'high',
-273:        ttl: '600s',
-274:        restricted_package_name: 'com.jayuminton.user',
-275:        notification: {
-276:          title: data.title,
-277:          body: data.body,
-278:          icon: 'icon',
-279:          sound: 'default',
-280:          channel_id: event.type === 'court_assignment'
-281:            ? 'jayuminton_court_system_v114'
-282:            : 'jayuminton_wait1_system_v114',
-283:          notification_priority: 'PRIORITY_MAX',
-284:          visibility: 'PUBLIC',
-285:          vibrate_timings: event.type === 'court_assignment'
-286:            ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
-287:            : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
-288:        }
-289:      },
-290:      webpush: {
-291:        headers: {
-292:          Urgency: 'high',
-293:          TTL: '600'
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
 
---- lines 463-540 ---
-463:  if (!rawCredentials) {
-464:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
-465:  }
-466:  const credentials = JSON.parse(rawCredentials);
-467:  if (!credentials.client_email || !credentials.private_key) {
-468:    throw new Error('Service-account JSON is missing client_email or private_key.');
-469:  }
-470:
-471:  const now = Math.floor(Date.now() / 1000);
-472:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
-473:  const claim = base64Url_(JSON.stringify({
-474:    iss: credentials.client_email,
-475:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
-476:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
-477:    iat: now,
-478:    exp: now + 3600
-479:  }));
-480:  const unsignedJwt = header + '.' + claim;
-481:  const signature = Utilities.computeRsaSha256Signature(
-482:    unsignedJwt,
-483:    credentials.private_key
-484:  );
-485:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
-486:
-487:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
-488:    method: 'post',
-489:    payload: {
-490:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-491:      assertion: assertion
-492:    },
-493:    muteHttpExceptions: true
-494:  });
-495:
-496:  const status = response.getResponseCode();
-497:  const text = response.getContentText();
-498:  if (status < 200 || status >= 300) {
-499:    throw new Error('OAuth token request failed (' + status + '): ' + text);
-500:  }
-501:
-502:  const tokenResponse = JSON.parse(text);
-503:  if (!tokenResponse.access_token) {
-504:    throw new Error('OAuth response did not contain access_token.');
+--- lines 156-289 ---
+156:
+157:    active.push({
+158:      memberId: memberId,
+159:      memberName: memberName,
+160:      token: token,
+161:      userAgent: userAgent,
+162:      updatedAt: now
+163:    });
+164:
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+196:      action: 'unregistered',
+197:      removed: records.length - next.length
+198:    };
+199:  } finally {
+200:    lock.releaseLock();
+201:  }
+202:}
+203:
+204:function sendAssignmentEvent_(event) {
+205:  const records = loadWebPushTokens_();
+206:  const now = Date.now();
+207:  const memberIds = {};
+208:  event.members.forEach(function(member) {
+209:    memberIds[member.id] = member;
+210:  });
+211:
+212:  const targets = [];
+213:  const seenTokens = {};
+214:  records.forEach(function(record) {
+215:    if (!record || !record.token || seenTokens[record.token]) return;
+216:    if (now - Number(record.updatedAt || 0) >
+217:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+218:    const member = memberIds[String(record.memberId || '')];
+219:    if (!member) return;
+220:    seenTokens[record.token] = true;
+221:    targets.push({
+222:      token: record.token,
+223:      member: member
+224:    });
+225:  });
+226:
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+
+--- lines 165-298 ---
+165:    const limited = limitWebPushTokens_(active);
+166:    saveWebPushTokens_(limited);
+167:
+168:    return {
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+196:      action: 'unregistered',
+197:      removed: records.length - next.length
+198:    };
+199:  } finally {
+200:    lock.releaseLock();
+201:  }
+202:}
+203:
+204:function sendAssignmentEvent_(event) {
+205:  const records = loadWebPushTokens_();
+206:  const now = Date.now();
+207:  const memberIds = {};
+208:  event.members.forEach(function(member) {
+209:    memberIds[member.id] = member;
+210:  });
+211:
+212:  const targets = [];
+213:  const seenTokens = {};
+214:  records.forEach(function(record) {
+215:    if (!record || !record.token || seenTokens[record.token]) return;
+216:    if (now - Number(record.updatedAt || 0) >
+217:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+218:    const member = memberIds[String(record.memberId || '')];
+219:    if (!member) return;
+220:    seenTokens[record.token] = true;
+221:    targets.push({
+222:      token: record.token,
+223:      member: member
+224:    });
+225:  });
+226:
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+290:  const title = isWait
+291:    ? '대기 1순위 안내'
+292:    : '코트 배정 긴급 안내';
+293:  const body = isWait
+294:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+295:    : courtNo + '번 코트가 나왔습니다. ' +
+296:      courtNo + '번코트로 이동해주세요!';
+297:
+298:  const data = {
+
+--- lines 169-302 ---
+169:      ok: true,
+170:      action: 'registered',
+171:      memberId: memberId,
+172:      memberName: memberName,
+173:      registeredTokens: limited.length
+174:    };
+175:  } finally {
+176:    lock.releaseLock();
+177:  }
+178:}
+179:
+180:function unregisterWebToken_(body) {
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+196:      action: 'unregistered',
+197:      removed: records.length - next.length
+198:    };
+199:  } finally {
+200:    lock.releaseLock();
+201:  }
+202:}
+203:
+204:function sendAssignmentEvent_(event) {
+205:  const records = loadWebPushTokens_();
+206:  const now = Date.now();
+207:  const memberIds = {};
+208:  event.members.forEach(function(member) {
+209:    memberIds[member.id] = member;
+210:  });
+211:
+212:  const targets = [];
+213:  const seenTokens = {};
+214:  records.forEach(function(record) {
+215:    if (!record || !record.token || seenTokens[record.token]) return;
+216:    if (now - Number(record.updatedAt || 0) >
+217:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+218:    const member = memberIds[String(record.memberId || '')];
+219:    if (!member) return;
+220:    seenTokens[record.token] = true;
+221:    targets.push({
+222:      token: record.token,
+223:      member: member
+224:    });
+225:  });
+226:
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+290:  const title = isWait
+291:    ? '대기 1순위 안내'
+292:    : '코트 배정 긴급 안내';
+293:  const body = isWait
+294:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+295:    : courtNo + '번 코트가 나왔습니다. ' +
+296:      courtNo + '번코트로 이동해주세요!';
+297:
+298:  const data = {
+299:    type: event.type,
+300:    assignmentId: event.assignmentId,
+301:    memberId: member.id,
+302:    memberName: member.name,
+
+--- lines 181-314 ---
+181:  const token = cleanToken_(body.token);
+182:  if (!token) {
+183:    throw new Error('token is required.');
+184:  }
+185:
+186:  const lock = LockService.getScriptLock();
+187:  lock.waitLock(10000);
+188:  try {
+189:    const records = loadWebPushTokens_();
+190:    const next = records.filter(function(record) {
+191:      return record && record.token !== token;
+192:    });
+193:    saveWebPushTokens_(next);
+194:    return {
+195:      ok: true,
+196:      action: 'unregistered',
+197:      removed: records.length - next.length
+198:    };
+199:  } finally {
+200:    lock.releaseLock();
+201:  }
+202:}
+203:
+204:function sendAssignmentEvent_(event) {
+205:  const records = loadWebPushTokens_();
+206:  const now = Date.now();
+207:  const memberIds = {};
+208:  event.members.forEach(function(member) {
+209:    memberIds[member.id] = member;
+210:  });
+211:
+212:  const targets = [];
+213:  const seenTokens = {};
+214:  records.forEach(function(record) {
+215:    if (!record || !record.token || seenTokens[record.token]) return;
+216:    if (now - Number(record.updatedAt || 0) >
+217:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+218:    const member = memberIds[String(record.memberId || '')];
+219:    if (!member) return;
+220:    seenTokens[record.token] = true;
+221:    targets.push({
+222:      token: record.token,
+223:      member: member
+224:    });
+225:  });
+226:
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+290:  const title = isWait
+291:    ? '대기 1순위 안내'
+292:    : '코트 배정 긴급 안내';
+293:  const body = isWait
+294:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+295:    : courtNo + '번 코트가 나왔습니다. ' +
+296:      courtNo + '번코트로 이동해주세요!';
+297:
+298:  const data = {
+299:    type: event.type,
+300:    assignmentId: event.assignmentId,
+301:    memberId: member.id,
+302:    memberName: member.name,
+303:    title: title,
+304:    body: body,
+305:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
+306:    courtNo: String(event.courtNo || ''),
+307:    expectedCourtNo: String(event.expectedCourtNo || ''),
+308:    repeatCount: '1',
+309:    notificationTag: event.assignmentId,
+310:    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
+311:  };
+312:
+313:  const payload = {
+314:    message: {
+
+--- lines 215-348 ---
+215:    if (!record || !record.token || seenTokens[record.token]) return;
+216:    if (now - Number(record.updatedAt || 0) >
+217:        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+218:    const member = memberIds[String(record.memberId || '')];
+219:    if (!member) return;
+220:    seenTokens[record.token] = true;
+221:    targets.push({
+222:      token: record.token,
+223:      member: member
+224:    });
+225:  });
+226:
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+290:  const title = isWait
+291:    ? '대기 1순위 안내'
+292:    : '코트 배정 긴급 안내';
+293:  const body = isWait
+294:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+295:    : courtNo + '번 코트가 나왔습니다. ' +
+296:      courtNo + '번코트로 이동해주세요!';
+297:
+298:  const data = {
+299:    type: event.type,
+300:    assignmentId: event.assignmentId,
+301:    memberId: member.id,
+302:    memberName: member.name,
+303:    title: title,
+304:    body: body,
+305:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
+306:    courtNo: String(event.courtNo || ''),
+307:    expectedCourtNo: String(event.expectedCourtNo || ''),
+308:    repeatCount: '1',
+309:    notificationTag: event.assignmentId,
+310:    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
+311:  };
+312:
+313:  const payload = {
+314:    message: {
+315:      token: token,
+316:      data: data,
+317:      android: {
+318:        priority: 'high',
+319:        ttl: '600s',
+320:        restricted_package_name: 'com.jayuminton.user',
+321:        notification: {
+322:          title: data.title,
+323:          body: data.body,
+324:          icon: 'icon',
+325:          sound: 'default',
+326:          channel_id: event.type === 'court_assignment'
+327:            ? 'jayuminton_court_system_v114'
+328:            : 'jayuminton_wait1_system_v114',
+329:          notification_priority: 'PRIORITY_MAX',
+330:          visibility: 'PUBLIC',
+331:          vibrate_timings: event.type === 'court_assignment'
+332:            ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+333:            : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+334:        }
+335:      },
+336:      webpush: {
+337:        headers: {
+338:          Urgency: 'high',
+339:          TTL: '600'
+340:        },
+341:        fcm_options: {
+342:          link: JAYUMINTON_PUSH_CONFIG.appUrl
+343:        }
+344:      }
+345:    }
+346:  };
+347:
+348:  return {
+
+--- lines 222-355 ---
+222:      token: record.token,
+223:      member: member
+224:    });
+225:  });
+226:
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+290:  const title = isWait
+291:    ? '대기 1순위 안내'
+292:    : '코트 배정 긴급 안내';
+293:  const body = isWait
+294:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+295:    : courtNo + '번 코트가 나왔습니다. ' +
+296:      courtNo + '번코트로 이동해주세요!';
+297:
+298:  const data = {
+299:    type: event.type,
+300:    assignmentId: event.assignmentId,
+301:    memberId: member.id,
+302:    memberName: member.name,
+303:    title: title,
+304:    body: body,
+305:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
+306:    courtNo: String(event.courtNo || ''),
+307:    expectedCourtNo: String(event.expectedCourtNo || ''),
+308:    repeatCount: '1',
+309:    notificationTag: event.assignmentId,
+310:    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
+311:  };
+312:
+313:  const payload = {
+314:    message: {
+315:      token: token,
+316:      data: data,
+317:      android: {
+318:        priority: 'high',
+319:        ttl: '600s',
+320:        restricted_package_name: 'com.jayuminton.user',
+321:        notification: {
+322:          title: data.title,
+323:          body: data.body,
+324:          icon: 'icon',
+325:          sound: 'default',
+326:          channel_id: event.type === 'court_assignment'
+327:            ? 'jayuminton_court_system_v114'
+328:            : 'jayuminton_wait1_system_v114',
+329:          notification_priority: 'PRIORITY_MAX',
+330:          visibility: 'PUBLIC',
+331:          vibrate_timings: event.type === 'court_assignment'
+332:            ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+333:            : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+334:        }
+335:      },
+336:      webpush: {
+337:        headers: {
+338:          Urgency: 'high',
+339:          TTL: '600'
+340:        },
+341:        fcm_options: {
+342:          link: JAYUMINTON_PUSH_CONFIG.appUrl
+343:        }
+344:      }
+345:    }
+346:  };
+347:
+348:  return {
+349:    url: JAYUMINTON_PUSH_CONFIG.fcmUrl,
+350:    method: 'post',
+351:    contentType: 'application/json; charset=utf-8',
+352:    headers: {
+353:      Authorization: 'Bearer ' + accessToken
+354:    },
+355:    payload: JSON.stringify(payload),
+
+--- lines 227-360 ---
+227:  if (!targets.length) {
+228:    return {
+229:      ok: true,
+230:      assignmentId: event.assignmentId,
+231:      sent: 0,
+232:      failed: 0,
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+290:  const title = isWait
+291:    ? '대기 1순위 안내'
+292:    : '코트 배정 긴급 안내';
+293:  const body = isWait
+294:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+295:    : courtNo + '번 코트가 나왔습니다. ' +
+296:      courtNo + '번코트로 이동해주세요!';
+297:
+298:  const data = {
+299:    type: event.type,
+300:    assignmentId: event.assignmentId,
+301:    memberId: member.id,
+302:    memberName: member.name,
+303:    title: title,
+304:    body: body,
+305:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
+306:    courtNo: String(event.courtNo || ''),
+307:    expectedCourtNo: String(event.expectedCourtNo || ''),
+308:    repeatCount: '1',
+309:    notificationTag: event.assignmentId,
+310:    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
+311:  };
+312:
+313:  const payload = {
+314:    message: {
+315:      token: token,
+316:      data: data,
+317:      android: {
+318:        priority: 'high',
+319:        ttl: '600s',
+320:        restricted_package_name: 'com.jayuminton.user',
+321:        notification: {
+322:          title: data.title,
+323:          body: data.body,
+324:          icon: 'icon',
+325:          sound: 'default',
+326:          channel_id: event.type === 'court_assignment'
+327:            ? 'jayuminton_court_system_v114'
+328:            : 'jayuminton_wait1_system_v114',
+329:          notification_priority: 'PRIORITY_MAX',
+330:          visibility: 'PUBLIC',
+331:          vibrate_timings: event.type === 'court_assignment'
+332:            ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+333:            : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+334:        }
+335:      },
+336:      webpush: {
+337:        headers: {
+338:          Urgency: 'high',
+339:          TTL: '600'
+340:        },
+341:        fcm_options: {
+342:          link: JAYUMINTON_PUSH_CONFIG.appUrl
+343:        }
+344:      }
+345:    }
+346:  };
+347:
+348:  return {
+349:    url: JAYUMINTON_PUSH_CONFIG.fcmUrl,
+350:    method: 'post',
+351:    contentType: 'application/json; charset=utf-8',
+352:    headers: {
+353:      Authorization: 'Bearer ' + accessToken
+354:    },
+355:    payload: JSON.stringify(payload),
+356:    muteHttpExceptions: true
+357:  };
+358:}
+359:
+360:function cleanEvent_(body) {
+
+--- lines 233-366 ---
+233:      noRegisteredBrowser: event.members.length
+234:    };
+235:  }
+236:
+237:  const accessToken = getFcmAccessToken_();
+238:  const requests = targets.map(function(target) {
+239:    return makeWebFcmRequest_(
+240:      event,
+241:      target.member,
+242:      target.token,
+243:      accessToken
+244:    );
+245:  });
+246:  const responses = UrlFetchApp.fetchAll(requests);
+247:
+248:  const failedTokens = [];
+249:  let sent = 0;
+250:  responses.forEach(function(response, index) {
+251:    const status = response.getResponseCode();
+252:    if (status >= 200 && status < 300) {
+253:      sent += 1;
+254:      return;
+255:    }
+256:
+257:    const text = response.getContentText();
+258:    const target = targets[index];
+259:    console.error(JSON.stringify({
+260:      message: 'FCM web send failed',
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+290:  const title = isWait
+291:    ? '대기 1순위 안내'
+292:    : '코트 배정 긴급 안내';
+293:  const body = isWait
+294:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+295:    : courtNo + '번 코트가 나왔습니다. ' +
+296:      courtNo + '번코트로 이동해주세요!';
+297:
+298:  const data = {
+299:    type: event.type,
+300:    assignmentId: event.assignmentId,
+301:    memberId: member.id,
+302:    memberName: member.name,
+303:    title: title,
+304:    body: body,
+305:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
+306:    courtNo: String(event.courtNo || ''),
+307:    expectedCourtNo: String(event.expectedCourtNo || ''),
+308:    repeatCount: '1',
+309:    notificationTag: event.assignmentId,
+310:    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
+311:  };
+312:
+313:  const payload = {
+314:    message: {
+315:      token: token,
+316:      data: data,
+317:      android: {
+318:        priority: 'high',
+319:        ttl: '600s',
+320:        restricted_package_name: 'com.jayuminton.user',
+321:        notification: {
+322:          title: data.title,
+323:          body: data.body,
+324:          icon: 'icon',
+325:          sound: 'default',
+326:          channel_id: event.type === 'court_assignment'
+327:            ? 'jayuminton_court_system_v114'
+328:            : 'jayuminton_wait1_system_v114',
+329:          notification_priority: 'PRIORITY_MAX',
+330:          visibility: 'PUBLIC',
+331:          vibrate_timings: event.type === 'court_assignment'
+332:            ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+333:            : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+334:        }
+335:      },
+336:      webpush: {
+337:        headers: {
+338:          Urgency: 'high',
+339:          TTL: '600'
+340:        },
+341:        fcm_options: {
+342:          link: JAYUMINTON_PUSH_CONFIG.appUrl
+343:        }
+344:      }
+345:    }
+346:  };
+347:
+348:  return {
+349:    url: JAYUMINTON_PUSH_CONFIG.fcmUrl,
+350:    method: 'post',
+351:    contentType: 'application/json; charset=utf-8',
+352:    headers: {
+353:      Authorization: 'Bearer ' + accessToken
+354:    },
+355:    payload: JSON.stringify(payload),
+356:    muteHttpExceptions: true
+357:  };
+358:}
+359:
+360:function cleanEvent_(body) {
+361:  const type = String(body && body.type || 'court_assignment').trim();
+362:  const assignmentId = String(body && body.assignmentId || '').trim();
+363:  const sourceMembers = Array.isArray(body && body.members)
+364:    ? body.members
+365:    : [];
+366:
+
+--- lines 261-394 ---
+261:      assignmentId: event.assignmentId,
+262:      memberId: target.member.id,
+263:      status: status,
+264:      response: text
+265:    }));
+266:
+267:    if (status === 404 || status === 410 ||
+268:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+269:      failedTokens.push(target.token);
+270:    }
+271:  });
+272:
+273:  if (failedTokens.length) {
+274:    removeInvalidTokens_(failedTokens);
+275:  }
+276:
+277:  return {
+278:    ok: sent === targets.length,
+279:    assignmentId: event.assignmentId,
+280:    sent: sent,
+281:    failed: targets.length - sent
+282:  };
+283:}
+284:
+285:function makeWebFcmRequest_(event, member, token, accessToken) {
+286:  const isWait = event.type === 'wait1_ready';
+287:  const courtNo = isWait
+288:    ? event.expectedCourtNo
+289:    : event.courtNo;
+290:  const title = isWait
+291:    ? '대기 1순위 안내'
+292:    : '코트 배정 긴급 안내';
+293:  const body = isWait
+294:    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+295:    : courtNo + '번 코트가 나왔습니다. ' +
+296:      courtNo + '번코트로 이동해주세요!';
+297:
+298:  const data = {
+299:    type: event.type,
+300:    assignmentId: event.assignmentId,
+301:    memberId: member.id,
+302:    memberName: member.name,
+303:    title: title,
+304:    body: body,
+305:    link: JAYUMINTON_PUSH_CONFIG.appUrl,
+306:    courtNo: String(event.courtNo || ''),
+307:    expectedCourtNo: String(event.expectedCourtNo || ''),
+308:    repeatCount: '1',
+309:    notificationTag: event.assignmentId,
+310:    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
+311:  };
+312:
+313:  const payload = {
+314:    message: {
+315:      token: token,
+316:      data: data,
+317:      android: {
+318:        priority: 'high',
+319:        ttl: '600s',
+320:        restricted_package_name: 'com.jayuminton.user',
+321:        notification: {
+322:          title: data.title,
+323:          body: data.body,
+324:          icon: 'icon',
+325:          sound: 'default',
+326:          channel_id: event.type === 'court_assignment'
+327:            ? 'jayuminton_court_system_v114'
+328:            : 'jayuminton_wait1_system_v114',
+329:          notification_priority: 'PRIORITY_MAX',
+330:          visibility: 'PUBLIC',
+331:          vibrate_timings: event.type === 'court_assignment'
+332:            ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+333:            : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+334:        }
+335:      },
+336:      webpush: {
+337:        headers: {
+338:          Urgency: 'high',
+339:          TTL: '600'
+340:        },
+341:        fcm_options: {
+342:          link: JAYUMINTON_PUSH_CONFIG.appUrl
+343:        }
+344:      }
+345:    }
+346:  };
+347:
+348:  return {
+349:    url: JAYUMINTON_PUSH_CONFIG.fcmUrl,
+350:    method: 'post',
+351:    contentType: 'application/json; charset=utf-8',
+352:    headers: {
+353:      Authorization: 'Bearer ' + accessToken
+354:    },
+355:    payload: JSON.stringify(payload),
+356:    muteHttpExceptions: true
+357:  };
+358:}
+359:
+360:function cleanEvent_(body) {
+361:  const type = String(body && body.type || 'court_assignment').trim();
+362:  const assignmentId = String(body && body.assignmentId || '').trim();
+363:  const sourceMembers = Array.isArray(body && body.members)
+364:    ? body.members
+365:    : [];
+366:
+367:  if (!/^[A-Za-z0-9_.-]{8,500}$/.test(assignmentId)) {
+368:    throw new Error('Invalid assignmentId.');
+369:  }
+370:  if (type !== 'court_assignment' && type !== 'wait1_ready') {
+371:    throw new Error('Invalid notification type.');
+372:  }
+373:
+374:  const uniqueMembers = {};
+375:  sourceMembers.forEach(function(member) {
+376:    const id = cleanText_(member && member.id, 200);
+377:    const name = cleanText_(member && member.name, 80);
+378:    if (id && name) {
+379:      uniqueMembers[id] = {id: id, name: name};
+380:    }
+381:  });
+382:  const members = Object.keys(uniqueMembers).map(function(id) {
+383:    return uniqueMembers[id];
+384:  });
+385:
+386:  if (type === 'court_assignment') {
+387:    const courtNo = Number(body.courtNo);
+388:    if ([1, 2, 3, 4].indexOf(courtNo) === -1 ||
+389:        members.length !== 4) {
+390:      throw new Error('Court assignment requires one valid court and four members.');
+391:    }
+392:    return {
+393:      type: type,
+394:      assignmentId: assignmentId,
+
+--- lines 404-537 ---
+404:    throw new Error('Wait-1 notification requires one expected court and one to four members.');
+405:  }
+406:  return {
+407:    type: type,
+408:    assignmentId: assignmentId,
+409:    courtNo: 0,
+410:    expectedCourtNo: expectedCourtNo,
+411:    members: members
+412:  };
+413:}
+414:
+415:function verifyAdminSecret_(e) {
+416:  const expected = String(
+417:    PropertiesService.getScriptProperties()
+418:      .getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+419:  );
+420:  const supplied = String(
+421:    e && e.parameter ? (e.parameter.key || '') : ''
+422:  );
+423:  if (!secureEquals_(supplied, expected)) {
+424:    throw new Error('unauthorized');
+425:  }
+426:}
+427:
+428:function loadWebPushTokens_() {
+429:  const raw = PropertiesService.getScriptProperties()
+430:    .getProperty(JAYUMINTON_PUSH_CONFIG.webTokenProperty);
+431:  if (!raw) return [];
+432:  try {
+433:    const parsed = JSON.parse(raw);
+434:    return Array.isArray(parsed) ? parsed : [];
+435:  } catch (error) {
+436:    return [];
+437:  }
+438:}
+439:
+440:function saveWebPushTokens_(records) {
+441:  PropertiesService.getScriptProperties().setProperty(
+442:    JAYUMINTON_PUSH_CONFIG.webTokenProperty,
+443:    JSON.stringify(records || [])
+444:  );
+445:}
+446:
+447:function limitWebPushTokens_(records) {
+448:  const sorted = (records || []).slice().sort(function(left, right) {
+449:    return Number(right.updatedAt || 0) - Number(left.updatedAt || 0);
+450:  });
+451:  const perMember = {};
+452:  const result = [];
+453:
+454:  sorted.forEach(function(record) {
+455:    if (result.length >= JAYUMINTON_PUSH_CONFIG.maxTotalTokens) return;
+456:    const memberId = String(record.memberId || '');
+457:    perMember[memberId] = Number(perMember[memberId] || 0);
+458:    if (perMember[memberId] >=
+459:        JAYUMINTON_PUSH_CONFIG.maxTokensPerMember) return;
+460:    perMember[memberId] += 1;
+461:    result.push(record);
+462:  });
+463:  return result;
+464:}
+465:
+466:function removeInvalidTokens_(tokens) {
+467:  const invalid = {};
+468:  tokens.forEach(function(token) {
+469:    invalid[token] = true;
+470:  });
+471:  const lock = LockService.getScriptLock();
+472:  lock.waitLock(10000);
+473:  try {
+474:    saveWebPushTokens_(
+475:      loadWebPushTokens_().filter(function(record) {
+476:        return record && !invalid[record.token];
+477:      })
+478:    );
+479:  } finally {
+480:    lock.releaseLock();
+481:  }
+482:}
+483:
+484:function countWebPushTokens_() {
+485:  return loadWebPushTokens_().length;
+486:}
+487:
+488:function cleanText_(value, maxLength) {
+489:  return String(value == null ? '' : value)
+490:    .trim()
+491:    .slice(0, maxLength);
+492:}
+493:
+494:function cleanToken_(value) {
+495:  const token = String(value == null ? '' : value).trim();
+496:  if (!token || token.length < 40 || token.length > 4096) return '';
+497:  return token;
+498:}
+499:
+500:function getFcmAccessToken_(forceRefresh) {
+501:  const cache = CacheService.getScriptCache();
+502:  if (!forceRefresh) {
+503:    const cached = cache.get(JAYUMINTON_PUSH_CONFIG.tokenCacheKey);
+504:    if (cached) return cached;
 505:  }
 506:
-507:  const expiresIn = Math.max(
-508:    60,
-509:    Number(tokenResponse.expires_in || 3600) - 300
-510:  );
-511:  cache.put(
-512:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
-513:    tokenResponse.access_token,
-514:    Math.min(21600, expiresIn)
-515:  );
-516:  return tokenResponse.access_token;
-517:}
-518:
-519:function base64Url_(text) {
-520:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
-521:}
-522:
-523:function base64UrlBytes_(bytes) {
-524:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
-525:}
-526:
-527:function secureEquals_(left, right) {
-528:  if (!left || !right || left.length !== right.length) return false;
-529:  let difference = 0;
-530:  for (let index = 0; index < left.length; index += 1) {
-531:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-532:  }
-533:  return difference === 0;
-534:}
-535:
-536:function jsonOutput_(value) {
-537:  return ContentService
-538:    .createTextOutput(JSON.stringify(value))
-539:    .setMimeType(ContentService.MimeType.JSON);
-540:}
+507:  const rawCredentials = PropertiesService.getScriptProperties()
+508:    .getProperty('FCM_SERVICE_ACCOUNT_JSON');
+509:  if (!rawCredentials) {
+510:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+511:  }
+512:  const credentials = JSON.parse(rawCredentials);
+513:  if (!credentials.client_email || !credentials.private_key) {
+514:    throw new Error('Service-account JSON is missing client_email or private_key.');
+515:  }
+516:
+517:  const now = Math.floor(Date.now() / 1000);
+518:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
+519:  const claim = base64Url_(JSON.stringify({
+520:    iss: credentials.client_email,
+521:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+522:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+523:    iat: now,
+524:    exp: now + 3600
+525:  }));
+526:  const unsignedJwt = header + '.' + claim;
+527:  const signature = Utilities.computeRsaSha256Signature(
+528:    unsignedJwt,
+529:    credentials.private_key
+530:  );
+531:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+532:
+533:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+534:    method: 'post',
+535:    payload: {
+536:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+537:      assertion: assertion
 
---- lines 472-540 ---
-472:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
-473:  const claim = base64Url_(JSON.stringify({
-474:    iss: credentials.client_email,
-475:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
-476:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
-477:    iat: now,
-478:    exp: now + 3600
-479:  }));
-480:  const unsignedJwt = header + '.' + claim;
-481:  const signature = Utilities.computeRsaSha256Signature(
-482:    unsignedJwt,
-483:    credentials.private_key
-484:  );
-485:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
-486:
-487:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
-488:    method: 'post',
-489:    payload: {
-490:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-491:      assertion: assertion
-492:    },
-493:    muteHttpExceptions: true
-494:  });
-495:
-496:  const status = response.getResponseCode();
-497:  const text = response.getContentText();
-498:  if (status < 200 || status >= 300) {
-499:    throw new Error('OAuth token request failed (' + status + '): ' + text);
-500:  }
-501:
-502:  const tokenResponse = JSON.parse(text);
-503:  if (!tokenResponse.access_token) {
-504:    throw new Error('OAuth response did not contain access_token.');
+--- lines 416-549 ---
+416:  const expected = String(
+417:    PropertiesService.getScriptProperties()
+418:      .getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || ''
+419:  );
+420:  const supplied = String(
+421:    e && e.parameter ? (e.parameter.key || '') : ''
+422:  );
+423:  if (!secureEquals_(supplied, expected)) {
+424:    throw new Error('unauthorized');
+425:  }
+426:}
+427:
+428:function loadWebPushTokens_() {
+429:  const raw = PropertiesService.getScriptProperties()
+430:    .getProperty(JAYUMINTON_PUSH_CONFIG.webTokenProperty);
+431:  if (!raw) return [];
+432:  try {
+433:    const parsed = JSON.parse(raw);
+434:    return Array.isArray(parsed) ? parsed : [];
+435:  } catch (error) {
+436:    return [];
+437:  }
+438:}
+439:
+440:function saveWebPushTokens_(records) {
+441:  PropertiesService.getScriptProperties().setProperty(
+442:    JAYUMINTON_PUSH_CONFIG.webTokenProperty,
+443:    JSON.stringify(records || [])
+444:  );
+445:}
+446:
+447:function limitWebPushTokens_(records) {
+448:  const sorted = (records || []).slice().sort(function(left, right) {
+449:    return Number(right.updatedAt || 0) - Number(left.updatedAt || 0);
+450:  });
+451:  const perMember = {};
+452:  const result = [];
+453:
+454:  sorted.forEach(function(record) {
+455:    if (result.length >= JAYUMINTON_PUSH_CONFIG.maxTotalTokens) return;
+456:    const memberId = String(record.memberId || '');
+457:    perMember[memberId] = Number(perMember[memberId] || 0);
+458:    if (perMember[memberId] >=
+459:        JAYUMINTON_PUSH_CONFIG.maxTokensPerMember) return;
+460:    perMember[memberId] += 1;
+461:    result.push(record);
+462:  });
+463:  return result;
+464:}
+465:
+466:function removeInvalidTokens_(tokens) {
+467:  const invalid = {};
+468:  tokens.forEach(function(token) {
+469:    invalid[token] = true;
+470:  });
+471:  const lock = LockService.getScriptLock();
+472:  lock.waitLock(10000);
+473:  try {
+474:    saveWebPushTokens_(
+475:      loadWebPushTokens_().filter(function(record) {
+476:        return record && !invalid[record.token];
+477:      })
+478:    );
+479:  } finally {
+480:    lock.releaseLock();
+481:  }
+482:}
+483:
+484:function countWebPushTokens_() {
+485:  return loadWebPushTokens_().length;
+486:}
+487:
+488:function cleanText_(value, maxLength) {
+489:  return String(value == null ? '' : value)
+490:    .trim()
+491:    .slice(0, maxLength);
+492:}
+493:
+494:function cleanToken_(value) {
+495:  const token = String(value == null ? '' : value).trim();
+496:  if (!token || token.length < 40 || token.length > 4096) return '';
+497:  return token;
+498:}
+499:
+500:function getFcmAccessToken_(forceRefresh) {
+501:  const cache = CacheService.getScriptCache();
+502:  if (!forceRefresh) {
+503:    const cached = cache.get(JAYUMINTON_PUSH_CONFIG.tokenCacheKey);
+504:    if (cached) return cached;
 505:  }
 506:
-507:  const expiresIn = Math.max(
-508:    60,
-509:    Number(tokenResponse.expires_in || 3600) - 300
-510:  );
-511:  cache.put(
-512:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
-513:    tokenResponse.access_token,
-514:    Math.min(21600, expiresIn)
-515:  );
-516:  return tokenResponse.access_token;
-517:}
-518:
-519:function base64Url_(text) {
-520:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
-521:}
-522:
-523:function base64UrlBytes_(bytes) {
-524:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
-525:}
-526:
-527:function secureEquals_(left, right) {
-528:  if (!left || !right || left.length !== right.length) return false;
-529:  let difference = 0;
-530:  for (let index = 0; index < left.length; index += 1) {
-531:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-532:  }
-533:  return difference === 0;
-534:}
-535:
-536:function jsonOutput_(value) {
-537:  return ContentService
-538:    .createTextOutput(JSON.stringify(value))
-539:    .setMimeType(ContentService.MimeType.JSON);
-540:}
+507:  const rawCredentials = PropertiesService.getScriptProperties()
+508:    .getProperty('FCM_SERVICE_ACCOUNT_JSON');
+509:  if (!rawCredentials) {
+510:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+511:  }
+512:  const credentials = JSON.parse(rawCredentials);
+513:  if (!credentials.client_email || !credentials.private_key) {
+514:    throw new Error('Service-account JSON is missing client_email or private_key.');
+515:  }
+516:
+517:  const now = Math.floor(Date.now() / 1000);
+518:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
+519:  const claim = base64Url_(JSON.stringify({
+520:    iss: credentials.client_email,
+521:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+522:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+523:    iat: now,
+524:    exp: now + 3600
+525:  }));
+526:  const unsignedJwt = header + '.' + claim;
+527:  const signature = Utilities.computeRsaSha256Signature(
+528:    unsignedJwt,
+529:    credentials.private_key
+530:  );
+531:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+532:
+533:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+534:    method: 'post',
+535:    payload: {
+536:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+537:      assertion: assertion
+538:    },
+539:    muteHttpExceptions: true
+540:  });
+541:
+542:  const status = response.getResponseCode();
+543:  const text = response.getContentText();
+544:  if (status < 200 || status >= 300) {
+545:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+546:  }
+547:
+548:  const tokenResponse = JSON.parse(text);
+549:  if (!tokenResponse.access_token) {
 
---- lines 473-540 ---
-473:  const claim = base64Url_(JSON.stringify({
-474:    iss: credentials.client_email,
-475:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
-476:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
-477:    iat: now,
-478:    exp: now + 3600
-479:  }));
-480:  const unsignedJwt = header + '.' + claim;
-481:  const signature = Utilities.computeRsaSha256Signature(
-482:    unsignedJwt,
-483:    credentials.private_key
-484:  );
-485:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
-486:
-487:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
-488:    method: 'post',
-489:    payload: {
-490:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-491:      assertion: assertion
-492:    },
-493:    muteHttpExceptions: true
-494:  });
-495:
-496:  const status = response.getResponseCode();
-497:  const text = response.getContentText();
-498:  if (status < 200 || status >= 300) {
-499:    throw new Error('OAuth token request failed (' + status + '): ' + text);
-500:  }
-501:
-502:  const tokenResponse = JSON.parse(text);
-503:  if (!tokenResponse.access_token) {
-504:    throw new Error('OAuth response did not contain access_token.');
+--- lines 450-583 ---
+450:  });
+451:  const perMember = {};
+452:  const result = [];
+453:
+454:  sorted.forEach(function(record) {
+455:    if (result.length >= JAYUMINTON_PUSH_CONFIG.maxTotalTokens) return;
+456:    const memberId = String(record.memberId || '');
+457:    perMember[memberId] = Number(perMember[memberId] || 0);
+458:    if (perMember[memberId] >=
+459:        JAYUMINTON_PUSH_CONFIG.maxTokensPerMember) return;
+460:    perMember[memberId] += 1;
+461:    result.push(record);
+462:  });
+463:  return result;
+464:}
+465:
+466:function removeInvalidTokens_(tokens) {
+467:  const invalid = {};
+468:  tokens.forEach(function(token) {
+469:    invalid[token] = true;
+470:  });
+471:  const lock = LockService.getScriptLock();
+472:  lock.waitLock(10000);
+473:  try {
+474:    saveWebPushTokens_(
+475:      loadWebPushTokens_().filter(function(record) {
+476:        return record && !invalid[record.token];
+477:      })
+478:    );
+479:  } finally {
+480:    lock.releaseLock();
+481:  }
+482:}
+483:
+484:function countWebPushTokens_() {
+485:  return loadWebPushTokens_().length;
+486:}
+487:
+488:function cleanText_(value, maxLength) {
+489:  return String(value == null ? '' : value)
+490:    .trim()
+491:    .slice(0, maxLength);
+492:}
+493:
+494:function cleanToken_(value) {
+495:  const token = String(value == null ? '' : value).trim();
+496:  if (!token || token.length < 40 || token.length > 4096) return '';
+497:  return token;
+498:}
+499:
+500:function getFcmAccessToken_(forceRefresh) {
+501:  const cache = CacheService.getScriptCache();
+502:  if (!forceRefresh) {
+503:    const cached = cache.get(JAYUMINTON_PUSH_CONFIG.tokenCacheKey);
+504:    if (cached) return cached;
 505:  }
 506:
-507:  const expiresIn = Math.max(
-508:    60,
-509:    Number(tokenResponse.expires_in || 3600) - 300
-510:  );
-511:  cache.put(
-512:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
-513:    tokenResponse.access_token,
-514:    Math.min(21600, expiresIn)
-515:  );
-516:  return tokenResponse.access_token;
-517:}
-518:
-519:function base64Url_(text) {
-520:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
-521:}
-522:
-523:function base64UrlBytes_(bytes) {
-524:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
-525:}
-526:
-527:function secureEquals_(left, right) {
-528:  if (!left || !right || left.length !== right.length) return false;
-529:  let difference = 0;
-530:  for (let index = 0; index < left.length; index += 1) {
-531:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-532:  }
-533:  return difference === 0;
-534:}
-535:
-536:function jsonOutput_(value) {
-537:  return ContentService
-538:    .createTextOutput(JSON.stringify(value))
-539:    .setMimeType(ContentService.MimeType.JSON);
-540:}
+507:  const rawCredentials = PropertiesService.getScriptProperties()
+508:    .getProperty('FCM_SERVICE_ACCOUNT_JSON');
+509:  if (!rawCredentials) {
+510:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+511:  }
+512:  const credentials = JSON.parse(rawCredentials);
+513:  if (!credentials.client_email || !credentials.private_key) {
+514:    throw new Error('Service-account JSON is missing client_email or private_key.');
+515:  }
+516:
+517:  const now = Math.floor(Date.now() / 1000);
+518:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
+519:  const claim = base64Url_(JSON.stringify({
+520:    iss: credentials.client_email,
+521:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+522:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+523:    iat: now,
+524:    exp: now + 3600
+525:  }));
+526:  const unsignedJwt = header + '.' + claim;
+527:  const signature = Utilities.computeRsaSha256Signature(
+528:    unsignedJwt,
+529:    credentials.private_key
+530:  );
+531:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+532:
+533:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+534:    method: 'post',
+535:    payload: {
+536:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+537:      assertion: assertion
+538:    },
+539:    muteHttpExceptions: true
+540:  });
+541:
+542:  const status = response.getResponseCode();
+543:  const text = response.getContentText();
+544:  if (status < 200 || status >= 300) {
+545:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+546:  }
+547:
+548:  const tokenResponse = JSON.parse(text);
+549:  if (!tokenResponse.access_token) {
+550:    throw new Error('OAuth response did not contain access_token.');
+551:  }
+552:
+553:  const expiresIn = Math.max(
+554:    60,
+555:    Number(tokenResponse.expires_in || 3600) - 300
+556:  );
+557:  cache.put(
+558:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+559:    tokenResponse.access_token,
+560:    Math.min(21600, expiresIn)
+561:  );
+562:  return tokenResponse.access_token;
+563:}
+564:
+565:function base64Url_(text) {
+566:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
+567:}
+568:
+569:function base64UrlBytes_(bytes) {
+570:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
+571:}
+572:
+573:function secureEquals_(left, right) {
+574:  if (!left || !right || left.length !== right.length) return false;
+575:  let difference = 0;
+576:  for (let index = 0; index < left.length; index += 1) {
+577:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+578:  }
+579:  return difference === 0;
+580:}
+581:
+582:function jsonOutput_(value) {
+583:  return ContentService
+
+--- lines 451-584 ---
+451:  const perMember = {};
+452:  const result = [];
+453:
+454:  sorted.forEach(function(record) {
+455:    if (result.length >= JAYUMINTON_PUSH_CONFIG.maxTotalTokens) return;
+456:    const memberId = String(record.memberId || '');
+457:    perMember[memberId] = Number(perMember[memberId] || 0);
+458:    if (perMember[memberId] >=
+459:        JAYUMINTON_PUSH_CONFIG.maxTokensPerMember) return;
+460:    perMember[memberId] += 1;
+461:    result.push(record);
+462:  });
+463:  return result;
+464:}
+465:
+466:function removeInvalidTokens_(tokens) {
+467:  const invalid = {};
+468:  tokens.forEach(function(token) {
+469:    invalid[token] = true;
+470:  });
+471:  const lock = LockService.getScriptLock();
+472:  lock.waitLock(10000);
+473:  try {
+474:    saveWebPushTokens_(
+475:      loadWebPushTokens_().filter(function(record) {
+476:        return record && !invalid[record.token];
+477:      })
+478:    );
+479:  } finally {
+480:    lock.releaseLock();
+481:  }
+482:}
+483:
+484:function countWebPushTokens_() {
+485:  return loadWebPushTokens_().length;
+486:}
+487:
+488:function cleanText_(value, maxLength) {
+489:  return String(value == null ? '' : value)
+490:    .trim()
+491:    .slice(0, maxLength);
+492:}
+493:
+494:function cleanToken_(value) {
+495:  const token = String(value == null ? '' : value).trim();
+496:  if (!token || token.length < 40 || token.length > 4096) return '';
+497:  return token;
+498:}
+499:
+500:function getFcmAccessToken_(forceRefresh) {
+501:  const cache = CacheService.getScriptCache();
+502:  if (!forceRefresh) {
+503:    const cached = cache.get(JAYUMINTON_PUSH_CONFIG.tokenCacheKey);
+504:    if (cached) return cached;
+505:  }
+506:
+507:  const rawCredentials = PropertiesService.getScriptProperties()
+508:    .getProperty('FCM_SERVICE_ACCOUNT_JSON');
+509:  if (!rawCredentials) {
+510:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+511:  }
+512:  const credentials = JSON.parse(rawCredentials);
+513:  if (!credentials.client_email || !credentials.private_key) {
+514:    throw new Error('Service-account JSON is missing client_email or private_key.');
+515:  }
+516:
+517:  const now = Math.floor(Date.now() / 1000);
+518:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
+519:  const claim = base64Url_(JSON.stringify({
+520:    iss: credentials.client_email,
+521:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+522:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+523:    iat: now,
+524:    exp: now + 3600
+525:  }));
+526:  const unsignedJwt = header + '.' + claim;
+527:  const signature = Utilities.computeRsaSha256Signature(
+528:    unsignedJwt,
+529:    credentials.private_key
+530:  );
+531:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+532:
+533:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+534:    method: 'post',
+535:    payload: {
+536:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+537:      assertion: assertion
+538:    },
+539:    muteHttpExceptions: true
+540:  });
+541:
+542:  const status = response.getResponseCode();
+543:  const text = response.getContentText();
+544:  if (status < 200 || status >= 300) {
+545:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+546:  }
+547:
+548:  const tokenResponse = JSON.parse(text);
+549:  if (!tokenResponse.access_token) {
+550:    throw new Error('OAuth response did not contain access_token.');
+551:  }
+552:
+553:  const expiresIn = Math.max(
+554:    60,
+555:    Number(tokenResponse.expires_in || 3600) - 300
+556:  );
+557:  cache.put(
+558:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+559:    tokenResponse.access_token,
+560:    Math.min(21600, expiresIn)
+561:  );
+562:  return tokenResponse.access_token;
+563:}
+564:
+565:function base64Url_(text) {
+566:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
+567:}
+568:
+569:function base64UrlBytes_(bytes) {
+570:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
+571:}
+572:
+573:function secureEquals_(left, right) {
+574:  if (!left || !right || left.length !== right.length) return false;
+575:  let difference = 0;
+576:  for (let index = 0; index < left.length; index += 1) {
+577:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+578:  }
+579:  return difference === 0;
+580:}
+581:
+582:function jsonOutput_(value) {
+583:  return ContentService
+584:    .createTextOutput(JSON.stringify(value))
+
+--- lines 461-586 ---
+461:    result.push(record);
+462:  });
+463:  return result;
+464:}
+465:
+466:function removeInvalidTokens_(tokens) {
+467:  const invalid = {};
+468:  tokens.forEach(function(token) {
+469:    invalid[token] = true;
+470:  });
+471:  const lock = LockService.getScriptLock();
+472:  lock.waitLock(10000);
+473:  try {
+474:    saveWebPushTokens_(
+475:      loadWebPushTokens_().filter(function(record) {
+476:        return record && !invalid[record.token];
+477:      })
+478:    );
+479:  } finally {
+480:    lock.releaseLock();
+481:  }
+482:}
+483:
+484:function countWebPushTokens_() {
+485:  return loadWebPushTokens_().length;
+486:}
+487:
+488:function cleanText_(value, maxLength) {
+489:  return String(value == null ? '' : value)
+490:    .trim()
+491:    .slice(0, maxLength);
+492:}
+493:
+494:function cleanToken_(value) {
+495:  const token = String(value == null ? '' : value).trim();
+496:  if (!token || token.length < 40 || token.length > 4096) return '';
+497:  return token;
+498:}
+499:
+500:function getFcmAccessToken_(forceRefresh) {
+501:  const cache = CacheService.getScriptCache();
+502:  if (!forceRefresh) {
+503:    const cached = cache.get(JAYUMINTON_PUSH_CONFIG.tokenCacheKey);
+504:    if (cached) return cached;
+505:  }
+506:
+507:  const rawCredentials = PropertiesService.getScriptProperties()
+508:    .getProperty('FCM_SERVICE_ACCOUNT_JSON');
+509:  if (!rawCredentials) {
+510:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+511:  }
+512:  const credentials = JSON.parse(rawCredentials);
+513:  if (!credentials.client_email || !credentials.private_key) {
+514:    throw new Error('Service-account JSON is missing client_email or private_key.');
+515:  }
+516:
+517:  const now = Math.floor(Date.now() / 1000);
+518:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
+519:  const claim = base64Url_(JSON.stringify({
+520:    iss: credentials.client_email,
+521:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+522:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+523:    iat: now,
+524:    exp: now + 3600
+525:  }));
+526:  const unsignedJwt = header + '.' + claim;
+527:  const signature = Utilities.computeRsaSha256Signature(
+528:    unsignedJwt,
+529:    credentials.private_key
+530:  );
+531:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+532:
+533:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+534:    method: 'post',
+535:    payload: {
+536:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+537:      assertion: assertion
+538:    },
+539:    muteHttpExceptions: true
+540:  });
+541:
+542:  const status = response.getResponseCode();
+543:  const text = response.getContentText();
+544:  if (status < 200 || status >= 300) {
+545:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+546:  }
+547:
+548:  const tokenResponse = JSON.parse(text);
+549:  if (!tokenResponse.access_token) {
+550:    throw new Error('OAuth response did not contain access_token.');
+551:  }
+552:
+553:  const expiresIn = Math.max(
+554:    60,
+555:    Number(tokenResponse.expires_in || 3600) - 300
+556:  );
+557:  cache.put(
+558:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+559:    tokenResponse.access_token,
+560:    Math.min(21600, expiresIn)
+561:  );
+562:  return tokenResponse.access_token;
+563:}
+564:
+565:function base64Url_(text) {
+566:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
+567:}
+568:
+569:function base64UrlBytes_(bytes) {
+570:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
+571:}
+572:
+573:function secureEquals_(left, right) {
+574:  if (!left || !right || left.length !== right.length) return false;
+575:  let difference = 0;
+576:  for (let index = 0; index < left.length; index += 1) {
+577:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+578:  }
+579:  return difference === 0;
+580:}
+581:
+582:function jsonOutput_(value) {
+583:  return ContentService
+584:    .createTextOutput(JSON.stringify(value))
+585:    .setMimeType(ContentService.MimeType.JSON);
+586:}
+
+--- lines 509-586 ---
+509:  if (!rawCredentials) {
+510:    throw new Error('FCM_SERVICE_ACCOUNT_JSON Script Property is missing.');
+511:  }
+512:  const credentials = JSON.parse(rawCredentials);
+513:  if (!credentials.client_email || !credentials.private_key) {
+514:    throw new Error('Service-account JSON is missing client_email or private_key.');
+515:  }
+516:
+517:  const now = Math.floor(Date.now() / 1000);
+518:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
+519:  const claim = base64Url_(JSON.stringify({
+520:    iss: credentials.client_email,
+521:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+522:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+523:    iat: now,
+524:    exp: now + 3600
+525:  }));
+526:  const unsignedJwt = header + '.' + claim;
+527:  const signature = Utilities.computeRsaSha256Signature(
+528:    unsignedJwt,
+529:    credentials.private_key
+530:  );
+531:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+532:
+533:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+534:    method: 'post',
+535:    payload: {
+536:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+537:      assertion: assertion
+538:    },
+539:    muteHttpExceptions: true
+540:  });
+541:
+542:  const status = response.getResponseCode();
+543:  const text = response.getContentText();
+544:  if (status < 200 || status >= 300) {
+545:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+546:  }
+547:
+548:  const tokenResponse = JSON.parse(text);
+549:  if (!tokenResponse.access_token) {
+550:    throw new Error('OAuth response did not contain access_token.');
+551:  }
+552:
+553:  const expiresIn = Math.max(
+554:    60,
+555:    Number(tokenResponse.expires_in || 3600) - 300
+556:  );
+557:  cache.put(
+558:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+559:    tokenResponse.access_token,
+560:    Math.min(21600, expiresIn)
+561:  );
+562:  return tokenResponse.access_token;
+563:}
+564:
+565:function base64Url_(text) {
+566:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
+567:}
+568:
+569:function base64UrlBytes_(bytes) {
+570:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
+571:}
+572:
+573:function secureEquals_(left, right) {
+574:  if (!left || !right || left.length !== right.length) return false;
+575:  let difference = 0;
+576:  for (let index = 0; index < left.length; index += 1) {
+577:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+578:  }
+579:  return difference === 0;
+580:}
+581:
+582:function jsonOutput_(value) {
+583:  return ContentService
+584:    .createTextOutput(JSON.stringify(value))
+585:    .setMimeType(ContentService.MimeType.JSON);
+586:}
+
+--- lines 518-586 ---
+518:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
+519:  const claim = base64Url_(JSON.stringify({
+520:    iss: credentials.client_email,
+521:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+522:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+523:    iat: now,
+524:    exp: now + 3600
+525:  }));
+526:  const unsignedJwt = header + '.' + claim;
+527:  const signature = Utilities.computeRsaSha256Signature(
+528:    unsignedJwt,
+529:    credentials.private_key
+530:  );
+531:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+532:
+533:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+534:    method: 'post',
+535:    payload: {
+536:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+537:      assertion: assertion
+538:    },
+539:    muteHttpExceptions: true
+540:  });
+541:
+542:  const status = response.getResponseCode();
+543:  const text = response.getContentText();
+544:  if (status < 200 || status >= 300) {
+545:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+546:  }
+547:
+548:  const tokenResponse = JSON.parse(text);
+549:  if (!tokenResponse.access_token) {
+550:    throw new Error('OAuth response did not contain access_token.');
+551:  }
+552:
+553:  const expiresIn = Math.max(
+554:    60,
+555:    Number(tokenResponse.expires_in || 3600) - 300
+556:  );
+557:  cache.put(
+558:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+559:    tokenResponse.access_token,
+560:    Math.min(21600, expiresIn)
+561:  );
+562:  return tokenResponse.access_token;
+563:}
+564:
+565:function base64Url_(text) {
+566:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
+567:}
+568:
+569:function base64UrlBytes_(bytes) {
+570:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
+571:}
+572:
+573:function secureEquals_(left, right) {
+574:  if (!left || !right || left.length !== right.length) return false;
+575:  let difference = 0;
+576:  for (let index = 0; index < left.length; index += 1) {
+577:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+578:  }
+579:  return difference === 0;
+580:}
+581:
+582:function jsonOutput_(value) {
+583:  return ContentService
+584:    .createTextOutput(JSON.stringify(value))
+585:    .setMimeType(ContentService.MimeType.JSON);
+586:}
+
+--- lines 519-586 ---
+519:  const claim = base64Url_(JSON.stringify({
+520:    iss: credentials.client_email,
+521:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+522:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+523:    iat: now,
+524:    exp: now + 3600
+525:  }));
+526:  const unsignedJwt = header + '.' + claim;
+527:  const signature = Utilities.computeRsaSha256Signature(
+528:    unsignedJwt,
+529:    credentials.private_key
+530:  );
+531:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+532:
+533:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+534:    method: 'post',
+535:    payload: {
+536:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+537:      assertion: assertion
+538:    },
+539:    muteHttpExceptions: true
+540:  });
+541:
+542:  const status = response.getResponseCode();
+543:  const text = response.getContentText();
+544:  if (status < 200 || status >= 300) {
+545:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+546:  }
+547:
+548:  const tokenResponse = JSON.parse(text);
+549:  if (!tokenResponse.access_token) {
+550:    throw new Error('OAuth response did not contain access_token.');
+551:  }
+552:
+553:  const expiresIn = Math.max(
+554:    60,
+555:    Number(tokenResponse.expires_in || 3600) - 300
+556:  );
+557:  cache.put(
+558:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+559:    tokenResponse.access_token,
+560:    Math.min(21600, expiresIn)
+561:  );
+562:  return tokenResponse.access_token;
+563:}
+564:
+565:function base64Url_(text) {
+566:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
+567:}
+568:
+569:function base64UrlBytes_(bytes) {
+570:  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
+571:}
+572:
+573:function secureEquals_(left, right) {
+574:  if (!left || !right || left.length !== right.length) return false;
+575:  let difference = 0;
+576:  for (let index = 0; index < left.length; index += 1) {
+577:    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+578:  }
+579:  return difference === 0;
+580:}
+581:
+582:function jsonOutput_(value) {
+583:  return ContentService
+584:    .createTextOutput(JSON.stringify(value))
+585:    .setMimeType(ContentService.MimeType.JSON);
+586:}
