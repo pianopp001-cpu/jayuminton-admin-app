@@ -1,0 +1,280 @@
+status=success
+fetch_hits=2
+response_code_hits=2
+content_text_hits=2
+
+--- lines 182-225 ---
+182:    return {
+183:      ok: true,
+184:      assignmentId: event.assignmentId,
+185:      sent: 0,
+186:      failed: 0,
+187:      noRegisteredBrowser: event.members.length
+188:    };
+189:  }
+190:
+191:  const accessToken = getFcmAccessToken_();
+192:  const requests = targets.map(function(target) {
+193:    return makeWebFcmRequest_(
+194:      event,
+195:      target.member,
+196:      target.token,
+197:      accessToken
+198:    );
+199:  });
+200:  const responses = UrlFetchApp.fetchAll(requests);
+201:
+202:  const failedTokens = [];
+203:  let sent = 0;
+204:  responses.forEach(function(response, index) {
+205:    const status = response.getResponseCode();
+206:    if (status >= 200 && status < 300) {
+207:      sent += 1;
+208:      return;
+209:    }
+210:
+211:    const text = response.getContentText();
+212:    const target = targets[index];
+213:    console.error(JSON.stringify({
+214:      message: 'FCM web send failed',
+215:      assignmentId: event.assignmentId,
+216:      memberId: target.member.id,
+217:      status: status,
+218:      response: text
+219:    }));
+220:
+221:    if (status === 404 || status === 410 ||
+222:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+223:      failedTokens.push(target.token);
+224:    }
+225:  });
+
+--- lines 187-230 ---
+187:      noRegisteredBrowser: event.members.length
+188:    };
+189:  }
+190:
+191:  const accessToken = getFcmAccessToken_();
+192:  const requests = targets.map(function(target) {
+193:    return makeWebFcmRequest_(
+194:      event,
+195:      target.member,
+196:      target.token,
+197:      accessToken
+198:    );
+199:  });
+200:  const responses = UrlFetchApp.fetchAll(requests);
+201:
+202:  const failedTokens = [];
+203:  let sent = 0;
+204:  responses.forEach(function(response, index) {
+205:    const status = response.getResponseCode();
+206:    if (status >= 200 && status < 300) {
+207:      sent += 1;
+208:      return;
+209:    }
+210:
+211:    const text = response.getContentText();
+212:    const target = targets[index];
+213:    console.error(JSON.stringify({
+214:      message: 'FCM web send failed',
+215:      assignmentId: event.assignmentId,
+216:      memberId: target.member.id,
+217:      status: status,
+218:      response: text
+219:    }));
+220:
+221:    if (status === 404 || status === 410 ||
+222:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+223:      failedTokens.push(target.token);
+224:    }
+225:  });
+226:
+227:  if (failedTokens.length) {
+228:    removeInvalidTokens_(failedTokens);
+229:  }
+230:
+
+--- lines 193-236 ---
+193:    return makeWebFcmRequest_(
+194:      event,
+195:      target.member,
+196:      target.token,
+197:      accessToken
+198:    );
+199:  });
+200:  const responses = UrlFetchApp.fetchAll(requests);
+201:
+202:  const failedTokens = [];
+203:  let sent = 0;
+204:  responses.forEach(function(response, index) {
+205:    const status = response.getResponseCode();
+206:    if (status >= 200 && status < 300) {
+207:      sent += 1;
+208:      return;
+209:    }
+210:
+211:    const text = response.getContentText();
+212:    const target = targets[index];
+213:    console.error(JSON.stringify({
+214:      message: 'FCM web send failed',
+215:      assignmentId: event.assignmentId,
+216:      memberId: target.member.id,
+217:      status: status,
+218:      response: text
+219:    }));
+220:
+221:    if (status === 404 || status === 410 ||
+222:        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+223:      failedTokens.push(target.token);
+224:    }
+225:  });
+226:
+227:  if (failedTokens.length) {
+228:    removeInvalidTokens_(failedTokens);
+229:  }
+230:
+231:  return {
+232:    ok: sent === targets.length,
+233:    assignmentId: event.assignmentId,
+234:    sent: sent,
+235:    failed: targets.length - sent
+236:  };
+
+--- lines 469-512 ---
+469:  }
+470:
+471:  const now = Math.floor(Date.now() / 1000);
+472:  const header = base64Url_(JSON.stringify({alg: 'RS256', typ: 'JWT'}));
+473:  const claim = base64Url_(JSON.stringify({
+474:    iss: credentials.client_email,
+475:    scope: JAYUMINTON_PUSH_CONFIG.tokenScope,
+476:    aud: JAYUMINTON_PUSH_CONFIG.tokenUrl,
+477:    iat: now,
+478:    exp: now + 3600
+479:  }));
+480:  const unsignedJwt = header + '.' + claim;
+481:  const signature = Utilities.computeRsaSha256Signature(
+482:    unsignedJwt,
+483:    credentials.private_key
+484:  );
+485:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+486:
+487:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+488:    method: 'post',
+489:    payload: {
+490:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+491:      assertion: assertion
+492:    },
+493:    muteHttpExceptions: true
+494:  });
+495:
+496:  const status = response.getResponseCode();
+497:  const text = response.getContentText();
+498:  if (status < 200 || status >= 300) {
+499:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+500:  }
+501:
+502:  const tokenResponse = JSON.parse(text);
+503:  if (!tokenResponse.access_token) {
+504:    throw new Error('OAuth response did not contain access_token.');
+505:  }
+506:
+507:  const expiresIn = Math.max(
+508:    60,
+509:    Number(tokenResponse.expires_in || 3600) - 300
+510:  );
+511:  cache.put(
+512:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+
+--- lines 478-521 ---
+478:    exp: now + 3600
+479:  }));
+480:  const unsignedJwt = header + '.' + claim;
+481:  const signature = Utilities.computeRsaSha256Signature(
+482:    unsignedJwt,
+483:    credentials.private_key
+484:  );
+485:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+486:
+487:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+488:    method: 'post',
+489:    payload: {
+490:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+491:      assertion: assertion
+492:    },
+493:    muteHttpExceptions: true
+494:  });
+495:
+496:  const status = response.getResponseCode();
+497:  const text = response.getContentText();
+498:  if (status < 200 || status >= 300) {
+499:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+500:  }
+501:
+502:  const tokenResponse = JSON.parse(text);
+503:  if (!tokenResponse.access_token) {
+504:    throw new Error('OAuth response did not contain access_token.');
+505:  }
+506:
+507:  const expiresIn = Math.max(
+508:    60,
+509:    Number(tokenResponse.expires_in || 3600) - 300
+510:  );
+511:  cache.put(
+512:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+513:    tokenResponse.access_token,
+514:    Math.min(21600, expiresIn)
+515:  );
+516:  return tokenResponse.access_token;
+517:}
+518:
+519:function base64Url_(text) {
+520:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
+521:}
+
+--- lines 479-522 ---
+479:  }));
+480:  const unsignedJwt = header + '.' + claim;
+481:  const signature = Utilities.computeRsaSha256Signature(
+482:    unsignedJwt,
+483:    credentials.private_key
+484:  );
+485:  const assertion = unsignedJwt + '.' + base64UrlBytes_(signature);
+486:
+487:  const response = UrlFetchApp.fetch(JAYUMINTON_PUSH_CONFIG.tokenUrl, {
+488:    method: 'post',
+489:    payload: {
+490:      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+491:      assertion: assertion
+492:    },
+493:    muteHttpExceptions: true
+494:  });
+495:
+496:  const status = response.getResponseCode();
+497:  const text = response.getContentText();
+498:  if (status < 200 || status >= 300) {
+499:    throw new Error('OAuth token request failed (' + status + '): ' + text);
+500:  }
+501:
+502:  const tokenResponse = JSON.parse(text);
+503:  if (!tokenResponse.access_token) {
+504:    throw new Error('OAuth response did not contain access_token.');
+505:  }
+506:
+507:  const expiresIn = Math.max(
+508:    60,
+509:    Number(tokenResponse.expires_in || 3600) - 300
+510:  );
+511:  cache.put(
+512:    JAYUMINTON_PUSH_CONFIG.tokenCacheKey,
+513:    tokenResponse.access_token,
+514:    Math.min(21600, expiresIn)
+515:  );
+516:  return tokenResponse.access_token;
+517:}
+518:
+519:function base64Url_(text) {
+520:  return base64UrlBytes_(Utilities.newBlob(text).getBytes());
+521:}
+522:
