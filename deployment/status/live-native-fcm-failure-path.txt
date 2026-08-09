@@ -119,7 +119,6 @@ function makeWebFcmRequest_(event, member, token, accessToken, userAgent) {
       android: {
         priority: 'high',
         ttl: '600s',
-        restricted_package_name: 'com.jayuminton.user',
         notification: {
           title: data.title,
           body: data.body,
@@ -148,11 +147,17 @@ function makeWebFcmRequest_(event, member, token, accessToken, userAgent) {
   };
 
   if (nativeAndroid) {
-    // A notification payload would be consumed by Android while the app is
-    // backgrounded, skipping onMessageReceived and therefore skipping the
-    // app's explicit strong vibrator waveform.
+    /* JAYUMINTON_NATIVE_FCM_CONTRACT_V2 */
+    // HTTP v1 uses lowerCamelCase. Restrict only native tokens; applying an
+    // Android package restriction to browser tokens makes FCM reject them.
+    payload.message.android.restrictedPackageName = 'com.jayuminton.user';
+    // Data-only high-priority delivery guarantees onMessageReceived owns the
+    // overlay and explicit vibrator even while another app is in front.
     delete payload.message.android.notification;
     delete payload.message.webpush;
+  } else {
+    // Browser/PWA registrations receive only the webpush contract.
+    delete payload.message.android;
   }
 
   return {
@@ -267,17 +272,4 @@ function limitWebPushTokens_(records) {
     perMember[memberId] = Number(perMember[memberId] || 0);
     if (perMember[memberId] >=
         JAYUMINTON_PUSH_CONFIG.maxTokensPerMember) return;
-    perMember[memberId] += 1;
-    result.push(record);
-  });
-  return result;
-}
-
-function removeInvalidTokens_(tokens) {
-  const invalid = {};
-  tokens.forEach(function(token) {
-    invalid[token] = true;
-  });
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  try
+ 
