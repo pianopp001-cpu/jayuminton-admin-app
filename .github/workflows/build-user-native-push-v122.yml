@@ -155,6 +155,7 @@ jobs:
           python3 deployment/scripts/patch_build_user_native_v118.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v119.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v120_diagnostic.py deployment/scripts/build_user_native_push_fresh_v110.sh
+          python3 deployment/scripts/patch_build_user_native_v121.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v122.py deployment/scripts/build_user_native_push_fresh_v110.sh
           bash deployment/scripts/build_user_native_push_fresh_v110.sh
           test -s releases/jayuminton-courtstatus-v1.2.2-overlay.apk
