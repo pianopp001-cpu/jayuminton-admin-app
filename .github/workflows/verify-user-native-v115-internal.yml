@@ -1,4 +1,4 @@
-name: Verify clean no-overlay APK background FCM path
+name: Verify clean APK production background FCM path without test alerts
 
 on:
   push:
@@ -29,12 +29,10 @@ jobs:
           missing=0
           : > "$RUNNER_TEMP/missing.txt"
           for marker in \
-            'test_native_push' \
+            'register_web_token' \
+            'token_registered' \
             'setInstanceFollowRedirects' \
             'Location' \
-            'fcm_accepted' \
-            'fcm_test_failed' \
-            'fcm_test_message_id' \
             'jayuminton_wait1_system_v114' \
             'jayuminton_court_system_v114' \
             'JayumintonNativeAndroid/1.1.5' \
@@ -46,7 +44,7 @@ jobs:
               missing=1
             fi
           done
-          for forbidden in 'jayuminton-native-status' '알림 연결 확인 중' '휴대폰 자체 테스트' '서버 실제발송 재확인'
+          for forbidden in 'test_native_push' 'retryServerPushTest' 'fcm_accepted' 'fcm_test_failed' 'jayuminton-native-status' '알림 연결 확인 중' '휴대폰 자체 테스트' '서버 실제발송 재확인'
           do
             if grep -F "$forbidden" "$RUNNER_TEMP/classes.txt" >/dev/null; then
               echo "forbidden:$forbidden" >> "$RUNNER_TEMP/missing.txt"
@@ -63,7 +61,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/native-v115-binary-verified.txt
-          git commit -m 'Verify native v1.1.5 FCM acceptance bytecode'
+          git commit -m 'Verify native v1.1.5 production FCM bytecode without test alerts'
           git pull --rebase origin main
           git push origin main
           test "$missing" = 0
