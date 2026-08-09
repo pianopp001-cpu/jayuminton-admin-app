@@ -1,0 +1,87 @@
+name: Inspect live admin push event path
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-live-admin-push-events.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Pull live admin and record push event contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          test -n "$MAIN_SCRIPT_ID"
+          WORK="$RUNNER_TEMP/main"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          OUT="$GITHUB_WORKSPACE/deployment/status/live-admin-push-event-context.txt"
+          python3 - "$OUT" <<'PY'
+          from pathlib import Path
+          import re, sys
+          out = Path(sys.argv[1])
+          needles = (
+              'wait1_ready', 'court_assignment', 'sendPush', 'pushUrl',
+              'push_url', 'UrlFetchApp', 'fetch(', 'assignmentId',
+              'memberIds', 'memberId', 'members:'
+          )
+          chunks = []
+          for name in ('Code.js', 'Script.html'):
+              p = Path(name)
+              if not p.exists():
+                  continue
+              lines = p.read_text(encoding='utf-8').splitlines()
+              chunks.append(f'=== {name} ===')
+              seen = set()
+              for i, line in enumerate(lines):
+                  if not any(n.lower() in line.lower() for n in needles):
+                      continue
+                  lo, hi = max(0, i-5), min(len(lines), i+11)
+                  key = (lo, hi)
+                  if key in seen:
+                      continue
+                  seen.add(key)
+                  for j in range(lo, hi):
+                      x = lines[j]
+                      x = re.sub(r'https://[^\s\'"]+', '[REDACTED_URL]', x)
+                      x = re.sub(r'Bearer\s+[^\s\'"]+', 'Bearer [REDACTED]', x)
+                      x = re.sub(r"(['\"])[A-Za-z0-9_\-]{80,}\1", r"\1[REDACTED_TOKEN]\1", x)
+                      chunks.append(f'{j+1}: {x[:320]}')
+                  chunks.append('---')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text('\n'.join(chunks) + '\n', encoding='utf-8')
+          PY
+      - name: Publish inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/live-admin-push-event-context.txt
+          git commit -m 'Record live admin push event path' || true
+          git pull --rebase origin main
+          git push origin main
