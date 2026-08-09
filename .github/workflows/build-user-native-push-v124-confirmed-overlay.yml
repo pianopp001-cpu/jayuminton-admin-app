@@ -1,4 +1,5 @@
 name: Build v1.2.4 confirmed overlay alert candidate
+# internal version markers corrected
 
 on:
   push:
