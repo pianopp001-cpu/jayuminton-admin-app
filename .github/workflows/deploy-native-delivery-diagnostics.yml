@@ -1,0 +1,63 @@
+name: Deploy native delivery diagnostics
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/scripts/patch_push_delivery_diagnostics.py'
+      - '.github/workflows/deploy-native-delivery-diagnostics.yml'
+      - 'deploy-triggers/native-delivery-diagnostics.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-native-delivery-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Add diagnostics without changing app or admin code
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$CONFIG")"
+          test -n "$PUSH_SCRIPT_ID"; test -n "$PUSH_DEPLOYMENT_ID"
+          WORK="$RUNNER_TEMP/push"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          sha256sum appsscript.json > "$RUNNER_TEMP/non-code-before.sha"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_push_delivery_diagnostics.py" "$WORK"
+          node --check Code.js
+          sha256sum appsscript.json > "$RUNNER_TEMP/non-code-after.sha"
+          cmp "$RUNNER_TEMP/non-code-before.sha" "$RUNNER_TEMP/non-code-after.sha"
+          grep -F 'JAYUMINTON_NATIVE_DELIVERY_DIAGNOSTICS_V1' Code.js >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "native delivery diagnostics $GITHUB_RUN_ID"
+          echo "PUSH_URL=https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+      - name: Verify diagnostic endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl --fail --location --retry 5 "$PUSH_URL?action=native_delivery_summary&run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/summary.json"
+          jq -e '.ok == true and (.nativeUserTokens | type == "number") and (.browserTokens | type == "number")' "$RUNNER_TEMP/summary.json" >/dev/null
+          jq '{ok,totalTokens,nativeUserTokens,nativeMemberTokens,browserTokens,newestNativeUserAgeSeconds,lastDelivery}' "$RUNNER_TEMP/summary.json"
