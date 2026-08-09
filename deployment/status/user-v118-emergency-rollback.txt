@@ -1,0 +1,7 @@
+status=success
+rolled_back_from=1.1.8
+rolled_back_to=1.1.7
+changed_files=Script.html
+admin_logic_changed=no
+reason=missing_stop_button_for_repeating_vibration
+deployed_at=2026-08-09T17:25:11Z
