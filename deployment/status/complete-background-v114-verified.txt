@@ -1,0 +1,12 @@
+status=success
+version=1.1.4
+apk_system_channels=yes
+apk_background_fcm=yes
+apk_registration_verify=yes
+server_system_notification=yes
+server_channel_match=yes
+live_install_link=yes
+wait_vibration_groups=3
+court_vibration_groups=5
+apk_sha256=4a8bafb3991fb03eb528551c4d2d257fedd93012087b3aaf248f07530c72a5da
+verified_at=2026-08-09T02:28:22Z
