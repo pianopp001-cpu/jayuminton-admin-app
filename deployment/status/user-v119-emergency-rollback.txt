@@ -1,0 +1,6 @@
+status=success
+rolled_back_from=1.1.9
+rolled_back_to=1.1.7
+changed_files=Script.html
+admin_logic_changed=no
+deployed_at=2026-08-09T17:43:09Z
