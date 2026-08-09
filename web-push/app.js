@@ -37,6 +37,24 @@
   let registration = null;
   let pendingAction = null;
   let toastTimer = null;
+  let deferredInstallPrompt = null;
+  let appInstalled = isStandalone;
+  let appInstallReady = false;
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    appInstallReady = true;
+    postAppInstallStatus({});
+  });
+
+  window.addEventListener('appinstalled', () => {
+    appInstalled = true;
+    deferredInstallPrompt = null;
+    appInstallReady = false;
+    postAppInstallStatus({ installed: true, installing: false, choice: 'on', message: '자유민턴 앱 설치가 완료되었습니다.' });
+    showToast('자유민턴 앱 설치가 완료되었습니다.', 'success', 4500);
+  });
 
   restoreHandoff();
   frame.src = addQuery(cfg.memberPageUrl, { unified: '1', embedded: '1' });
@@ -109,13 +127,87 @@
   }
 
   function sendBootstrap() {
-    postToMember('JAYUMINTON_UNIFIED_BOOTSTRAP', {
+    postToMember('JAYUMINTON_UNIFIED_BOOTSTRAP', Object.assign({
       authVersion,
       member: selectedMember,
       notificationPermission: 'Notification' in window ? Notification.permission : 'unsupported',
       standalone: isStandalone,
       platform: isIos ? 'ios' : (isAndroid ? 'android' : 'other')
-    });
+    }, appInstallStateFields()));
+  }
+
+  function currentAppInstallBrowserContext() {
+    if (isStandalone) return 'standalone';
+    if (isInApp && !isChromeAndroid) return isIos ? 'ios-embedded' : 'android-embedded';
+    if (isIos) return 'ios-safari';
+    if (isAndroid) return 'android-browser';
+    return 'other';
+  }
+
+  function appInstallStateFields() {
+    return {
+      appInstalled: appInstalled,
+      appInstallChoice: appInstalled ? 'on' : '',
+      appInstallPlatform: isIos ? 'ios' : (isAndroid ? 'android' : 'other'),
+      appInstallBrowserContext: currentAppInstallBrowserContext(),
+      appInstallReady: appInstallReady,
+      appInstallPending: false,
+      appInstallArmed: !!deferredInstallPrompt,
+      appInstallPrepRemaining: 0,
+      appInstallNative: false
+    };
+  }
+
+  function postAppInstallStatus(extra) {
+    postToMember('JAYUMINTON_APP_INSTALL_STATUS', Object.assign({
+      installed: appInstalled,
+      choice: appInstalled ? 'on' : '',
+      platform: isIos ? 'ios' : (isAndroid ? 'android' : 'other'),
+      browserContext: currentAppInstallBrowserContext(),
+      ready: appInstallReady,
+      installing: false,
+      armed: !!deferredInstallPrompt,
+      prepRemaining: 0,
+      nativeInstall: false,
+      message: ''
+    }, extra || {}));
+  }
+
+  async function handleAppInstallRequest() {
+    if (isStandalone || appInstalled) {
+      appInstalled = true;
+      postAppInstallStatus({ installed: true, choice: 'on', message: '자유민턴 앱이 이미 설치되어 있습니다.' });
+      return;
+    }
+
+    if (isIos) {
+      updateHandoffUrl();
+      showSetup('ios-install');
+      postAppInstallStatus({});
+      return;
+    }
+
+    if (!deferredInstallPrompt) {
+      postAppInstallStatus({ ready: false, message: '설치 준비가 되지 않았습니다. 잠시 후 다시 눌러 주세요.' });
+      return;
+    }
+
+    postAppInstallStatus({ installing: true, message: '설치 확인 창을 여는 중입니다…' });
+    try {
+      const prompt = deferredInstallPrompt;
+      prompt.prompt();
+      const choice = await prompt.userChoice;
+      deferredInstallPrompt = null;
+      appInstallReady = false;
+      if (choice && choice.outcome === 'accepted') {
+        appInstalled = true;
+        postAppInstallStatus({ installed: true, installing: false, choice: 'on', message: '자유민턴 앱을 설치하는 중입니다.' });
+      } else {
+        postAppInstallStatus({ installed: false, installing: false, choice: 'off', message: '앱 설치를 취소했습니다.' });
+      }
+    } catch (error) {
+      postAppInstallStatus({ installing: false, message: '앱 설치를 시작하지 못했습니다. 다시 시도해 주세요.' });
+    }
   }
 
   function showToast(message, type, duration) {
@@ -192,7 +284,7 @@
       requestMemberRefresh(eventId);
       registration.showNotification(data.title || '자유민턴 배정 알림', {
         body: data.body || '새 배정 안내가 있습니다.',
-        icon: '/icon.svg',
+        icon: '/icon-dog.png',
         badge: '/badge.svg',
         tag: eventId,
         renotify: false,
@@ -338,6 +430,11 @@
         saveJson(STORAGE.member, selectedMember);
       }
       handleSetupRequest();
+      return;
+    }
+
+    if (data.type === 'JAYUMINTON_APP_INSTALL_REQUEST') {
+      handleAppInstallRequest();
     }
   });
 

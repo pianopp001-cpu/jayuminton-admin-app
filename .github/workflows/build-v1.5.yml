@@ -17,6 +17,7 @@ jobs:
     env:
       JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
       JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
+      FIREBASE_GOOGLE_SERVICES_JSON_B64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON_B64 }}
 
     steps:
       - name: Checkout
@@ -49,6 +50,14 @@ jobs:
           test -n "$JAYUMINTON_PUSH_SHARED_SECRET"
           test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
 
+      - name: Restore member google-services.json
+        shell: bash
+        run: |
+          test -n "$FIREBASE_GOOGLE_SERVICES_JSON_B64"
+          echo "$FIREBASE_GOOGLE_SERVICES_JSON_B64" | base64 --decode > member/google-services.json
+          test -s member/google-services.json
+          grep -F 'com.jayuminton.member' member/google-services.json
+
       - name: Restore v199 design and PIN session bridge
         run: |
           python3 scripts/prepare_v199_firebase_build.py
@@ -68,6 +77,9 @@ jobs:
 
       - name: Build signed Firebase admin APK
         run: gradle --no-daemon :app:assembleRelease
+
+      - name: Build signed Firebase member APK
+        run: gradle --no-daemon :member:assembleRelease
 
       - name: Verify signed APK and embedded v199 runtime
         run: |

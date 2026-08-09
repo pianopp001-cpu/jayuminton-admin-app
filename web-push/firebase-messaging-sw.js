@@ -43,7 +43,7 @@ messaging.onBackgroundMessage((payload) => {
   const title = data.title || '자유민턴 배정 알림';
   return self.registration.showNotification(title, {
     body: data.body || '새 배정 안내가 있습니다.',
-    icon: '/icon.svg',
+    icon: '/icon-dog.png',
     badge: '/badge.svg',
     tag: data.assignmentId || 'jayuminton-assignment',
     renotify: false,

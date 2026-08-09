@@ -1,6 +1,6 @@
 window.JAYUMINTON_WEB_PUSH_CONFIG = Object.freeze({
-  relayUrl: 'PASTE_APPS_SCRIPT_EXEC_URL',
-  memberPageUrl: 'https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec',
+  relayUrl: 'https://script.google.com/macros/s/AKfycbyVPlL35pwN9QXvyzUG_TRaE4zC9QiEBB3z4jg3PjJwcuUmX-MI_hKuFX6FO757WaRHIg/exec',
+  memberPageUrl: 'https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec',
   appUrl: 'https://jayuminton-push.web.app/',
   vapidKey: 'BNUQPnrOB2AKL7vkrpWQCqtCUyeQN9OInABU5eWBXpF1vGNTuW5ozOV5cdSBNj8d_y0Yc0UB8dolRz2xPLkZ0Rw',
   firebase: {
