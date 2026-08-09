@@ -47,7 +47,7 @@ jobs:
           needles = (
               'wait1_ready', 'court_assignment', 'sendPush', 'pushUrl',
               'push_url', 'UrlFetchApp', 'fetch(', 'assignmentId',
-              'memberIds', 'memberId', 'members:'
+              'memberIds', 'memberId', 'members:', 'withDocumentLock_', 'writeWaitGroups_', 'writeCourts_', 'touch_', 'readWaitGroups_', 'readCourts_'
           )
           chunks = []
           for name in ('Code.js', 'Script.html'):
