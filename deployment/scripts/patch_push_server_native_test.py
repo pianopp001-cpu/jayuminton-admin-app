@@ -90,6 +90,36 @@ function testNativePush_(body) {
         raise SystemExit("native-test function anchor missing")
     source = source.replace(anchor, function + anchor, 1)
 
+# Upgrade an already-deployed V1 endpoint in place.  The marker alone does not
+# prove that later registration/member matching checks are present.
+if 'TOKEN_NOT_REGISTERED_FOR_MEMBER' not in source:
+    old = '''  if (!memberId || !token) {
+    throw new Error('memberId and token are required for native push test.');
+  }
+
+  // Possession of the device FCM token is required.'''
+    new = '''  if (!memberId || !token) {
+    throw new Error('memberId and token are required for native push test.');
+  }
+
+  const registeredForMember = loadWebPushTokens_().some(function(record) {
+    return record && String(record.memberId || '') === memberId && record.token === token;
+  });
+  if (!registeredForMember) {
+    return {
+      ok: false,
+      stage: 'registration_lookup',
+      status: 0,
+      messageId: '',
+      error: 'TOKEN_NOT_REGISTERED_FOR_MEMBER'
+    };
+  }
+
+  // Possession of the device FCM token is required.'''
+    if source.count(old) != 1:
+        raise SystemExit('existing native test endpoint upgrade point missing')
+    source = source.replace(old, new, 1)
+
 required = (
     marker,
     "action === 'test_native_push'",
