@@ -110,13 +110,23 @@ submit = '''    private static JSONObject submit(String action, String memberId,
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(20000);
             connection.setRequestMethod("POST");
+            connection.setInstanceFollowRedirects(false);
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8");
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             connection.setFixedLengthStreamingMode(bytes.length);
             try (OutputStream output = connection.getOutputStream()) { output.write(bytes); }
             int code = connection.getResponseCode();
-            InputStream input = code >= 200 && code < 400 ? connection.getInputStream() : connection.getErrorStream();
+            String redirect = connection.getHeaderField("Location");
+            if (code >= 300 && code < 400 && redirect != null && !redirect.isEmpty()) {
+                connection.disconnect();
+                connection = (HttpURLConnection) new URL(redirect).openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(20000);
+                connection.setRequestMethod("GET");
+                code = connection.getResponseCode();
+            }
+            InputStream input = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
             StringBuilder responseBody = new StringBuilder();
             if (input != null) {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
