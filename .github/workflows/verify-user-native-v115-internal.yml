@@ -1,4 +1,4 @@
-name: Verify internal APK FCM acceptance path redirect-fixed
+name: Verify internal APK FCM acceptance path visible-diagnostics
 
 on:
   push:
@@ -31,6 +31,10 @@ jobs:
           for marker in \
             'test_native_push' \
             'setInstanceFollowRedirects' \
+            'retryServerPushTest' \
+            'notificationPermission' \
+            'waitChannelImportance' \
+            'jayuminton-native-status' \
             'Location' \
             'fcm_accepted' \
             'fcm_test_failed' \
