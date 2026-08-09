@@ -174,7 +174,8 @@ function sendAssignmentEvent_(event) {
     seenTokens[record.token] = true;
     targets.push({
       token: record.token,
-      member: member
+      member: member,
+      userAgent: record.userAgent
     });
   });
 
@@ -194,7 +195,8 @@ function sendAssignmentEvent_(event) {
       event,
       target.member,
       target.token,
-      accessToken
+      accessToken,
+      target.userAgent
     );
   });
   const responses = UrlFetchApp.fetchAll(requests);
@@ -236,7 +238,7 @@ function sendAssignmentEvent_(event) {
   };
 }
 
-function makeWebFcmRequest_(event, member, token, accessToken) {
+function makeWebFcmRequest_(event, member, token, accessToken, userAgent) {
   const isWait = event.type === 'wait1_ready';
   const courtNo = isWait
     ? event.expectedCourtNo
@@ -262,14 +264,20 @@ function makeWebFcmRequest_(event, member, token, accessToken) {
     expectedCourtNo: String(event.expectedCourtNo || '')
   };
 
+  const android = {
+    priority: 'high',
+    ttl: '600s'
+  };
+  const nativePackage = nativeAndroidPackageForUserAgent_(userAgent);
+  if (nativePackage) {
+    android.restricted_package_name = nativePackage;
+  }
+
   const payload = {
     message: {
       token: token,
       data: data,
-      android: {
-        priority: 'high',
-        ttl: '600s'
-      },
+      android: android,
       webpush: {
         headers: {
           Urgency: 'high',
@@ -292,6 +300,21 @@ function makeWebFcmRequest_(event, member, token, accessToken) {
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   };
+}
+
+/**
+ * FCM's android.restricted_package_name silently drops delivery to any
+ * token whose package doesn't match, so it must only be set for tokens we
+ * can positively identify as belonging to a specific native APK — never
+ * for plain browser/PWA tokens, which have no Android package to restrict
+ * against. Each native app tags its register_web_token userAgent so this
+ * can tell them apart.
+ */
+function nativeAndroidPackageForUserAgent_(userAgent) {
+  const ua = String(userAgent || '');
+  if (/JayumintonMemberNative\//i.test(ua)) return 'com.jayuminton.member';
+  if (/JayumintonNativeAndroid\//i.test(ua)) return 'com.jayuminton.user';
+  return '';
 }
 
 function cleanEvent_(body) {
