@@ -1,0 +1,6 @@
+status=success
+version=1.1.5
+filename=jayuminton-courtstatus-v1.1.5-test.apk
+apk_sha256=e15d476b82d85791cd000e0abdf9f3407d16eda4739e2230228d346655533d03
+live_install_link_changed=no
+published_at=2026-08-09T04:18:53Z
