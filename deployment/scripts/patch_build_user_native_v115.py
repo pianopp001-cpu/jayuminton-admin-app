@@ -114,32 +114,6 @@ if 'retryServerPushTest()' not in s:
         raise SystemExit("v115 diagnostic bridge insertion point missing")
     s = s.replace(old, new, 1)
 
-old = '''                    null
-                );
-            }
-        });'''
-new = '''                    null
-                );
-                view.evaluateJavascript(
-                    "(function(){if(window.__JAYUMINTON_NATIVE_STATUS_UI__)return;window.__JAYUMINTON_NATIVE_STATUS_UI__=1;" +
-                    "var box=document.createElement('div');box.id='jayuminton-native-status';" +
-                    "box.style.cssText='position:fixed;left:8px;right:8px;bottom:76px;z-index:2147483646;background:#102a43;color:white;padding:9px 10px;border-radius:10px;font:12px sans-serif;box-shadow:0 3px 12px #0005';" +
-                    "var label=document.createElement('div');label.textContent='알림 연결 확인 중…';box.appendChild(label);" +
-                    "var local=document.createElement('button');local.textContent='휴대폰 자체 테스트';local.style.cssText='margin-top:7px;margin-right:6px;padding:5px 8px';local.onclick=function(){NativeUserApp.testNativeAlert();};box.appendChild(local);" +
-                    "var server=document.createElement('button');server.textContent='서버 실제발송 재확인';server.style.cssText='margin-top:7px;padding:5px 8px';server.onclick=function(){NativeUserApp.retryServerPushTest();label.textContent='서버 실제발송 확인 중…';};box.appendChild(server);" +
-                    "document.body.appendChild(box);function refresh(){try{var s=JSON.parse(NativeUserApp.getPushRegistrationStatus());" +
-                    "var ok=s.status==='fcm_accepted'&&s.notificationPermission&&s.waitChannelImportance>=4&&s.courtChannelImportance>=4;" +
-                    "label.textContent=(ok?'✅ ':'⚠️ ')+s.status+' · 권한 '+(s.notificationPermission?'허용':'거부')+' · 채널 '+s.waitChannelImportance+'/'+s.courtChannelImportance+(s.fcmError?' · '+s.fcmError:'');" +
-                    "box.style.background=ok?'#146c43':'#8a3b12';}catch(e){label.textContent='⚠️ 상태 읽기 실패';}}refresh();setInterval(refresh,1500);})();",
-                    null
-                );
-            }
-        });'''
-if 'jayuminton-native-status' not in s:
-    if s.count(old) != 1:
-        raise SystemExit("v115 diagnostic UI insertion point missing")
-    s = s.replace(old, new, 1)
-
 anchor = '''    public static String registrationStatus(Context context) {'''
 retry = '''    public static void retryCurrent(Context context) {
         Context app = context.getApplicationContext();
@@ -240,7 +214,7 @@ for marker in (
     '"fcm_accepted"', 'result.put("fcmMessageId"',
     'JayumintonNativeAndroid/1.1.5',
     'retryServerPushTest()', 'notificationPermission',
-    'waitChannelImportance', 'jayuminton-native-status',
+    'waitChannelImportance',
 ):
     if marker not in s:
         raise SystemExit("missing native v1.1.5 marker: " + marker)
