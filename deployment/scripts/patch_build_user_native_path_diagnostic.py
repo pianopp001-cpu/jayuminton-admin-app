@@ -55,9 +55,12 @@ http_dummy = '''
 ''' + http_anchor + '''
 JAYUMINTON_NATIVE_DIAG_HTTP_DUMMY_END */
 '''
-registrar_end = s.find('\n}\nJAVA\n\ncat > "$SERVICE_JAVA"')
-if registrar_end < 0:
-    raise SystemExit("native diagnostic registrar end missing")
+# v1.2.0 inserts NativeDeliveryReporter between the registrar and FCM service,
+# so place this inert block before the registrar heredoc terminator/reporter.
+registrar_start = s.find('cat > "$REGISTRAR_JAVA" <<JAVA\n')
+registrar_end = s.find('\nJAVA\n\ncat > "$REPORTER_JAVA"', registrar_start)
+if registrar_start < 0 or registrar_end < 0:
+    raise SystemExit("native diagnostic registrar heredoc end missing")
 s = s[:registrar_end] + http_dummy + s[registrar_end:]
 path.write_text(s, encoding="utf-8")
 
