@@ -23,7 +23,6 @@ new = """      android: {
             : 'jayuminton_wait1_system_v114',
           notification_priority: 'PRIORITY_MAX',
           visibility: 'PUBLIC',
-          default_sound: true,
           vibrate_timings: event.type === 'court_assignment'
             ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
             : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
@@ -44,6 +43,11 @@ for marker in (
 ):
     if marker not in s:
         raise SystemExit('missing system notification sender marker: ' + marker)
+
+# `sound` and `default_sound` describe the same Android setting.  Sending both
+# can make FCM reject the whole message as an invalid Android notification.
+if 'default_sound:' in s:
+    raise SystemExit('conflicting Android default_sound remains')
 
 p.write_text(s, encoding='utf-8')
 print('Patched Android FCM to system-rendered background notifications with long vibration.')
