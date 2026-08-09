@@ -1,0 +1,23 @@
+status=failure
+stage=native-build-started
+--- build log tail ---
+Prepared native background push APK build v1.1.1.
+Prepared native v1.1.2 with direct member bridge and registration retries.
+Prepared native v1.1.3 with verified registration and local alert probe.
+Prepared native v1.1.4 with pre-created Android system notification channels.
+Prepared native v1.1.5 with token registration and no automatic test push.
+Prepared native v1.1.6 with unconditional alarm-usage assignment vibration.
+Prepared v1.1.7 persistent alert with uncancelled explicit vibration.
+Prepared v1.1.8 with correct wait1 wording, stale-member guard and until-dismissed vibration.
+Prepared v1.1.9 with always-available notification stop action.
+Prepared safe v1.2.0 native delivery diagnostic APK.
+Prepared v1.2.1 with Android full-screen access flow and strict member resync.
+Prepared v1.2.2 deterministic overlay stop UI and safe vibration fallback.
+Prepared v1.2.3 with verified overlay add before repeating vibration.
+v124 member change anchor missing
+Traceback (most recent call last):
+  File "/home/runner/work/jayuminton-admin-app/jayuminton-admin-app/deployment/scripts/patch_build_user_native_path_diagnostic.py", line 12, in <module>
+    subprocess.run([sys.executable, str(instrumentation), str(path)], check=True)
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/usr/bin/python3', '/home/runner/work/jayuminton-admin-app/jayuminton-admin-app/deployment/scripts/patch_build_user_native_v124_diagnostic.py', 'deployment/scripts/build_user_native_push_fresh_v110.sh']' returned non-zero exit status 1.
