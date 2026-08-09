@@ -1,4 +1,4 @@
-status=success
+status=failure
 version=1.1.5
 apk_sha256=45c85179b396e37c3bbd7493ebc155e724e6d5c7d4407483bc32cda373250a6b
 server_test_action=yes
@@ -7,5 +7,5 @@ fcm_failure_recorded=yes
 system_channels=yes
 background_service=yes
 live_install_link_changed=no
-verified_at=2026-08-09T04:28:42Z
-missing=
+verified_at=2026-08-09T04:38:41Z
+missing=token_registered,forbidden:test_native_push,forbidden:retryServerPushTest,forbidden:fcm_accepted,forbidden:fcm_test_failed,
