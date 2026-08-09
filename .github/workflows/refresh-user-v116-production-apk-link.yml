@@ -1,0 +1,72 @@
+name: Publish v1.1.6 independent strong vibration APK link
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/refresh-user-v116-production-apk-link.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Change only APK download URL cache key
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          WORK="$RUNNER_TEMP/main"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          cp Code.js "$RUNNER_TEMP/Code.before.js"
+          cp Admin.html "$RUNNER_TEMP/Admin.before.html"
+          cp Style.html "$RUNNER_TEMP/Style.before.html"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          base='https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.6-fresh-install.apk'
+          s,n=re.subn(re.escape(base)+r'(?:\?build=[A-Za-z0-9]+)?', base+'?build=35edc903', s, count=1)
+          if n != 1:
+              raise SystemExit('APK link not found exactly once')
+          p.write_text(s,encoding='utf-8')
+          PY
+          cmp Code.js "$RUNNER_TEMP/Code.before.js"
+          cmp Admin.html "$RUNNER_TEMP/Admin.before.html"
+          cmp Style.html "$RUNNER_TEMP/Style.before.html"
+          grep -F 'jayuminton-courtstatus-v1.1.6-fresh-install.apk?build=35edc903' Script.html >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "refresh production-only APK bytes ${GITHUB_SHA::7}"
+          printf 'status=success\nversion=1.1.5\napk_sha256=35edc90331b023812e87a42a0dfe695206b9030847c268d59a29db297dc01de0\ncache_key=35edc903\nchanged_files=Script.html\nadmin_logic_changed=no\ndeployed_at=%s\n' "$(date -u +%FT%TZ)" > "$GITHUB_WORKSPACE/deployment/status/user-v116-production-link-live.txt"
+      - name: Publish status
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v116-production-link-live.txt
+          git commit -m 'Record refreshed production-only APK install link'
+          git pull --rebase origin main
+          git push origin main
