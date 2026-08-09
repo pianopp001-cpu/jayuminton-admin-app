@@ -1,0 +1,6 @@
+status=success
+version=1.1.7
+apk_sha256=f8bbf54055ae1228900ec1f0048692e654a65ec79f4793f7df7cf0a9ac5084f7
+changed_files=Script.html
+admin_logic_changed=no
+deployed_at=2026-08-09T16:01:36Z
