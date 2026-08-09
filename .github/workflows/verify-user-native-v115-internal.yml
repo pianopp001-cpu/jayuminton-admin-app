@@ -45,7 +45,9 @@ jobs:
             fi
           done
           SHA="$(sha256sum "$APK" | awk '{print $1}')"
-          test "$SHA" = '6e418ea2019df4b6873c5b5c0eb3112cdc3fba31c66d91a73d07750df5b84355'
+          EXPECTED_SHA="$(sed -n 's/^apk_sha256=//p' deployment/status/user-native-push-v1.1.5.txt)"
+          test -n "$EXPECTED_SHA"
+          test "$SHA" = "$EXPECTED_SHA"
           RESULT=success
           if [ "$missing" != 0 ]; then RESULT=failure; fi
           printf 'status=%s\nversion=1.1.5\napk_sha256=%s\nserver_test_action=yes\nfcm_acceptance_required=yes\nfcm_failure_recorded=yes\nsystem_channels=yes\nbackground_service=yes\nlive_install_link_changed=no\nverified_at=%s\nmissing=%s\n' "$RESULT" "$SHA" "$(date -u +%FT%TZ)" "$(tr '\n' ',' < "$RUNNER_TEMP/missing.txt")" > deployment/status/native-v115-binary-verified.txt
