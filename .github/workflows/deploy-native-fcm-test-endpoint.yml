@@ -1,0 +1,83 @@
+name: Deploy native FCM end-to-end test endpoint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-native-fcm-test-endpoint.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Patch and deploy only push relay Code.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$CONFIG")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$CONFIG")"
+          WORK="$RUNNER_TEMP/push"
+          BEFORE="$RUNNER_TEMP/before"
+          mkdir -p "$WORK" "$BEFORE"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          cp -a . "$BEFORE/"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_push_server_native_test.py" "$WORK"
+          python3 - "$BEFORE" "$WORK" <<'PY'
+          from pathlib import Path
+          import sys
+          before,after=map(Path,sys.argv[1:3])
+          names={p.name for p in before.iterdir() if p.is_file()}|{p.name for p in after.iterdir() if p.is_file()}
+          changed=set()
+          for name in names:
+              if name=='.clasp.json': continue
+              a,b=before/name,after/name
+              if (a.read_bytes() if a.exists() else None)!=(b.read_bytes() if b.exists() else None):
+                  changed.add(name)
+          if changed!={'Code.js'}:
+              raise SystemExit('Unexpected push files changed: '+','.join(sorted(changed)))
+          PY
+          node --check Code.js
+          grep -F "action === 'test_native_push'" Code.js >/dev/null
+          grep -F "stage: 'fcm_send'" Code.js >/dev/null
+          grep -F 'delete requestOptions.url' Code.js >/dev/null
+          grep -F 'jayuminton_wait1_system_v114' Code.js >/dev/null
+          grep -F 'jayuminton_court_system_v114' Code.js >/dev/null
+          if grep -F 'default_sound:' Code.js >/dev/null; then exit 1; fi
+          clasp push --force
+          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "Native FCM end-to-end test $GITHUB_RUN_ID"
+          VERIFY="$RUNNER_TEMP/verify"
+          mkdir -p "$VERIFY"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$VERIFY/.clasp.json"
+          cd "$VERIFY"
+          clasp pull
+          grep -F "action === 'test_native_push'" Code.js >/dev/null
+          grep -F "stage: 'fcm_send'" Code.js >/dev/null
+          node --check Code.js
+          cd "$GITHUB_WORKSPACE"
+          printf 'status=success\naction=test_native_push\nresponse_status=yes\nfcm_message_id=yes\nadmin_files_changed=no\ndeployed_at=%s\n' "$(date -u +%FT%TZ)" > deployment/status/native-fcm-test-endpoint.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/native-fcm-test-endpoint.txt
+          git commit -m 'Verify native FCM test endpoint'
+          git pull --rebase origin main
+          git push origin main
