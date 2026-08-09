@@ -44,6 +44,13 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('Code.js').read_text(encoding='utf-8')
+          for number, line in enumerate(source.splitlines(), 1):
+              if any(name in line for name in ('doGet', 'sendAssignmentEvent_', 'verifyPushConfiguration')):
+                  print(f'{number}: {line[:240]}')
+          PY
           sha256sum appsscript.json > "$RUNNER_TEMP/non-code-before.sha"
           python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_push_delivery_diagnostics.py" "$WORK"
           node --check Code.js
