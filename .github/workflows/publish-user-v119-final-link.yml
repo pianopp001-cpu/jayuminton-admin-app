@@ -1,0 +1,71 @@
+name: Publish final v1.1.9 stop action APK link
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-user-v119-final-link.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Replace only rollback v1.1.7 APK URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          ID="$(jq -r '.mainScriptId' "$C")"
+          DEPLOY="$(jq -r '.mainDeploymentId' "$C")"
+          W="$RUNNER_TEMP/main"
+          mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          cp Code.js "$RUNNER_TEMP/Code.before.js"
+          cp Admin.html "$RUNNER_TEMP/Admin.before.html"
+          cp Style.html "$RUNNER_TEMP/Style.before.html"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          old='https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540'
+          new='https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.9-fresh-install.apk?build=e9c82252'
+          if s.count(old) != 1:
+              raise SystemExit('rollback v1.1.7 live link not found exactly once')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          PY
+          cmp Code.js "$RUNNER_TEMP/Code.before.js"
+          cmp Admin.html "$RUNNER_TEMP/Admin.before.html"
+          cmp Style.html "$RUNNER_TEMP/Style.before.html"
+          grep -F 'jayuminton-courtstatus-v1.1.9-fresh-install.apk?build=e9c82252' Script.html >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$DEPLOY" --description "final v1.1.9 stop action APK ${GITHUB_SHA::7}"
+          printf 'status=success\nversion=1.1.9\napk_sha256=e9c822526fd44ebb267cb9c5369172fe18030a0c17bed9d840e8b67cf4826fed\nchanged_files=Script.html\nadmin_logic_changed=no\nnotification_stop_action=yes\ndeployed_at=%s\n' "$(date -u +%FT%TZ)" > "$GITHUB_WORKSPACE/deployment/status/user-v119-final-link-live.txt"
+      - name: Publish status
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v119-final-link-live.txt
+          git commit -m 'Record final v1.1.9 stop action install link'
+          git pull --rebase origin main
+          git push origin main
