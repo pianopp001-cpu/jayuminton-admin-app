@@ -17,17 +17,18 @@ import com.google.firebase.messaging.RemoteMessage;
 import java.util.Map;
 
 public final class JayumintonMessagingService extends FirebaseMessagingService {
-    static final String CHANNEL_ID = "court_assignment";
-    private static final long[] VIBRATION_PATTERN = {0, 600, 220, 600};
+    static final String CHANNEL_WAIT1 = "jayuminton_wait1_v1";
+    static final String CHANNEL_COURT = "jayuminton_court_v1";
+    private static final int WAIT1_GROUPS = 3;
+    private static final int COURT_GROUPS = 5;
+    private static final long PULSE_MS = 650L;
+    private static final long INTRA_PULSE_GAP_MS = 220L;
+    private static final long GROUP_GAP_MS = 1100L;
 
     @Override
     public void onNewToken(String token) {
         super.onNewToken(token);
-        String memberId = MemberStore.getSelectedMemberId(this);
-        if (!memberId.isEmpty()) {
-            FirebaseMessaging.getInstance()
-                    .subscribeToTopic(MemberStore.topicForMemberId(memberId));
-        }
+        MemberStore.registerTokenIfMemberSelected(this, token);
     }
 
     @Override
@@ -57,6 +58,7 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
                     ? "경기 시간이 가장 많이 지난 코트가"
                     : expectedCourtNo + "번 코트가";
             showAssignmentNotification(
+                    CHANNEL_WAIT1,
                     assignmentId,
                     "대기 1순위 안내",
                     memberName,
@@ -71,6 +73,7 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
                 ? "배정된 코트"
                 : courtNo + "번 코트";
         showAssignmentNotification(
+                CHANNEL_COURT,
                 assignmentId,
                 "코트 입장 안내",
                 memberName,
@@ -78,20 +81,45 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
         );
     }
 
-    static void ensureNotificationChannel(Context context) {
+    static void ensureNotificationChannels(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager manager =
                 (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager == null || manager.getNotificationChannel(CHANNEL_ID) != null) return;
+        if (manager == null) return;
+
+        ensureChannel(
+                manager,
+                CHANNEL_WAIT1,
+                "대기 1순위 알림",
+                "대기1로 올라올 때 긴 진동 3회 x 3그룹으로 알려드립니다.",
+                buildVibrationPattern(WAIT1_GROUPS)
+        );
+        ensureChannel(
+                manager,
+                CHANNEL_COURT,
+                "코트 입장 알림",
+                "코트에 배정될 때 긴 진동 3회 x 5그룹으로 알려드립니다.",
+                buildVibrationPattern(COURT_GROUPS)
+        );
+    }
+
+    private static void ensureChannel(
+            NotificationManager manager,
+            String channelId,
+            String name,
+            String description,
+            long[] vibrationPattern
+    ) {
+        if (manager.getNotificationChannel(channelId) != null) return;
 
         NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "대기·코트 배정 알림",
+                channelId,
+                name,
                 NotificationManager.IMPORTANCE_HIGH
         );
-        channel.setDescription("대기1 승급과 코트 입장 시 진동과 알림을 표시합니다.");
+        channel.setDescription(description);
         channel.enableVibration(true);
-        channel.setVibrationPattern(VIBRATION_PATTERN);
+        channel.setVibrationPattern(vibrationPattern);
         channel.enableLights(true);
         channel.setLightColor(Color.BLUE);
         channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
@@ -105,13 +133,39 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
         manager.createNotificationChannel(channel);
     }
 
+    /**
+     * One group is 3 long pulses. Android channel vibration patterns alternate
+     * off/on starting with an initial (possibly zero) delay, so a single FCM
+     * message can still ring out the full multi-group pattern locally.
+     */
+    private static long[] buildVibrationPattern(int groups) {
+        int pulsesPerGroup = 3;
+        int segments = 1 + groups * (pulsesPerGroup * 2 - 1) + (groups - 1);
+        long[] pattern = new long[segments];
+        pattern[0] = 0L;
+        int index = 1;
+        for (int group = 0; group < groups; group++) {
+            for (int pulse = 0; pulse < pulsesPerGroup; pulse++) {
+                pattern[index++] = PULSE_MS;
+                if (pulse < pulsesPerGroup - 1) {
+                    pattern[index++] = INTRA_PULSE_GAP_MS;
+                }
+            }
+            if (group < groups - 1) {
+                pattern[index++] = GROUP_GAP_MS;
+            }
+        }
+        return pattern;
+    }
+
     private void showAssignmentNotification(
+            String channelId,
             String assignmentId,
             String title,
             String memberName,
             String instruction
     ) {
-        ensureNotificationChannel(this);
+        ensureNotificationChannels(this);
 
         Intent launchIntent = new Intent(this, MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -125,7 +179,7 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
         String body = (memberName.isEmpty() ? "회원" : memberName + "님") + ", " + instruction;
 
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, CHANNEL_ID)
+                ? new Notification.Builder(this, channelId)
                 : new Notification.Builder(this);
         builder.setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
@@ -138,9 +192,10 @@ public final class JayumintonMessagingService extends FirebaseMessagingService {
                 .setVisibility(Notification.VISIBILITY_PUBLIC);
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            int groups = CHANNEL_WAIT1.equals(channelId) ? WAIT1_GROUPS : COURT_GROUPS;
             builder.setPriority(Notification.PRIORITY_HIGH)
                     .setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_LIGHTS)
-                    .setVibrate(VIBRATION_PATTERN);
+                    .setVibrate(buildVibrationPattern(groups));
         }
 
         NotificationManager manager =

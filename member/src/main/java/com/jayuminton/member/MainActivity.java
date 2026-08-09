@@ -18,8 +18,6 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.firebase.messaging.FirebaseMessaging;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -78,7 +76,7 @@ public final class MainActivity extends Activity {
         selectMemberButton = findViewById(R.id.selectMemberButton);
         selectMemberButton.setOnClickListener(view -> loadMembersAndShowPicker());
 
-        JayumintonMessagingService.ensureNotificationChannel(this);
+        JayumintonMessagingService.ensureNotificationChannels(this);
         requestNotificationPermission();
         configureWebView();
         findViewById(R.id.refreshButton).setOnClickListener(view -> {
@@ -140,8 +138,8 @@ public final class MainActivity extends Activity {
     private void restoreSubscription() {
         String memberId = MemberStore.getSelectedMemberId(this);
         if (memberId.isEmpty()) return;
-        FirebaseMessaging.getInstance()
-                .subscribeToTopic(MemberStore.topicForMemberId(memberId));
+        MemberStore.registerCurrentToken(
+                this, memberId, MemberStore.getSelectedMemberName(this));
     }
 
     private void updateSelectedMemberText() {
@@ -220,48 +218,33 @@ public final class MainActivity extends Activity {
     }
 
     private void subscribeToMember(MemberChoice choice) {
-        String oldMemberId = MemberStore.getSelectedMemberId(this);
-        String oldTopic = oldMemberId.isEmpty()
-                ? ""
-                : MemberStore.topicForMemberId(oldMemberId);
-        String newTopic = MemberStore.topicForMemberId(choice.id);
-
         selectedMemberText.setText(choice.name + " 알림을 설정하는 중...");
         selectMemberButton.setEnabled(false);
 
-        FirebaseMessaging.getInstance()
-                .subscribeToTopic(newTopic)
-                .addOnCompleteListener(task -> runOnUiThread(() -> {
-                    selectMemberButton.setEnabled(true);
-                    if (!task.isSuccessful()) {
-                        updateSelectedMemberText();
-                        Toast.makeText(
-                                MainActivity.this,
-                                "알림 설정에 실패했습니다. 인터넷 연결을 확인해 주세요.",
-                                Toast.LENGTH_LONG
-                        ).show();
-                        return;
-                    }
+        MemberStore.registerToken(this, choice.id, choice.name, success -> runOnUiThread(() -> {
+            selectMemberButton.setEnabled(true);
+            if (!success) {
+                updateSelectedMemberText();
+                Toast.makeText(
+                        MainActivity.this,
+                        "알림 설정에 실패했습니다. 인터넷 연결을 확인해 주세요.",
+                        Toast.LENGTH_LONG
+                ).show();
+                return;
+            }
 
-                    MemberStore.saveSelection(MainActivity.this, choice.id, choice.name);
-                    if (!oldTopic.isEmpty() && !oldTopic.equals(newTopic)) {
-                        FirebaseMessaging.getInstance().unsubscribeFromTopic(oldTopic);
-                    }
-                    updateSelectedMemberText();
-                    Toast.makeText(
-                            MainActivity.this,
-                            choice.name + "님의 대기1·코트 배정 알림을 받습니다.",
-                            Toast.LENGTH_LONG
-                    ).show();
-                }));
+            MemberStore.saveSelection(MainActivity.this, choice.id, choice.name);
+            updateSelectedMemberText();
+            Toast.makeText(
+                    MainActivity.this,
+                    choice.name + "님의 대기1·코트 배정 알림을 받습니다.",
+                    Toast.LENGTH_LONG
+            ).show();
+        }));
     }
 
     private void clearSelection() {
-        String oldMemberId = MemberStore.getSelectedMemberId(this);
-        if (!oldMemberId.isEmpty()) {
-            FirebaseMessaging.getInstance()
-                    .unsubscribeFromTopic(MemberStore.topicForMemberId(oldMemberId));
-        }
+        MemberStore.unregisterCurrentToken(this);
         MemberStore.clearSelection(this);
         updateSelectedMemberText();
         Toast.makeText(this, "개인 배정 알림을 해제했습니다.", Toast.LENGTH_SHORT).show();

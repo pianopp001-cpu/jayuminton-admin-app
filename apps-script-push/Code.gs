@@ -266,6 +266,10 @@ function makeWebFcmRequest_(event, member, token, accessToken) {
     message: {
       token: token,
       data: data,
+      android: {
+        priority: 'high',
+        ttl: '600s'
+      },
       webpush: {
         headers: {
           Urgency: 'high',
