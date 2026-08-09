@@ -195,7 +195,9 @@ jobs:
           grep -F 'confirm_action' "$RUNNER_TEMP/native-path-classes.txt" >/dev/null
           grep -F 'vibration_cancelled' "$RUNNER_TEMP/native-path-classes.txt" >/dev/null
           grep -F 'token_register_requested' "$RUNNER_TEMP/native-path-classes.txt" >/dev/null
-          grep -F '확인 · 진동 끄기' "$RUNNER_TEMP/native-path-classes.txt" >/dev/null
+          # Korean UI text is verified in generated Java above and by successful
+          # javac/assemble. GNU strings is byte/locale-sensitive for DEX UTF-8 and
+          # must not be used as the release gate for Hangul text.
           if grep -F '?mode=admin' "$RUNNER_TEMP/native-path-classes.txt" >/dev/null; then
             echo 'admin URL leaked into user diagnostic APK' >&2
             exit 1
