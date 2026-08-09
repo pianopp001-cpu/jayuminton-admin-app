@@ -1,0 +1,41 @@
+name: Deploy wait1 push without court requirement
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-wait1-no-court.yml'
+      - 'deployment/scripts/patch_live_wait1_no_court_required.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Allow wait1 push without assigned court
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          ID="$(jq -r '.pushScriptId' "$C")"; DEPLOY="$(jq -r '.pushDeploymentId' "$C")"
+          W="$RUNNER_TEMP/push"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$ID" > "$W/.clasp.json"
+          cd "$W"; clasp pull
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_live_wait1_no_court_required.py" "$W"
+          node --check Code.js
+          grep -F 'JAYUMINTON_WAIT1_NO_COURT_REQUIRED_V1' Code.js >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$DEPLOY" --description "wait1 no court $GITHUB_RUN_ID"
