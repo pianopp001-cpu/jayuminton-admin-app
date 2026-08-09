@@ -29,6 +29,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/v116-link.log") 2>&1
+          echo start > "$RUNNER_TEMP/v116-link-stage.txt"
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
@@ -39,6 +41,7 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
+          echo pulled-live-main > "$RUNNER_TEMP/v116-link-stage.txt"
           cp Code.js "$RUNNER_TEMP/Code.before.js"
           cp Admin.html "$RUNNER_TEMP/Admin.before.html"
           cp Style.html "$RUNNER_TEMP/Style.before.html"
@@ -57,8 +60,10 @@ jobs:
           cmp Admin.html "$RUNNER_TEMP/Admin.before.html"
           cmp Style.html "$RUNNER_TEMP/Style.before.html"
           grep -F 'jayuminton-courtstatus-v1.1.6-fresh-install.apk?build=35edc903' Script.html >/dev/null
+          echo link-patched-and-verified > "$RUNNER_TEMP/v116-link-stage.txt"
           clasp push --force
           clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "refresh production-only APK bytes ${GITHUB_SHA::7}"
+          echo live-deployed > "$RUNNER_TEMP/v116-link-stage.txt"
           printf 'status=success\nversion=1.1.6\napk_sha256=35edc90331b023812e87a42a0dfe695206b9030847c268d59a29db297dc01de0\ncache_key=35edc903\nchanged_files=Script.html\nadmin_logic_changed=no\ndeployed_at=%s\n' "$(date -u +%FT%TZ)" > "$GITHUB_WORKSPACE/deployment/status/user-v116-production-link-live.txt"
       - name: Publish status
         shell: bash
@@ -68,5 +73,24 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/user-v116-production-link-live.txt
           git commit -m 'Record refreshed production-only APK install link'
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Publish sanitized failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          {
+            echo 'status=failure'
+            echo 'stage='"$(cat "$RUNNER_TEMP/v116-link-stage.txt" 2>/dev/null || echo unknown)"
+            echo '--- log tail ---'
+            tail -n 160 "$RUNNER_TEMP/v116-link.log" 2>/dev/null || true
+          } > deployment/status/user-v116-production-link-failure.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v116-production-link-failure.txt
+          git commit -m 'Record v1.1.6 install link deployment failure' || true
           git pull --rebase origin main
           git push origin main
