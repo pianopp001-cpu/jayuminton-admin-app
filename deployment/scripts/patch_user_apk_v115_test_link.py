@@ -9,7 +9,7 @@ path = root / "Script.html"
 source = path.read_text(encoding="utf-8")
 target = (
     "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/"
-    "main/releases/jayuminton-courtstatus-v1.1.5-test.apk"
+    "main/releases/jayuminton-courtstatus-v1.1.5-fresh-install.apk"
 )
 source, count = re.subn(
     r"https://raw\.githubusercontent\.com/pianopp001-cpu/jayuminton-admin-app/"
@@ -29,4 +29,4 @@ source = re.sub(
 if target not in source:
     raise SystemExit("v1.1.5 test APK link verification failed")
 path.write_text(source, encoding="utf-8")
-print("Updated only the user app-install button to the v1.1.5 test APK.")
+print("Updated only the user app-install button to the clean v1.1.5 APK.")
