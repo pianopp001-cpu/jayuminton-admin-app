@@ -1,0 +1,71 @@
+name: Emergency rollback unsafe v1.1.8 install link
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rollback-user-v118-install-link.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Roll back only the APK link
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          ID="$(jq -r '.mainScriptId' "$C")"
+          DEPLOY="$(jq -r '.mainDeploymentId' "$C")"
+          W="$RUNNER_TEMP/main"
+          mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          cp Code.js "$RUNNER_TEMP/Code.before.js"
+          cp Admin.html "$RUNNER_TEMP/Admin.before.html"
+          cp Style.html "$RUNNER_TEMP/Style.before.html"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          old='https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.8-fresh-install.apk?build=0289f965'
+          new='https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540'
+          if s.count(old) != 1:
+              raise SystemExit('unsafe v1.1.8 live link not found exactly once')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          PY
+          cmp Code.js "$RUNNER_TEMP/Code.before.js"
+          cmp Admin.html "$RUNNER_TEMP/Admin.before.html"
+          cmp Style.html "$RUNNER_TEMP/Style.before.html"
+          grep -F 'jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540' Script.html >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$DEPLOY" --description "emergency rollback unsafe v1.1.8 ${GITHUB_SHA::7}"
+          printf 'status=success\nrolled_back_from=1.1.8\nrolled_back_to=1.1.7\nchanged_files=Script.html\nadmin_logic_changed=no\nreason=missing_stop_button_for_repeating_vibration\ndeployed_at=%s\n' "$(date -u +%FT%TZ)" > "$GITHUB_WORKSPACE/deployment/status/user-v118-emergency-rollback.txt"
+      - name: Publish rollback status
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v118-emergency-rollback.txt
+          git commit -m 'Record emergency rollback of unsafe v1.1.8 install link'
+          git pull --rebase origin main
+          git push origin main
