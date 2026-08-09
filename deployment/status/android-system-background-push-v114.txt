@@ -1,0 +1,10 @@
+status=success
+mode=android-system-notification
+package=com.jayuminton.user
+wait_channel=jayuminton_wait1_system_v114
+court_channel=jayuminton_court_system_v114
+priority=high
+notification_priority=PRIORITY_MAX
+system_tray_background=yes
+long_vibration=yes
+deployed_at=2026-08-09T02:27:26Z
