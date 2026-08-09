@@ -12,11 +12,12 @@ source = path.read_text(encoding="utf-8")
 marker = "JAYUMINTON_NATIVE_DELIVERY_DIAGNOSTICS_V1"
 
 if marker not in source:
-    match = re.search(r"function\s+doGet\s*\(e\)\s*\{", source)
+    match = re.search(r"function\s+doGet\s*\([^)]*\)\s*\{", source)
     if not match:
         raise SystemExit("doGet function not found")
     branch = r'''
-  const nativeDiagnosticRequest_ = arguments[0] || {};\n  if (String(nativeDiagnosticRequest_.parameter && nativeDiagnosticRequest_.parameter.action || '') === 'native_delivery_summary') {
+  const nativeDiagnosticRequest_ = arguments[0] || {};
+  if (String(nativeDiagnosticRequest_.parameter && nativeDiagnosticRequest_.parameter.action || '') === 'native_delivery_summary') {
     return ContentService.createTextOutput(JSON.stringify(nativeDeliverySummary_()))
       .setMimeType(ContentService.MimeType.JSON);
   }
