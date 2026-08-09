@@ -151,6 +151,7 @@ jobs:
           python3 deployment/scripts/patch_build_user_native_v114.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v115.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v116.py deployment/scripts/build_user_native_push_fresh_v110.sh
+          python3 deployment/scripts/patch_build_user_native_v117.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v118.py deployment/scripts/build_user_native_push_fresh_v110.sh
           bash deployment/scripts/build_user_native_push_fresh_v110.sh
           test -s releases/jayuminton-courtstatus-v1.1.8-fresh-install.apk
