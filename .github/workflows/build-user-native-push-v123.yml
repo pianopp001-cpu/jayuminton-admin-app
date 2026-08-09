@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/build-user-native-push-v122.yml'
+      - '.github/workflows/build-user-native-push-v123.yml'
   pull_request:
     branches: [main]
     paths:
       - 'deployment/status/trigger-user-native-v123.txt'
-      - '.github/workflows/build-user-native-push-v122.yml'
+      - '.github/workflows/build-user-native-push-v123.yml'
   workflow_dispatch: {}
 
 permissions:
