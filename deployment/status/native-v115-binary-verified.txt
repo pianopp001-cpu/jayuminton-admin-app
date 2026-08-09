@@ -1,11 +1,11 @@
 status=success
 version=1.1.5
 apk_sha256=f5c77cab41ef07992479bd39ba3a460c72f9cfe28720a2c8e3b349ab50ee3ae2
-server_test_action=yes
-fcm_acceptance_required=yes
-fcm_failure_recorded=yes
+automatic_test_push=no
+token_registration=yes
+production_event_only=yes
 system_channels=yes
 background_service=yes
 live_install_link_changed=no
-verified_at=2026-08-09T04:48:05Z
+verified_at=2026-08-09T04:49:37Z
 missing=
