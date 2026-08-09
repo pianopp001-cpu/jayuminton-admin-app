@@ -1,0 +1,39 @@
+name: Publish uniquely named v1.1.5 test APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-user-v115-test-copy.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Publish exact verified APK under unique test name
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE="releases/jayuminton-courtstatus-v1.1.5-fresh-install.apk"
+          TARGET="releases/jayuminton-courtstatus-v1.1.5-test.apk"
+          test -s "$SOURCE"
+          EXPECTED="$(sed -n 's/^apk_sha256=//p' deployment/status/user-native-push-v1.1.5.txt)"
+          test -n "$EXPECTED"
+          test "$(sha256sum "$SOURCE" | awk '{print $1}')" = "$EXPECTED"
+          cp "$SOURCE" "$TARGET"
+          test "$(sha256sum "$TARGET" | awk '{print $1}')" = "$EXPECTED"
+          printf 'status=success\nversion=1.1.5\nfilename=jayuminton-courtstatus-v1.1.5-test.apk\napk_sha256=%s\nlive_install_link_changed=no\npublished_at=%s\n' "$EXPECTED" "$(date -u +%FT%TZ)" > deployment/status/user-v115-test-copy.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$TARGET" deployment/status/user-v115-test-copy.txt
+          git commit -m 'Publish uniquely named user APK v1.1.5 test copy'
+          git pull --rebase origin main
+          git push origin main
