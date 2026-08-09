@@ -43,7 +43,7 @@ jobs:
           clasp pull
           PUSH_WORK="$RUNNER_TEMP/push"
           mkdir -p "$PUSH_WORK"
-          printf '{"scriptId":"%s","rootDir":"."}\\n' "$PUSH_SCRIPT_ID" > "$PUSH_WORK/.clasp.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$PUSH_WORK/.clasp.json"
           cd "$PUSH_WORK"
           clasp pull
           cp Code.js "$WORK/PushCode.js"
