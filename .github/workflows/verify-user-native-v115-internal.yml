@@ -57,7 +57,7 @@ jobs:
           test "$SHA" = "$EXPECTED_SHA"
           RESULT=success
           if [ "$missing" != 0 ]; then RESULT=failure; fi
-          printf 'status=%s\nversion=1.1.5\napk_sha256=%s\nserver_test_action=yes\nfcm_acceptance_required=yes\nfcm_failure_recorded=yes\nsystem_channels=yes\nbackground_service=yes\nlive_install_link_changed=no\nverified_at=%s\nmissing=%s\n' "$RESULT" "$SHA" "$(date -u +%FT%TZ)" "$(tr '\n' ',' < "$RUNNER_TEMP/missing.txt")" > deployment/status/native-v115-binary-verified.txt
+          printf 'status=%s\nversion=1.1.5\napk_sha256=%s\nautomatic_test_push=no\ntoken_registration=yes\nproduction_event_only=yes\nsystem_channels=yes\nbackground_service=yes\nlive_install_link_changed=no\nverified_at=%s\nmissing=%s\n' "$RESULT" "$SHA" "$(date -u +%FT%TZ)" "$(tr '\n' ',' < "$RUNNER_TEMP/missing.txt")" > deployment/status/native-v115-binary-verified.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/native-v115-binary-verified.txt
