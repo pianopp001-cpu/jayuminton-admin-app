@@ -44,12 +44,12 @@ jobs:
           import re,sys
           source=Path(sys.argv[1]).read_text(encoding='utf-8')
           lines=source.splitlines()
-          patterns=('UrlFetchApp.fetch','getResponseCode','getContentText','function doGet','function doPost','token_status','register_web_token','makeWebFcmRequest_','sendWebPush')
+          patterns=('UrlFetchApp.fetch','getResponseCode','getContentText','function doGet','function doPost','token_status','register_web_token','makeWebFcmRequest_','sendWebPush','registerWebToken_','loadWeb','readWeb','getWebPush','saveWeb','webPushTokens')
           hits=[i for i,line in enumerate(lines) if any(pattern in line for pattern in patterns)]
           out=['status=success','fetch_hits='+str(sum('UrlFetchApp.fetch' in x for x in lines)),'response_code_hits='+str(sum('getResponseCode' in x for x in lines)),'content_text_hits='+str(sum('getContentText' in x for x in lines))]
           covered=set()
           for hit in hits:
-              start=max(0,hit-24); end=min(len(lines),hit+55)
+              start=max(0,hit-24); end=min(len(lines),hit+110)
               key=(start,end)
               if key in covered: continue
               covered.add(key)
