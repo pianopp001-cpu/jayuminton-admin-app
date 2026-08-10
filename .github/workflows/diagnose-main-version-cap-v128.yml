@@ -1,0 +1,92 @@
+name: Diagnose main Apps Script version blocker for v1.2.8
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-main-version-cap-v128.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+
+      - name: Inspect version count and classify create-version failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          test -n "$SCRIPT_ID"; test "$SCRIPT_ID" != null
+          W="$RUNNER_TEMP/main-version-diag"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull >/dev/null
+          clasp list-versions > "$RUNNER_TEMP/versions.txt" 2> "$RUNNER_TEMP/versions.err" || true
+
+          TOTAL_LINES="$(grep -cve '^\s*$' "$RUNNER_TEMP/versions.txt" || true)"
+          NUMBERED_LINES="$(grep -cE '(^|[^0-9])[0-9]+([^0-9]|$)' "$RUNNER_TEMP/versions.txt" || true)"
+          MAX_SEEN="$(grep -oE '[0-9]+' "$RUNNER_TEMP/versions.txt" | sort -n | tail -1 || true)"
+          [ -n "$MAX_SEEN" ] || MAX_SEEN=0
+
+          set +e
+          clasp create-version "v128 diagnostic $GITHUB_RUN_ID" > "$RUNNER_TEMP/create.out" 2> "$RUNNER_TEMP/create.err"
+          RC=$?
+          set -e
+          cat "$RUNNER_TEMP/create.out" "$RUNNER_TEMP/create.err" > "$RUNNER_TEMP/create.all"
+          tr '[:upper:]' '[:lower:]' < "$RUNNER_TEMP/create.all" > "$RUNNER_TEMP/create.lower"
+
+          LIMIT_HINT=no
+          PERMISSION_HINT=no
+          QUOTA_HINT=no
+          API_HINT=no
+          grep -Eq '200|maximum|max versions|version limit|too many version' "$RUNNER_TEMP/create.lower" && LIMIT_HINT=yes || true
+          grep -Eq 'permission|insufficient|scope|unauthorized|forbidden|authentication|credential' "$RUNNER_TEMP/create.lower" && PERMISSION_HINT=yes || true
+          grep -Eq 'quota|rate limit|resource exhausted' "$RUNNER_TEMP/create.lower" && QUOTA_HINT=yes || true
+          grep -Eq 'script\.googleapis\.com|apps script api|api error|request failed' "$RUNNER_TEMP/create.lower" && API_HINT=yes || true
+
+          CREATED_VERSION=no
+          if [ "$RC" -eq 0 ]; then CREATED_VERSION=yes; fi
+
+          cd "$GITHUB_WORKSPACE"
+          cat > deployment/status/main-version-cap-diagnostic-v128.txt <<EOF
+          status=success
+          version=1.2.8
+          list_versions_nonempty_lines=$TOTAL_LINES
+          list_versions_numbered_lines=$NUMBERED_LINES
+          max_version_number_seen=$MAX_SEEN
+          create_version_exit_code=$RC
+          create_version_succeeded=$CREATED_VERSION
+          version_limit_hint=$LIMIT_HINT
+          permission_or_scope_hint=$PERMISSION_HINT
+          quota_hint=$QUOTA_HINT
+          api_error_hint=$API_HINT
+          admin_logic_changed=no
+          diagnosed_at=$(date -u +%FT%TZ)
+          EOF
+
+      - name: Publish safe diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/main-version-cap-diagnostic-v128.txt
+          git commit -m 'Record Apps Script version blocker diagnostic for v1.2.8' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
