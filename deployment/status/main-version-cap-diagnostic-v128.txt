@@ -1,0 +1,13 @@
+status=success
+version=1.2.8
+list_versions_nonempty_lines=201
+list_versions_numbered_lines=201
+max_version_number_seen=31348277927
+create_version_exit_code=1
+create_version_succeeded=no
+version_limit_hint=yes
+permission_or_scope_hint=no
+quota_hint=no
+api_error_hint=no
+admin_logic_changed=no
+diagnosed_at=2026-08-10T12:51:24Z
