@@ -1,0 +1,71 @@
+name: Preflight v1.2.8 repeated-switch patch chain
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/preflight-user-v128-repeat-switch.yml'
+      - 'deployment/scripts/patch_build_user_native_v128_repeat_switch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - name: Apply complete user APK patch chain
+        id: check
+        shell: bash
+        run: |
+          set +e
+          SCRIPT='deployment/scripts/build_user_native_push_fresh_v110.sh'
+          LOG="$RUNNER_TEMP/v128-preflight.log"
+          {
+            python3 deployment/scripts/patch_build_user_native_v111.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v112.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v113.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v114.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v115.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v116.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v117.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v118.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v119.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v120_diagnostic.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v121.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v122.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v124_confirmed_overlay.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v126_stop_controller.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v126_raceguard.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v127_member_switch.py "$SCRIPT" &&
+            python3 deployment/scripts/patch_build_user_native_v128_repeat_switch.py "$SCRIPT" &&
+            grep -F 'VERSION="1.2.8"' "$SCRIPT" &&
+            grep -F 'stopPreviousMemberAlert(app);' "$SCRIPT" &&
+            grep -F 'AlertVibrationController.start(this, assignmentId)' "$SCRIPT" &&
+            grep -F 'NativePushRegistrar.isCurrentMember(this, targetMemberId)' "$SCRIPT"
+          } >"$LOG" 2>&1
+          RC=$?
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          tail -n 180 "$LOG"
+          exit 0
+      - name: Publish preflight result
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS='deployment/status/v128-repeat-switch-preflight.txt'
+          {
+            echo 'workflow=Preflight v1.2.8 repeated-switch patch chain'
+            if [ '${{ steps.check.outputs.rc }}' = '0' ]; then echo 'status=success'; else echo 'status=failure'; fi
+            echo 'exit_code=${{ steps.check.outputs.rc }}'
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > "$STATUS"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$STATUS"
+          git commit -m 'Record v1.2.8 repeated-switch preflight' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
