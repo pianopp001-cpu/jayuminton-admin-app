@@ -1,0 +1,18 @@
+status=failure
+stage=native-build-started
+--- build log tail ---
+Prepared native background push APK build v1.1.1.
+Prepared native v1.1.2 with direct member bridge and registration retries.
+Prepared native v1.1.3 with verified registration and local alert probe.
+Prepared native v1.1.4 with pre-created Android system notification channels.
+Prepared native v1.1.5 with token registration and no automatic test push.
+Prepared native v1.1.6 with unconditional alarm-usage assignment vibration.
+Prepared v1.1.7 persistent alert with uncancelled explicit vibration.
+Prepared v1.1.8 with correct wait1 wording, stale-member guard and until-dismissed vibration.
+Prepared v1.1.9 with always-available notification stop action.
+Prepared safe v1.2.0 native delivery diagnostic APK.
+Prepared v1.2.1 with Android full-screen access flow and strict member resync.
+Prepared v1.2.2 deterministic overlay stop UI and safe vibration fallback.
+Prepared v1.2.4 with verified overlay add before repeating vibration.
+Prepared v1.2.6 candidate: finite-group controller + manager-wide cancel + guarded cancel retries.
+deployment/scripts/build_user_native_push_fresh_v110.sh: line 4: MAIN_DEPLOYMENT_ID: MAIN_DEPLOYMENT_ID required
