@@ -1,0 +1,15 @@
+status=success
+version=1.2.9
+version_code=129
+deploy_outcome=success
+verify_outcome=success
+stage=verified
+hosting_url=https://jayuminton-push.web.app
+user_url=https://jayuminton-push.web.app/badminton.html
+hosting_button=v1.2.9
+apk_transport=external-raw-github
+apk=jayuminton-courtstatus-v1.2.9-background-registration.apk
+apk_sha256=5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff
+old_v128_link_present=no
+admin_logic_changed=no
+verified_at=2026-08-10T15:08:39Z
