@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/build-user-native-push-v126-stop-controller.yml'
       - 'deployment/scripts/patch_build_user_native_v126_stop_controller.py'
+      - 'deployment/scripts/patch_build_user_native_v126_raceguard.py'
   workflow_dispatch: {}
 
 permissions:
@@ -44,9 +45,12 @@ jobs:
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          jq -e '.pushScriptId and .pushDeploymentId and .firebaseProjectId and .pushUrl' "$CONFIG" >/dev/null
+          jq -e '.mainScriptId and .mainDeploymentId and .pushScriptId and .pushDeploymentId and .firebaseProjectId and .pushUrl' "$CONFIG" >/dev/null
           {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")"
             echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$CONFIG")"
+            echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG")"
             echo "PUSH_URL=$(jq -r '.pushUrl' "$CONFIG")"
             echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")"
           } >> "$GITHUB_ENV"
@@ -140,6 +144,7 @@ jobs:
           python3 deployment/scripts/patch_build_user_native_v122.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v124_confirmed_overlay.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v126_stop_controller.py deployment/scripts/build_user_native_push_fresh_v110.sh
+          python3 deployment/scripts/patch_build_user_native_v126_raceguard.py deployment/scripts/build_user_native_push_fresh_v110.sh
 
           SCRIPT='deployment/scripts/build_user_native_push_fresh_v110.sh'
           grep -F 'VERSION="1.2.6"' "$SCRIPT" >/dev/null
@@ -152,6 +157,7 @@ jobs:
           grep -F 'AlertVibrationController.start(this, assignmentId)' "$SCRIPT" >/dev/null
           grep -F 'AlertVibrationController.stop(this)' "$SCRIPT" >/dev/null
           test "$(grep -Fc 'AlertVibrationController.stop(context)' "$SCRIPT")" -ge 2
+          grep -F 'JAYUMINTON_V126_START_STOP_RACE_GUARD' "$SCRIPT" >/dev/null
           grep -F 'NativeDeliveryReporter.report("vibration_started"' "$SCRIPT" >/dev/null
           grep -F 'confirm.setText("확인하고 닫기")' "$SCRIPT" >/dev/null
           grep -F '"확인 · 진동 끄기"' "$SCRIPT" >/dev/null
