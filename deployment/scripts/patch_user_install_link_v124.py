@@ -3,8 +3,10 @@ from pathlib import Path
 import re
 import sys
 
-# Safety rollback only. v1.2.5 is not accepted because the centre confirm button
-# did not stop the repeating vibration on the real device.
+# Safety rollback only. v1.2.6 is not accepted for general installation because
+# the first selected member worked but notifications failed after switching to a
+# second member on the real device. Keep the live install button on v1.1.7 while
+# the member/token switch path is diagnosed.
 APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540"
 
 mode = sys.argv[1]
