@@ -1,0 +1,64 @@
+name: Deploy atomic native member token switch protection
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-member-token-switch-atomic.yml'
+      - 'deployment/scripts/patch_member_token_switch_atomic.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+
+      - name: Patch only push token reassignment safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          ID="$(jq -r '.pushScriptId' "$C")"
+          DEPLOY="$(jq -r '.pushDeploymentId' "$C")"
+          W="$RUNNER_TEMP/push"
+          mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          sha256sum appsscript.json > "$RUNNER_TEMP/manifest.before"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_member_token_switch_atomic.py" "$W"
+          node --check Code.js
+          grep -F 'JAYUMINTON_MEMBER_TOKEN_SWITCH_ATOMIC_V1' Code.js >/dev/null
+          grep -F "if (memberId && String(record.memberId || '') !== memberId) return true;" Code.js >/dev/null
+          sha256sum appsscript.json > "$RUNNER_TEMP/manifest.after"
+          cmp "$RUNNER_TEMP/manifest.before" "$RUNNER_TEMP/manifest.after"
+          clasp push --force
+          clasp create-deployment --deploymentId "$DEPLOY" --description "atomic native member token switch $GITHUB_RUN_ID"
+
+      - name: Verify deployed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          C="$RUNNER_TEMP/deploy.json"
+          ID="$(jq -r '.pushScriptId' "$C")"
+          W="$RUNNER_TEMP/verify"
+          mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          grep -F 'JAYUMINTON_MEMBER_TOKEN_SWITCH_ATOMIC_V1' Code.js >/dev/null
+          grep -F "if (memberId && String(record.memberId || '') !== memberId) return true;" Code.js >/dev/null
