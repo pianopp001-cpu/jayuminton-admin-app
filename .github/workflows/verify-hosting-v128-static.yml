@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {ref: main}
-      - name: Inspect live Hosting only
+      - name: Inspect live Hosting and its current APK target
         shell: bash
         run: |
           set -euo pipefail
@@ -31,31 +31,39 @@ jobs:
           test -n "$EXPECTED"
 
           curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' \
-            "$BASE/setup-v205.js?verify=static-check-$GITHUB_RUN_ID" -o "$RUNNER_TEMP/setup.js"
+            "$BASE/setup-v205.js?verify=target-check-$GITHUB_RUN_ID" -o "$RUNNER_TEMP/setup.js"
           V128_COUNT="$(grep -Fc 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$RUNNER_TEMP/setup.js" || true)"
           V124_COUNT="$(grep -Fc 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/setup.js" || true)"
           SAME_ORIGIN_COUNT="$(grep -Fc '/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-hosting-' "$RUNNER_TEMP/setup.js" || true)"
 
-          APK_HTTP=fail
-          APK_HASH=unavailable
+          TARGET="$(sed -n "s/.*const JAYUMINTON_USER_APK_V128 = '\([^']*\)'.*/\1/p" "$RUNNER_TEMP/setup.js" | head -1)"
+          test -n "$TARGET"
+          TARGET_KIND=other
+          case "$TARGET" in
+            /jayuminton-courtstatus-v1.2.8-repeat-switch.apk*) TARGET_KIND=same-origin-v128; TARGET="$BASE$TARGET" ;;
+            https://raw.githubusercontent.com/*jayuminton-courtstatus-v1.2.8-repeat-switch.apk*) TARGET_KIND=raw-github-v128 ;;
+          esac
+
+          TARGET_HTTP=fail
+          TARGET_HASH=unavailable
           HASH_MATCH=no
-          if curl --fail --location --retry 3 -H 'Cache-Control: no-cache, no-store' \
-             "$BASE/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/apk"; then
-            APK_HTTP=ok
-            APK_HASH="$(sha256sum "$RUNNER_TEMP/apk" | awk '{print $1}')"
-            if [ "$APK_HASH" = "$EXPECTED" ]; then HASH_MATCH=yes; fi
+          if curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$TARGET" -o "$RUNNER_TEMP/target.apk"; then
+            TARGET_HTTP=ok
+            TARGET_HASH="$(sha256sum "$RUNNER_TEMP/target.apk" | awk '{print $1}')"
+            if [ "$TARGET_HASH" = "$EXPECTED" ]; then HASH_MATCH=yes; fi
           fi
 
-          cat > deployment/status/user-v128-static-hosting-check.txt <<EOF
+          cat > deployment/status/user-v128-hosting-target-check.txt <<EOF
           status=success
           version=1.2.8
           live_setup_v128_count=$V128_COUNT
           live_setup_v124_count=$V124_COUNT
           same_origin_v128_count=$SAME_ORIGIN_COUNT
-          live_apk_http=$APK_HTTP
-          live_apk_hash_match=$HASH_MATCH
+          target_kind=$TARGET_KIND
+          target_http=$TARGET_HTTP
+          target_hash_match=$HASH_MATCH
           expected_apk_sha256=$EXPECTED
-          observed_apk_sha256=$APK_HASH
+          observed_target_sha256=$TARGET_HASH
           admin_logic_changed=no
           checked_at=$(date -u +%FT%TZ)
           EOF
@@ -65,7 +73,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/user-v128-static-hosting-check.txt
-          git commit -m 'Record current Firebase Hosting v1.2.8 route check' || exit 0
+          git add deployment/status/user-v128-hosting-target-check.txt
+          git commit -m 'Record exact Firebase Hosting v1.2.8 APK target check' || exit 0
           git pull --rebase origin main || true
           git push origin main
