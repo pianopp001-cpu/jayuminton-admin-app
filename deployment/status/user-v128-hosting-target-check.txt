@@ -1,0 +1,12 @@
+status=success
+version=1.2.8
+live_setup_v128_count=1
+live_setup_v124_count=0
+same_origin_v128_count=0
+target_kind=raw-github-v128
+target_http=ok
+target_hash_match=yes
+expected_apk_sha256=9ff436e2cbc70f10fc32b905d8f3e66e18df3e3604444309a49990371ec3f7fc
+observed_target_sha256=9ff436e2cbc70f10fc32b905d8f3e66e18df3e3604444309a49990371ec3f7fc
+admin_logic_changed=no
+checked_at=2026-08-10T12:57:27Z
