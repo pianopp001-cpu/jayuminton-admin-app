@@ -1,0 +1,17 @@
+status=success
+hosting_base=https://jayuminton-push.web.app
+root_route=https://jayuminton-push.web.app/
+badminton_route=https://jayuminton-push.web.app/badminton.html
+root_and_badminton_same_html=yes
+root_setup_ref_count=1
+badminton_setup_ref_count=1
+root_v128_literal_count=0
+root_v124_literal_count=0
+badminton_v128_literal_count=0
+badminton_v124_literal_count=0
+setup_v128_count=1
+setup_v124_count=0
+root_apk_filenames=
+badminton_apk_filenames=
+admin_logic_changed=no
+checked_at=2026-08-10T13:07:13Z
