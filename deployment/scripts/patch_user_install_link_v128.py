@@ -3,7 +3,9 @@ from pathlib import Path
 import re
 import sys
 
-APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch"
+# Keep the verified v1.2.8 APK bytes, but use a fresh cache-busting URL so a
+# phone/browser cannot reuse an earlier downloaded APK response.
+APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch&r=20260810-2113"
 MARKER = "JAYUMINTON_NATIVE_APK_DOWNLOAD_V128"
 
 mode = sys.argv[1]
@@ -47,7 +49,7 @@ if mode == "hosting":
 elif mode == "main":
     pattern = re.compile(
         r"https://(?:raw\.githubusercontent\.com/pianopp001-cpu/jayuminton-admin-app/main/releases/|github\.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/releases/)"
-        r"jayuminton-(?:courtstatus|user)[A-Za-z0-9._-]*\.apk(?:\?build=[A-Za-z0-9._-]+)?"
+        r"jayuminton-(?:courtstatus|user)[A-Za-z0-9._-]*\.apk(?:\?build=[A-Za-z0-9._-]+(?:&r=[A-Za-z0-9._-]+)?)?"
     )
     s, count = pattern.subn(APK, s)
     if count < 1 and APK not in s:
@@ -58,4 +60,4 @@ else:
     raise SystemExit("mode must be hosting or main")
 
 path.write_text(s, encoding="utf-8")
-print(f"Connected {mode} user install button to v1.2.8 repeated-switch APK.")
+print(f"Connected {mode} user install button to cache-busted v1.2.8 repeated-switch APK.")
