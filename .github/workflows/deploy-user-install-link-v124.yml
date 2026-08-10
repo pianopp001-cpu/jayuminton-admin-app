@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/deploy-user-install-link-v125.yml'
-      - 'deployment/scripts/patch_user_install_link_v125.py'
+      - '.github/workflows/deploy-user-install-link-v124.yml'
+      - 'deployment/scripts/patch_user_install_link_v124.py'
   workflow_dispatch: {}
 
 permissions:
@@ -71,7 +71,7 @@ jobs:
           python3 deployment/scripts/patch_push_setup_verification.py "$PUBLIC/setup-v205.js"
           python3 deployment/scripts/patch_embedded_browser_push.py "$PUBLIC/setup-v205.js"
           python3 deployment/scripts/patch_native_host_bridge.py "$PUBLIC/setup-v205.js"
-          python3 deployment/scripts/patch_user_install_link_v125.py hosting "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_user_install_link_v124.py hosting "$PUBLIC/setup-v205.js"
           python3 - <<'PY'
           from pathlib import Path
           import os
@@ -103,7 +103,7 @@ jobs:
           cd "$W"
           clasp pull
           sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/main-nonscript.before"
-          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_install_link_v125.py" main "$W/Script.html"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_install_link_v124.py" main "$W/Script.html"
           sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/main-nonscript.after"
           cmp "$RUNNER_TEMP/main-nonscript.before" "$RUNNER_TEMP/main-nonscript.after"
           grep -F 'jayuminton-courtstatus-v1.2.5-confirm-stop.apk' Script.html >/dev/null
