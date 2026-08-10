@@ -1,0 +1,12 @@
+status=success
+live_target=https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.9-background-registration.apk?build=129-background-registration&r=31401932036
+live_size_bytes=2861865
+repo_size_bytes=2861865
+live_sha256=5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff
+expected_sha256=5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff
+zip_magic=504b0304
+package_name=com.jayuminton.user
+version_name=1.2.9
+version_code=129
+admin_logic_changed=no
+checked_at=2026-08-10T15:24:30Z
