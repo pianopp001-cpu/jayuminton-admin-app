@@ -1,0 +1,101 @@
+name: Verify actual public v1.2.9 APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-live-v129-real-apk.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - name: Fetch exact live button target and inspect real APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://jayuminton-push.web.app'
+          RUN="${GITHUB_RUN_ID}"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' \
+            "$BASE/setup-v205.js?realapk=$RUN" -o "$RUNNER_TEMP/setup.js"
+          TARGET="$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s=Path(__import__('os').environ['RUNNER_TEMP'])/'setup.js'
+          t=s.read_text(encoding='utf-8', errors='replace')
+          m=re.search(r"const\s+JAYUMINTON_USER_APK_V129\s*=\s*'([^']+)'", t)
+          if not m:
+              m=re.search(r"const\s+JAYUMINTON_USER_APK_[A-Z0-9_]+\s*=\s*'([^']+)'", t)
+          if not m: raise SystemExit('no APK target constant')
+          print(m.group(1))
+          PY
+          )"
+          python3 - <<'PY' "$TARGET" > "$RUNNER_TEMP/target.txt"
+          import sys
+          from urllib.parse import urljoin
+          print(urljoin('https://jayuminton-push.web.app/', sys.argv[1]))
+          PY
+          TARGET="$(cat "$RUNNER_TEMP/target.txt")"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' \
+            "$TARGET" -o "$RUNNER_TEMP/live.apk"
+
+          EXPECTED='5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff'
+          LIVE_SHA="$(sha256sum "$RUNNER_TEMP/live.apk" | awk '{print $1}')"
+          LIVE_SIZE="$(stat -c%s "$RUNNER_TEMP/live.apk")"
+          REPO_SIZE="$(stat -c%s releases/jayuminton-courtstatus-v1.2.9-background-registration.apk)"
+          MAGIC="$(xxd -p -l 4 "$RUNNER_TEMP/live.apk")"
+
+          AAPT=''
+          for p in "$ANDROID_HOME"/build-tools/*/aapt "$ANDROID_HOME"/build-tools/*/aapt2; do
+            if [ -x "$p" ]; then AAPT="$p"; fi
+          done
+          test -n "$AAPT"
+          if [[ "$AAPT" == *'/aapt2' ]]; then
+            "$AAPT" dump badging "$RUNNER_TEMP/live.apk" > "$RUNNER_TEMP/badging.txt" 2>&1 || true
+          else
+            "$AAPT" dump badging "$RUNNER_TEMP/live.apk" > "$RUNNER_TEMP/badging.txt" 2>&1 || true
+          fi
+          PACKAGE_LINE="$(grep -m1 '^package:' "$RUNNER_TEMP/badging.txt" || true)"
+          VERSION_NAME="$(printf '%s' "$PACKAGE_LINE" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
+          VERSION_CODE="$(printf '%s' "$PACKAGE_LINE" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")"
+          PACKAGE_NAME="$(printf '%s' "$PACKAGE_LINE" | sed -n "s/package: name='\([^']*\)'.*/\1/p")"
+
+          STATUS='success'
+          [ "$MAGIC" = '504b0304' ] || STATUS='failure'
+          [ "$LIVE_SHA" = "$EXPECTED" ] || STATUS='failure'
+          [ "$VERSION_NAME" = '1.2.9' ] || STATUS='failure'
+          [ "$VERSION_CODE" = '129' ] || STATUS='failure'
+          [ "$PACKAGE_NAME" = 'com.jayuminton.user' ] || STATUS='failure'
+
+          cat > deployment/status/v129-real-public-apk.txt <<EOF
+          status=$STATUS
+          live_target=$TARGET
+          live_size_bytes=$LIVE_SIZE
+          repo_size_bytes=$REPO_SIZE
+          live_sha256=$LIVE_SHA
+          expected_sha256=$EXPECTED
+          zip_magic=$MAGIC
+          package_name=$PACKAGE_NAME
+          version_name=$VERSION_NAME
+          version_code=$VERSION_CODE
+          admin_logic_changed=no
+          checked_at=$(date -u +%FT%TZ)
+          EOF
+
+      - name: Publish verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v129-real-public-apk.txt
+          git commit -m 'Record actual public v1.2.9 APK version verification' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
