@@ -1,0 +1,29 @@
+outcome=success
+exit_code=0
+admin_logic_changed=no
+recorded_at=2026-08-10T15:02:32Z
+--- safe firebase output ---
+[32m[1m✔  hosting:channel:[22m[39m Channel [1mv129-diag-31401374446[22m has been created on site [1mjayuminton-push[22m.
+
+[1m[37m===[39m Deploying to 'jayuminton-push'...[22m
+
+[36m[1mi [22m[39m deploying [1mhosting[22m
+[36m[1mi  hosting[jayuminton-push]:[22m[39m beginning deploy...
+[36m[1mi  hosting[jayuminton-push]:[22m[39m found 1 files in [1mpublic[22m
+[36m[1mi  hosting:[22m[39m upload complete
+[32m[1m✔  hosting[jayuminton-push]:[22m[39m file upload complete
+[36m[1mi  hosting[jayuminton-push]:[22m[39m finalizing version...
+[32m[1m✔  hosting[jayuminton-push]:[22m[39m version finalized
+[36m[1mi  hosting[jayuminton-push]:[22m[39m releasing new version...
+[32m[1m✔  hosting[jayuminton-push]:[22m[39m release complete
+
+[32m[1m✔ [22m[39m [1m[4mDeploy complete![24m[22m
+
+[1mProject Console:[22m https://console.firebase.google.com/project/jayuminton-push/overview
+[1mHosting URL:[22m https://jayuminton-push.web.app
+[33m[1m⚠  hosting:channel:[22m[39m Unable to add channel domain to Firebase Auth. Visit the Firebase Console at https://console.firebase.google.com/project/jayuminton-push/authentication/providers
+
+
+[33m[1m⚠  hosting:channel:[22m[39m Unable to sync Firebase Auth state.
+
+[32m[1m✔  hosting:channel:[22m[39m Channel URL ([1mjayuminton-push[22m): https://jayuminton-push--v129-diag-31401374446-c9rk4fvh.web.app [expires [1m2026-08-10 16:02:27[22m]
