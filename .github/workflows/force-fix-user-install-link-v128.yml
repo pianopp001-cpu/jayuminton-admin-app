@@ -17,7 +17,7 @@ concurrency:
 jobs:
   forcefix:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
@@ -36,6 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo 'LAST_STAGE=resolve-and-verify-apk' >> "$GITHUB_ENV"
           C="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
@@ -64,6 +65,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo 'LAST_STAGE=deploy-hosting-v128-only' >> "$GITHUB_ENV"
           SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
           ROOT="$RUNNER_TEMP/hosting-v128-force"
           PUBLIC="$ROOT/public"
@@ -124,6 +126,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo 'LAST_STAGE=deploy-main-v128-only' >> "$GITHUB_ENV"
           W="$RUNNER_TEMP/main-force"; mkdir -p "$W"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
           cd "$W"
@@ -138,35 +141,34 @@ jobs:
           clasp push --force
           clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 only $GITHUB_RUN_ID"
 
-      - name: Verify live pages contain no old user APK route
+      - name: Verify actual live Hosting and actual live main user page
         shell: bash
         run: |
           set -euo pipefail
+          echo 'LAST_STAGE=verify-actual-live-pages' >> "$GITHUB_ENV"
           BASE="${HOSTING_URL%/}"
           EXPECT='jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch'
           ok=0
-          for attempt in $(seq 1 20); do
+          for attempt in $(seq 1 24); do
             INDEX_URL="$BASE/index.html?verify=v128-force-$GITHUB_RUN_ID-$attempt"
             SETUP_URL="$BASE/setup-v205.js?verify=v128-force-$GITHUB_RUN_ID-$attempt"
+            MAIN_LIVE_URL="$MAIN_URL?mode=user&userAppVersion=1.2.8&apkUser=1&freshInstall=1&verify=v128-force-$GITHUB_RUN_ID-$attempt"
             if curl --fail --location --silent --show-error -H 'Cache-Control: no-cache, no-store' "$INDEX_URL" -o "$RUNNER_TEMP/live-index.html" && \
                curl --fail --location --silent --show-error -H 'Cache-Control: no-cache, no-store' "$SETUP_URL" -o "$RUNNER_TEMP/live-setup.js" && \
+               curl --fail --location --silent --show-error -H 'Cache-Control: no-cache, no-store' "$MAIN_LIVE_URL" -o "$RUNNER_TEMP/live-main.html" && \
                grep -F "native-apk-128-force-$GITHUB_RUN_ID" "$RUNNER_TEMP/live-index.html" >/dev/null && \
                grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_V128' "$RUNNER_TEMP/live-setup.js" >/dev/null && \
                grep -F "$EXPECT" "$RUNNER_TEMP/live-setup.js" >/dev/null && \
                ! grep -F 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/live-setup.js" >/dev/null && \
-               ! grep -F 'v1.1.7-fresh-install.apk' "$RUNNER_TEMP/live-setup.js" >/dev/null; then
+               ! grep -F 'v1.1.7-fresh-install.apk' "$RUNNER_TEMP/live-setup.js" >/dev/null && \
+               grep -F "$EXPECT" "$RUNNER_TEMP/live-main.html" >/dev/null && \
+               ! grep -F 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/live-main.html" >/dev/null && \
+               ! grep -F 'v1.1.7-fresh-install.apk' "$RUNNER_TEMP/live-main.html" >/dev/null; then
               ok=1; break
             fi
             sleep 8
           done
           test "$ok" = 1
-
-          W="$RUNNER_TEMP/main-force-verify"; mkdir -p "$W"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
-          (cd "$W" && clasp pull)
-          grep -F "$EXPECT" "$W/Script.html" >/dev/null
-          ! grep -F 'v1.2.4-confirmed-overlay.apk' "$W/Script.html"
-          ! grep -F 'v1.1.7-fresh-install.apk' "$W/Script.html"
 
           curl --fail --location --retry 5 \
             'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch&r=20260810-2113' \
@@ -180,7 +182,7 @@ jobs:
           apk=jayuminton-courtstatus-v1.2.8-repeat-switch.apk
           apk_sha256=$EXPECTED_APK_SHA
           hosting_button=v1.2.8-only
-          main_button=v1.2.8-only
+          main_live_page=v1.2.8-only
           old_v124_link_present=no
           old_v117_link_present=no
           hosting_shell_cache=forced-new
@@ -189,12 +191,37 @@ jobs:
           EOF
 
       - name: Publish force-fix verification
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
+          echo 'LAST_STAGE=publish-success' >> "$GITHUB_ENV"
+          rm -f deployment/status/user-v128-install-link-forcefix-failure.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/user-v128-install-link-forcefix.txt
+          git add -u deployment/status/user-v128-install-link-forcefix-failure.txt 2>/dev/null || true
           git commit -m 'Record forced live v1.2.8-only install route verification' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
+
+      - name: Publish safe force-fix failure stage
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          mkdir -p deployment/status
+          cat > deployment/status/user-v128-install-link-forcefix-failure.txt <<EOF
+          status=failure
+          version=1.2.8
+          last_stage=${LAST_STAGE:-unknown}
+          admin_logic_changed=no
+          failed_at=$(date -u +%FT%TZ)
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v128-install-link-forcefix-failure.txt
+          git commit -m 'Record v1.2.8 live install force-fix failure stage' || exit 0
           git pull --rebase origin main || true
           git push origin main
