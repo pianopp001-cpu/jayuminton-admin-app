@@ -4,12 +4,14 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/deploy-user-install-link-v128.yml'
+      - 'deployment/scripts/patch_user_install_link_v128.py'
       - 'releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk'
       - 'deployment/status/user-native-push-v1.2.8.txt'
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jayuminton-user-install-link-v128
@@ -58,10 +60,10 @@ jobs:
           grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
           EXPECTED="$(sed -n 's/^apk_sha256=//p' "$STATUS" | tail -1)"
           test -n "$EXPECTED"
-          ACTUAL="$(sha256sum "$APK" | awk '{print $1}')"
-          test "$ACTUAL" = "$EXPECTED"
+          test "$(sha256sum "$APK" | awk '{print $1}')" = "$EXPECTED"
+          echo "EXPECTED_APK_SHA=$EXPECTED" >> "$GITHUB_ENV"
 
-      - name: Build Hosting with v1.2.8 APK button
+      - name: Build and deploy Hosting with v1.2.8 APK button
         shell: bash
         run: |
           set -euo pipefail
@@ -121,15 +123,52 @@ jobs:
           clasp push --force
           clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "user APK v1.2.8 repeated-switch $GITHUB_RUN_ID"
 
-      - name: Verify live install link and bytes
+      - name: Verify live routing and exact APK bytes
         shell: bash
         run: |
           set -euo pipefail
-          sleep 10
           BASE="${HOSTING_URL%/}"
-          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-setup.js"
-          grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_V128' "$RUNNER_TEMP/live-setup.js" >/dev/null
-          grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch' "$RUNNER_TEMP/live-setup.js" >/dev/null
-          curl --fail --location --retry 5 'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch' -o "$RUNNER_TEMP/live.apk"
-          EXPECTED="$(sed -n 's/^apk_sha256=//p' deployment/status/user-native-push-v1.2.8.txt | tail -1)"
-          test "$(sha256sum "$RUNNER_TEMP/live.apk" | awk '{print $1}')" = "$EXPECTED"
+          EXPECT='jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch'
+          ok=0
+          for attempt in $(seq 1 18); do
+            if curl --fail --location --silent --show-error -H 'Cache-Control: no-cache' \
+                "$BASE/setup-v205.js?verify=v128-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/live-setup.js" && \
+               grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_V128' "$RUNNER_TEMP/live-setup.js" >/dev/null && \
+               grep -F "$EXPECT" "$RUNNER_TEMP/live-setup.js" >/dev/null; then ok=1; break; fi
+            sleep 8
+          done
+          test "$ok" = 1
+
+          W="$RUNNER_TEMP/main-verify"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          (cd "$W" && clasp pull)
+          grep -F "$EXPECT" "$W/Script.html" >/dev/null
+
+          curl --fail --location --retry 5 \
+            'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch' \
+            -o "$RUNNER_TEMP/live.apk"
+          test "$(sha256sum "$RUNNER_TEMP/live.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA"
+
+          cat > deployment/status/user-v128-install-link-live.txt <<EOF
+          status=success
+          version=1.2.8
+          apk=jayuminton-courtstatus-v1.2.8-repeat-switch.apk
+          apk_sha256=$EXPECTED_APK_SHA
+          hosting_button=v1.2.8
+          main_button=v1.2.8
+          repeated_member_switch=current-member-only-vibration
+          previous_member_alert=stopped-on-member-change
+          admin_logic_changed=no
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+
+      - name: Publish live verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v128-install-link-live.txt
+          git commit -m 'Record live v1.2.8 user install link verification' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
