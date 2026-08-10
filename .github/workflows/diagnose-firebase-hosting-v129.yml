@@ -1,0 +1,79 @@
+name: Diagnose Firebase Hosting v1.2.9 blocker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-firebase-hosting-v129.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Test preview-channel deployment and capture safe error
+        id: test_hosting
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          PROJECT="$(jq -r '.firebaseProjectId' "$C")"
+          test -n "$PROJECT"; test "$PROJECT" != null
+          ROOT="$RUNNER_TEMP/firebase-diag"
+          mkdir -p "$ROOT/public"
+          printf '<!doctype html><title>v129 diagnostic</title>\n' > "$ROOT/public/index.html"
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*"]}}
+          JSON
+          set +e
+          firebase hosting:channel:deploy "v129-diag-$GITHUB_RUN_ID" --expires 1h --project "$PROJECT" --config "$ROOT/firebase.json" --non-interactive > "$RUNNER_TEMP/firebase.log" 2>&1
+          RC=$?
+          set -e
+          echo "$RC" > "$RUNNER_TEMP/firebase.rc"
+          if [ "$RC" -ne 0 ]; then exit "$RC"; fi
+
+      - name: Publish safe Firebase diagnostic
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          RC="$(cat "$RUNNER_TEMP/firebase.rc" 2>/dev/null || echo unavailable)"
+          OUT='${{ steps.test_hosting.outcome }}'
+          {
+            echo "outcome=$OUT"
+            echo "exit_code=$RC"
+            echo "admin_logic_changed=no"
+            echo "recorded_at=$(date -u +%FT%TZ)"
+            echo '--- safe firebase output ---'
+            if [ -f "$RUNNER_TEMP/firebase.log" ]; then
+              tail -n 80 "$RUNNER_TEMP/firebase.log" \
+                | sed -E 's/(ya29\.[A-Za-z0-9._-]+)/[REDACTED]/g; s/(Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g' \
+                | grep -Ev 'private_key|client_secret|access_token|refresh_token' || true
+            else
+              echo 'firebase log unavailable'
+            fi
+          } > deployment/status/v129-firebase-hosting-diagnostic.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v129-firebase-hosting-diagnostic.txt
+          git commit -m "Record Firebase Hosting v1.2.9 diagnostic: $OUT" || exit 0
+          git pull --rebase origin main || true
+          git push origin main
