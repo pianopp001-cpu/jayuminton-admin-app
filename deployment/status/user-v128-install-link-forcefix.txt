@@ -1,0 +1,11 @@
+status=success
+version=1.2.8
+version_code=128
+apk=jayuminton-courtstatus-v1.2.8-repeat-switch.apk
+apk_sha256=9ff436e2cbc70f10fc32b905d8f3e66e18df3e3604444309a49990371ec3f7fc
+hosting_button=v1.2.8-only
+main_live_page=v1.2.8-only
+old_v124_link_present=no
+old_v117_link_present=no
+admin_logic_changed=no
+verified_at=2026-08-10T13:24:18Z
