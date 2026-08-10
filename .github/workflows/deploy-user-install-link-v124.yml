@@ -1,4 +1,4 @@
-name: Connect live user install buttons to APK v1.2.5
+name: Connect live user install buttons to temporary safe APK v1.1.7
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: jayuminton-user-install-link-v125
+  group: jayuminton-user-install-link-safe-v117
   cancel-in-progress: false
 
 jobs:
@@ -49,12 +49,12 @@ jobs:
             echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$C")/exec"
           } >> "$GITHUB_ENV"
 
-      - name: Build Hosting with native APK button
+      - name: Build Hosting with safe native APK button
         shell: bash
         run: |
           set -euo pipefail
           SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
-          ROOT="$RUNNER_TEMP/hosting-v125"
+          ROOT="$RUNNER_TEMP/hosting-safe-v117"
           PUBLIC="$ROOT/public"
           mkdir -p "$PUBLIC"
           cp "$SRC/index.html" "$PUBLIC/index.html"
@@ -75,19 +75,19 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import os
-          public=Path(os.environ['RUNNER_TEMP'])/'hosting-v125'/'public'
+          public=Path(os.environ['RUNNER_TEMP'])/'hosting-safe-v117'/'public'
           template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
           config=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
           for name in ('config-v202.js','config-v203.js','config-v204.js'):
               (public/name).write_text(config,encoding='utf-8')
           p=public/'index.html'; s=p.read_text(encoding='utf-8')
-          s=s.replace('/setup-v205.js?v=1637','/setup-v205.js?v=native-apk-125')
-          s=s.replace('/config-v204.js?v=1637','/config-v204.js?v=native-apk-125')
+          s=s.replace('/setup-v205.js?v=1637','/setup-v205.js?v=native-apk-safe-117')
+          s=s.replace('/config-v204.js?v=1637','/config-v204.js?v=native-apk-safe-117')
           p.write_text(s,encoding='utf-8')
           PY
           node --check "$PUBLIC/setup-v205.js"
-          grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_V125' "$PUBLIC/setup-v205.js" >/dev/null
-          grep -F 'jayuminton-courtstatus-v1.2.5-confirm-stop.apk' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_SAFE_V117' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540' "$PUBLIC/setup-v205.js" >/dev/null
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store,must-revalidate"}]},{"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache,no-store,must-revalidate"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
@@ -106,9 +106,9 @@ jobs:
           python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_install_link_v124.py" main "$W/Script.html"
           sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/main-nonscript.after"
           cmp "$RUNNER_TEMP/main-nonscript.before" "$RUNNER_TEMP/main-nonscript.after"
-          grep -F 'jayuminton-courtstatus-v1.2.5-confirm-stop.apk' Script.html >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540' Script.html >/dev/null
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "user APK v1.2.5 link $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "temporary safe user APK v1.1.7 link $GITHUB_RUN_ID"
 
       - name: Verify live links
         shell: bash
@@ -117,8 +117,8 @@ jobs:
           sleep 10
           BASE="${HOSTING_URL%/}"
           curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-setup.js"
-          grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_V125' "$RUNNER_TEMP/live-setup.js" >/dev/null
-          grep -F 'jayuminton-courtstatus-v1.2.5-confirm-stop.apk' "$RUNNER_TEMP/live-setup.js" >/dev/null
-          curl --fail --location --retry 5 'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.5-confirm-stop.apk' -o "$RUNNER_TEMP/live.apk"
+          grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_SAFE_V117' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          curl --fail --location --retry 5 'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540' -o "$RUNNER_TEMP/live.apk"
           test -s "$RUNNER_TEMP/live.apk"
-          test "$(sha256sum "$RUNNER_TEMP/live.apk" | awk '{print $1}')" = 'a4336ddce21f31933b3baf3361d4113032643e5e56d662b92fb03bfe22ac8da6'
+          test "$(sha256sum "$RUNNER_TEMP/live.apk" | awk '{print $1}')" = 'f8bbf54055ae1228900ec1f0048692e654a65ec79f4793f7df7cf0a9ac5084f7'
