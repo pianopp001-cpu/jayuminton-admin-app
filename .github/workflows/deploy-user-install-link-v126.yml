@@ -1,0 +1,133 @@
+name: Connect live user install buttons to verified APK v1.2.6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-user-install-link-v126.yml'
+      - 'deployment/scripts/patch_user_install_link_v126.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-user-install-link-v126
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global firebase-tools@latest @google/clasp@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          {
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")"
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$C")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$C")/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$C")/exec"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify accepted v1.2.6 APK before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_URL='https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.6-stop-controller.apk'
+          curl --fail --location --retry 5 "$APK_URL?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/v126.apk"
+          test -s "$RUNNER_TEMP/v126.apk"
+          test "$(sha256sum "$RUNNER_TEMP/v126.apk" | awk '{print $1}')" = 'eafe8975dfb05f2da9bf744db63b42b89e79d2a0550e4974a89b224dcd34f537'
+
+      - name: Build Hosting with v1.2.6 native APK button
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
+          ROOT="$RUNNER_TEMP/hosting-v126"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+          cp "$SRC/index.html" "$PUBLIC/index.html"
+          cp "$SRC/setup-v205.css" "$PUBLIC/setup-v205.css"
+          cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
+          cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
+          cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
+          BASE="${HOSTING_URL%/}"
+          for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 5 "$BASE/$asset?source=$GITHUB_RUN_ID" -o "$PUBLIC/$asset"
+          done
+          cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
+          gzip -dc "$RUNNER_TEMP/setup.gz" > "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_push_setup_verification.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_embedded_browser_push.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_native_host_bridge.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_user_install_link_v126.py hosting "$PUBLIC/setup-v205.js"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          public=Path(os.environ['RUNNER_TEMP'])/'hosting-v126'/'public'
+          template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          config=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          for name in ('config-v202.js','config-v203.js','config-v204.js'):
+              (public/name).write_text(config,encoding='utf-8')
+          p=public/'index.html'; s=p.read_text(encoding='utf-8')
+          s=s.replace('/setup-v205.js?v=1637','/setup-v205.js?v=native-apk-126')
+          s=s.replace('/config-v204.js?v=1637','/config-v204.js?v=native-apk-126')
+          p.write_text(s,encoding='utf-8')
+          PY
+          node --check "$PUBLIC/setup-v205.js"
+          grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_V126' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.2.6-stop-controller.apk?build=eafe8975' "$PUBLIC/setup-v205.js" >/dev/null
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store,must-revalidate"}]},{"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache,no-store,must-revalidate"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive
+
+      - name: Patch only user APK URL in main Script
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/main"
+          mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/main-nonscript.before"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_install_link_v126.py" main "$W/Script.html"
+          sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/main-nonscript.after"
+          cmp "$RUNNER_TEMP/main-nonscript.before" "$RUNNER_TEMP/main-nonscript.after"
+          grep -F 'jayuminton-courtstatus-v1.2.6-stop-controller.apk?build=eafe8975' Script.html >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "user APK v1.2.6 accepted stop-controller $GITHUB_RUN_ID"
+
+      - name: Verify live install link
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 10
+          BASE="${HOSTING_URL%/}"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache' "$BASE/setup-v205.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-setup.js"
+          grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_V126' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.2.6-stop-controller.apk?build=eafe8975' "$RUNNER_TEMP/live-setup.js" >/dev/null
+          curl --fail --location --retry 5 'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.6-stop-controller.apk?build=eafe8975' -o "$RUNNER_TEMP/live.apk"
+          test -s "$RUNNER_TEMP/live.apk"
+          test "$(sha256sum "$RUNNER_TEMP/live.apk" | awk '{print $1}')" = 'eafe8975dfb05f2da9bf744db63b42b89e79d2a0550e4974a89b224dcd34f537'
