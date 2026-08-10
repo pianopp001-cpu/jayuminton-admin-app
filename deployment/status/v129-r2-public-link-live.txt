@@ -1,0 +1,14 @@
+status=success
+version=1.2.9
+version_code=129
+package=com.jayuminton.user
+user_url=https://jayuminton-push.web.app/badminton.html
+visible_button=앱설치_1.2.9_(129)
+release_tag=user-v1.2.9-r2
+release_asset=Jayuminton-User-v1.2.9-code129-R2.apk
+apk_sha256=5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff
+old_v128_link_present=no
+live_manifest_version_name=1.2.9
+live_manifest_version_code=129
+admin_logic_changed=no
+verified_at=2026-08-10T16:04:56Z
