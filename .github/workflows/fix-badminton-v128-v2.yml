@@ -1,4 +1,4 @@
-name: Deploy corrected badminton.html v1.2.8 route
+name: Deploy corrected badminton.html v1.2.9 route
 
 on:
   push:
@@ -40,8 +40,18 @@ jobs:
           BASE="${HOSTING_URL%/}"
           echo "HOSTING_URL=$BASE" >> "$GITHUB_ENV"
 
+          STATUS='deployment/status/user-native-push-v1.2.9.txt'
+          APK='releases/jayuminton-courtstatus-v1.2.9-background-registration.apk'
+          test -s "$STATUS"; test -s "$APK"
+          grep -F 'status=success' "$STATUS" >/dev/null
+          grep -F 'version=1.2.9' "$STATUS" >/dev/null
+          EXPECTED="$(sed -n 's/^apk_sha256=//p' "$STATUS" | tail -1)"
+          test -n "$EXPECTED"
+          test "$(sha256sum "$APK" | awk '{print $1}')" = "$EXPECTED"
+          echo "EXPECTED_APK_SHA=$EXPECTED" >> "$GITHUB_ENV"
+
           SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
-          ROOT="$RUNNER_TEMP/hosting-badminton-v128-v2"
+          ROOT="$RUNNER_TEMP/hosting-badminton-v129"
           PUBLIC="$ROOT/public"
           mkdir -p "$PUBLIC"
           cp "$SRC/index.html" "$PUBLIC/index.html"
@@ -49,8 +59,9 @@ jobs:
           cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
           cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
           cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
+          cp "$APK" "$PUBLIC/jayuminton-courtstatus-v1.2.9-background-registration.apk"
           for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
-            curl --fail --location --retry 5 "$BASE/$asset?source=badminton-v128-v2-$GITHUB_RUN_ID" -o "$PUBLIC/$asset"
+            curl --fail --location --retry 5 "$BASE/$asset?source=badminton-v129-$GITHUB_RUN_ID" -o "$PUBLIC/$asset"
           done
 
           cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
@@ -65,73 +76,87 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import os,re
-          public=Path(os.environ['RUNNER_TEMP'])/'hosting-badminton-v128-v2'/'public'
+          public=Path(os.environ['RUNNER_TEMP'])/'hosting-badminton-v129'/'public'
           run=os.environ['GITHUB_RUN_ID']
+          target=f"/jayuminton-courtstatus-v1.2.9-background-registration.apk?build=129-badminton-{run}"
+
+          setup=public/'setup-v205.js'
+          s=setup.read_text(encoding='utf-8')
+          s=s.replace('JAYUMINTON_NATIVE_APK_DOWNLOAD_V128','JAYUMINTON_NATIVE_APK_DOWNLOAD_V129')
+          s=s.replace('JAYUMINTON_USER_APK_V128','JAYUMINTON_USER_APK_V129')
+          s=s.replace('자유민턴 사용자 앱 1.2.8을 다운로드합니다.','자유민턴 사용자 앱 1.2.9을 다운로드합니다.')
+          s=re.sub(r"const JAYUMINTON_USER_APK_V129 = '[^']+';", f"const JAYUMINTON_USER_APK_V129 = '{target}';", s, count=1)
+          if target not in s: raise SystemExit('v1.2.9 APK target missing')
+          if 'v1.2.8-repeat-switch.apk' in s: raise SystemExit('old v1.2.8 route remained')
+          setup.write_text(s,encoding='utf-8')
+
           template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
           config=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
           for name in ('config-v202.js','config-v203.js','config-v204.js'):
               (public/name).write_text(config,encoding='utf-8')
 
           p=public/'index.html'
-          s=p.read_text(encoding='utf-8')
-          s=s.replace('/setup-v205.js?v=1637', f'/setup-v205.js?v=native-apk-128-badminton-v2-{run}')
-          s=s.replace('/config-v204.js?v=1637', f'/config-v204.js?v=native-apk-128-badminton-v2-{run}')
-          s=s.replace('<meta name="jayuminton-build" content="1.6.37">', f'<meta name="jayuminton-build" content="1.6.37-v128-badminton-v2-{run}">')
-          p.write_text(s,encoding='utf-8')
-          (public/'badminton.html').write_text(s,encoding='utf-8')
+          h=p.read_text(encoding='utf-8')
+          h=h.replace('/setup-v205.js?v=1637', f'/setup-v205.js?v=native-apk-129-badminton-{run}')
+          h=h.replace('/config-v204.js?v=1637', f'/config-v204.js?v=native-apk-129-badminton-{run}')
+          h=h.replace('<meta name="jayuminton-build" content="1.6.37">', f'<meta name="jayuminton-build" content="1.6.37-v129-badminton-{run}">')
+          p.write_text(h,encoding='utf-8')
+          (public/'badminton.html').write_text(h,encoding='utf-8')
 
           sw=public/'firebase-messaging-sw.js'
           w=sw.read_text(encoding='utf-8')
-          w=re.sub(r"const JAYUMINTON_SW_VERSION = '[^']+';", f"const JAYUMINTON_SW_VERSION = 'v128-badminton-v2-{run}';", w, count=1)
-          w=re.sub(r"const JAYUMINTON_CACHE = '[^']+';", f"const JAYUMINTON_CACHE = 'jayuminton-v128-badminton-v2-{run}';", w, count=1)
+          w=re.sub(r"const JAYUMINTON_SW_VERSION = '[^']+';", f"const JAYUMINTON_SW_VERSION = 'v129-badminton-{run}';", w, count=1)
+          w=re.sub(r"const JAYUMINTON_CACHE = '[^']+';", f"const JAYUMINTON_CACHE = 'jayuminton-v129-badminton-{run}';", w, count=1)
           sw.write_text(w,encoding='utf-8')
           PY
 
           node --check "$PUBLIC/setup-v205.js"
-          grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$PUBLIC/setup-v205.js" >/dev/null
-          ! grep -F 'v1.2.4-confirmed-overlay.apk' "$PUBLIC/setup-v205.js"
+          grep -F 'jayuminton-courtstatus-v1.2.9-background-registration.apk' "$PUBLIC/setup-v205.js" >/dev/null
+          ! grep -F 'v1.2.8-repeat-switch.apk' "$PUBLIC/setup-v205.js"
           cmp "$PUBLIC/index.html" "$PUBLIC/badminton.html"
+          test "$(sha256sum "$PUBLIC/jayuminton-courtstatus-v1.2.9-background-registration.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA"
 
           cat > "$ROOT/firebase.json" <<'JSON'
-          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/badminton.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/config-v204.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/firebase-messaging-sw.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/badminton.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/config-v204.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/firebase-messaging-sw.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/*.apk","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"},{"key":"Content-Type","value":"application/vnd.android.package-archive"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive
 
-      - name: Verify badminton.html and APK
+      - name: Verify badminton.html and v1.2.9 APK
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
-          EXPECTED="$(sed -n 's/^apk_sha256=//p' deployment/status/user-native-push-v1.2.8.txt | tail -1)"
           ok=0
           for attempt in $(seq 1 18); do
             curl --fail --location --silent --show-error -D "$RUNNER_TEMP/h.txt" -H 'Cache-Control: no-cache, no-store' \
-              "$BASE/badminton.html?verify=v128-badminton-v2-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/b.html" || true
+              "$BASE/badminton.html?verify=v129-badminton-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/b.html" || true
             curl --fail --location --silent --show-error -H 'Cache-Control: no-cache, no-store' \
-              "$BASE/setup-v205.js?verify=v128-badminton-v2-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/s.js" || true
-            if grep -F "1.6.37-v128-badminton-v2-$GITHUB_RUN_ID" "$RUNNER_TEMP/b.html" >/dev/null 2>&1 && \
-               grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$RUNNER_TEMP/s.js" >/dev/null 2>&1 && \
-               ! grep -F 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/s.js" >/dev/null 2>&1; then ok=1; break; fi
+              "$BASE/setup-v205.js?verify=v129-badminton-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/s.js" || true
+            if grep -F "1.6.37-v129-badminton-$GITHUB_RUN_ID" "$RUNNER_TEMP/b.html" >/dev/null 2>&1 && \
+               grep -F 'jayuminton-courtstatus-v1.2.9-background-registration.apk' "$RUNNER_TEMP/s.js" >/dev/null 2>&1 && \
+               ! grep -F 'v1.2.8-repeat-switch.apk' "$RUNNER_TEMP/s.js" >/dev/null 2>&1; then ok=1; break; fi
             sleep 5
           done
           test "$ok" = 1
           grep -i 'cache-control:.*no-store' "$RUNNER_TEMP/h.txt" >/dev/null
-          TARGET="$(sed -n "s/.*const JAYUMINTON_USER_APK_V128 = '\([^']*\)'.*/\1/p" "$RUNNER_TEMP/s.js" | head -1)"
-          test -n "$TARGET"
-          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$TARGET" -o "$RUNNER_TEMP/v128.apk"
-          OBSERVED="$(sha256sum "$RUNNER_TEMP/v128.apk" | awk '{print $1}')"
-          test "$OBSERVED" = "$EXPECTED"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' \
+            "$BASE/jayuminton-courtstatus-v1.2.9-background-registration.apk?verify=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/v129.apk"
+          OBSERVED="$(sha256sum "$RUNNER_TEMP/v129.apk" | awk '{print $1}')"
+          test "$OBSERVED" = "$EXPECTED_APK_SHA"
 
-          cat > deployment/status/badminton-v128-live.txt <<EOF
+          cat > deployment/status/badminton-v129-live.txt <<EOF
           status=success
+          version=1.2.9
+          version_code=129
           user_url=$BASE/badminton.html
           canonical_root=$BASE/
           badminton_page=fresh-physical-file
           badminton_cache_control=no-store
-          badminton_build_marker=1.6.37-v128-badminton-v2-$GITHUB_RUN_ID
-          setup_v128_present=yes
-          setup_v124_present=no
-          apk=jayuminton-courtstatus-v1.2.8-repeat-switch.apk
+          badminton_build_marker=1.6.37-v129-badminton-$GITHUB_RUN_ID
+          setup_v129_present=yes
+          setup_v128_present=no
+          apk=jayuminton-courtstatus-v1.2.9-background-registration.apk
           apk_hash_match=yes
           apk_sha256=$OBSERVED
           admin_logic_changed=no
@@ -144,7 +169,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/badminton-v128-live.txt
-          git commit -m 'Record verified badminton.html v1.2.8 install route' || exit 0
+          git add deployment/status/badminton-v129-live.txt
+          git commit -m 'Record verified badminton.html v1.2.9 install route' || exit 0
           git pull --rebase origin main || true
           git push origin main
