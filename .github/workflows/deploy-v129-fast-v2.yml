@@ -1,0 +1,179 @@
+name: Deploy v1.2.9 Hosting fast v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-v129-fast-v2.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-v129-fast-v2
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Deploy v1.2.9
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/v129-v2-stage.txt"
+          echo resolve_config > "$STAGE"
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$C")"
+          HOSTING_URL="$(jq -r '.hostingUrl' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$C")"
+          for v in "$FIREBASE_PROJECT_ID" "$HOSTING_URL" "$MAIN_DEPLOYMENT_ID" "$PUSH_DEPLOYMENT_ID"; do test -n "$v"; test "$v" != null; done
+          BASE="${HOSTING_URL%/}"
+          export MAIN_URL="https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec"
+          export PUSH_URL="https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec"
+          {
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            echo "HOSTING_URL=$BASE"
+            echo "MAIN_URL=$MAIN_URL"
+            echo "PUSH_URL=$PUSH_URL"
+          } >> "$GITHUB_ENV"
+
+          echo verify_apk > "$STAGE"
+          STATUS='deployment/status/user-native-push-v1.2.9.txt'
+          APK='releases/jayuminton-courtstatus-v1.2.9-background-registration.apk'
+          test -s "$STATUS"; test -s "$APK"
+          grep -F 'status=success' "$STATUS" >/dev/null
+          EXPECTED="$(sed -n 's/^apk_sha256=//p' "$STATUS" | tail -1)"
+          test "$(sha256sum "$APK" | awk '{print $1}')" = "$EXPECTED"
+          echo "EXPECTED_APK_SHA=$EXPECTED" >> "$GITHUB_ENV"
+
+          echo build_public > "$STAGE"
+          SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
+          ROOT="$RUNNER_TEMP/v129-v2"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+          cp "$SRC/index.html" "$PUBLIC/index.html"
+          cp "$SRC/setup-v205.css" "$PUBLIC/setup-v205.css"
+          cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
+          cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
+          cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
+          cp "$APK" "$PUBLIC/jayuminton-courtstatus-v1.2.9-background-registration.apk"
+          for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 5 "$BASE/$asset?source=v129-v2-$GITHUB_RUN_ID" -o "$PUBLIC/$asset"
+          done
+
+          echo patch_setup > "$STAGE"
+          cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
+          gzip -dc "$RUNNER_TEMP/setup.gz" > "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_push_setup_verification.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_embedded_browser_push.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_native_host_bridge.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_user_install_link_v128.py hosting "$PUBLIC/setup-v205.js"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          public=Path(os.environ['RUNNER_TEMP'])/'v129-v2'/'public'
+          run=os.environ['GITHUB_RUN_ID']
+          target=f"/jayuminton-courtstatus-v1.2.9-background-registration.apk?build=129-v2-{run}"
+          setup=public/'setup-v205.js'
+          s=setup.read_text(encoding='utf-8')
+          s=s.replace('JAYUMINTON_NATIVE_APK_DOWNLOAD_V128','JAYUMINTON_NATIVE_APK_DOWNLOAD_V129')
+          s=s.replace('JAYUMINTON_USER_APK_V128','JAYUMINTON_USER_APK_V129')
+          s=s.replace('자유민턴 사용자 앱 1.2.8을 다운로드합니다.','자유민턴 사용자 앱 1.2.9을 다운로드합니다.')
+          s=re.sub(r"const JAYUMINTON_USER_APK_V129 = '[^']+';",f"const JAYUMINTON_USER_APK_V129 = '{target}';",s,count=1)
+          if target not in s: raise SystemExit('v129 target missing')
+          setup.write_text(s,encoding='utf-8')
+
+          template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          config=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          for n in ('config-v202.js','config-v203.js','config-v204.js'):
+              (public/n).write_text(config,encoding='utf-8')
+
+          base=(public/'index.html').read_text(encoding='utf-8')
+          for n in ('index.html','badminton.html'):
+              h=base
+              h=h.replace('/setup-v205.js?v=1637',f'/setup-v205.js?v=v129-v2-{run}')
+              h=h.replace('/config-v204.js?v=1637',f'/config-v204.js?v=v129-v2-{run}')
+              h=h.replace('<meta name="jayuminton-build" content="1.6.37">',f'<meta name="jayuminton-build" content="1.6.37-v129-v2-{run}">')
+              (public/n).write_text(h,encoding='utf-8')
+          sw=public/'firebase-messaging-sw.js'
+          w=sw.read_text(encoding='utf-8')
+          w=re.sub(r"const JAYUMINTON_SW_VERSION = '[^']+';",f"const JAYUMINTON_SW_VERSION = 'v129-v2-{run}';",w,count=1)
+          w=re.sub(r"const JAYUMINTON_CACHE = '[^']+';",f"const JAYUMINTON_CACHE = 'jayuminton-v129-v2-{run}';",w,count=1)
+          sw.write_text(w,encoding='utf-8')
+          PY
+          node --check "$PUBLIC/setup-v205.js"
+          grep -F 'jayuminton-courtstatus-v1.2.9-background-registration.apk' "$PUBLIC/setup-v205.js" >/dev/null
+
+          echo firebase_deploy > "$STAGE"
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/badminton.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/firebase-messaging-sw.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/*.apk","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"},{"key":"Content-Type","value":"application/vnd.android.package-archive"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive
+          echo deployed > "$STAGE"
+
+      - name: Verify live
+        id: verify
+        if: steps.deploy.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo verify_live > "$RUNNER_TEMP/v129-v2-stage.txt"
+          BASE="${HOSTING_URL%/}"
+          ok=0
+          for attempt in $(seq 1 20); do
+            curl --fail --location --silent --show-error -H 'Cache-Control: no-cache, no-store' "$BASE/setup-v205.js?verify=v129-v2-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/live.js" || true
+            if grep -F 'jayuminton-courtstatus-v1.2.9-background-registration.apk' "$RUNNER_TEMP/live.js" >/dev/null 2>&1; then ok=1; break; fi
+            sleep 4
+          done
+          test "$ok" = 1
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/jayuminton-courtstatus-v1.2.9-background-registration.apk?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.apk"
+          test "$(sha256sum "$RUNNER_TEMP/live.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA"
+          echo verified > "$RUNNER_TEMP/v129-v2-stage.txt"
+
+      - name: Record result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          D='${{ steps.deploy.outcome }}'; V='${{ steps.verify.outcome }}'; S=failure
+          if [ "$D" = success ] && [ "$V" = success ]; then S=success; fi
+          STAGE="$(cat "$RUNNER_TEMP/v129-v2-stage.txt" 2>/dev/null || echo before_deploy)"
+          cat > deployment/status/v129-fast-v2.txt <<EOF
+          status=$S
+          version=1.2.9
+          version_code=129
+          deploy_outcome=$D
+          verify_outcome=$V
+          stage=$STAGE
+          hosting_url=${HOSTING_URL:-unknown}
+          apk=jayuminton-courtstatus-v1.2.9-background-registration.apk
+          apk_sha256=${EXPECTED_APK_SHA:-unknown}
+          admin_logic_changed=no
+          recorded_at=$(date -u +%FT%TZ)
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v129-fast-v2.txt
+          git commit -m "Record v1.2.9 fast v2 result: $S at $STAGE" || exit 0
+          git pull --rebase origin main || true
+          git push origin main
