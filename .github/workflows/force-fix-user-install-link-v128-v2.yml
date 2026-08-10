@@ -96,16 +96,27 @@ jobs:
           clasp list-deployments > "$RUNNER_TEMP/deployments.txt"
           grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/deployments.txt" >/dev/null
 
-      - name: Redeploy existing live Apps Script deployment
+      - name: Create immutable Apps Script version for v1.2.8 route
         shell: bash
         run: |
           set -euo pipefail
-          echo 'LAST_STAGE=redeploy-main-live' >> "$GITHUB_ENV"
+          echo 'LAST_STAGE=create-main-version' >> "$GITHUB_ENV"
           cd "$RUNNER_TEMP/main-v128-repair"
-          if clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"; then
+          clasp create-version "v1.2.8 user APK route $GITHUB_RUN_ID" | tee "$RUNNER_TEMP/version.txt"
+          VERSION_NUMBER="$(grep -oE '[0-9]+' "$RUNNER_TEMP/version.txt" | tail -1)"
+          test -n "$VERSION_NUMBER"
+          echo "MAIN_VERSION_NUMBER=$VERSION_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Redeploy exact Apps Script version to existing live deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'LAST_STAGE=redeploy-main-live-explicit-version' >> "$GITHUB_ENV"
+          cd "$RUNNER_TEMP/main-v128-repair"
+          if clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --versionNumber "$MAIN_VERSION_NUMBER" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"; then
             exit 0
           fi
-          clasp update-deployment "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"
+          clasp update-deployment "$MAIN_DEPLOYMENT_ID" --versionNumber "$MAIN_VERSION_NUMBER" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"
 
       - name: Verify actual live Hosting and actual Apps Script user page
         shell: bash
