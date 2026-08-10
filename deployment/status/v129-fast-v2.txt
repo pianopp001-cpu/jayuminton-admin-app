@@ -1,0 +1,11 @@
+status=failure
+version=1.2.9
+version_code=129
+deploy_outcome=failure
+verify_outcome=skipped
+stage=firebase_deploy
+hosting_url=https://jayuminton-push.web.app
+apk=jayuminton-courtstatus-v1.2.9-background-registration.apk
+apk_sha256=5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff
+admin_logic_changed=no
+recorded_at=2026-08-10T14:59:48Z
