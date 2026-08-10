@@ -79,17 +79,33 @@ jobs:
           ! grep -F 'v1.1.7-fresh-install.apk' Script.html
           ! grep -F 'v1.2.7-member-switch.apk' Script.html
 
-      - name: Deploy normalized main Script to existing live deployment
+      - name: Push normalized Script source only
         shell: bash
         run: |
           set -euo pipefail
-          echo 'LAST_STAGE=deploy-main-live' >> "$GITHUB_ENV"
-          W="$RUNNER_TEMP/main-v128-repair"
-          cd "$W"
+          echo 'LAST_STAGE=push-main-source' >> "$GITHUB_ENV"
+          cd "$RUNNER_TEMP/main-v128-repair"
           clasp push --force
-          if ! clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"; then
-            clasp deploy --deploymentId "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"
+
+      - name: Confirm target deployment exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'LAST_STAGE=confirm-main-deployment-id' >> "$GITHUB_ENV"
+          cd "$RUNNER_TEMP/main-v128-repair"
+          clasp list-deployments > "$RUNNER_TEMP/deployments.txt"
+          grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/deployments.txt" >/dev/null
+
+      - name: Redeploy existing live Apps Script deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'LAST_STAGE=redeploy-main-live' >> "$GITHUB_ENV"
+          cd "$RUNNER_TEMP/main-v128-repair"
+          if clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"; then
+            exit 0
           fi
+          clasp update-deployment "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"
 
       - name: Verify actual live Hosting and actual Apps Script user page
         shell: bash
