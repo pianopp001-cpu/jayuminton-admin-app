@@ -1,0 +1,181 @@
+name: Focused repair live user install route to v1.2.8
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/force-fix-user-install-link-v128-v2.yml'
+      - 'deployment/scripts/patch_user_install_link_v128.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-install-forcefix-v128-v2
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+
+      - name: Resolve endpoints and verified APK identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'LAST_STAGE=resolve' >> "$GITHUB_ENV"
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          HOSTING_URL="$(jq -r '.hostingUrl' "$C")"
+          for value in "$MAIN_SCRIPT_ID" "$MAIN_DEPLOYMENT_ID" "$HOSTING_URL"; do
+            test -n "$value"; test "$value" != null
+          done
+          {
+            echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
+            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
+            echo "MAIN_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec"
+            echo "HOSTING_URL=$HOSTING_URL"
+          } >> "$GITHUB_ENV"
+
+          STATUS='deployment/status/user-native-push-v1.2.8.txt'
+          APK='releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk'
+          test -s "$STATUS"; test -s "$APK"
+          grep -F 'status=success' "$STATUS" >/dev/null
+          grep -F 'version=1.2.8' "$STATUS" >/dev/null
+          grep -F 'version_code=128' "$STATUS" >/dev/null
+          EXPECTED="$(sed -n 's/^apk_sha256=//p' "$STATUS" | tail -1)"
+          test -n "$EXPECTED"
+          test "$(sha256sum "$APK" | awk '{print $1}')" = "$EXPECTED"
+          echo "EXPECTED_APK_SHA=$EXPECTED" >> "$GITHUB_ENV"
+
+      - name: Pull and normalize only user APK routes in main Script
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'LAST_STAGE=patch-main-source' >> "$GITHUB_ENV"
+          W="$RUNNER_TEMP/main-v128-repair"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/main-protected.before"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_install_link_v128.py" main "$W/Script.html" | tee "$RUNNER_TEMP/main-patch.txt"
+          sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/main-protected.after"
+          cmp "$RUNNER_TEMP/main-protected.before" "$RUNNER_TEMP/main-protected.after"
+          grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' Script.html >/dev/null
+          ! grep -F 'v1.2.4-confirmed-overlay.apk' Script.html
+          ! grep -F 'v1.1.7-fresh-install.apk' Script.html
+          ! grep -F 'v1.2.7-member-switch.apk' Script.html
+
+      - name: Deploy normalized main Script to existing live deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'LAST_STAGE=deploy-main-live' >> "$GITHUB_ENV"
+          W="$RUNNER_TEMP/main-v128-repair"
+          cd "$W"
+          clasp push --force
+          if ! clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"; then
+            clasp deploy --deploymentId "$MAIN_DEPLOYMENT_ID" --description "force user APK v1.2.8 route $GITHUB_RUN_ID"
+          fi
+
+      - name: Verify actual live Hosting and actual Apps Script user page
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'LAST_STAGE=verify-live-pages' >> "$GITHUB_ENV"
+          EXPECT='jayuminton-courtstatus-v1.2.8-repeat-switch.apk'
+          BASE="${HOSTING_URL%/}"
+          ok=0
+          h128=0; h124=0; m128=0; m124=0
+          for attempt in $(seq 1 24); do
+            curl --fail --location --silent --show-error -H 'Cache-Control: no-cache, no-store' \
+              "$BASE/setup-v205.js?verify=v128-v2-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/live-hosting.js" || true
+            curl --fail --location --silent --show-error -H 'Cache-Control: no-cache, no-store' \
+              "$MAIN_URL?mode=user&userAppVersion=1.2.8&apkUser=1&freshInstall=1&verify=v128-v2-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/live-main.html" || true
+            h128=$(grep -Fc "$EXPECT" "$RUNNER_TEMP/live-hosting.js" 2>/dev/null || true)
+            h124=$(grep -Fc 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/live-hosting.js" 2>/dev/null || true)
+            m128=$(grep -Fc "$EXPECT" "$RUNNER_TEMP/live-main.html" 2>/dev/null || true)
+            m124=$(grep -Fc 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/live-main.html" 2>/dev/null || true)
+            if [ "$h128" -gt 0 ] && [ "$h124" -eq 0 ] && [ "$m128" -gt 0 ] && [ "$m124" -eq 0 ]; then
+              ok=1; break
+            fi
+            sleep 8
+          done
+          {
+            echo "LIVE_HOSTING_V128_COUNT=$h128"
+            echo "LIVE_HOSTING_V124_COUNT=$h124"
+            echo "LIVE_MAIN_V128_COUNT=$m128"
+            echo "LIVE_MAIN_V124_COUNT=$m124"
+          } >> "$GITHUB_ENV"
+          test "$ok" = 1
+
+          curl --fail --location --retry 5 \
+            'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch&r=20260810-2139' \
+            -o "$RUNNER_TEMP/live-v128.apk"
+          test "$(sha256sum "$RUNNER_TEMP/live-v128.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA"
+
+          cat > deployment/status/user-v128-install-link-forcefix.txt <<EOF
+          status=success
+          version=1.2.8
+          version_code=128
+          apk=jayuminton-courtstatus-v1.2.8-repeat-switch.apk
+          apk_sha256=$EXPECTED_APK_SHA
+          hosting_button=v1.2.8-only
+          main_live_page=v1.2.8-only
+          old_v124_link_present=no
+          old_v117_link_present=no
+          admin_logic_changed=no
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+
+      - name: Publish verified live repair
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f deployment/status/user-v128-install-link-forcefix-failure.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v128-install-link-forcefix.txt
+          git add -u deployment/status/user-v128-install-link-forcefix-failure.txt 2>/dev/null || true
+          git commit -m 'Verify actual live user download is v1.2.8 only' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
+
+      - name: Publish safe repair failure detail
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          mkdir -p deployment/status
+          cat > deployment/status/user-v128-install-link-forcefix-failure.txt <<EOF
+          status=failure
+          version=1.2.8
+          last_stage=${LAST_STAGE:-unknown}
+          live_hosting_v128_count=${LIVE_HOSTING_V128_COUNT:-unknown}
+          live_hosting_v124_count=${LIVE_HOSTING_V124_COUNT:-unknown}
+          live_main_v128_count=${LIVE_MAIN_V128_COUNT:-unknown}
+          live_main_v124_count=${LIVE_MAIN_V124_COUNT:-unknown}
+          admin_logic_changed=no
+          failed_at=$(date -u +%FT%TZ)
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v128-install-link-forcefix-failure.txt
+          git commit -m 'Record focused v1.2.8 live route repair failure' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
