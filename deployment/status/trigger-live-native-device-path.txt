@@ -1,1 +1,1 @@
-2026-08-10T17:19:00+09:00 v1.2.6 worked for first selected member but failed after switching to a second member; fetch privacy-safe native path history and delivery counters.
+2026-08-10T21:13:00+09:00 v1.2.8 real-device failure: pressing the notification-panel stop/close action did not stop the repeating vibration. Refresh privacy-safe native delivery and cancellation history for the current device path.
