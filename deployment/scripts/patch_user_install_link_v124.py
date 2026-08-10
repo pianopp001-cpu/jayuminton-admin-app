@@ -3,18 +3,20 @@ from pathlib import Path
 import re
 import sys
 
-APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.5-confirm-stop.apk"
+# Safety rollback only. v1.2.5 is not accepted because the centre confirm button
+# did not stop the repeating vibration on the real device.
+APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.1.7-fresh-install.apk?build=f8bbf540"
 
 mode = sys.argv[1]
 path = Path(sys.argv[2])
 s = path.read_text(encoding="utf-8")
 
 if mode == "hosting":
-    marker = "JAYUMINTON_NATIVE_APK_DOWNLOAD_V125"
+    marker = "JAYUMINTON_NATIVE_APK_DOWNLOAD_SAFE_V117"
     if marker not in s:
         anchor = "  function handleAppInstallButton(fromDirectUserTap) {"
         block = f'''  /* {marker} */
-  const JAYUMINTON_USER_APK_V125 = '{APK}';
+  const JAYUMINTON_USER_APK_SAFE_V117 = '{APK}';
 
 '''
         if s.count(anchor) != 1:
@@ -27,29 +29,29 @@ if mode == "hosting":
       setInstallMessage('자유민턴 사용자 앱 전체 설치본을 다운로드합니다.', 'success');
       sendAppInstallStatus('APK 다운로드 시작');
       showToast('다운로드가 시작됩니다. 완료 후 APK를 실행해 주세요.');
-      window.location.href = JAYUMINTON_USER_APK_V125;
+      window.location.href = JAYUMINTON_USER_APK_SAFE_V117;
       return;
     }
 '''
         s = s.replace(handler, replacement, 1)
 
-    for required in (marker, APK, "window.location.href = JAYUMINTON_USER_APK_V125"):
+    for required in (marker, APK, "window.location.href = JAYUMINTON_USER_APK_SAFE_V117"):
         if required not in s:
-            raise SystemExit("missing hosting APK marker: " + required)
+            raise SystemExit("missing safe hosting APK marker: " + required)
 
 elif mode == "main":
     # Replace only native user APK release URLs; never touch admin assets.
     pattern = re.compile(
         r"https://(?:raw\.githubusercontent\.com/pianopp001-cpu/jayuminton-admin-app/main/releases/|github\.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/releases/)"
-        r"jayuminton-(?:courtstatus|user)[A-Za-z0-9._-]*\.apk"
+        r"jayuminton-(?:courtstatus|user)[A-Za-z0-9._-]*\.apk(?:\?build=[A-Za-z0-9._-]+)?"
     )
     s, count = pattern.subn(APK, s)
     if count < 1 and APK not in s:
         raise SystemExit("native user APK URL not found in main Script.html")
     if APK not in s:
-        raise SystemExit("v1.2.5 APK URL missing from main Script.html")
+        raise SystemExit("safe v1.1.7 APK URL missing from main Script.html")
 else:
     raise SystemExit("mode must be hosting or main")
 
 path.write_text(s, encoding="utf-8")
-print(f"Connected {mode} user install button to v1.2.5 full APK.")
+print(f"Connected {mode} user install button to temporary safe v1.1.7 APK.")
