@@ -1,4 +1,4 @@
-name: Deploy v1.2.9 diagnostic APK as hidden Hosting candidate
+name: Deploy v1.2.9 user APK on public Hosting button
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-user-v129-candidate-hosting
+  group: jayuminton-user-v129-public-hosting
   cancel-in-progress: false
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Resolve Hosting and verify v1.2.8 plus v1.2.9 APK bytes
+      - name: Resolve Hosting and verify v1.2.9 APK bytes
         shell: bash
         run: |
           set -euo pipefail
@@ -51,28 +51,23 @@ jobs:
             echo "PUSH_URL=https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec"
           } >> "$GITHUB_ENV"
 
-          for V in 128 129; do
-            if [ "$V" = 128 ]; then
-              STATUS='deployment/status/user-native-push-v1.2.8.txt'
-              APK='releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk'
-            else
-              STATUS='deployment/status/user-native-push-v1.2.9.txt'
-              APK='releases/jayuminton-courtstatus-v1.2.9-background-registration.apk'
-            fi
-            test -s "$STATUS"; test -s "$APK"
-            grep -F 'status=success' "$STATUS" >/dev/null
-            EXPECTED="$(sed -n 's/^apk_sha256=//p' "$STATUS" | tail -1)"
-            test -n "$EXPECTED"
-            test "$(sha256sum "$APK" | awk '{print $1}')" = "$EXPECTED"
-            echo "EXPECTED_APK_SHA_$V=$EXPECTED" >> "$GITHUB_ENV"
-          done
+          STATUS='deployment/status/user-native-push-v1.2.9.txt'
+          APK='releases/jayuminton-courtstatus-v1.2.9-background-registration.apk'
+          test -s "$STATUS"; test -s "$APK"
+          grep -F 'status=success' "$STATUS" >/dev/null
+          grep -F 'version=1.2.9' "$STATUS" >/dev/null
+          grep -F 'version_code=129' "$STATUS" >/dev/null
+          EXPECTED="$(sed -n 's/^apk_sha256=//p' "$STATUS" | tail -1)"
+          test -n "$EXPECTED"
+          test "$(sha256sum "$APK" | awk '{print $1}')" = "$EXPECTED"
+          echo "EXPECTED_APK_SHA=$EXPECTED" >> "$GITHUB_ENV"
 
-      - name: Build Hosting with unchanged v1.2.8 button plus hidden v1.2.9 candidate
+      - name: Build Hosting with public v1.2.9 install button
         shell: bash
         run: |
           set -euo pipefail
           SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
-          ROOT="$RUNNER_TEMP/hosting-v129-candidate"
+          ROOT="$RUNNER_TEMP/hosting-v129-public"
           PUBLIC="$ROOT/public"
           mkdir -p "$PUBLIC"
           cp "$SRC/index.html" "$PUBLIC/index.html"
@@ -80,7 +75,6 @@ jobs:
           cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
           cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
           cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
-          cp releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk "$PUBLIC/jayuminton-courtstatus-v1.2.8-repeat-switch.apk"
           cp releases/jayuminton-courtstatus-v1.2.9-background-registration.apk "$PUBLIC/jayuminton-courtstatus-v1.2.9-background-registration.apk"
 
           BASE="${HOSTING_URL%/}"
@@ -98,14 +92,17 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import os, re
-          public=Path(os.environ['RUNNER_TEMP'])/'hosting-v129-candidate'/'public'
+          public=Path(os.environ['RUNNER_TEMP'])/'hosting-v129-public'/'public'
           run=os.environ['GITHUB_RUN_ID']
-          apk128=f"/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-hosting-{run}"
+          apk=f"/jayuminton-courtstatus-v1.2.9-background-registration.apk?build=129-hosting-{run}"
           setup=public/'setup-v205.js'
           s=setup.read_text(encoding='utf-8')
-          s=re.sub(r"const JAYUMINTON_USER_APK_V128 = '[^']+';",f"const JAYUMINTON_USER_APK_V128 = '{apk128}';",s,count=1)
-          if apk128 not in s: raise SystemExit('v1.2.8 button route missing')
-          if 'v1.2.9-background-registration.apk' in s: raise SystemExit('candidate leaked into install button')
+          s=s.replace('JAYUMINTON_NATIVE_APK_DOWNLOAD_V128','JAYUMINTON_NATIVE_APK_DOWNLOAD_V129')
+          s=s.replace('JAYUMINTON_USER_APK_V128','JAYUMINTON_USER_APK_V129')
+          s=s.replace('자유민턴 사용자 앱 1.2.8을 다운로드합니다.','자유민턴 사용자 앱 1.2.9을 다운로드합니다.')
+          s=re.sub(r"const JAYUMINTON_USER_APK_V129 = '[^']+';",f"const JAYUMINTON_USER_APK_V129 = '{apk}';",s,count=1)
+          if apk not in s: raise SystemExit('v1.2.9 public APK route missing')
+          if 'v1.2.8-repeat-switch.apk' in s: raise SystemExit('old v1.2.8 APK route remained')
           setup.write_text(s,encoding='utf-8')
 
           template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
@@ -115,30 +112,30 @@ jobs:
 
           index=public/'index.html'
           h=index.read_text(encoding='utf-8')
-          h=h.replace('/setup-v205.js?v=1637',f'/setup-v205.js?v=v129-candidate-{run}')
-          h=h.replace('/config-v204.js?v=1637',f'/config-v204.js?v=v129-candidate-{run}')
+          h=h.replace('/setup-v205.js?v=1637',f'/setup-v205.js?v=v129-public-{run}')
+          h=h.replace('/config-v204.js?v=1637',f'/config-v204.js?v=v129-public-{run}')
           index.write_text(h,encoding='utf-8')
 
           sw=public/'firebase-messaging-sw.js'
           w=sw.read_text(encoding='utf-8')
-          w=re.sub(r"const JAYUMINTON_SW_VERSION = '[^']+';",f"const JAYUMINTON_SW_VERSION = 'v129-candidate-{run}';",w,count=1)
-          w=re.sub(r"const JAYUMINTON_CACHE = '[^']+';",f"const JAYUMINTON_CACHE = 'jayuminton-v129-candidate-{run}';",w,count=1)
+          w=re.sub(r"const JAYUMINTON_SW_VERSION = '[^']+';",f"const JAYUMINTON_SW_VERSION = 'v129-public-{run}';",w,count=1)
+          w=re.sub(r"const JAYUMINTON_CACHE = '[^']+';",f"const JAYUMINTON_CACHE = 'jayuminton-v129-public-{run}';",w,count=1)
           sw.write_text(w,encoding='utf-8')
           PY
 
           node --check "$PUBLIC/setup-v205.js"
           node --check "$PUBLIC/firebase-messaging-sw.js"
-          grep -F '/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-hosting-' "$PUBLIC/setup-v205.js" >/dev/null
-          ! grep -F 'v1.2.9-background-registration.apk' "$PUBLIC/setup-v205.js"
-          test "$(sha256sum "$PUBLIC/jayuminton-courtstatus-v1.2.8-repeat-switch.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA_128"
-          test "$(sha256sum "$PUBLIC/jayuminton-courtstatus-v1.2.9-background-registration.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA_129"
+          grep -F '/jayuminton-courtstatus-v1.2.9-background-registration.apk?build=129-hosting-' "$PUBLIC/setup-v205.js" >/dev/null
+          grep -F '자유민턴 사용자 앱 1.2.9을 다운로드합니다.' "$PUBLIC/setup-v205.js" >/dev/null
+          ! grep -F 'v1.2.8-repeat-switch.apk' "$PUBLIC/setup-v205.js"
+          test "$(sha256sum "$PUBLIC/jayuminton-courtstatus-v1.2.9-background-registration.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA"
 
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/firebase-messaging-sw.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/*.apk","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"},{"key":"Content-Type","value":"application/vnd.android.package-archive"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive
 
-      - name: Verify live button unchanged and v1.2.9 direct candidate bytes
+      - name: Verify public v1.2.9 button and downloaded APK bytes
         shell: bash
         run: |
           set -euo pipefail
@@ -146,9 +143,9 @@ jobs:
           ok=0
           for attempt in $(seq 1 20); do
             curl --fail --location --silent --show-error -H 'Cache-Control: no-cache, no-store' \
-              "$BASE/setup-v205.js?verify=v129-candidate-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/live-setup.js" || true
-            if grep -F '/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-hosting-' "$RUNNER_TEMP/live-setup.js" >/dev/null 2>&1 && \
-               ! grep -F 'v1.2.9-background-registration.apk' "$RUNNER_TEMP/live-setup.js" >/dev/null 2>&1; then
+              "$BASE/setup-v205.js?verify=v129-public-$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/live-setup.js" || true
+            if grep -F '/jayuminton-courtstatus-v1.2.9-background-registration.apk?build=129-hosting-' "$RUNNER_TEMP/live-setup.js" >/dev/null 2>&1 && \
+               ! grep -F 'v1.2.8-repeat-switch.apk' "$RUNNER_TEMP/live-setup.js" >/dev/null 2>&1; then
               ok=1; break
             fi
             sleep 6
@@ -156,30 +153,31 @@ jobs:
           test "$ok" = 1
 
           curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' \
-            "$BASE/jayuminton-courtstatus-v1.2.9-background-registration.apk?candidate=129-$GITHUB_RUN_ID" \
+            "$BASE/jayuminton-courtstatus-v1.2.9-background-registration.apk?verify=129-$GITHUB_RUN_ID" \
             -o "$RUNNER_TEMP/live-v129.apk"
-          test "$(sha256sum "$RUNNER_TEMP/live-v129.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA_129"
+          test "$(sha256sum "$RUNNER_TEMP/live-v129.apk" | awk '{print $1}')" = "$EXPECTED_APK_SHA"
 
-          cat > deployment/status/user-v129-candidate-hosting-live.txt <<EOF
+          cat > deployment/status/user-v129-public-hosting-live.txt <<EOF
           status=success
-          candidate_version=1.2.9
-          candidate_version_code=129
-          candidate_apk=jayuminton-courtstatus-v1.2.9-background-registration.apk
-          candidate_apk_sha256=$EXPECTED_APK_SHA_129
-          public_install_button=v1.2.8-unchanged
-          candidate_link_hidden=yes
-          live_candidate_hash_match=yes
+          version=1.2.9
+          version_code=129
+          apk=jayuminton-courtstatus-v1.2.9-background-registration.apk
+          apk_sha256=$EXPECTED_APK_SHA
+          hosting_download=same-origin
+          hosting_button=v1.2.9
+          old_v128_link_present=no
+          live_apk_hash_match=yes
           admin_logic_changed=no
           verified_at=$(date -u +%FT%TZ)
           EOF
 
-      - name: Publish candidate Hosting verification
+      - name: Publish public Hosting verification
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/user-v129-candidate-hosting-live.txt
-          git commit -m 'Verify hidden v1.2.9 Hosting candidate without changing public button' || exit 0
+          git add deployment/status/user-v129-public-hosting-live.txt
+          git commit -m 'Verify public Hosting button serves v1.2.9 APK' || exit 0
           git pull --rebase origin main || true
           git push origin main
