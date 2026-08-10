@@ -1,0 +1,81 @@
+name: Diagnose v1.2.9 setup patch stage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-v129-patch.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Run patch preflight
+        id: preflight
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/stage.txt"
+          SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
+          OUT="$RUNNER_TEMP/setup-v205.js"
+          echo decode_setup > "$STAGE"
+          cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
+          gzip -dc "$RUNNER_TEMP/setup.gz" > "$OUT"
+          echo patch_push_setup_verification > "$STAGE"
+          python3 deployment/scripts/patch_push_setup_verification.py "$OUT"
+          echo patch_embedded_browser_push > "$STAGE"
+          python3 deployment/scripts/patch_embedded_browser_push.py "$OUT"
+          echo patch_native_host_bridge > "$STAGE"
+          python3 deployment/scripts/patch_native_host_bridge.py "$OUT"
+          echo patch_user_install_v128 > "$STAGE"
+          python3 deployment/scripts/patch_user_install_link_v128.py hosting "$OUT"
+          echo inline_v129 > "$STAGE"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('/tmp')/'noop'
+          out=Path(__import__('os').environ['RUNNER_TEMP'])/'setup-v205.js'
+          s=out.read_text(encoding='utf-8')
+          target='/jayuminton-courtstatus-v1.2.9-background-registration.apk?build=129-diagnostic'
+          s=s.replace('JAYUMINTON_NATIVE_APK_DOWNLOAD_V128','JAYUMINTON_NATIVE_APK_DOWNLOAD_V129')
+          s=s.replace('JAYUMINTON_USER_APK_V128','JAYUMINTON_USER_APK_V129')
+          s=s.replace('자유민턴 사용자 앱 1.2.8을 다운로드합니다.','자유민턴 사용자 앱 1.2.9을 다운로드합니다.')
+          s=re.sub(r"const JAYUMINTON_USER_APK_V129 = '[^']+';",f"const JAYUMINTON_USER_APK_V129 = '{target}';",s,count=1)
+          if target not in s: raise SystemExit('v129 target not inserted')
+          out.write_text(s,encoding='utf-8')
+          PY
+          echo node_check > "$STAGE"
+          node --check "$OUT"
+          echo grep_v129 > "$STAGE"
+          grep -F 'jayuminton-courtstatus-v1.2.9-background-registration.apk' "$OUT" >/dev/null
+          echo success > "$STAGE"
+
+      - name: Record patch diagnostic
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUTCOME='${{ steps.preflight.outcome }}'
+          STAGE="$(cat "$RUNNER_TEMP/stage.txt" 2>/dev/null || echo before_preflight)"
+          cat > deployment/status/v129-patch-diagnostic.txt <<EOF
+          outcome=$OUTCOME
+          stage=$STAGE
+          admin_logic_changed=no
+          recorded_at=$(date -u +%FT%TZ)
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v129-patch-diagnostic.txt
+          git commit -m "Record v1.2.9 patch diagnostic: $OUTCOME at $STAGE" || exit 0
+          git pull --rebase origin main || true
+          git push origin main
