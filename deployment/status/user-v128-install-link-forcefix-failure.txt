@@ -1,9 +1,9 @@
 status=failure
 version=1.2.8
-last_stage=deploy-main-live
+last_stage=redeploy-main-live
 live_hosting_v128_count=unknown
 live_hosting_v124_count=unknown
 live_main_v128_count=unknown
 live_main_v124_count=unknown
 admin_logic_changed=no
-failed_at=2026-08-10T12:45:50Z
+failed_at=2026-08-10T12:47:57Z
