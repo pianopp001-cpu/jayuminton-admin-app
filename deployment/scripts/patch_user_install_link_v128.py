@@ -5,7 +5,8 @@ import sys
 
 # Keep the verified v1.2.8 APK bytes, but use a fresh cache-busting URL so a
 # phone/browser cannot reuse an earlier downloaded APK response.
-APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk?build=128-repeat-switch&r=20260810-2113"
+APK_FILENAME = "jayuminton-courtstatus-v1.2.8-repeat-switch.apk"
+APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/" + APK_FILENAME + "?build=128-repeat-switch&r=20260810-2139"
 MARKER = "JAYUMINTON_NATIVE_APK_DOWNLOAD_V128"
 
 mode = sys.argv[1]
@@ -47,15 +48,49 @@ if mode == "hosting":
             raise SystemExit("missing v1.2.8 hosting APK marker: " + required)
 
 elif mode == "main":
-    pattern = re.compile(
-        r"https://(?:raw\.githubusercontent\.com/pianopp001-cpu/jayuminton-admin-app/main/releases/|github\.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/releases/)"
-        r"jayuminton-(?:courtstatus|user)[A-Za-z0-9._-]*\.apk(?:\?build=[A-Za-z0-9._-]+(?:&r=[A-Za-z0-9._-]+)?)?"
+    original = s
+
+    # First replace every complete GitHub/raw user-APK URL we can recognize,
+    # regardless of the historical URL form or query string.
+    url_pattern = re.compile(
+        r"https://(?:raw\.githubusercontent\.com|github\.com)/"
+        r"pianopp001-cpu/jayuminton-admin-app/"
+        r"[^'\"\s<>]*?"
+        r"jayuminton-(?:courtstatus|user)[A-Za-z0-9._()\-]*\.apk"
+        r"(?:\?[^'\"\s<>]*)?"
     )
-    s, count = pattern.subn(APK, s)
-    if count < 1 and APK not in s:
-        raise SystemExit("native user APK URL not found in main Script.html")
-    if APK not in s:
-        raise SystemExit("v1.2.8 APK URL missing from main Script.html")
+    s, url_count = url_pattern.subn(APK, s)
+
+    # Some older page revisions assembled the URL around only the filename.
+    # Normalize every user APK filename token in Script.html to the v1.2.8 file.
+    filename_pattern = re.compile(
+        r"jayuminton-(?:courtstatus|user)[A-Za-z0-9._()\-]*\.apk"
+    )
+    filenames_before = filename_pattern.findall(s)
+    s = filename_pattern.sub(APK_FILENAME, s)
+
+    # If the page contains a direct v1.2.8 raw URL without our fresh query,
+    # normalize that full URL as well.
+    current_plain = (
+        "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/"
+        + APK_FILENAME
+    )
+    s = re.sub(re.escape(current_plain) + r"(?:\?[^'\"\s<>]*)?", APK, s)
+
+    if APK_FILENAME not in s:
+        raise SystemExit("v1.2.8 APK filename missing from main Script.html")
+    stale = [name for name in filename_pattern.findall(s) if name != APK_FILENAME]
+    if stale:
+        raise SystemExit("stale user APK filename remained in main Script.html")
+    if url_count < 1 and not filenames_before and APK not in original:
+        raise SystemExit("native user APK route not found in main Script.html")
+
+    print(
+        "main-route-normalized",
+        "full_urls=", url_count,
+        "filename_tokens=", len(filenames_before),
+        "v128_tokens=", s.count(APK_FILENAME),
+    )
 else:
     raise SystemExit("mode must be hosting or main")
 
