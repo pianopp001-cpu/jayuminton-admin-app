@@ -1,0 +1,211 @@
+name: Build v1.2.7 immediate member-switch candidate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-user-native-push-v127-member-switch.yml'
+      - 'deployment/scripts/patch_build_user_native_v127_member_switch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-native-v127-member-switch
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+
+      - name: Resolve deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId and .pushScriptId and .pushDeploymentId and .firebaseProjectId and .pushUrl' "$C" >/dev/null
+          {
+            echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$C")"
+            echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")"
+            echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$C")"
+            echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$C")"
+            echo "PUSH_URL=$(jq -r '.pushUrl' "$C")"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")"
+          } >> "$GITHUB_ENV"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Install Firebase and clasp
+        run: npm install --global firebase-tools@latest @google/clasp@latest
+
+      - name: Download Firebase config for user package
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE='com.jayuminton.user'
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          APP_ID="$(jq -r --arg pkg "$PACKAGE" '[.. | objects | select(((.packageName? == $pkg) or (.package_name? == $pkg) or (.androidClientInfo?.packageName? == $pkg)) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
+          test -n "$APP_ID"
+          firebase apps:sdkconfig ANDROID "$APP_ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
+          grep -F 'com.jayuminton.user' app/google-services.json >/dev/null
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Verify Android SDK and atomic server switch protection
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME/platform-tools"
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -n "$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | head -1)"
+          W="$RUNNER_TEMP/push-check"
+          mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$W/.clasp.json"
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            rm -f "$W/Code.js"
+            (cd "$W" && clasp pull) || true
+            if grep -F 'JAYUMINTON_MEMBER_TOKEN_SWITCH_ATOMIC_V1' "$W/Code.js" >/dev/null 2>&1; then ok=1; break; fi
+            sleep 5
+          done
+          test "$ok" = 1
+          grep -F "if (memberId && String(record.memberId || '') !== memberId) return true;" "$W/Code.js" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_DEVICE_ACK_V2' "$W/Code.js" >/dev/null
+
+      - name: Build and verify v1.2.7 candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/v127-build.log") 2>&1
+          SCRIPT='deployment/scripts/build_user_native_push_fresh_v110.sh'
+          python3 deployment/scripts/patch_build_user_native_v111.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v112.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v113.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v114.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v115.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v116.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v117.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v118.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v119.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v120_diagnostic.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v121.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v122.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v124_confirmed_overlay.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v126_stop_controller.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v126_raceguard.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v127_member_switch.py "$SCRIPT"
+
+          grep -F 'VERSION="1.2.7"' "$SCRIPT" >/dev/null
+          grep -F 'VERSION_CODE="127"' "$SCRIPT" >/dev/null
+          grep -F 'REGISTER_EXECUTOR = Executors.newSingleThreadExecutor()' "$SCRIPT" >/dev/null
+          grep -F 'REGISTRATION_GENERATION = new AtomicLong(0L)' "$SCRIPT" >/dev/null
+          grep -F 'boolean changed = !oldId.equals(newId) || !oldName.equals(newName)' "$SCRIPT" >/dev/null
+          grep -F 'registrationStillCurrent(app, expectedGeneration, id, token)' "$SCRIPT" >/dev/null
+          grep -F 'NativeDeliveryReporter.report("member_changed"' "$SCRIPT" >/dev/null
+          grep -F 'NativeDeliveryReporter.report("token_register_requested"' "$SCRIPT" >/dev/null
+          grep -F 'JAYUMINTON_V126_START_STOP_RACE_GUARD' "$SCRIPT" >/dev/null
+          grep -F 'AlertVibrationController.start(this, assignmentId)' "$SCRIPT" >/dev/null
+          grep -F 'confirm.setText("확인하고 닫기")' "$SCRIPT" >/dev/null
+          grep -F '"확인 · 진동 끄기"' "$SCRIPT" >/dev/null
+          grep -F 'NativePushRegistrar.isCurrentMember(this, targetMemberId)' "$SCRIPT" >/dev/null
+
+          python3 - "$SCRIPT" <<'PY'
+          from pathlib import Path
+          import sys
+          s=Path(sys.argv[1]).read_text(encoding='utf-8')
+          a=s.index('    public static void setMember(Context context, String memberId, String memberName) {')
+          b=s.index('    public static void clearMember(',a)
+          block=s[a:b]
+          if 'unregister_web_token' in block:
+              raise SystemExit('member switch still unregisters old token before reassignment')
+          if 'if (!changed)' not in block:
+              raise SystemExit('same-member idempotency guard missing')
+          PY
+
+          bash "$SCRIPT"
+
+          APK='releases/jayuminton-courtstatus-v1.2.7-member-switch.apk'
+          STATUS='deployment/status/user-native-push-v1.2.7.txt'
+          test -s "$APK"
+          grep -F 'status=success' "$STATUS" >/dev/null
+          grep -F 'version=1.2.7' "$STATUS" >/dev/null
+          grep -F 'version_code=127' "$STATUS" >/dev/null
+          grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
+          grep -F 'install_mode=uninstall-old-then-fresh-install' "$STATUS" >/dev/null
+          grep -F 'member-switch-v127' "$STATUS" >/dev/null
+
+          unzip -p "$APK" classes.dex > "$RUNNER_TEMP/v127.dex"
+          strings "$RUNNER_TEMP/v127.dex" > "$RUNNER_TEMP/v127.strings"
+          grep -F 'AlertVibrationController' "$RUNNER_TEMP/v127.strings" >/dev/null
+          grep -F 'member_changed' "$RUNNER_TEMP/v127.strings" >/dev/null
+          grep -F 'token_register_requested' "$RUNNER_TEMP/v127.strings" >/dev/null
+          grep -F 'token_register_http_ok' "$RUNNER_TEMP/v127.strings" >/dev/null
+          if grep -F '?mode=admin' "$RUNNER_TEMP/v127.strings" >/dev/null; then
+            echo 'admin URL leaked into user APK' >&2
+            exit 1
+          fi
+
+          cp "$APK" "$RUNNER_TEMP/v127.apk"
+          cp "$STATUS" "$RUNNER_TEMP/v127-status.txt"
+
+      - name: Publish candidate only, keep live install rollback unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          cp "$RUNNER_TEMP/v127.apk" releases/jayuminton-courtstatus-v1.2.7-member-switch.apk
+          cp "$RUNNER_TEMP/v127-status.txt" deployment/status/user-native-push-v1.2.7.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/jayuminton-courtstatus-v1.2.7-member-switch.apk deployment/status/user-native-push-v1.2.7.txt
+          git commit -m 'Publish v1.2.7 member-switch user APK candidate' || true
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Upload v1.2.7 candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-courtstatus-v1.2.7-member-switch
+          path: releases/jayuminton-courtstatus-v1.2.7-member-switch.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish sanitized failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          {
+            echo 'status=failure'
+            tail -n 260 "$RUNNER_TEMP/v127-build.log" 2>/dev/null || true
+          } > deployment/status/native-v127-build-failure.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/native-v127-build-failure.txt
+          git commit -m 'Record v1.2.7 member-switch build failure' || true
+          git pull --rebase origin main
+          git push origin main
