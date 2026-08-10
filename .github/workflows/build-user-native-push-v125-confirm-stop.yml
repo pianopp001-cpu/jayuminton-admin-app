@@ -1,5 +1,5 @@
 name: Build v1.2.5 confirmed stop alert
-# internal version markers corrected
+# internal version markers corrected; confirm-stop retry
 
 on:
   push:
