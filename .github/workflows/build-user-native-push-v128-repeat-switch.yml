@@ -1,0 +1,183 @@
+name: Build v1.2.8 repeated member-switch user APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-user-native-push-v128-repeat-switch.yml'
+      - 'deployment/scripts/patch_build_user_native_v128_repeat_switch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-native-v128-repeat-switch
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+
+      - name: Resolve deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId and .pushScriptId and .pushDeploymentId and .firebaseProjectId and .pushUrl' "$C" >/dev/null
+          {
+            echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$C")"
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")"
+          } >> "$GITHUB_ENV"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm install --global firebase-tools@latest @google/clasp@latest
+
+      - name: Download Firebase config for user package
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE='com.jayuminton.user'
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          APP_ID="$(jq -r --arg pkg "$PACKAGE" '[.. | objects | select(((.packageName? == $pkg) or (.package_name? == $pkg) or (.androidClientInfo?.packageName? == $pkg)) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
+          test -n "$APP_ID"
+          firebase apps:sdkconfig ANDROID "$APP_ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
+          grep -F 'com.jayuminton.user' app/google-services.json >/dev/null
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Verify SDK and server member-switch protection
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME/platforms/android-35"
+          W="$RUNNER_TEMP/push-check"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$W/.clasp.json"
+          (cd "$W" && clasp pull)
+          grep -F 'JAYUMINTON_MEMBER_TOKEN_SWITCH_ATOMIC_V1' "$W/Code.js" >/dev/null
+          grep -F "if (memberId && String(record.memberId || '') !== memberId) return true;" "$W/Code.js" >/dev/null
+
+      - name: Build and verify v1.2.8
+        shell: bash
+        run: |
+          set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/v128-build.log") 2>&1
+          SCRIPT='deployment/scripts/build_user_native_push_fresh_v110.sh'
+          python3 deployment/scripts/patch_build_user_native_v111.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v112.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v113.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v114.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v115.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v116.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v117.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v118.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v119.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v120_diagnostic.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v121.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v122.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v124_confirmed_overlay.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v126_stop_controller.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v126_raceguard.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v127_member_switch.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v128_repeat_switch.py "$SCRIPT"
+
+          grep -F 'VERSION="1.2.8"' "$SCRIPT" >/dev/null
+          grep -F 'VERSION_CODE="128"' "$SCRIPT" >/dev/null
+          grep -F 'stopPreviousMemberAlert(app);' "$SCRIPT" >/dev/null
+          grep -F 'AlertVibrationController.stop(app);' "$SCRIPT" >/dev/null
+          grep -F 'AssignmentOverlay.dismissOnly();' "$SCRIPT" >/dev/null
+          grep -F 'notifications.cancelAll();' "$SCRIPT" >/dev/null
+          grep -F 'REGISTRATION_GENERATION = new AtomicLong(0L)' "$SCRIPT" >/dev/null
+          grep -F 'registrationStillCurrent(app, expectedGeneration, id, token)' "$SCRIPT" >/dev/null
+          grep -F 'NativePushRegistrar.isCurrentMember(this, targetMemberId)' "$SCRIPT" >/dev/null
+          grep -F 'AlertVibrationController.start(this, assignmentId)' "$SCRIPT" >/dev/null
+          grep -F 'JAYUMINTON_V126_START_STOP_RACE_GUARD' "$SCRIPT" >/dev/null
+
+          # Static state-machine proof for repeated A->B->C->D switches: only an
+          # actual member change stops old vibration; same-member sync never does;
+          # every new accepted FCM start supersedes the previous controller generation.
+          python3 - "$SCRIPT" <<'PY'
+          from pathlib import Path
+          import sys
+          s=Path(sys.argv[1]).read_text(encoding='utf-8')
+          a=s.index('    public static void setMember(Context context, String memberId, String memberName) {')
+          b=s.index('    public static void clearMember(',a)
+          block=s[a:b]
+          same=block.index('if (!changed) {')
+          stop=block.index('stopPreviousMemberAlert(app);')
+          if same > stop: raise SystemExit('same-member sync can stop a valid current alert')
+          if 'unregister_web_token' in block: raise SystemExit('member switch regressed to unregister-first')
+          c=s.index('public final class AlertVibrationController')
+          d=s.index('JAVA\n\n',c)
+          ctl=s[c:d]
+          for marker in ('generation++;','removeCallbacks(activeRunnable)','cancelHardware(app, activeVibrator)','generation != myGeneration'):
+              if marker not in ctl: raise SystemExit('controller repeat-start guard missing: '+marker)
+          print('Repeated-switch state machine verified: A->B->C->D cannot inherit stale vibration ownership.')
+          PY
+
+          bash "$SCRIPT"
+
+          APK='releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk'
+          STATUS='deployment/status/user-native-push-v1.2.8.txt'
+          test -s "$APK"
+          grep -F 'status=success' "$STATUS" >/dev/null
+          grep -F 'version=1.2.8' "$STATUS" >/dev/null
+          grep -F 'version_code=128' "$STATUS" >/dev/null
+          grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
+          grep -F 'repeat-switch-v128-current-member-only' "$STATUS" >/dev/null
+
+          unzip -p "$APK" classes.dex > "$RUNNER_TEMP/v128.dex"
+          strings "$RUNNER_TEMP/v128.dex" > "$RUNNER_TEMP/v128.strings"
+          grep -F 'AlertVibrationController' "$RUNNER_TEMP/v128.strings" >/dev/null
+          grep -F 'stopPreviousMemberAlert' "$RUNNER_TEMP/v128.strings" >/dev/null
+          grep -F 'member_changed' "$RUNNER_TEMP/v128.strings" >/dev/null
+          if grep -F '?mode=admin' "$RUNNER_TEMP/v128.strings" >/dev/null; then
+            echo 'admin URL leaked into user APK' >&2; exit 1
+          fi
+
+          cp "$APK" "$RUNNER_TEMP/v128.apk"
+          cp "$STATUS" "$RUNNER_TEMP/v128-status.txt"
+
+      - name: Publish verified v1.2.8 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          cp "$RUNNER_TEMP/v128.apk" releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk
+          cp "$RUNNER_TEMP/v128-status.txt" deployment/status/user-native-push-v1.2.8.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk deployment/status/user-native-push-v1.2.8.txt
+          git commit -m 'Publish v1.2.8 repeated member-switch user APK' || true
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Upload v1.2.8 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-courtstatus-v1.2.8-repeat-switch
+          path: releases/jayuminton-courtstatus-v1.2.8-repeat-switch.apk
+          if-no-files-found: error
+          retention-days: 30
