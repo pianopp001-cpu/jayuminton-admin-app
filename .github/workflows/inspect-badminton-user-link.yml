@@ -1,0 +1,79 @@
+name: Inspect badminton.html user install route
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-badminton-user-link.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - name: Inspect exact public user URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          BASE="$(jq -r '.hostingUrl' "$RUNNER_TEMP/deploy.json")"
+          BASE="${BASE%/}"
+          for route in root badminton; do
+            if [ "$route" = root ]; then URL="$BASE/?inspect=$GITHUB_RUN_ID"; else URL="$BASE/badminton.html?inspect=$GITHUB_RUN_ID"; fi
+            curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$URL" -o "$RUNNER_TEMP/$route.html"
+          done
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/setup-v205.js?inspect=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/setup.js"
+
+          ROOT_V128="$(grep -Fc 'v1.2.8-repeat-switch.apk' "$RUNNER_TEMP/root.html" || true)"
+          ROOT_V124="$(grep -Fc 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/root.html" || true)"
+          BAD_V128="$(grep -Fc 'v1.2.8-repeat-switch.apk' "$RUNNER_TEMP/badminton.html" || true)"
+          BAD_V124="$(grep -Fc 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/badminton.html" || true)"
+          SETUP_V128="$(grep -Fc 'v1.2.8-repeat-switch.apk' "$RUNNER_TEMP/setup.js" || true)"
+          SETUP_V124="$(grep -Fc 'v1.2.4-confirmed-overlay.apk' "$RUNNER_TEMP/setup.js" || true)"
+          ROOT_SHA="$(sha256sum "$RUNNER_TEMP/root.html" | awk '{print $1}')"
+          BAD_SHA="$(sha256sum "$RUNNER_TEMP/badminton.html" | awk '{print $1}')"
+          SAME_HTML=no; [ "$ROOT_SHA" = "$BAD_SHA" ] && SAME_HTML=yes
+          BAD_SETUP_REF="$(grep -Fc 'setup-v205.js' "$RUNNER_TEMP/badminton.html" || true)"
+          ROOT_SETUP_REF="$(grep -Fc 'setup-v205.js' "$RUNNER_TEMP/root.html" || true)"
+
+          # Capture only APK filenames/route-shape, no secrets or personal data.
+          BAD_APKS="$(grep -Eo 'jayuminton-(courtstatus|user)[A-Za-z0-9._()\-]*\.apk' "$RUNNER_TEMP/badminton.html" | sort -u | paste -sd, - || true)"
+          ROOT_APKS="$(grep -Eo 'jayuminton-(courtstatus|user)[A-Za-z0-9._()\-]*\.apk' "$RUNNER_TEMP/root.html" | sort -u | paste -sd, - || true)"
+
+          cat > deployment/status/badminton-user-link-live.txt <<EOF
+          status=success
+          hosting_base=$BASE
+          root_route=$BASE/
+          badminton_route=$BASE/badminton.html
+          root_and_badminton_same_html=$SAME_HTML
+          root_setup_ref_count=$ROOT_SETUP_REF
+          badminton_setup_ref_count=$BAD_SETUP_REF
+          root_v128_literal_count=$ROOT_V128
+          root_v124_literal_count=$ROOT_V124
+          badminton_v128_literal_count=$BAD_V128
+          badminton_v124_literal_count=$BAD_V124
+          setup_v128_count=$SETUP_V128
+          setup_v124_count=$SETUP_V124
+          root_apk_filenames=$ROOT_APKS
+          badminton_apk_filenames=$BAD_APKS
+          admin_logic_changed=no
+          checked_at=$(date -u +%FT%TZ)
+          EOF
+      - name: Publish route inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/badminton-user-link-live.txt
+          git commit -m 'Record actual badminton.html user route inspection' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
