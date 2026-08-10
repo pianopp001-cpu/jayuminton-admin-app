@@ -1,0 +1,25 @@
+status=failure
+version=1.2.9
+version_code=129
+deploy_outcome=failure
+verify_outcome=skipped
+stage=firebase_deploy
+hosting_url=https://jayuminton-push.web.app
+apk=jayuminton-courtstatus-v1.2.9-background-registration.apk
+apk_sha256=5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff
+admin_logic_changed=no
+recorded_at=2026-08-10T15:06:14Z
+--- safe firebase error ---
+
+[1m[37m===[39m Deploying to 'jayuminton-push'...[22m
+
+[36m[1mi [22m[39m deploying [1mhosting[22m
+[36m[1mi  hosting[jayuminton-push]:[22m[39m beginning deploy...
+[36m[1mi  hosting[jayuminton-push]:[22m[39m found 15 files in [1mpublic[22m
+[36m[1mi  hosting:[22m[39m adding files to version [0/15] ([1m[32m0%[39m[22m)
+[36m[1mi  hosting:[22m[39m adding files to version [0/15] ([1m[32m0%[39m[22m)
+[36m[1mi  hosting:[22m[39m adding files to version [15/15] ([1m[32m100%[39m[22m)
+
+[1m[31mError:[39m[22m Task index 0 failed: retries exhausted after 4 attempts, with error: Request to https://firebasehosting.googleapis.com/v1beta1/projects/758697255400/sites/jayuminton-push/versions/c5b524fc2ed75aa7:populateFiles had HTTP Error: 400, Executable files are forbidden on the Spark billing plan. For more details, see https://firebase.google.com/support/faq#hosting-exe-restrictions
+
+[1m[31mError:[39m[22m Task index 0 failed: retries exhausted after 4 attempts, with error: Request to https://firebasehosting.googleapis.com/v1beta1/projects/758697255400/sites/jayuminton-push/versions/c5b524fc2ed75aa7:populateFiles had HTTP Error: 400, Executable files are forbidden on the Spark billing plan. For more details, see https://firebase.google.com/support/faq#hosting-exe-restrictions
