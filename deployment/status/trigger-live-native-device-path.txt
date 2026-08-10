@@ -1,1 +1,1 @@
-2026-08-10T21:13:00+09:00 v1.2.8 real-device failure: pressing the notification-panel stop/close action did not stop the repeating vibration. Refresh privacy-safe native delivery and cancellation history for the current device path.
+2026-08-10T23:10:00+09:00 v1.2.8 real-device failure: while another app/activity is in foreground, both wait1_ready and court_assignment produce no vibration and no alert UI at all. Refresh privacy-safe native FCM delivery/receive/full-screen/background-path diagnostics for the current device path. Do not change admin logic.
