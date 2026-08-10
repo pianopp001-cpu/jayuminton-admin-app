@@ -5,12 +5,12 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/build-user-native-push-v125-confirmed-overlay.yml'
+      - '.github/workflows/build-user-native-push-v125-confirm-stop.yml'
   pull_request:
     branches: [main]
     paths:
       - 'deployment/status/trigger-user-native-v125.txt'
-      - '.github/workflows/build-user-native-push-v125-confirmed-overlay.yml'
+      - '.github/workflows/build-user-native-push-v125-confirm-stop.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -158,7 +158,8 @@ jobs:
           python3 deployment/scripts/patch_build_user_native_v120_diagnostic.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v121.py deployment/scripts/build_user_native_push_fresh_v110.sh
           python3 deployment/scripts/patch_build_user_native_v122.py deployment/scripts/build_user_native_push_fresh_v110.sh
-          python3 deployment/scripts/patch_build_user_native_v125_confirmed_overlay.py deployment/scripts/build_user_native_push_fresh_v110.sh
+          python3 deployment/scripts/patch_build_user_native_v124_confirmed_overlay.py deployment/scripts/build_user_native_push_fresh_v110.sh
+          python3 deployment/scripts/patch_build_user_native_v125_confirm_stop.py deployment/scripts/build_user_native_push_fresh_v110.sh
           bash deployment/scripts/build_user_native_push_fresh_v110.sh
           test -s releases/jayuminton-courtstatus-v1.2.5-confirm-stop.apk
           grep -F 'status=success' deployment/status/user-native-push-v1.2.5.txt >/dev/null
@@ -179,7 +180,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add releases/jayuminton-courtstatus-v1.2.5-confirm-stop.apk deployment/status/user-native-push-v1.2.5.txt
-          git commit -m 'Publish verified fresh-install native push user APK v1.2.4' || true
+          git commit -m 'Publish verified fresh-install native push user APK v1.2.5' || true
           git pull --rebase origin main
           git push origin main
 
