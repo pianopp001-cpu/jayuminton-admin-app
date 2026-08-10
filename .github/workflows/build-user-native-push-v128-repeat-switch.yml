@@ -48,12 +48,19 @@ jobs:
           C="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          PUSH_URL="$(jq -r '.pushUrl' "$C")"
           PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$C")"
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$C")"
-          test -n "$PUSH_SCRIPT_ID"; test "$PUSH_SCRIPT_ID" != null
-          test -n "$FIREBASE_PROJECT_ID"; test "$FIREBASE_PROJECT_ID" != null
-          echo "PUSH_SCRIPT_ID=$PUSH_SCRIPT_ID" >> "$GITHUB_ENV"
-          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+          for value in "$MAIN_DEPLOYMENT_ID" "$PUSH_URL" "$PUSH_SCRIPT_ID" "$FIREBASE_PROJECT_ID"; do
+            test -n "$value"; test "$value" != null
+          done
+          {
+            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
+            echo "PUSH_URL=$PUSH_URL"
+            echo "PUSH_SCRIPT_ID=$PUSH_SCRIPT_ID"
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+          } >> "$GITHUB_ENV"
 
           PACKAGE='com.jayuminton.user'
           firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
