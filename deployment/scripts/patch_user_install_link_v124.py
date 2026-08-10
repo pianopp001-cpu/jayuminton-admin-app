@@ -3,18 +3,18 @@ from pathlib import Path
 import re
 import sys
 
-APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.4-confirmed-overlay.apk"
+APK = "https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-courtstatus-v1.2.5-confirm-stop.apk"
 
 mode = sys.argv[1]
 path = Path(sys.argv[2])
 s = path.read_text(encoding="utf-8")
 
 if mode == "hosting":
-    marker = "JAYUMINTON_NATIVE_APK_DOWNLOAD_V124"
+    marker = "JAYUMINTON_NATIVE_APK_DOWNLOAD_V125"
     if marker not in s:
         anchor = "  function handleAppInstallButton(fromDirectUserTap) {"
         block = f'''  /* {marker} */
-  const JAYUMINTON_USER_APK_V124 = '{APK}';
+  const JAYUMINTON_USER_APK_V125 = '{APK}';
 
 '''
         if s.count(anchor) != 1:
@@ -27,13 +27,13 @@ if mode == "hosting":
       setInstallMessage('자유민턴 사용자 앱 전체 설치본을 다운로드합니다.', 'success');
       sendAppInstallStatus('APK 다운로드 시작');
       showToast('다운로드가 시작됩니다. 완료 후 APK를 실행해 주세요.');
-      window.location.href = JAYUMINTON_USER_APK_V124;
+      window.location.href = JAYUMINTON_USER_APK_V125;
       return;
     }
 '''
         s = s.replace(handler, replacement, 1)
 
-    for required in (marker, APK, "window.location.href = JAYUMINTON_USER_APK_V124"):
+    for required in (marker, APK, "window.location.href = JAYUMINTON_USER_APK_V125"):
         if required not in s:
             raise SystemExit("missing hosting APK marker: " + required)
 
@@ -47,9 +47,9 @@ elif mode == "main":
     if count < 1 and APK not in s:
         raise SystemExit("native user APK URL not found in main Script.html")
     if APK not in s:
-        raise SystemExit("v1.2.4 APK URL missing from main Script.html")
+        raise SystemExit("v1.2.5 APK URL missing from main Script.html")
 else:
     raise SystemExit("mode must be hosting or main")
 
 path.write_text(s, encoding="utf-8")
-print(f"Connected {mode} user install button to v1.2.4 full APK.")
+print(f"Connected {mode} user install button to v1.2.5 full APK.")
