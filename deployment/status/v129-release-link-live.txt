@@ -1,0 +1,13 @@
+status=success
+version=1.2.9
+version_code=129
+package=com.jayuminton.user
+user_url=https://jayuminton-push.web.app/badminton.html
+apk_transport=github-release-asset
+apk_sha256=5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff
+apk_size_bytes=2861865
+old_v128_link_present=no
+live_manifest_version_name=1.2.9
+live_manifest_version_code=129
+admin_logic_changed=no
+verified_at=2026-08-10T15:27:18Z
