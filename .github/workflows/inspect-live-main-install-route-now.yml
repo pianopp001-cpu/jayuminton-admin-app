@@ -1,0 +1,64 @@
+name: Inspect actual live main install route now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-live-main-install-route-now.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Pull current Apps Script and summarize installer route
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          (cd "$W" && clasp pull)
+          python3 - "$W/Script.html" <<'PY' > deployment/status/live-main-install-route-inspect.txt
+          import re,sys,hashlib
+          p=sys.argv[1]
+          s=open(p,encoding='utf-8').read()
+          urls=re.findall(r"https://[^'\"\s<>]+\.apk(?:\?[^'\"\s<>]*)?",s)
+          print('status=success')
+          print('has_1_2_8=' + ('yes' if '1.2.8' in s else 'no'))
+          print('has_1_2_9=' + ('yes' if '1.2.9' in s else 'no'))
+          print('has_v128_apk=' + ('yes' if 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' in s else 'no'))
+          print('has_v129_apk=' + ('yes' if 'Jayuminton-User-v1.2.9-code129-R2.apk' in s else 'no'))
+          print('apk_url_count='+str(len(urls)))
+          for i,u in enumerate(urls[:10]): print(f'apk_url_{i}='+u)
+          for needle in ['1.2.8','1.2.9','앱설치']:
+              idx=s.find(needle)
+              if idx>=0:
+                  frag=re.sub(r'\s+',' ',s[max(0,idx-120):idx+240])
+                  print('snippet_'+needle.replace('.','_')+'='+frag)
+          print('script_sha256='+hashlib.sha256(s.encode()).hexdigest())
+          PY
+      - name: Publish inspection
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/live-main-install-route-inspect.txt
+          git commit -m 'Inspect actual live main install route' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
