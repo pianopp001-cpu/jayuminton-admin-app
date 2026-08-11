@@ -1,0 +1,222 @@
+status=success
+scope=read_only_live_main
+admin_logic_changed=no
+file=Script.html;sha256=d9e70af11691f4d06b7e58de313b82a502ab2064931a85ab502edd66f83b7a92
+match=Script.html:198;function=;code=<str>;
+match=Script.html:251;function=;code=let MEMBER_INFO_OPEN_ID = <str>;
+match=Script.html:882;function=;code=<str>,<str>,<str>
+match=Script.html:971;function=memberCardDisplayName;code=function memberCardDisplayName(member) {
+match=Script.html:976;function=escapeMemberInfo;code=function escapeMemberInfo(value) {
+match=Script.html:996;function=;code=const grade = firstMemberProfileValue(member, [
+match=Script.html:997;function=;code=<str>, <str>, <str>, <str>, <str>
+match=Script.html:999;function=;code=const experience = firstMemberProfileValue(member, [
+match=Script.html:1000;function=;code=<str>, <str>, <str>, <str>, <str>
+match=Script.html:1002;function=;code=member.grade = grade;
+match=Script.html:1003;function=;code=member.experience = experience;
+match=Script.html:1004;function=;code=member.level = grade;
+match=Script.html:1005;function=;code=member.career = experience;
+match=Script.html:1049;function=memberInfoDetailHtml;code=function memberInfoDetailHtml(member, locationOverride) {
+match=Script.html:1051;function=;code=const grade = String(member && member.grade || <str>).trim();
+match=Script.html:1052;function=;code=let experience = String(member && member.experience || <str>).trim();
+match=Script.html:1054;function=;code=experience = experience.replace(/^구력\s*/i, <str>).trim();
+match=Script.html:1057;function=;code=if (grade) parts.push(escapeMemberInfo(grade));
+match=Script.html:1058;function=;code=if (experience) parts.push(escapeMemberInfo(<str> + experience));
+match=Script.html:1061;function=;code=return badge + <str> + parts.join(<str>) + <str>;
+match=Script.html:1064;function=toggleMemberInfo;code=function toggleMemberInfo(memberId, event) {
+match=Script.html:1211;function=memberCard;code=function memberCard(
+match=Script.html:1244;function=;code=(clickable ? <str> : <str>) +
+match=Script.html:1255;function=;code=escapeMemberInfo(memberCardDisplayName(member)) +
+match=Script.html:1258;function=;code=memberInfoDetailHtml(member) +
+match=Script.html:2010;function=;code=escapeMemberInfo(member.id) + <str> +
+match=Script.html:2011;function=;code=escapeMemberInfo(member.name) + <str>;
+match=Script.html:3115;function=;code=memberCardDisplayName(member) +
+match=Script.html:3120;function=;code=memberInfoDetailHtml(member, <str>) +
+match=Script.html:3977;function=;code=return memberCard(null, false, false);
+match=Script.html:3984;function=;code=return memberCard(
+match=Script.html:4001;function=;code=memberCardDisplayName(member) +
+match=Script.html:4006;function=;code=memberInfoDetailHtml(member, courtNo + <str>) +
+match=Script.html:4124;function=;code=return memberCard(null, false, false);
+match=Script.html:4131;function=;code=return memberCard(
+match=Script.html:4153;function=;code=memberCardDisplayName(member) +
+match=Script.html:4158;function=;code=memberInfoDetailHtml(member, <str> + (groupIndex + 1)) +
+match=Script.html:4261;function=;code=return memberCard(
+match=Script.html:4274;function=;code=return memberCard(
+match=Script.html:4361;function=;code=memberInfoDetailHtml(member, label) +
+match=Script.html:4401;function=;code=return memberCard(
+match=Script.html:4879;function=adminLogin;code=async function adminLogin() {
+match=Script.html:4918;function=;code=<str>
+match=Script.html:4932;function=;code=<str>
+match=Script.html:4936;function=;code=<str>,
+match=Script.html:4944;function=memberLogin;code=async function memberLogin() {
+match=Script.html:4945;function=;code=const password =
+match=Script.html:4948;function=;code=<str>
+match=Script.html:4955;function=;code=<str>,
+match=Script.html:4956;function=;code=[password]
+match=Script.html:4960;function=;code=alert(<str>);
+match=Script.html:4979;function=;code=<str>
+match=Script.html:5010;function=;code=const login = document.getElementById(<str>);
+match=Script.html:5022;function=;code=if (login) login.classList.add(<str>);
+match=Script.html:5042;function=;code=const version = String(await server(<str>, []));
+match=Script.html:5046;function=;code=if (login) login.classList.add(<str>);
+match=Script.html:5062;function=;code=if (login) login.classList.remove(<str>);
+match=Script.html:5181;function=;code=const grade = document.getElementById(<str>);
+match=Script.html:5182;function=;code=const experience = document.getElementById(<str>);
+match=Script.html:5185;function=;code=if (!name || !gender || !grade || !experience || !isNew || !updateButton) {
+match=Script.html:5191;function=;code=grade.value = String(member.grade || <str>);
+match=Script.html:5192;function=;code=experience.value = String(member.experience || <str>);
+match=Script.html:5210;function=;code=const gradeInput = document.getElementById(<str>);
+match=Script.html:5211;function=;code=const experienceInput = document.getElementById(<str>);
+match=Script.html:5215;function=;code=if (gradeInput) gradeInput.value = <str>;
+match=Script.html:5216;function=;code=if (experienceInput) experienceInput.value = <str>;
+match=Script.html:5242;function=;code=const grade = String(document.getElementById(<str>)?.value || <str>).trim();
+match=Script.html:5243;function=;code=const experience = String(document.getElementById(<str>)?.value || <str>).trim();
+match=Script.html:5250;function=;code=server(<str>, [ADMIN_PIN_VALUE, targetId, name, gender, grade, experience, isNew])
+match=Script.html:5255;function=;code=document.getElementById(<str>).value = <str>;
+match=Script.html:5256;function=;code=document.getElementById(<str>).value = <str>;
+match=Script.html:5271;function=;code=const gradeInput = document.getElementById(<str>);
+match=Script.html:5272;function=;code=const experienceInput = document.getElementById(<str>);
+match=Script.html:5278;function=;code=const grade = gradeInput.value.trim();
+match=Script.html:5279;function=;code=const experience = experienceInput.value.trim();
+match=Script.html:5307;function=;code=grade: grade,
+match=Script.html:5308;function=;code=experience: experience,
+match=Script.html:5330;function=;code=grade,
+match=Script.html:5331;function=;code=experience,
+match=Script.html:5348;function=;code=gradeInput.value = <str>;
+match=Script.html:5349;function=;code=experienceInput.value = <str>;
+match=Script.html:5690;function=changeMemberPassword;code=async function changeMemberPassword() {
+match=Script.html:5693;function=;code=<str>
+match=Script.html:5700;function=;code=alert(<str>);
+match=Script.html:5707;function=;code=<str>,
+match=Script.html:5716;function=;code=<str>
+match=Script.html:5719;function=;code=result.password;
+match=Script.html:5724;function=;code=<str> +
+match=Script.html:5725;function=;code=result.password +
+match=Script.html:5761;function=;code=<str>,
+match=Script.html:5784;function=;code=<str>
+file=Style.html;sha256=c3309edc3b89fb2ae90cd4c740fe0af2da13a3f3a6c566ceff85e4dcc671281b
+match=Style.html:249;function=;code=.login{
+match=Style.html:254;function=;code=.login h1{margin-bottom:12px}
+match=Style.html:2457;function=;code=/* v1.6.8 compact member information — always visible, no popup or redraw */
+match=Style.html:2458;function=;code=#adminApp .member-info-detail,
+match=Style.html:2459;function=;code=#memberApp .member-info-detail{
+match=Style.html:2478;function=;code=#adminApp .member-info-detail.is-empty,
+match=Style.html:2479;function=;code=#memberApp .member-info-detail.is-empty{
+match=Style.html:2484;function=;code=#adminApp .member-info-card,
+match=Style.html:2485;function=;code=#memberApp .member-info-card{
+match=Style.html:2491;function=;code=#adminApp .quick-member .member-info-detail{
+match=Style.html:2775;function=;code=/* v1.6.11 reliable grade/experience line on every member card */
+match=Style.html:2776;function=;code=#adminApp .member-info-detail,
+match=Style.html:2777;function=;code=#memberApp .member-info-detail{
+match=Style.html:2792;function=;code=#adminApp .member-info-detail.is-missing,
+match=Style.html:2793;function=;code=#memberApp .member-info-detail.is-missing{
+match=Style.html:2801;function=;code=#memberApp .member-info-card,
+match=Style.html:2802;function=;code=#adminApp .member-info-card{
+match=Style.html:2926;function=;code=/* Court-assignment waiting cards: keep the small grade/experience line inside. */
+match=Style.html:2927;function=;code=#memberApp #activeMembersMember .person.member-info-card{
+match=Style.html:2939;function=;code=#memberApp #activeMembersMember .person.member-info-card .name{
+match=Style.html:2944;function=;code=#memberApp #activeMembersMember .member-info-detail,
+match=Style.html:2945;function=;code=#adminApp .v4-quick-roster .member-info-detail{
+match=Style.html:2966;function=;code=#adminApp .v4-quick-roster .member-info-detail{
+match=Style.html:2989;function=;code=#adminApp .v4-court-card .member-info-detail,
+match=Style.html:2990;function=;code=#memberApp .v4-court-card .member-info-detail{
+match=Style.html:3104;function=;code=#memberApp .is-self-member .member-info-detail{
+match=Style.html:3150;function=;code=/* v1.6.18: one unified member settings card appears only after password authentication. */
+match=Style.html:3175;function=;code=/* v1.6.31: password screen stays clean; post-login settings use one compact line. */
+match=Style.html:3221;function=;code=#memberLoginBox~#memberApp.hidden + script + .member-unified-setting-message{display:none!important}
+match=Style.html:3268;function=;code=#memberApp .is-self-member .member-info-detail{color:inherit!important}
+file=Index.html;sha256=d05fc8465d48a1f4284f2693399a2f80c75b490cdc051eb7eb4058b71300ae72
+match=Index.html:12;function=;code=<div id=<str> class=<str>>
+match=Index.html:14;function=;code=<div class=<str>>로그인 상태를 확인하는 중입니다...</div>
+match=Index.html:17;function=;code=<div id=<str> class=<str>>
+match=Index.html:20;function=;code=관리자가 알려준 멤버 열람 비밀번호를 입력하세요.
+match=Index.html:24;function=;code=id=<str>
+match=Index.html:25;function=;code=type=<str>
+match=Index.html:28;function=;code=placeholder=<str>
+match=Index.html:32;function=;code=onclick=<str>
+file=Code.js;sha256=29eace87f8a5bf32bb455fa023df0651e3db7c4fa3c4b7144bf53418dea93ff7
+match=Code.js:2;function=;code=const DEFAULT_MEMBER_PASSWORD = <str>;
+match=Code.js:106;function=;code=<str>,
+match=Code.js:107;function=;code=<str>,
+match=Code.js:177;function=;code=[<str>, DEFAULT_MEMBER_PASSWORD],
+match=Code.js:178;function=;code=[<str>, <str>],
+match=Code.js:187;function=;code=ensureSetting_(<str>, DEFAULT_MEMBER_PASSWORD);
+match=Code.js:188;function=;code=ensureSetting_(<str>, <str>);
+match=Code.js:379;function=;code=<str>
+match=Code.js:774;function=;code=grade: String(member.grade || <str>),
+match=Code.js:775;function=;code=experience: String(member.experience || <str>)
+match=Code.js:796;function=;code=if (legacy.MEMBER_PASSWORD) {
+match=Code.js:798;function=;code=<str>,
+match=Code.js:799;function=;code=String(legacy.MEMBER_PASSWORD)
+match=Code.js:803;function=;code=if (legacy.MEMBER_PASSWORD_VERSION) {
+match=Code.js:805;function=;code=<str>,
+match=Code.js:806;function=;code=String(legacy.MEMBER_PASSWORD_VERSION)
+match=Code.js:830;function=adminLogin;code=function adminLogin(pin) {
+match=Code.js:858;function=;code=if (!adminLogin(pin)) {
+match=Code.js:882;function=;code=!adminLogin(credential) &&
+match=Code.js:898;function=verifyMemberPassword;code=function verifyMemberPassword(password) {
+match=Code.js:903;function=;code=getSetting_(<str>) ||
+match=Code.js:904;function=;code=DEFAULT_MEMBER_PASSWORD
+match=Code.js:908;function=;code=String(password == null ? <str> : password).trim();
+match=Code.js:912;function=;code=? String(getSetting_(<str>) || <str>)
+match=Code.js:928;function=;code=version: ok ? String(getSetting_(<str>) || <str>) : <str>
+match=Code.js:932;function=getMemberPasswordVersion;code=function getMemberPasswordVersion() {
+match=Code.js:936;function=;code=getSetting_(<str>) ||
+match=Code.js:941;function=getCurrentMemberPassword;code=function getCurrentMemberPassword(pin) {
+match=Code.js:945;function=;code=getSetting_(<str>) ||
+match=Code.js:946;function=;code=DEFAULT_MEMBER_PASSWORD
+match=Code.js:950;function=changeMemberPasswordUnlocked_;code=function changeMemberPasswordUnlocked_(pin, newPassword) {
+match=Code.js:954;function=;code=String(newPassword == null ? <str> : newPassword).trim();
+match=Code.js:962;function=;code=<str>
+match=Code.js:968;function=;code=getSetting_(<str>) ||
+match=Code.js:972;function=;code=setSetting_(<str>, value);
+match=Code.js:974;function=;code=<str>,
+match=Code.js:986;function=;code=password: value
+match=Code.js:1168;function=addMemberUnlocked_;code=function addMemberUnlocked_(pin, name, gender, grade, experience, isNew) {
+match=Code.js:1173;function=;code=grade = String(grade == null ? <str> : grade).trim();
+match=Code.js:1174;function=;code=experience = String(experience == null ? <str> : experience).trim();
+match=Code.js:1189;function=;code=if (grade.length > 12) {
+match=Code.js:1190;function=;code=throw new Error(<str>);
+match=Code.js:1193;function=;code=if (experience.length > 20) {
+match=Code.js:1194;function=;code=throw new Error(<str>);
+match=Code.js:1210;function=;code=grade: grade,
+match=Code.js:1211;function=;code=experience: experience,
+match=Code.js:1212;function=;code=level: grade,
+match=Code.js:1213;function=;code=career: experience,
+match=Code.js:1758;function=changeMemberPassword;code=function changeMemberPassword(pin, newPassword) {
+match=Code.js:1760;function=;code=<str>,
+match=Code.js:1762;function=;code=return changeMemberPasswordUnlocked_(
+match=Code.js:1764;function=;code=newPassword
+match=Code.js:1770;function=updateMemberSelfProfileUnlocked_;code=function updateMemberSelfProfileUnlocked_(pin, memberId, name, gender, grade, experience) {
+match=Code.js:1776;function=;code=grade = String(grade == null ? <str> : grade).trim();
+match=Code.js:1777;function=;code=experience = String(experience == null ? <str> : experience).trim();
+match=Code.js:1785;function=;code=if (grade.length > 12) {
+match=Code.js:1786;function=;code=throw new Error(<str>);
+match=Code.js:1788;function=;code=if (experience.length > 20) {
+match=Code.js:1789;function=;code=throw new Error(<str>);
+match=Code.js:1806;function=;code=found.grade = grade;
+match=Code.js:1807;function=;code=found.experience = experience;
+match=Code.js:1814;function=;code=grade: grade,
+match=Code.js:1815;function=;code=experience: experience
+match=Code.js:1819;function=updateMemberSelfProfile;code=function updateMemberSelfProfile(pin, memberId, name, gender, grade, experience) {
+match=Code.js:1828;function=;code=grade,
+match=Code.js:1829;function=;code=experience
+match=Code.js:1837;function=updateMemberProfile;code=function updateMemberProfile(pin, memberId, name, gender, grade, experience, isNew) {
+match=Code.js:1843;function=;code=grade = String(grade == null ? <str> : grade).trim();
+match=Code.js:1844;function=;code=experience = String(experience == null ? <str> : experience).trim();
+match=Code.js:1850;function=;code=if (grade.length > 12) throw new Error(<str>);
+match=Code.js:1851;function=;code=if (experience.length > 20) throw new Error(<str>);
+match=Code.js:1867;function=;code=members[index].grade = grade;
+match=Code.js:1868;function=;code=members[index].experience = experience;
+match=Code.js:1877;function=addMember;code=function addMember(pin, name, gender, grade, experience, isNew) {
+match=Code.js:1885;function=;code=grade,
+match=Code.js:1886;function=;code=experience,
+match=Code.js:2395;function=;code=grade: String(member.grade || <str>).slice(0, 12),
+match=Code.js:2396;function=;code=experience: String(member.experience || <str>).slice(0, 20)
+match=Code.js:2625;function=;code=grade: String(row[6] || <str>),
+match=Code.js:2626;function=;code=experience: String(row[7] || <str>),
+match=Code.js:2628;function=;code=level: String(row[6] || <str>),
+match=Code.js:2629;function=;code=career: String(row[7] || <str>),
+match=Code.js:2650;function=;code=member.grade || <str>,
+match=Code.js:2651;function=;code=member.experience || <str>,
+match=Code.js:2683;function=;code=member.grade || <str>,
+match=Code.js:2684;function=;code=member.experience || <str>,
