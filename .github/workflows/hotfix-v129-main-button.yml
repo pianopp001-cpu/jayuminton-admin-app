@@ -1,0 +1,72 @@
+name: Hotfix live main user install button to v1.2.9
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-v129-main-button.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Patch only live main Script.html
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/nonuser.before"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_install_link_v129.py" main "$W/Script.html"
+          sha256sum Admin.html Code.js Index.html Style.html > "$RUNNER_TEMP/nonuser.after"
+          cmp "$RUNNER_TEMP/nonuser.before" "$RUNNER_TEMP/nonuser.after"
+          grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' Script.html >/dev/null
+          ! grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' Script.html
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "HOTFIX user install v1.2.9 code129 $GITHUB_RUN_ID"
+          V="$RUNNER_TEMP/verify"; mkdir -p "$V"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$V/.clasp.json"
+          (cd "$V" && clasp pull)
+          grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$V/Script.html" >/dev/null
+          ! grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$V/Script.html"
+          sha256sum "$V/Admin.html" "$V/Code.js" "$V/Index.html" "$V/Style.html" > "$RUNNER_TEMP/nonuser.verify"
+          cmp "$RUNNER_TEMP/nonuser.after" "$RUNNER_TEMP/nonuser.verify"
+          cd "$GITHUB_WORKSPACE"
+          cat > deployment/status/v129-main-button-hotfix-live.txt <<EOF
+          status=success
+          main_user_button=v1.2.9
+          main_user_apk=Jayuminton-User-v1.2.9-code129-R2.apk
+          old_v128_apk_route_present=no
+          admin_logic_changed=no
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+      - name: Publish hotfix proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v129-main-button-hotfix-live.txt
+          git commit -m 'Confirm live main user button now targets v1.2.9' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
