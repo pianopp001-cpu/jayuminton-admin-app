@@ -1,0 +1,45 @@
+name: Inspect live member card CSS
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inspect-live-user-card-css.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SID="$(jq -r '.mainScriptId' "$RUNNER_TEMP/deploy.json")"
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
+          (cd "$W" && clasp pull >/dev/null)
+          {
+            echo 'status=success'
+            echo 'admin_logic_changed=no'
+            echo '---member-info---'
+            sed -n '2450,2505p' "$W/Style.html"
+            sed -n '2770,2810p' "$W/Style.html"
+            sed -n '2925,2960p' "$W/Style.html"
+          } > deployment/status/live-user-card-css.txt
+      - shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/live-user-card-css.txt
+          git commit -m 'Record live user card CSS detail' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
