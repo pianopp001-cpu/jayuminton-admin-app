@@ -1,0 +1,119 @@
+name: Verify v1.2.9 functional vibration binary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-v129-functional-binary.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  verify-functional-binary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+
+      - name: Verify exact functional v1.2.9 APK bytes and native behavior markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='releases/jayuminton-courtstatus-v1.2.9-background-registration.apk'
+          STATUS='deployment/status/user-native-push-v1.2.9.txt'
+          V129_SHA='5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff'
+          V128_SHA='9ff436e2cbc70f10fc32b905d8f3e66e18df3e3604444309a49990371ec3f7fc'
+
+          test -s "$APK"
+          test -s "$STATUS"
+          ACTUAL_SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          test "$ACTUAL_SHA" = "$V129_SHA"
+          test "$ACTUAL_SHA" != "$V128_SHA"
+
+          grep -F 'version=1.2.9' "$STATUS" >/dev/null
+          grep -F 'version_code=129' "$STATUS" >/dev/null
+          grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
+          grep -F 'native_fcm=yes' "$STATUS" >/dev/null
+          grep -F 'wait1_vibration=controller-finite-3-pulse-groups-repeat-until-confirmed-repeat-switch-v128-current-member-only' "$STATUS" >/dev/null
+          grep -F 'court_vibration=controller-finite-3-pulse-groups-repeat-until-confirmed-repeat-switch-v128-current-member-only' "$STATUS" >/dev/null
+          grep -F 'native_vibration_amplitude=255-when-supported' "$STATUS" >/dev/null
+          grep -F 'pulse_ms=650' "$STATUS" >/dev/null
+          grep -F 'group_gap_ms=1100' "$STATUS" >/dev/null
+
+          TMP="$RUNNER_TEMP/apk"
+          mkdir -p "$TMP"
+          unzip -q "$APK" -d "$TMP"
+          strings "$TMP"/classes*.dex > "$RUNNER_TEMP/dex-strings.txt"
+
+          # Native vibration / stop / member-registration implementation must be in the compiled APK.
+          for marker in \
+            'AlertVibrationController' \
+            'token_register_job_started' \
+            'token_register_job_http_ok' \
+            'token_register_requested' \
+            'member_changed' \
+            'court_assignment' \
+            'wait1_ready'; do
+            grep -F "$marker" "$RUNNER_TEMP/dex-strings.txt" >/dev/null
+          done
+
+          # User-facing native alert strings must be compiled into this exact APK.
+          # grep as broad fragments because DEX UTF encoding/string layout can split punctuation.
+          grep -F '라켓 들고 준비하세요' "$RUNNER_TEMP/dex-strings.txt" >/dev/null
+          grep -F '코트로 들어가세요' "$RUNNER_TEMP/dex-strings.txt" >/dev/null
+          grep -F '확인하고 닫기' "$RUNNER_TEMP/dex-strings.txt" >/dev/null
+          grep -F '진동 끄기' "$RUNNER_TEMP/dex-strings.txt" >/dev/null
+
+          # Release asset currently used by the installer must be byte-for-byte identical.
+          RELEASE='https://github.com/pianopp001-cpu/jayuminton-admin-app/releases/download/user-v1.2.9-r2/Jayuminton-User-v1.2.9-code129-R2.apk?download=1&functional-check='
+          curl --fail --location --retry 5 "${RELEASE}${GITHUB_RUN_ID}" -o "$RUNNER_TEMP/release.apk"
+          RELEASE_SHA="$(sha256sum "$RUNNER_TEMP/release.apk" | awk '{print $1}')"
+          test "$RELEASE_SHA" = "$V129_SHA"
+          test "$RELEASE_SHA" != "$V128_SHA"
+
+          AAPT=''
+          for p in "$ANDROID_HOME"/build-tools/*/aapt; do [ -x "$p" ] && AAPT="$p"; done
+          test -n "$AAPT"
+          "$AAPT" dump badging "$RUNNER_TEMP/release.apk" > "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='com.jayuminton.user'" "$RUNNER_TEMP/badging.txt" >/dev/null
+          grep -F "versionCode='129'" "$RUNNER_TEMP/badging.txt" >/dev/null
+          grep -F "versionName='1.2.9'" "$RUNNER_TEMP/badging.txt" >/dev/null
+
+          cat > deployment/status/v129-functional-binary-proof.txt <<EOF
+          status=success
+          purpose=prove-v1.2.9-is-functional-native-vibration-build-not-renamed-v1.2.8
+          local_apk_sha256=$ACTUAL_SHA
+          release_apk_sha256=$RELEASE_SHA
+          v1_2_8_sha256=$V128_SHA
+          byte_identical_local_and_release=yes
+          different_from_v1_2_8=yes
+          version_name=1.2.9
+          version_code=129
+          package=com.jayuminton.user
+          native_fcm=yes
+          vibration_controller_marker=yes
+          vibration_repeat_until_confirmed_status=yes
+          current_member_only_status=yes
+          background_registration_job_markers=yes
+          wait1_native_text=yes
+          court_native_text=yes
+          center_confirm_stop_text=yes
+          top_stop_vibration_text=yes
+          physical_device_vibration_verified=no-requires-real-device-test
+          admin_logic_changed=no
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+
+      - name: Publish functional-binary proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v129-functional-binary-proof.txt
+          git commit -m 'Prove v1.2.9 release is the functional vibration binary' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
