@@ -1,0 +1,10 @@
+status=success
+has_1_2_8=no
+has_1_2_9=yes
+has_v128_apk=no
+has_v129_apk=yes
+apk_url_count=1
+apk_url_0=https://github.com/pianopp001-cpu/jayuminton-admin-app/releases/download/user-v1.2.9-r2/Jayuminton-User-v1.2.9-code129-R2.apk?download=1&build=129-live-main
+snippet_1_2_9=eb.app/'; const MEMBER_USER_APK_URL = 'https://github.com/pianopp001-cpu/jayuminton-admin-app/releases/download/user-v1.2.9-r2/Jayuminton-User-v1.2.9-code129-R2.apk?download=1&build=129-live-main'; const MEMBER_USER_APK_HINT = /JayumintonUserNative\/1\\.1\\.0/i.test(String(navigator.userAgent || '')) || window.__JAYUMINTON_USER_APK__ === true || !!wi
+snippet_앱설치= ' + (memberAlertEnabled() ? 'ON' : 'OFF') + ' · 진동 ' + (memberVibrationEnabled() ? 'ON' : 'OFF') + ' · 앱설치 ' + (MEMBER_APP_INSTALL_STATE.installed ? 'ON' : 'OFF') : '🌟 내 이름·알림·앱 설정'; } if (alertButton) { alertButton.textContent = '알림 ' + (memberAlertEnabled() ? 'ON' : 'OFF'); alertButton.classList.toggle('is-on', memberAler
+script_sha256=d9e70af11691f4d06b7e58de313b82a502ab2064931a85ab502edd66f83b7a92
