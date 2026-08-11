@@ -1,0 +1,16 @@
+status=success
+play_review_access=enabled
+play_review_password_storage=sha256_only
+ordinary_rotating_member_password=preserved
+member_info_font_size=9px_to_11px
+member_info_font_weight=900
+member_screen_css_only=yes
+admin_functions_changed=no
+admin_html_changed=no
+index_html_changed=no
+script_html_changed=no
+native_apk_changed=no
+vibration_logic_changed=no
+volume_logic_changed=no
+notification_logic_changed=no
+verified_at=2026-08-11T08:27:47Z
