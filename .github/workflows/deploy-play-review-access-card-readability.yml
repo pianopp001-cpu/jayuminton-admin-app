@@ -1,0 +1,162 @@
+name: Deploy Play review access and member card readability
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-play-review-access-card-readability.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-play-review-access-card-readability
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      REVIEW_PASSWORD_SHA256: 6c98ec4eeeba3e8c0b408c51c3e65617846771a174db7a7efc3ada7360b175fb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+
+      - name: Resolve MAIN deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$C")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")" >> "$GITHUB_ENV"
+
+      - name: Pull live MAIN and patch only member login plus member-only CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/main"
+          mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          cp Code.js "$RUNNER_TEMP/Code.before.js"
+          cp Style.html "$RUNNER_TEMP/Style.before.html"
+          sha256sum Admin.html Index.html Script.html > "$RUNNER_TEMP/protected.before"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          code_path = Path('Code.js')
+          code = code_path.read_text(encoding='utf-8')
+          start = code.index('function verifyMemberPassword(password) {')
+          end = code.index('function resumeMemberSession(', start)
+          block = code[start:end]
+          marker = 'JAYU_PLAY_REVIEW_ACCESS_V1'
+          review_hash = os.environ['REVIEW_PASSWORD_SHA256']
+          if marker not in block:
+              old = '  const ok = current === entered;'
+              if old not in block:
+                  raise SystemExit('member password comparison anchor not found')
+              new = '''  // JAYU_PLAY_REVIEW_ACCESS_V1: separate Google Play review credential; ordinary rotating member password remains unchanged.\n  const reviewHash = "''' + review_hash + '''";\n  const reviewDigestBytes = Utilities.computeDigest(\n    Utilities.DigestAlgorithm.SHA_256, entered, Utilities.Charset.UTF_8\n  );\n  const reviewDigest = reviewDigestBytes.map(function(b) {\n    return ("0" + ((b + 256) % 256).toString(16)).slice(-2);\n  }).join("");\n  const reviewOk = reviewDigest === reviewHash;\n  const ok = current === entered || reviewOk;'''
+              block = block.replace(old, new, 1)
+              code = code[:start] + block + code[end:]
+              code_path.write_text(code, encoding='utf-8')
+
+          style_path = Path('Style.html')
+          style = style_path.read_text(encoding='utf-8')
+          css_marker = 'JAYU_MEMBER_INFO_READABILITY_V1'
+          if css_marker not in style:
+              style += '''\n\n/* JAYU_MEMBER_INFO_READABILITY_V1 — member screen only; admin selectors intentionally excluded. */\n#memberApp .member-info-detail{\n  font-size:clamp(9px,2.25vw,11px)!important;\n  font-weight:900!important;\n  line-height:1.15!important;\n  letter-spacing:-.15px!important;\n  color:#445064!important;\n  opacity:1!important;\n}\n#memberApp #activeMembersMember .member-info-detail{\n  font-size:clamp(9px,2.15vw,10.5px)!important;\n  font-weight:900!important;\n}\n'''
+              style_path.write_text(style, encoding='utf-8')
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          before = Path("$RUNNER_TEMP/Code.before.js").read_text(encoding='utf-8')
+          after = Path('Code.js').read_text(encoding='utf-8')
+          s1 = before.index('function verifyMemberPassword(password) {')
+          e1 = before.index('function resumeMemberSession(', s1)
+          s2 = after.index('function verifyMemberPassword(password) {')
+          e2 = after.index('function resumeMemberSession(', s2)
+          assert before[:s1] == after[:s2], 'Code.js changed before member verifier'
+          assert before[e1:] == after[e2:], 'Code.js changed after member verifier'
+          assert 'JAYU_PLAY_REVIEW_ACCESS_V1' in after[s2:e2]
+          assert 'current === entered || reviewOk' in after[s2:e2]
+
+          sb = Path("$RUNNER_TEMP/Style.before.html").read_text(encoding='utf-8')
+          sa = Path('Style.html').read_text(encoding='utf-8')
+          if 'JAYU_MEMBER_INFO_READABILITY_V1' not in sb:
+              assert sa.startswith(sb), 'Existing Style.html content changed'
+          assert 'JAYU_MEMBER_INFO_READABILITY_V1' in sa
+          tail = sa[sa.index('JAYU_MEMBER_INFO_READABILITY_V1'):]
+          assert '#memberApp' in tail
+          assert '#adminApp' not in tail
+          PY
+          sha256sum Admin.html Index.html Script.html > "$RUNNER_TEMP/protected.after"
+          cmp "$RUNNER_TEMP/protected.before" "$RUNNER_TEMP/protected.after"
+
+      - name: Deploy same MAIN web app
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/main"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "Play review access + member-only card readability $GITHUB_RUN_ID"
+
+      - name: Re-pull and verify deployed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="$RUNNER_TEMP/verify"
+          mkdir -p "$V"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$V/.clasp.json"
+          cd "$V"
+          clasp pull
+          grep -F 'JAYU_PLAY_REVIEW_ACCESS_V1' Code.js >/dev/null
+          grep -F "$REVIEW_PASSWORD_SHA256" Code.js >/dev/null
+          grep -F 'current === entered || reviewOk' Code.js >/dev/null
+          grep -F 'JAYU_MEMBER_INFO_READABILITY_V1' Style.html >/dev/null
+          grep -F '#memberApp .member-info-detail' Style.html >/dev/null
+          sha256sum Admin.html Index.html Script.html > "$RUNNER_TEMP/protected.verify"
+          cmp "$RUNNER_TEMP/protected.before" "$RUNNER_TEMP/protected.verify"
+
+      - name: Publish verification status
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          cat > deployment/status/play-review-access-card-readability.txt <<EOF
+          status=success
+          play_review_access=enabled
+          play_review_password_storage=sha256_only
+          ordinary_rotating_member_password=preserved
+          member_info_font_size=9px_to_11px
+          member_info_font_weight=900
+          member_screen_css_only=yes
+          admin_functions_changed=no
+          admin_html_changed=no
+          index_html_changed=no
+          script_html_changed=no
+          native_apk_changed=no
+          vibration_logic_changed=no
+          volume_logic_changed=no
+          notification_logic_changed=no
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/play-review-access-card-readability.txt
+          git commit -m 'Confirm Play review access and member card readability' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
