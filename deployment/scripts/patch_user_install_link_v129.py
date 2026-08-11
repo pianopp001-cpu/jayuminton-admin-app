@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 import sys
 
+# Live hotfix trigger 2026-08-11: force the actual rendered installer route to 1.2.9.
 APK_FILENAME = "Jayuminton-User-v1.2.9-code129-R2.apk"
 APK = "https://github.com/pianopp001-cpu/jayuminton-admin-app/releases/download/user-v1.2.9-r2/" + APK_FILENAME + "?download=1&build=129-live-main"
 MARKER = "JAYUMINTON_NATIVE_APK_DOWNLOAD_V129"
