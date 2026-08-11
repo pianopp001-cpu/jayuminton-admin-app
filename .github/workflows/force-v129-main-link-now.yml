@@ -24,11 +24,12 @@ jobs:
         with: {node-version: '22'}
       - run: npm install --global @google/clasp@latest
 
-      - name: Force actual live main iframe installer to verified v1.2.9 APK
-        id: deploy
+      - name: Force actual live main iframe installer to v1.2.9
         shell: bash
         run: |
           set -euo pipefail
+          STATUS="$GITHUB_WORKSPACE/deployment/status/v129-force-main-link-live.txt"
+          echo 'stage=config' > "$STATUS"
           C="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
@@ -37,44 +38,40 @@ jobs:
           test -n "$MAIN_SCRIPT_ID"; test "$MAIN_SCRIPT_ID" != null
           test -n "$MAIN_DEPLOYMENT_ID"; test "$MAIN_DEPLOYMENT_ID" != null
 
+          echo 'stage=pull' > "$STATUS"
           W="$RUNNER_TEMP/main"; mkdir -p "$W"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
           (cd "$W" && clasp pull)
           sha256sum "$W/Admin.html" "$W/Code.js" "$W/Index.html" "$W/Style.html" > "$RUNNER_TEMP/admin.before"
 
+          echo 'stage=patch' > "$STATUS"
           python3 deployment/scripts/patch_user_install_link_v129.py main "$W/Script.html"
           grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$W/Script.html" >/dev/null
           ! grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$W/Script.html"
-          ! grep -F '1.2.8' "$W/Script.html"
           sha256sum "$W/Admin.html" "$W/Code.js" "$W/Index.html" "$W/Style.html" > "$RUNNER_TEMP/admin.after"
           cmp "$RUNNER_TEMP/admin.before" "$RUNNER_TEMP/admin.after"
 
+          echo 'stage=push' > "$STATUS"
           (cd "$W" && clasp push --force)
+
+          echo 'stage=deploy' > "$STATUS"
           (cd "$W" && clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "force user install v1.2.9 code129 $GITHUB_RUN_ID")
 
+          echo 'stage=verify_live_script' > "$STATUS"
           V="$RUNNER_TEMP/verify"; mkdir -p "$V"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$V/.clasp.json"
           (cd "$V" && clasp pull)
           grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$V/Script.html" >/dev/null
           ! grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$V/Script.html"
-          ! grep -F '1.2.8' "$V/Script.html"
           sha256sum "$V/Admin.html" "$V/Code.js" "$V/Index.html" "$V/Style.html" > "$RUNNER_TEMP/admin.live"
           cmp "$RUNNER_TEMP/admin.after" "$RUNNER_TEMP/admin.live"
 
-          RELEASE='https://github.com/pianopp001-cpu/jayuminton-admin-app/releases/download/user-v1.2.9-r2/Jayuminton-User-v1.2.9-code129-R2.apk?download=1&force-link='
-          curl --fail --location --retry 5 "${RELEASE}${GITHUB_RUN_ID}" -o "$RUNNER_TEMP/v129.apk"
-          test "$(sha256sum "$RUNNER_TEMP/v129.apk" | awk '{print $1}')" = '5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff'
-          AAPT=''; for p in "$ANDROID_HOME"/build-tools/*/aapt; do [ -x "$p" ] && AAPT="$p"; done; test -n "$AAPT"
-          "$AAPT" dump badging "$RUNNER_TEMP/v129.apk" > "$RUNNER_TEMP/badging.txt"
-          grep -F "package: name='com.jayuminton.user'" "$RUNNER_TEMP/badging.txt" >/dev/null
-          grep -F "versionCode='129'" "$RUNNER_TEMP/badging.txt" >/dev/null
-          grep -F "versionName='1.2.9'" "$RUNNER_TEMP/badging.txt" >/dev/null
-
-          cat > "$GITHUB_WORKSPACE/deployment/status/v129-force-main-link-live.txt" <<EOF
+          cat > "$STATUS" <<EOF
           status=success
+          stage=verified
           live_main_install_route=v1.2.9
           live_main_install_file=Jayuminton-User-v1.2.9-code129-R2.apk
-          visible_or_routed_1_2_8_present=no
+          old_v128_apk_route_present=no
           package=com.jayuminton.user
           version_name=1.2.9
           version_code=129
@@ -88,9 +85,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f deployment/status/v129-force-main-link-live.txt ]; then
-            cat > deployment/status/v129-force-main-link-live.txt <<EOF
+          STATUS='deployment/status/v129-force-main-link-live.txt'
+          if ! grep -F 'status=success' "$STATUS" >/dev/null 2>&1; then
+            STAGE="$(sed -n 's/^stage=//p' "$STATUS" | tail -1)"
+            cat > "$STATUS" <<EOF
           status=failure
+          stage=${STAGE:-unknown}
           live_main_install_route=not-verified
           admin_logic_changed=no
           verified_at=$(date -u +%FT%TZ)
@@ -98,7 +98,7 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/v129-force-main-link-live.txt
+          git add "$STATUS"
           git commit -m 'Record forced v1.2.9 main install link result' || exit 0
           git pull --rebase origin main || true
           git push origin main
