@@ -1,0 +1,51 @@
+status=success
+admin_logic_changed=no
+890:  let token = String(getSetting_(<str>) || <str>).trim();
+891:  if (!token) {
+892:    token = Utilities.getUuid() + Utilities.getUuid();
+893:    setSetting_(<str>, token);
+894:  }
+895:  return token;
+896:}
+897:
+898:function verifyMemberPassword(password) {
+899:  ensureSetup_();
+900:
+901:  const current =
+902:    String(
+903:      getSetting_(<str>) ||
+904:      DEFAULT_MEMBER_PASSWORD
+905:    ).trim();
+906:
+907:  const entered =
+908:    String(password == null ? <str> : password).trim();
+909:
+910:  const ok = current === entered;
+911:  const version = ok
+912:    ? String(getSetting_(<str>) || <str>)
+913:    : <str>;
+914:
+915:  return {
+916:    ok: ok,
+917:    version: version,
+918:    sessionToken: ok ? memberSessionToken_() : <str>
+919:  };
+920:}
+921:
+922:function resumeMemberSession(token) {
+923:  ensureSetup_();
+924:  const entered = String(token == null ? <str> : token).trim();
+925:  const ok = entered !== <str> && entered === memberSessionToken_();
+926:  return {
+927:    ok: ok,
+928:    version: ok ? String(getSetting_(<str>) || <str>) : <str>
+929:  };
+930:}
+931:
+932:function getMemberPasswordVersion() {
+933:  ensureSetup_();
+934:
+935:  return String(
+936:    getSetting_(<str>) ||
+937:    <str>
+938:  );
