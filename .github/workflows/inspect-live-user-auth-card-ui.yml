@@ -1,0 +1,77 @@
+name: Inspect live user auth and card UI safely
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-live-user-auth-card-ui.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Pull live MAIN and write sanitized structural inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          (cd "$W" && clasp pull >/dev/null)
+          python3 - "$W" <<'PY'
+          from pathlib import Path
+          import re,sys,hashlib
+          w=Path(sys.argv[1])
+          out=[]
+          out.append('status=success')
+          out.append('scope=read_only_live_main')
+          out.append('admin_logic_changed=no')
+          keywords=re.compile(r'(비밀번호|password|passwd|passcode|login|로그인|인증|급수|구력|경력|level|grade|career|experience|member.?card|member.?meta|member.?info)',re.I)
+          fn_re=re.compile(r'\bfunction\s+([A-Za-z_$][\w$]*)\s*\(')
+          str_re=re.compile(r'''(["'])(?:\\.|(?!\1).)*\1''')
+          num_re=re.compile(r'(?<![\w.])\d{3,}(?![\w.])')
+          for name in ['Script.html','Style.html','Index.html','Code.js']:
+              p=w/name
+              if not p.exists(): continue
+              text=p.read_text(encoding='utf-8',errors='replace')
+              out.append(f'file={name};sha256={hashlib.sha256(text.encode()).hexdigest()}')
+              lines=text.splitlines()
+              for i,line in enumerate(lines,1):
+                  if not keywords.search(line): continue
+                  # Redact all string literals and long numerics so secrets/current passcodes cannot leak.
+                  safe=str_re.sub('<str>',line)
+                  safe=num_re.sub('<num>',safe)
+                  safe=safe.strip()
+                  if len(safe)>360: safe=safe[:360]+'...'
+                  # Preserve function name when present.
+                  m=fn_re.search(line)
+                  fn=m.group(1) if m else ''
+                  out.append(f'match={name}:{i};function={fn};code={safe}')
+          Path('deployment/status').mkdir(parents=True,exist_ok=True)
+          Path('deployment/status/live-user-auth-card-ui-inspect.txt').write_text('\n'.join(out)+'\n',encoding='utf-8')
+          PY
+      - name: Publish inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/live-user-auth-card-ui-inspect.txt
+          git commit -m 'Record sanitized live user auth card UI inspection' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
