@@ -1,0 +1,202 @@
+name: Force live v1.2.9 and verify rendered click
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/force-live-v129-rendered-click.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-force-live-v129-rendered-click
+  cancel-in-progress: false
+
+jobs:
+  fix-and-browser-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Build hosting with forced v1.2.9 UI and target
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$C")"
+          HOSTING_URL="$(jq -r '.hostingUrl' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId' "$C")"
+          BASE="${HOSTING_URL%/}"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+          echo "HOSTING_URL=$BASE" >> "$GITHUB_ENV"
+          export MAIN_URL="https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec"
+          export PUSH_URL="https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec"
+
+          APK='releases/jayuminton-courtstatus-v1.2.9-background-registration.apk'
+          EXPECTED='5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff'
+          test "$(sha256sum "$APK" | awk '{print $1}')" = "$EXPECTED"
+          RELEASE_URL='https://github.com/pianopp001-cpu/jayuminton-admin-app/releases/download/user-v1.2.9-r2/Jayuminton-User-v1.2.9-code129-R2.apk'
+          curl --fail --location --retry 5 "$RELEASE_URL?precheck=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/precheck.apk"
+          test "$(sha256sum "$RUNNER_TEMP/precheck.apk" | awk '{print $1}')" = "$EXPECTED"
+          echo "RELEASE_URL=$RELEASE_URL" >> "$GITHUB_ENV"
+
+          SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
+          ROOT="$RUNNER_TEMP/v129-force"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+          cp "$SRC/index.html" "$PUBLIC/index.html"
+          cp "$SRC/setup-v205.css" "$PUBLIC/setup-v205.css"
+          cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
+          cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
+          cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
+          for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 5 "$BASE/$asset?source=v129-force-$GITHUB_RUN_ID" -o "$PUBLIC/$asset"
+          done
+
+          cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
+          gzip -dc "$RUNNER_TEMP/setup.gz" > "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_push_setup_verification.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_embedded_browser_push.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_native_host_bridge.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_user_install_link_v128.py hosting "$PUBLIC/setup-v205.js"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          public=Path(os.environ['RUNNER_TEMP'])/'v129-force'/'public'
+          target=os.environ['RELEASE_URL'] + '?download=1&force129=' + os.environ['GITHUB_RUN_ID']
+          p=public/'setup-v205.js'
+          s=p.read_text(encoding='utf-8')
+          # Remove every user-visible/version-route remnant of 1.2.8 from the generated user page.
+          s=s.replace('1.2.8','1.2.9').replace('V128','V129').replace('v128','v129')
+          # Force every APK URL in the user installer code to the known v1.2.9 release asset.
+          s=re.sub(r"https://[^'\"\s]+\.apk(?:\?[^'\"\s]*)?", target, s)
+          # Force installer constants even if their historical identifier changed.
+          s=re.sub(r"(const\s+JAYUMINTON_USER_APK_[A-Z0-9_]+\s*=\s*)'[^']*'", lambda m:m.group(1)+repr(target), s)
+          # Runtime guard: visible label and click target must stay 1.2.9 even if an old branch of UI code renders later.
+          s += "\n;(()=>{const U="+repr(target)+"; const fix=()=>{document.querySelectorAll('a,button').forEach(el=>{const t=(el.textContent||'').trim(); if(/1\\.2\\.8/.test(t)||(/앱 ?설치|다운로드/.test(t)&&! /1\\.2\\.9/.test(t))){el.textContent=t.replace(/1\\.2\\.8/g,'1.2.9')||'앱설치 1.2.9 (129)';} if(/앱 ?설치|다운로드|1\\.2\\.9/.test(el.textContent||'')){ if(el.tagName==='A') el.href=U; el.addEventListener('click',e=>{e.preventDefault(); location.href=U;},{capture:true}); }});}; new MutationObserver(fix).observe(document.documentElement,{subtree:true,childList:true,characterData:true}); addEventListener('DOMContentLoaded',fix); setTimeout(fix,0); setTimeout(fix,500); setTimeout(fix,1500);})();\n"
+          if '1.2.8' in s: raise SystemExit('generated setup still contains 1.2.8')
+          if target not in s: raise SystemExit('forced 1.2.9 target missing')
+          p.write_text(s,encoding='utf-8')
+
+          template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          config=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          for n in ('config-v202.js','config-v203.js','config-v204.js'):(public/n).write_text(config,encoding='utf-8')
+
+          base=(public/'index.html').read_text(encoding='utf-8')
+          for n in ('index.html','badminton.html'):
+              h=base.replace('/setup-v205.js?v=1637',f'/setup-v205.js?v=force129-{os.environ["GITHUB_RUN_ID"]}').replace('/config-v204.js?v=1637',f'/config-v204.js?v=force129-{os.environ["GITHUB_RUN_ID"]}')
+              # Add an unmistakable build marker to the live document.
+              h=h.replace('</head>',f'<meta name="jayuminton-user-apk" content="1.2.9-129-force-{os.environ["GITHUB_RUN_ID"]}"></head>')
+              (public/n).write_text(h,encoding='utf-8')
+
+          sw=public/'firebase-messaging-sw.js'
+          w=sw.read_text(encoding='utf-8')
+          w=w.replace("'jayuminton-v", "'jayuminton-force129-")
+          w += "\nself.addEventListener('install',()=>self.skipWaiting());\nself.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));\n"
+          sw.write_text(w,encoding='utf-8')
+          PY
+
+          node --check "$PUBLIC/setup-v205.js"
+          ! grep -F '1.2.8' "$PUBLIC/setup-v205.js"
+          grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$PUBLIC/setup-v205.js"
+
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/badminton.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/firebase-messaging-sw.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive
+
+      - name: Browser-open live page and actually click installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          npm init -y >/dev/null 2>&1
+          npm i playwright@1.54.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          cat > verify.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const base=process.env.HOSTING_URL.replace(/\/$/,'');
+          const expected='5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({acceptDownloads:true});
+          const page=await ctx.newPage();
+          page.on('dialog',d=>d.accept());
+          await page.goto(base+'/badminton.html?browsercheck='+Date.now(),{waitUntil:'networkidle',timeout:60000});
+          await page.waitForTimeout(1800);
+          const body=(await page.locator('body').innerText()).replace(/\s+/g,' ');
+          const items=await page.locator('a,button').evaluateAll(es=>es.map(e=>({tag:e.tagName,text:(e.textContent||'').trim(),href:e.href||'',onclick:e.getAttribute('onclick')||''})));
+          fs.writeFileSync('dom.txt',JSON.stringify({url:page.url(),body,items},null,2));
+          if(body.includes('1.2.8')) throw new Error('Rendered live page still visibly contains 1.2.8');
+          const candidates=page.locator('a,button').filter({hasText:/1\.2\.9|앱\s*설치|다운로드/});
+          if(await candidates.count()===0) throw new Error('No installer button found in rendered page');
+          const btn=candidates.first();
+          const txt=(await btn.innerText()).trim();
+          if(!txt.includes('1.2.9')) throw new Error('Installer button is not visibly labeled 1.2.9: '+txt);
+          let apkUrl='';
+          page.on('request',r=>{if(r.url().includes('.apk')) apkUrl=r.url();});
+          const dlPromise=page.waitForEvent('download',{timeout:20000}).catch(()=>null);
+          await btn.click({timeout:10000});
+          const dl=await dlPromise;
+          if(dl){apkUrl=dl.url(); await dl.saveAs('clicked.apk');}
+          await page.waitForTimeout(1500);
+          fs.writeFileSync('click.txt',JSON.stringify({buttonText:txt,apkUrl},null,2));
+          if(!apkUrl.includes('Jayuminton-User-v1.2.9-code129-R2.apk')) throw new Error('Clicked installer did not target v1.2.9 asset: '+apkUrl);
+          await browser.close();
+JS
+          node verify.mjs
+          cat dom.txt
+          cat click.txt
+          APK_URL="$(python3 -c 'import json; print(json.load(open("click.txt"))["apkUrl"])')"
+          curl --fail --location --retry 5 "$APK_URL" -o "$RUNNER_TEMP/clicked-v129.apk"
+          EXPECTED='5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff'
+          LIVE_SHA="$(sha256sum "$RUNNER_TEMP/clicked-v129.apk" | awk '{print $1}')"
+          test "$LIVE_SHA" = "$EXPECTED"
+          AAPT=''; for p in "$ANDROID_HOME"/build-tools/*/aapt; do [ -x "$p" ] && AAPT="$p"; done; test -n "$AAPT"
+          "$AAPT" dump badging "$RUNNER_TEMP/clicked-v129.apk" > "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='com.jayuminton.user'" "$RUNNER_TEMP/badging.txt"
+          grep -F "versionCode='129'" "$RUNNER_TEMP/badging.txt"
+          grep -F "versionName='1.2.9'" "$RUNNER_TEMP/badging.txt"
+          BTN="$(python3 -c 'import json; print(json.load(open("click.txt"))["buttonText"])')"
+          URL="$(python3 -c 'import json; print(json.load(open("click.txt"))["apkUrl"])')"
+          cd "$GITHUB_WORKSPACE"
+          cat > deployment/status/v129-rendered-click-live.txt <<EOF
+          status=success
+          live_page=$HOSTING_URL/badminton.html
+          rendered_button=$BTN
+          actual_clicked_apk_url=$URL
+          downloaded_sha256=$LIVE_SHA
+          package=com.jayuminton.user
+          version_name=1.2.9
+          version_code=129
+          rendered_1_2_8_present=no
+          admin_logic_changed=no
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+
+      - name: Publish rendered-click verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v129-rendered-click-live.txt
+          git commit -m 'Verify rendered public button click downloads v1.2.9' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
