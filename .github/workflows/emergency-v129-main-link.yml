@@ -1,0 +1,98 @@
+name: Emergency patch actual main iframe installer to v1.2.9
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-v129-main-link.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-emergency-v129-main-link
+  cancel-in-progress: true
+
+jobs:
+  patch-live-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+
+      - name: Patch live user iframe only
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          test -n "$MAIN_SCRIPT_ID"; test "$MAIN_SCRIPT_ID" != null
+          test -n "$MAIN_DEPLOYMENT_ID"; test "$MAIN_DEPLOYMENT_ID" != null
+
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          (cd "$W" && clasp pull)
+
+          sha256sum "$W/Admin.html" "$W/Code.js" "$W/Index.html" "$W/Style.html" > "$RUNNER_TEMP/nonuser.before"
+          python3 deployment/scripts/patch_user_install_link_v129.py main "$W/Script.html"
+          sha256sum "$W/Admin.html" "$W/Code.js" "$W/Index.html" "$W/Style.html" > "$RUNNER_TEMP/nonuser.after"
+          cmp "$RUNNER_TEMP/nonuser.before" "$RUNNER_TEMP/nonuser.after"
+
+          grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$W/Script.html" >/dev/null
+          ! grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$W/Script.html"
+          ! grep -F '1.2.8' "$W/Script.html"
+
+          (cd "$W" && clasp push --force)
+          (cd "$W" && clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "emergency user APK 1.2.9 code129 $GITHUB_RUN_ID")
+
+          V="$RUNNER_TEMP/verify"; mkdir -p "$V"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$V/.clasp.json"
+          (cd "$V" && clasp pull)
+          grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$V/Script.html" >/dev/null
+          ! grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$V/Script.html"
+          ! grep -F '1.2.8' "$V/Script.html"
+          sha256sum "$V/Admin.html" "$V/Code.js" "$V/Index.html" "$V/Style.html" > "$RUNNER_TEMP/nonuser.live"
+          cmp "$RUNNER_TEMP/nonuser.after" "$RUNNER_TEMP/nonuser.live"
+
+          RELEASE='https://github.com/pianopp001-cpu/jayuminton-admin-app/releases/download/user-v1.2.9-r2/Jayuminton-User-v1.2.9-code129-R2.apk?download=1&build=129-emergency-main'
+          curl --fail --location --retry 5 "$RELEASE&verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/v129.apk"
+          test "$(sha256sum "$RUNNER_TEMP/v129.apk" | awk '{print $1}')" = '5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff'
+          AAPT=''; for p in "$ANDROID_HOME"/build-tools/*/aapt; do [ -x "$p" ] && AAPT="$p"; done; test -n "$AAPT"
+          "$AAPT" dump badging "$RUNNER_TEMP/v129.apk" > "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='com.jayuminton.user'" "$RUNNER_TEMP/badging.txt" >/dev/null
+          grep -F "versionCode='129'" "$RUNNER_TEMP/badging.txt" >/dev/null
+          grep -F "versionName='1.2.9'" "$RUNNER_TEMP/badging.txt" >/dev/null
+
+          cat > deployment/status/v129-emergency-main-live.txt <<EOF
+          status=success
+          actual_main_iframe_route=v1.2.9
+          actual_main_iframe_file=Jayuminton-User-v1.2.9-code129-R2.apk
+          visible_1_2_8_in_main_script=no
+          release_apk_version_name=1.2.9
+          release_apk_version_code=129
+          release_apk_sha256=5de666da2dd8febfe6c5dbef354b5aab1bd2ffa709d2419fb8406c80f02383ff
+          admin_logic_changed=no
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+
+      - name: Publish live proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v129-emergency-main-live.txt
+          git commit -m 'Confirm actual main iframe installer is v1.2.9' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
