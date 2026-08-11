@@ -1,0 +1,146 @@
+name: Deploy Jayuminton privacy policy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/v1637-web/privacy.html'
+      - '.github/workflows/deploy-privacy-policy.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-privacy-policy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve Firebase config
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          {
+            echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")"
+            echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")"
+            echo "MAIN_URL=https://script.google.com/macros/s/$(jq -r '.mainDeploymentId' "$C")/exec"
+            echo "PUSH_URL=https://script.google.com/macros/s/$(jq -r '.pushDeploymentId' "$C")/exec"
+          } >> "$GITHUB_ENV"
+
+      - name: Build hosting bundle with privacy page
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web"
+          ROOT="$RUNNER_TEMP/hosting-privacy"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+
+          cp "$SRC/index.html" "$PUBLIC/index.html"
+          cp "$SRC/privacy.html" "$PUBLIC/privacy.html"
+          cp "$SRC/setup-v205.css" "$PUBLIC/setup-v205.css"
+          cp "$SRC/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
+          cp "$SRC/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
+          cp "$SRC/alert-self-test.js" "$PUBLIC/alert-self-test.js"
+
+          BASE="${HOSTING_URL%/}"
+          for asset in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 5 "$BASE/$asset?privacy=$GITHUB_RUN_ID" -o "$PUBLIC/$asset"
+          done
+
+          cat "$SRC"/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/setup.gz"
+          gzip -dc "$RUNNER_TEMP/setup.gz" > "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_push_setup_verification.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_embedded_browser_push.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_native_host_bridge.py "$PUBLIC/setup-v205.js"
+          python3 deployment/scripts/patch_user_install_link_v129.py hosting "$PUBLIC/setup-v205.js"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          public=Path(os.environ['RUNNER_TEMP'])/'hosting-privacy'/'public'
+          template=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          config=template.replace('__MEMBER_PAGE_URL__',os.environ['MAIN_URL']).replace('__RELAY_URL__',os.environ['PUSH_URL'])
+          for n in ('config-v202.js','config-v203.js','config-v204.js'):
+              (public/n).write_text(config,encoding='utf-8')
+          base=(public/'index.html').read_text(encoding='utf-8')
+          for n in ('index.html','badminton.html'):
+              h=base.replace('/setup-v205.js?v=1637',f'/setup-v205.js?v=privacy-{os.environ["GITHUB_RUN_ID"]}')
+              h=h.replace('/config-v204.js?v=1637',f'/config-v204.js?v=privacy-{os.environ["GITHUB_RUN_ID"]}')
+              h=h.replace('</head>',f'<meta name="jayuminton-user-apk" content="1.2.9-129-privacy-{os.environ["GITHUB_RUN_ID"]}"></head>')
+              (public/n).write_text(h,encoding='utf-8')
+          PY
+
+          node --check "$PUBLIC/setup-v205.js"
+          grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$PUBLIC/setup-v205.js" >/dev/null
+          ! grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$PUBLIC/setup-v205.js"
+          grep -F '<title>자유민턴 개인정보처리방침</title>' "$PUBLIC/privacy.html" >/dev/null
+          grep -F 'com.jayuminton.user' "$PUBLIC/privacy.html" >/dev/null
+
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/privacy.html","headers":[{"key":"Cache-Control","value":"public, max-age=300"},{"key":"Content-Type","value":"text/html; charset=utf-8"}]},{"source":"/index.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/badminton.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/setup-v205.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/firebase-messaging-sw.js","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive
+
+      - name: Verify public privacy URL and existing app route
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          ok=0
+          for attempt in $(seq 1 15); do
+            if curl --fail --location --silent --show-error -H 'Cache-Control: no-cache' \
+               "$BASE/privacy.html?verify=$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/privacy-live.html" && \
+               grep -F '<title>자유민턴 개인정보처리방침</title>' "$RUNNER_TEMP/privacy-live.html" >/dev/null && \
+               grep -F 'com.jayuminton.user' "$RUNNER_TEMP/privacy-live.html" >/dev/null; then
+              ok=1; break
+            fi
+            sleep 5
+          done
+          test "$ok" = 1
+
+          curl --fail --location --silent --show-error -H 'Cache-Control: no-cache' \
+            "$BASE/setup-v205.js?verify=privacy-$GITHUB_RUN_ID" -o "$RUNNER_TEMP/setup-live.js"
+          grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$RUNNER_TEMP/setup-live.js" >/dev/null
+          ! grep -F 'jayuminton-courtstatus-v1.2.8-repeat-switch.apk' "$RUNNER_TEMP/setup-live.js"
+
+          cat > deployment/status/privacy-policy-live.txt <<EOF
+          status=success
+          privacy_url=$BASE/privacy.html
+          app=자유민턴
+          package=com.jayuminton.user
+          play_console_ready=yes
+          hosting_app_route_preserved=v1.2.9-code129
+          admin_logic_changed=no
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+
+      - name: Publish verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/privacy-policy-live.txt
+          git commit -m 'Confirm Jayuminton privacy policy is live' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
