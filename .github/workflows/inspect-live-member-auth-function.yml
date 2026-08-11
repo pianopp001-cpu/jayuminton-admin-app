@@ -1,0 +1,46 @@
+name: Inspect live member auth function safely
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inspect-live-member-auth-function.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SID="$(jq -r '.mainScriptId' "$RUNNER_TEMP/deploy.json")"
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
+          (cd "$W" && clasp pull >/dev/null)
+          python3 - "$W/Code.js" > deployment/status/live-member-auth-function.txt <<'PY'
+          import re,sys
+          lines=open(sys.argv[1],encoding='utf-8').read().splitlines()
+          print('status=success')
+          print('admin_logic_changed=no')
+          for i in range(890,min(938,len(lines))+1):
+              s=re.sub(r'(["\'])(?:\\.|(?!\1).)*\1','<str>',lines[i-1])
+              print(f'{i}:{s}')
+          PY
+      - shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/live-member-auth-function.txt
+          git commit -m 'Record live member auth function detail' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
