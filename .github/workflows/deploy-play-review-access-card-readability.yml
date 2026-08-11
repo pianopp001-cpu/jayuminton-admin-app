@@ -83,7 +83,9 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-          before = Path("$RUNNER_TEMP/Code.before.js").read_text(encoding='utf-8')
+          import os
+          temp = Path(os.environ['RUNNER_TEMP'])
+          before = (temp / 'Code.before.js').read_text(encoding='utf-8')
           after = Path('Code.js').read_text(encoding='utf-8')
           s1 = before.index('function verifyMemberPassword(password) {')
           e1 = before.index('function resumeMemberSession(', s1)
@@ -94,7 +96,7 @@ jobs:
           assert 'JAYU_PLAY_REVIEW_ACCESS_V1' in after[s2:e2]
           assert 'current === entered || reviewOk' in after[s2:e2]
 
-          sb = Path("$RUNNER_TEMP/Style.before.html").read_text(encoding='utf-8')
+          sb = (temp / 'Style.before.html').read_text(encoding='utf-8')
           sa = Path('Style.html').read_text(encoding='utf-8')
           if 'JAYU_MEMBER_INFO_READABILITY_V1' not in sb:
               assert sa.startswith(sb), 'Existing Style.html content changed'
