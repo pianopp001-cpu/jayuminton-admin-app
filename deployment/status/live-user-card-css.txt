@@ -1,0 +1,136 @@
+status=success
+admin_logic_changed=no
+---member-info---
+  #memberApp .players{gap:6px}
+  #memberApp .person,
+  #memberApp .member{padding-left:7px;padding-right:7px}
+  #memberApp .name{font-size:clamp(11px,3.5vw,14px)}
+}
+
+
+/* v1.6.8 compact member information — always visible, no popup or redraw */
+#adminApp .member-info-detail,
+#memberApp .member-info-detail{
+  display:block!important;
+  width:100%;
+  min-width:0;
+  margin-top:2px;
+  padding:0;
+  border:0;
+  font-size:clamp(7px,1.7vw,9px)!important;
+  font-weight:800;
+  line-height:1.15!important;
+  letter-spacing:-.25px;
+  white-space:normal!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis;
+  overflow-wrap:anywhere;
+  word-break:keep-all;
+  color:#657087!important;
+  opacity:.92;
+}
+#adminApp .member-info-detail.is-empty,
+#memberApp .member-info-detail.is-empty{
+  visibility:hidden;
+  height:0;
+  margin:0;
+}
+#adminApp .member-info-card,
+#memberApp .member-info-card{
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:center;
+  text-align:center;
+}
+#adminApp .quick-member .member-info-detail{
+  grid-column:2;
+  margin-top:-2px;
+  font-size:8px!important;
+}
+#adminApp .v4-court-card .person>span,
+#adminApp .v4-wait-card .person>span{
+  display:block!important;
+  width:100%!important;
+  min-width:0!important;
+  text-align:center;
+}
+
+/* v1.6.7 four vertical courts and entrance-side switching */
+.court-orientation-panel{
+  .member-self-panel{padding:6px}
+  .member-self-summary{font-size:9px;min-height:24px;padding:2px 7px}
+}
+
+
+/* v1.6.11 reliable grade/experience line on every member card */
+#adminApp .member-info-detail,
+#memberApp .member-info-detail{
+  display:block!important;
+  visibility:visible!important;
+  height:auto!important;
+  min-height:11px!important;
+  margin-top:3px!important;
+  font-size:clamp(8px,2vw,10px)!important;
+  font-weight:850!important;
+  line-height:1.15!important;
+  color:#5f6d83!important;
+  opacity:1!important;
+  text-align:center!important;
+  white-space:normal!important;
+  overflow:visible!important;
+}
+#adminApp .member-info-detail.is-missing,
+#memberApp .member-info-detail.is-missing{
+  color:#9aa3b2!important;
+  font-weight:700!important;
+}
+#adminApp .v4-court-card .person,
+#memberApp .v4-court-card .person,
+#adminApp .v4-wait-card .person,
+#memberApp .v4-wait-card .person,
+#memberApp .member-info-card,
+#adminApp .member-info-card{
+  min-height:52px!important;
+  height:auto!important;
+  padding-top:5px!important;
+  padding-bottom:5px!important;
+}
+#adminApp .v4-court-card .person>span,
+#memberApp .v4-court-card .person>span,
+#adminApp .v4-wait-card .person>span,
+
+/* Court-assignment waiting cards: keep the small grade/experience line inside. */
+#memberApp #activeMembersMember .person.member-info-card{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-width:0!important;
+  min-height:62px!important;
+  height:auto!important;
+  padding:6px 4px!important;
+  overflow:hidden!important;
+  text-align:center!important;
+}
+#memberApp #activeMembersMember .person.member-info-card .name{
+  width:100%!important;
+  min-width:0!important;
+  line-height:1.05!important;
+}
+#memberApp #activeMembersMember .member-info-detail,
+#adminApp .v4-quick-roster .member-info-detail{
+  display:block!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  min-height:10px!important;
+  margin-top:3px!important;
+  padding:0 1px!important;
+  font-size:clamp(7px,1.85vw,9px)!important;
+  line-height:1.05!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+}
