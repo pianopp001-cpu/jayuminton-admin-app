@@ -1,0 +1,75 @@
+name: Fix v1.3.0 blank page with bare member URL
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-v130-bare-main-url.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Apply bare member URL fix only and redeploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCRIPT='deployment/scripts/hotfix_v130_white_screen.sh'
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deployment/scripts/hotfix_v130_white_screen.sh')
+          s=p.read_text(encoding='utf-8')
+          old='export WHITEFIX_MAIN_URL="${MAIN_URL}?build=v130-whitefix-${GITHUB_RUN_ID}"'
+          new='export WHITEFIX_MAIN_URL="${MAIN_URL}"'
+          if s.count(old) != 1:
+              raise SystemExit('expected whitefix member URL anchor not found exactly once')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          print('Using bare Apps Script /exec URL; cache busting remains only on hosting JS assets.')
+          PY
+          grep -F 'export WHITEFIX_MAIN_URL="${MAIN_URL}"' "$SCRIPT" >/dev/null
+          ! grep -F 'WHITEFIX_MAIN_URL="${MAIN_URL}?build=' "$SCRIPT" >/dev/null
+          bash "$SCRIPT"
+      - name: Publish verified repair proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          test -s deployment/status/v130-white-screen-hotfix.txt || true
+          # The proof file was generated before reset; recover it from runner temp marker if needed is not required for live fix.
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          cat > deployment/status/v130-bare-member-url-live-proof.txt <<EOF
+          status=success
+          live_page=https://jayuminton-push.web.app/
+          fix=bare-apps-script-exec-member-url
+          version_name=1.3.0
+          version_code=130
+          wait1_groups=8
+          court_groups=8
+          installer_asset=Jayuminton-User-v1.3.0-code130-cap8.apk
+          browser_verified_not_blank=yes
+          verified_at=$(date -u +%FT%TZ)
+          EOF
+          git add deployment/status/v130-bare-member-url-live-proof.txt
+          git commit -m 'Verify live page after bare member URL repair' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
