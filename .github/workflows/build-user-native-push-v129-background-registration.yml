@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/build-user-native-push-v129-background-registration.yml'
       - 'deployment/scripts/patch_build_user_native_v129_background_registration.py'
+      - 'deployment/scripts/patch_user_native_v129_vibration_cap10.py'
   workflow_dispatch: {}
 
 permissions:
@@ -111,10 +112,13 @@ jobs:
             python3 deployment/scripts/patch_build_user_native_v127_member_switch.py "$SCRIPT"
             python3 deployment/scripts/patch_build_user_native_v128_repeat_switch.py "$SCRIPT"
             python3 deployment/scripts/patch_build_user_native_v129_background_registration.py "$SCRIPT"
+            python3 deployment/scripts/patch_user_native_v129_vibration_cap10.py "$SCRIPT"
             grep -F 'VERSION="1.2.9"' "$SCRIPT" >/dev/null
             grep -F 'NativeRegistrationJobService' "$SCRIPT" >/dev/null
             grep -F 'token_register_job_http_ok' "$SCRIPT" >/dev/null
             grep -F 'AlertVibrationController.start(this, assignmentId)' "$SCRIPT" >/dev/null
+            grep -F 'private static final int MAX_GROUPS = 10;' "$SCRIPT" >/dev/null
+            grep -F 'vibration_max_groups=10' "$SCRIPT" >/dev/null
             bash "$SCRIPT"
             APK='releases/jayuminton-courtstatus-v1.2.9-background-registration.apk'
             STATUS='deployment/status/user-native-push-v1.2.9.txt'
@@ -123,6 +127,7 @@ jobs:
             grep -F 'version=1.2.9' "$STATUS" >/dev/null
             grep -F 'version_code=129' "$STATUS" >/dev/null
             grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
+            grep -F 'vibration_max_groups=10' "$STATUS" >/dev/null
             cp "$APK" "$RUNNER_TEMP/v129.apk"
             cp "$STATUS" "$RUNNER_TEMP/v129-status.txt"
           ) 2>&1 | tee "$LOG"
