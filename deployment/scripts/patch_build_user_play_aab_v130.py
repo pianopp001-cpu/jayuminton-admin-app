@@ -8,13 +8,20 @@ s = path.read_text(encoding='utf-8')
 # Play Store AAB build patch for the already verified v1.3.0/code130 user app.
 # Keep the app/UI/FCM/vibration logic unchanged. Only:
 #   1) target API 35 for current Google Play submission requirements,
-#   2) use a separate private Play upload key supplied via GitHub Secrets,
-#   3) build a signed Android App Bundle instead of an APK.
+#   2) use AGP 8.6.1 (API 35 supported; Gradle 8.7 compatible),
+#   3) use a separate private Play upload key supplied via GitHub Secrets,
+#   4) build a signed Android App Bundle instead of an APK.
 
 if 'VERSION="1.3.0"' not in s or 'VERSION_CODE="130"' not in s:
     raise SystemExit('expected v1.3.0/code130 baseline missing')
 if 'private static final int MAX_GROUPS = 8;' not in s:
     raise SystemExit('expected v1.3.0 cap8 vibration baseline missing')
+
+old_agp = "    id 'com.android.application' version '8.5.2' apply false\n"
+new_agp = "    id 'com.android.application' version '8.6.1' apply false\n"
+if s.count(old_agp) != 1:
+    raise SystemExit('AGP 8.5.2 anchor missing or duplicated')
+s = s.replace(old_agp, new_agp, 1)
 
 old_target = '        targetSdk 34\n'
 new_target = '        targetSdk 35\n'
@@ -90,6 +97,8 @@ grep -F 'targetSdk 35' app/build.gradle >/dev/null
 grep -F 'versionCode 130' app/build.gradle >/dev/null
 grep -F "versionName '1.3.0'" app/build.gradle >/dev/null
 
+grep -F "id 'com.android.application' version '8.6.1' apply false" build.gradle >/dev/null
+
 unzip -p "$AAB" base/dex/classes.dex > "$RUNNER_TEMP/play-classes.dex"
 strings "$RUNNER_TEMP/play-classes.dex" > "$RUNNER_TEMP/play-classes.txt"
 grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/play-classes.txt" >/dev/null
@@ -114,6 +123,7 @@ status=success
 version=1.3.0
 version_code=130
 application_id=com.jayuminton.user
+android_gradle_plugin=8.6.1
 compile_sdk=35
 target_sdk=35
 min_sdk=24
@@ -136,6 +146,7 @@ cat "$PLAY_STATUS"
 s = s[:pos] + play_tail
 
 for required in (
+    "version '8.6.1' apply false",
     'targetSdk 35',
     "System.getenv('PLAY_UPLOAD_KEYSTORE_PATH')",
     "System.getenv('PLAY_UPLOAD_KEY_PASSWORD')",
@@ -148,6 +159,7 @@ for required in (
         raise SystemExit('Play AAB patch verification marker missing: ' + required)
 
 for forbidden in (
+    "version '8.5.2' apply false",
     "storePassword 'JayuMinton14!'",
     "keyPassword 'JayuMinton14!'",
     "storeFile file('../signing/jayuminton-release.jks')",
@@ -157,4 +169,4 @@ for forbidden in (
         raise SystemExit('legacy APK signing/build marker remains: ' + forbidden)
 
 path.write_text(s, encoding='utf-8')
-print('Prepared v1.3.0/code130 Play AAB build: targetSdk35, private upload key from GitHub Secrets, cap8 app logic preserved.')
+print('Prepared v1.3.0/code130 Play AAB build: AGP8.6.1, targetSdk35, private upload key from GitHub Secrets, cap8 app logic preserved.')
