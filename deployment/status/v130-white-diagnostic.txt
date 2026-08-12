@@ -2,7 +2,7 @@
 window.JAYUMINTON_PUSH_SETUP_CONFIG = Object.freeze({
   build: '203',
   relayUrl: 'https://script.google.com/macros/s/AKfycbyVPlL35pwN9QXvyzUG_TRaE4zC9QiEBB3z4jg3PjJwcuUmX-MI_hKuFX6FO757WaRHIg/exec',
-  memberPageUrl: 'https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?build=v130-whitefix-31617284249',
+  memberPageUrl: 'https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec',
   appUrl: 'https://jayuminton-push.web.app/',
   vapidKey: 'BNUQPnrOB2AKL7vkrpWQCqtCUyeQN9OInABU5eWBXpF1vGNTuW5ozOV5cdSBNj8d_y0Yc0UB8dolRz2xPLkZ0Rw',
   firebase: {
@@ -17,21 +17,76 @@ window.JAYUMINTON_PUSH_SETUP_CONFIG = Object.freeze({
 
 
 === INDEX IFRAME ===
-<iframe id="courtFrame" src="https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?build=v130-whitefix-31617284249" title="자유민턴 코트현황" scrolling="no" allow="clipboard-read; clipboard-write">
+<iframe id="courtFrame" src="https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec" title="자유민턴 코트현황" scrolling="no" allow="clipboard-read; clipboard-write">
+
+=== RUNTIME FRAMES ===
+URL=https://n-4nnq62pip4hgv7ajqtpel4x4ept2jcaiyun6aqy-0lu-script.googleusercontent.com/blank
+TEXT_LENGTH=43 HTML_LENGTH=250519
+TEXT=자유민턴 코트배정 현황 관리자가 알려준 멤버 열람 비밀번호를 입력하세요. 확인
+---
+URL=https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?mode=user&app=user&source=pwa
+TEXT_LENGTH=0 HTML_LENGTH=311426
+TEXT=
+---
+URL=https://jayuminton-push.web.app/?diagframes=1786552465793
+TEXT_LENGTH=0 HTML_LENGTH=4364
+TEXT=
+---
+URL=https://n-4nnq62pip4hgv7ajqtpel4x4ept2jcaiyun6aqy-0lu-script.googleusercontent.com/userCodeAppPanel
+TEXT_LENGTH=0 HTML_LENGTH=927
+TEXT=
+---
+
+=== ERRORS ===
+CONSOLE Potential permissions policy violation: autoplay is not allowed in this document.
+CONSOLE Potential permissions policy violation: encrypted-media is not allowed in this document.
+CONSOLE Potential permissions policy violation: fullscreen is not allowed in this document.
+CONSOLE Potential permissions policy violation: geolocation is not allowed in this document.
+CONSOLE Potential permissions policy violation: midi is not allowed in this document.
+CONSOLE Potential permissions policy violation: payment is not allowed in this document.
+CONSOLE Potential permissions policy violation: accelerometer is not allowed in this document.
+CONSOLE Potential permissions policy violation: gyroscope is not allowed in this document.
+CONSOLE Potential permissions policy violation: magnetometer is not allowed in this document.
+CONSOLE Potential permissions policy violation: screen-wake-lock is not allowed in this document.
+CONSOLE Potential permissions policy violation: autoplay is not allowed in this document.
+CONSOLE Potential permissions policy violation: camera is not allowed in this document.
+CONSOLE Potential permissions policy violation: encrypted-media is not allowed in this document.
+CONSOLE Potential permissions policy violation: fullscreen is not allowed in this document.
+CONSOLE Potential permissions policy violation: geolocation is not allowed in this document.
+CONSOLE Potential permissions policy violation: microphone is not allowed in this document.
+CONSOLE Potential permissions policy violation: midi is not allowed in this document.
+CONSOLE Potential permissions policy violation: payment is not allowed in this document.
+CONSOLE Potential permissions policy violation: usb is not allowed in this document.
+CONSOLE Potential permissions policy violation: accelerometer is not allowed in this document.
+CONSOLE Potential permissions policy violation: gyroscope is not allowed in this document.
+CONSOLE Potential permissions policy violation: magnetometer is not allowed in this document.
+CONSOLE Potential permissions policy violation: screen-wake-lock is not allowed in this document.
+CONSOLE Potential permissions policy violation: autoplay is not allowed in this document.
+CONSOLE Potential permissions policy violation: encrypted-media is not allowed in this document.
+CONSOLE Potential permissions policy violation: fullscreen is not allowed in this document.
+CONSOLE Potential permissions policy violation: geolocation is not allowed in this document.
+CONSOLE Potential permissions policy violation: midi is not allowed in this document.
+CONSOLE Potential permissions policy violation: payment is not allowed in this document.
+CONSOLE Potential permissions policy violation: accelerometer is not allowed in this document.
+CONSOLE Potential permissions policy violation: gyroscope is not allowed in this document.
+CONSOLE Potential permissions policy violation: magnetometer is not allowed in this document.
+CONSOLE Potential permissions policy violation: screen-wake-lock is not allowed in this document.
+CONSOLE Potential permissions policy violation: autoplay is not allowed in this document.
+CONSOLE Potential permissions policy violation: camera is not allowed in this document.
+CONSOLE Potential permissions policy violation: encrypted-media is not allowed in this document.
+CONSOLE Potential permissions policy violation: fullscreen is not allowed in this document.
+CONSOLE Potential permissions policy violation: geolocation is not allowed in this document.
+CONSOLE Potential permissions policy violation: microphone is not allowed in this document.
+CONSOLE Potential permissions policy violation: midi is not allowed in this document.
+CONSOLE Potential permissions policy violation: payment is not allowed in this document.
+CONSOLE Potential permissions policy violation: usb is not allowed in this document.
+CONSOLE Potential permissions policy violation: accelerometer is not allowed in this document.
+CONSOLE Potential permissions policy violation: gyroscope is not allowed in this document.
+CONSOLE Potential permissions policy violation: magnetometer is not allowed in this document.
+CONSOLE Potential permissions policy violation: screen-wake-lock is not allowed in this document.
 
 === frame.src assignment ===
- || 0);
-      return Number.isFinite(value) ? Math.max(0, Math.min(30, Math.floor(value))) : 0;
-    } catch (_) {
-      return 0;
-    }
-  })();
-  const MIN_INSTALL_ENGAGEMENT_SECONDS = 0;
-  const iosDevice = isIOSDevice();
-  const androidDevice = isAndroidDevice();
-  const embeddedBrowser = isEmbeddedBrowser();
-  const browserContext = detectBrowserContext();
-  const query = new URLSearchParams(window.location.search);
+ndow.location.search);
   const installationEntryRequested = query.get('install') === 'choose' || query.get('install') === '1';
   const externalBrowserEntry = query.get('source') === 'embedded' || query.get('external') === '1';
   if (androidDevice && !embeddedBrowser && (installationEntryRequested || externalBrowserEntry)) {
@@ -71,34 +126,10 @@ window.JAYUMINTON_PUSH_SETUP_CONFIG = Object.freeze({
   if (nativeInstallControl) {
     nativeInstallControl.addEventListener('promptaction', handleNativeInstallAction);
     nativeInstallControl.addEventListener('promptdismiss', handleNativeInstallDismiss);
-    nativeInstallControl.addEventListener('validationstatuschanged', handleNativeInstallValidation);
-  }
-  window.addEventListener('beforeinstallprompt', captureAndroidInstallPrompt);
-  window.addEventListener('jayuminton:installpromptready', consumeEarlyInstallPrompt);
-  window.addEventListener('appinstalled', handleUserAppInstalled);
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      consumeEarlyInstallPrompt();
-      
+    nativeInstallControl.addEventListener('validationstatuschanged', handleNativeInstallVa
 
 === userOnlyMemberPageUrl ===
-요 없습니다.');
-    window.setTimeout(function() {
-      window.location.href = intentUrl;
-    }, 80);
-  }
-
-  function isIOSSafari() {
-    const ua = String(navigator.userAgent || '');
-    return iosDevice && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|KAKAOTALK|DaumApps|NAVER|Instagram|FBAN|FBAV/i.test(ua);
-  }
-
-  function detectBrowserContext() {
-    if (isStandaloneApp()) return 'standalone';
-    if (androidDevice && embeddedBrowser) return 'android-embedded';
-    if (androidDevice) return 'android-chrome';
-    if (iosDevice && embeddedBrowser) return 'ios-embedded';
-    if (isIOSSafari()) return 'ios-safari';
+return 'ios-safari';
     if (iosDevice) return 'ios-browser';
     return 'other';
   }
@@ -157,31 +188,3 @@ window.JAYUMINTON_PUSH_SETUP_CONFIG = Object.freeze({
   function setInstallMessage(text, type) { installMessage.textContent=text; installMessage.className='setting-message'+(type?' '+type:''); }
   function showToast(text) { clearTimeout(toastTimer);toast.textContent=text;toast.classList.remove('hidden');toastTimer=setTimeout(()=>toast.classList.add('hidden'),4000); }
 })();
-
-
-=== cfg.memberPageUrl references ===
-() ? '?' + query.toString() : '') + window.location.hash;
-      window.history.replaceState({}, document.title, cleanUrl);
-    } catch (_) {}
-  }
-
-  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
-    member = {id:String(query.get('memberId')), name:String(query.get('memberName'))};
-    saveJson(STORAGE.member, member);
-  }
-  if (member && member.name) nameInput.value = shortName(member.name);
-  syncStandaloneInstallState();
-  frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
-
-
-  setupToggle.addEventListener('click', () => setSetupCollapsed(!setupPanel.classList.contains('is-collapsed'), true));
-  connectButton.addEventListener('click', handleAlarmButton);
-  appInstallButton.addEventListener('click', handleAppInstallButton);
-  appInstallOffButton.addEventListener('click', setAppDownloadOff);
-  appInstallClickProxy.addEventListener('click', handleDirectInstallProxyClick);
-  appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);
-  appInstallChromeLink.addEventListener('touchstart', () => {
-    if (androidDevice && embeddedBrowser) appInstallChromeLink.removeAttribute('href');
-  }, {passive:true})
-
----
