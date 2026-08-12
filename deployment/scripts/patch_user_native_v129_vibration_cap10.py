@@ -19,6 +19,7 @@ for required in (
     'private static final long[] GROUP_TIMINGS = new long[]{0, 650, 220, 650, 220, 650};',
     'private static final int[] GROUP_AMPLITUDES = new int[]{0, 255, 0, 255, 0, 255};',
     'private static final long GROUP_REPEAT_MS = 3490L;',
+    'JAYUMINTON_V126_START_STOP_RACE_GUARD',
     'AlertVibrationController.stop(',
 ):
     if required not in s:
@@ -42,12 +43,13 @@ controller = controller.replace(
     1,
 )
 
-schedule_anchor = '''                    synchronized (LOCK) {
-                        if (!active || generation != myGeneration || activeRunnable != this) return;
+# Preserve the proven start/stop race guard exactly; only replace its final
+# unconditional reschedule with a 10-group ceiling.
+schedule_anchor = '''                        if (!active || generation != myGeneration || activeRunnable != this) return;
                         HANDLER.postDelayed(this, GROUP_REPEAT_MS);
-                    }'''
-schedule_replacement = '''                    synchronized (LOCK) {
-                        if (!active || generation != myGeneration || activeRunnable != this) return;
+                    }
+                }'''
+schedule_replacement = '''                        if (!active || generation != myGeneration || activeRunnable != this) return;
                         emittedGroups[0]++;
                         if (emittedGroups[0] >= MAX_GROUPS) {
                             active = false;
@@ -55,7 +57,8 @@ schedule_replacement = '''                    synchronized (LOCK) {
                             return;
                         }
                         HANDLER.postDelayed(this, GROUP_REPEAT_MS);
-                    }'''
+                    }
+                }'''
 if controller.count(schedule_anchor) != 1:
     raise SystemExit('v129 vibration repeat scheduling anchor missing')
 controller = controller.replace(schedule_anchor, schedule_replacement, 1)
@@ -89,6 +92,7 @@ for required in (
     'final int[] emittedGroups = new int[]{0};',
     'emittedGroups[0]++;',
     'if (emittedGroups[0] >= MAX_GROUPS)',
+    'JAYUMINTON_V126_START_STOP_RACE_GUARD',
     'HANDLER.postDelayed(this, GROUP_REPEAT_MS);',
     'createWaveform(GROUP_TIMINGS, GROUP_AMPLITUDES, -1)',
     'pulse_ms=650',
