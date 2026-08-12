@@ -1,0 +1,44 @@
+name: Hotfix v1.3.0 white screen simple
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-v130-white-screen-simple.yml'
+      - 'deployment/scripts/hotfix_v130_white_screen.sh'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Repair hosting and verify live page
+        shell: bash
+        run: bash deployment/scripts/hotfix_v130_white_screen.sh
+      - name: Publish repair proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v130-white-screen-hotfix.txt
+          git commit -m 'Verify v1.3.0 live page white-screen repair' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
