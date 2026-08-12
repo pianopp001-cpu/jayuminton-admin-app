@@ -1,0 +1,85 @@
+name: Verify v1.3.0 cap8 live download route
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-v130-cap8-live-route.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+
+      - name: Verify live page routes to exact code130 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          BASE="$(jq -r '.hostingUrl' "$C")"
+          BASE="${BASE%/}"
+          test -n "$BASE"
+
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/badminton.html?verify=v130-$(date +%s)" -o "$RUNNER_TEMP/live.html"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/setup-v205.js?verify=v130-$(date +%s)" -o "$RUNNER_TEMP/live.js"
+
+          grep -F 'jayuminton-user-apk' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F '1.3.0-code130-cap8-' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'Jayuminton-User-v1.3.0-code130-cap8.apk' "$RUNNER_TEMP/live.js" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_APK_DOWNLOAD_V130' "$RUNNER_TEMP/live.js" >/dev/null
+          grep -F '자유민턴 사용자 앱 1.3.0을 다운로드합니다.' "$RUNNER_TEMP/live.js" >/dev/null
+          ! grep -F 'Jayuminton-User-v1.2.9-code129-R2.apk' "$RUNNER_TEMP/live.js" >/dev/null
+
+          TARGET="$(sed -n "s/.*const JAYUMINTON_USER_APK_V130 = '\([^']*\)'.*/\1/p" "$RUNNER_TEMP/live.js" | head -1)"
+          test -n "$TARGET"
+          echo "$TARGET" | grep -F 'releases/download/user-v1.3.0-cap8/Jayuminton-User-v1.3.0-code130-cap8.apk' >/dev/null
+
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$TARGET" -o "$RUNNER_TEMP/live-v130.apk"
+          LIVE_SHA="$(sha256sum "$RUNNER_TEMP/live-v130.apk" | awk '{print $1}')"
+          REPO_SHA="$(sha256sum releases/jayuminton-courtstatus-v1.3.0-cap8.apk | awk '{print $1}')"
+          test "$LIVE_SHA" = "$REPO_SHA"
+
+          AAPT=''; for p in "$ANDROID_HOME"/build-tools/*/aapt; do [ -x "$p" ] && AAPT="$p"; done; test -n "$AAPT"
+          "$AAPT" dump badging "$RUNNER_TEMP/live-v130.apk" > "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='com.jayuminton.user'" "$RUNNER_TEMP/badging.txt" >/dev/null
+          grep -F "versionCode='130'" "$RUNNER_TEMP/badging.txt" >/dev/null
+          grep -F "versionName='1.3.0'" "$RUNNER_TEMP/badging.txt" >/dev/null
+
+          {
+            echo 'status=success'
+            echo "live_page=$BASE/badminton.html"
+            echo "actual_live_apk_url=$TARGET"
+            echo 'package=com.jayuminton.user'
+            echo 'version_name=1.3.0'
+            echo 'version_code=130'
+            echo 'wait1_groups=8'
+            echo 'court_groups=8'
+            echo 'pulses_per_group=3'
+            echo 'expected_full_vibration_seconds_about=27'
+            echo "apk_sha256=$LIVE_SHA"
+            echo 'old_v129_asset_present=no'
+            echo "verified_at=$(date -u +%FT%TZ)"
+          } > deployment/status/v130-cap8-live-route-proof.txt
+
+      - name: Publish verification proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v130-cap8-live-route-proof.txt
+          git commit -m 'Verify live v1.3.0 code130 cap8 download route' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
