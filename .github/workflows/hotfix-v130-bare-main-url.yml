@@ -42,19 +42,48 @@ jobs:
           if s.count(old) != 1:
               raise SystemExit('expected whitefix member URL anchor not found exactly once')
           s=s.replace(old,new,1)
+
+          old_verify="""const frames = page.frames();
+const target = frames.find(f => f !== page.mainFrame() && f.url().includes('script.google.com')) || frames.find(f => f !== page.mainFrame() && !f.url().startsWith('about:blank'));
+let inner = '';
+if (target) inner = (await target.locator('body').innerText({timeout:6000}).catch(()=>'' )).replace(/\\s+/g,' ').trim();
+const proof = { frameUrls: frames.map(f=>f.url()), inner: inner.slice(0,2000), errors };
+fs.writeFileSync('proof.json', JSON.stringify(proof,null,2));
+console.log(JSON.stringify(proof,null,2));
+if (!target) throw new Error('court iframe did not load');
+if (inner.length < 20) throw new Error('court iframe body is blank');"""
+          new_verify="""const frames = page.frames();
+const frameInfos = [];
+for (const f of frames) {
+  let text = '';
+  try { text = (await f.locator('body').innerText({timeout:6000})).replace(/\\s+/g,' ').trim(); } catch {}
+  frameInfos.push({url:f.url(), text:text.slice(0,4000), textLength:text.length});
+}
+frameInfos.sort((a,b)=>b.textLength-a.textLength);
+const targetInfo = frameInfos.find(x => !x.url.includes('jayuminton-push.web.app') && x.textLength >= 20);
+const inner = targetInfo ? targetInfo.text : '';
+const proof = { frameUrls: frames.map(f=>f.url()), frameInfos, inner: inner.slice(0,2000), errors };
+fs.writeFileSync('proof.json', JSON.stringify(proof,null,2));
+console.log(JSON.stringify(proof,null,2));
+if (!frames.some(f => f !== page.mainFrame() && f.url().includes('script.google.com/macros/s/'))) throw new Error('court iframe did not reach Apps Script');
+if (!targetInfo) throw new Error('nested court content is blank');"""
+          if s.count(old_verify) != 1:
+              raise SystemExit('expected browser verifier anchor not found exactly once')
+          s=s.replace(old_verify,new_verify,1)
           p.write_text(s,encoding='utf-8')
-          print('Using bare Apps Script /exec URL; cache busting remains only on hosting JS assets.')
+          print('Using bare Apps Script /exec URL and verifying the actual nested Apps Script content.')
           PY
           grep -F 'export WHITEFIX_MAIN_URL="${MAIN_URL}"' "$SCRIPT" >/dev/null
           ! grep -F 'WHITEFIX_MAIN_URL="${MAIN_URL}?build=' "$SCRIPT" >/dev/null
+          grep -F 'nested court content is blank' "$SCRIPT" >/dev/null
           bash "$SCRIPT"
       - name: Publish verified repair proof
         shell: bash
         run: |
           set -euo pipefail
+          cp deployment/status/v130-white-screen-hotfix.txt "$RUNNER_TEMP/v130-white-screen-hotfix.txt"
           git reset --hard HEAD
-          test -s deployment/status/v130-white-screen-hotfix.txt || true
-          # The proof file was generated before reset; recover it from runner temp marker if needed is not required for live fix.
+          cp "$RUNNER_TEMP/v130-white-screen-hotfix.txt" deployment/status/v130-white-screen-hotfix.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           cat > deployment/status/v130-bare-member-url-live-proof.txt <<EOF
@@ -69,7 +98,7 @@ jobs:
           browser_verified_not_blank=yes
           verified_at=$(date -u +%FT%TZ)
           EOF
-          git add deployment/status/v130-bare-member-url-live-proof.txt
+          git add deployment/status/v130-white-screen-hotfix.txt deployment/status/v130-bare-member-url-live-proof.txt
           git commit -m 'Verify live page after bare member URL repair' || exit 0
           git pull --rebase origin main || true
           git push origin main
