@@ -1,0 +1,187 @@
+=== CONFIG ===
+window.JAYUMINTON_PUSH_SETUP_CONFIG = Object.freeze({
+  build: '203',
+  relayUrl: 'https://script.google.com/macros/s/AKfycbyVPlL35pwN9QXvyzUG_TRaE4zC9QiEBB3z4jg3PjJwcuUmX-MI_hKuFX6FO757WaRHIg/exec',
+  memberPageUrl: 'https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?build=v130-whitefix-31617284249',
+  appUrl: 'https://jayuminton-push.web.app/',
+  vapidKey: 'BNUQPnrOB2AKL7vkrpWQCqtCUyeQN9OInABU5eWBXpF1vGNTuW5ozOV5cdSBNj8d_y0Yc0UB8dolRz2xPLkZ0Rw',
+  firebase: {
+    apiKey: 'AIzaSyCS8MJsLHfjsiaQymEyEn-qqp_05WSW1cI',
+    authDomain: 'jayuminton-push.firebaseapp.com',
+    projectId: 'jayuminton-push',
+    storageBucket: 'jayuminton-push.firebasestorage.app',
+    messagingSenderId: '758697255400',
+    appId: '1:758697255400:web:7214800018c65b7827045d'
+  }
+});
+
+
+=== INDEX IFRAME ===
+<iframe id="courtFrame" src="https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?build=v130-whitefix-31617284249" title="자유민턴 코트현황" scrolling="no" allow="clipboard-read; clipboard-write">
+
+=== frame.src assignment ===
+ || 0);
+      return Number.isFinite(value) ? Math.max(0, Math.min(30, Math.floor(value))) : 0;
+    } catch (_) {
+      return 0;
+    }
+  })();
+  const MIN_INSTALL_ENGAGEMENT_SECONDS = 0;
+  const iosDevice = isIOSDevice();
+  const androidDevice = isAndroidDevice();
+  const embeddedBrowser = isEmbeddedBrowser();
+  const browserContext = detectBrowserContext();
+  const query = new URLSearchParams(window.location.search);
+  const installationEntryRequested = query.get('install') === 'choose' || query.get('install') === '1';
+  const externalBrowserEntry = query.get('source') === 'embedded' || query.get('external') === '1';
+  if (androidDevice && !embeddedBrowser && (installationEntryRequested || externalBrowserEntry)) {
+    setInstallIntentArmed(true);
+  }
+  const transferredMemberSession = String(query.get('memberSession') || localStorage.getItem(STORAGE.authSession) || '');
+  if (transferredMemberSession) localStorage.setItem(STORAGE.authSession, transferredMemberSession);
+  if (query.has('memberSession')) {
+    try {
+      query.delete('memberSession');
+      const cleanUrl = window.location.pathname + (query.toString() ? '?' + query.toString() : '') + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch (_) {}
+  }
+
+  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
+    member = {id:String(query.get('memberId')), name:String(query.get('memberName'))};
+    saveJson(STORAGE.member, member);
+  }
+  if (member && member.name) nameInput.value = shortName(member.name);
+  syncStandaloneInstallState();
+  frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
+
+
+  setupToggle.addEventListener('click', () => setSetupCollapsed(!setupPanel.classList.contains('is-collapsed'), true));
+  connectButton.addEventListener('click', handleAlarmButton);
+  appInstallButton.addEventListener('click', handleAppInstallButton);
+  appInstallOffButton.addEventListener('click', setAppDownloadOff);
+  appInstallClickProxy.addEventListener('click', handleDirectInstallProxyClick);
+  appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);
+  appInstallChromeLink.addEventListener('touchstart', () => {
+    if (androidDevice && embeddedBrowser) appInstallChromeLink.removeAttribute('href');
+  }, {passive:true});
+  appInstallClickProxy.removeAttribute('href');
+  appInstallClickProxy.removeAttribute('target');
+  appInstallChromeLink.setAttribute('target', '_top');
+  if (nativeInstallControl) {
+    nativeInstallControl.addEventListener('promptaction', handleNativeInstallAction);
+    nativeInstallControl.addEventListener('promptdismiss', handleNativeInstallDismiss);
+    nativeInstallControl.addEventListener('validationstatuschanged', handleNativeInstallValidation);
+  }
+  window.addEventListener('beforeinstallprompt', captureAndroidInstallPrompt);
+  window.addEventListener('jayuminton:installpromptready', consumeEarlyInstallPrompt);
+  window.addEventListener('appinstalled', handleUserAppInstalled);
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      consumeEarlyInstallPrompt();
+      
+
+=== userOnlyMemberPageUrl ===
+요 없습니다.');
+    window.setTimeout(function() {
+      window.location.href = intentUrl;
+    }, 80);
+  }
+
+  function isIOSSafari() {
+    const ua = String(navigator.userAgent || '');
+    return iosDevice && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|KAKAOTALK|DaumApps|NAVER|Instagram|FBAN|FBAV/i.test(ua);
+  }
+
+  function detectBrowserContext() {
+    if (isStandaloneApp()) return 'standalone';
+    if (androidDevice && embeddedBrowser) return 'android-embedded';
+    if (androidDevice) return 'android-chrome';
+    if (iosDevice && embeddedBrowser) return 'ios-embedded';
+    if (isIOSSafari()) return 'ios-safari';
+    if (iosDevice) return 'ios-browser';
+    return 'other';
+  }
+
+  function isStandaloneApp() {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+  }
+
+  function syncStandaloneInstallState() {
+    if (!isStandaloneApp()) return false;
+    installAttemptPending = false;
+    deferredInstallPrompt = null;
+    setInstallIntentArmed(false);
+    clearTimeout(installAttemptTimer);
+    try {
+      localStorage.setItem(STORAGE.installConfirmed, '1');
+      localStorage.setItem(STORAGE.installChoice, 'on');
+      sessionStorage.removeItem(STORAGE.installRecheck);
+    } catch (_) {}
+    return true;
+  }
+
+  function isUserAppInstalledState() {
+    if (syncStandaloneInstallState()) return true;
+    return localStorage.getItem(STORAGE.installConfirmed) === '1';
+  }
+
+  function normalizedName(value) { return String(value || '').normalize('NFC').replace(/[\s()\[\]{}._\-·]/g,'').toLocaleLowerCase('ko-KR'); }
+  function firstTwoSearchChars(value) { return Array.from(normalizedName(value)).slice(0,2).join(''); }
+  function shortName(value) { return Array.from(String(value || '').trim()).slice(0,2).join(''); }
+  function readJson(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } }
+  function saveJson(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} }
+  function validMemberPageUrl(value) { const t=String(value||'').trim(); return /^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/exec\/?$/.test(t)?t.replace(/\/$/,''):''; }
+  function userOnlyMemberPageUrl(value, sessionToken) {
+    const t = validMemberPageUrl(value);
+    if (!t) return '';
+    const u = new URL(t);
+    u.searchParams.set('mode', 'user');
+    u.searchParams.set('app', 'user');
+    u.searchParams.set('source', 'pwa');
+    if (isStandaloneApp()) u.searchParams.set('pwaStandalone', '1');
+    if (sessionToken) u.searchParams.set('memberSession', String(sessionToken));
+    return u.toString();
+  }
+  function validRelayUrl(value) { return validMemberPageUrl(value); }
+  function vibrationPattern(type) {
+    return type === 'court_assignment'
+      ? [1400,500,1400,500,1400]
+      : [900,450,900,450,900];
+  }
+  function notificationRepeatGap(type) {
+    return type === 'court_assignment' ? 6500 : 0;
+  }
+  function setMessage(text, type) { message.textContent=text; message.className='setting-message'+(type?' '+type:''); }
+  function setInstallMessage(text, type) { installMessage.textContent=text; installMessage.className='setting-message'+(type?' '+type:''); }
+  function showToast(text) { clearTimeout(toastTimer);toast.textContent=text;toast.classList.remove('hidden');toastTimer=setTimeout(()=>toast.classList.add('hidden'),4000); }
+})();
+
+
+=== cfg.memberPageUrl references ===
+() ? '?' + query.toString() : '') + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch (_) {}
+  }
+
+  if ((!member || !member.id) && query.get('memberId') && query.get('memberName')) {
+    member = {id:String(query.get('memberId')), name:String(query.get('memberName'))};
+    saveJson(STORAGE.member, member);
+  }
+  if (member && member.name) nameInput.value = shortName(member.name);
+  syncStandaloneInstallState();
+  frame.src = userOnlyMemberPageUrl(cfg.memberPageUrl, transferredMemberSession) || 'about:blank';
+
+
+  setupToggle.addEventListener('click', () => setSetupCollapsed(!setupPanel.classList.contains('is-collapsed'), true));
+  connectButton.addEventListener('click', handleAlarmButton);
+  appInstallButton.addEventListener('click', handleAppInstallButton);
+  appInstallOffButton.addEventListener('click', setAppDownloadOff);
+  appInstallClickProxy.addEventListener('click', handleDirectInstallProxyClick);
+  appInstallChromeLink.addEventListener('click', handleEmbeddedChromeLinkClick);
+  appInstallChromeLink.addEventListener('touchstart', () => {
+    if (androidDevice && embeddedBrowser) appInstallChromeLink.removeAttribute('href');
+  }, {passive:true})
+
+---
