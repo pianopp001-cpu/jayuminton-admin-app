@@ -1,0 +1,35 @@
+name: Diagnose v1.3.0 blank screen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-v130-blank.yml'
+      - 'deployment/scripts/diagnose_v130_blank.sh'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - name: Inspect live hosting runtime
+        shell: bash
+        run: bash deployment/scripts/diagnose_v130_blank.sh
+      - name: Publish diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v130-white-diagnostic.txt
+          git commit -m 'Record v1.3.0 blank-screen diagnostic' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
