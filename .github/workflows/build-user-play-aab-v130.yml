@@ -1,6 +1,11 @@
 name: Build Google Play AAB v1.3.0
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-user-play-aab-v130.yml'
+      - 'deployment/scripts/patch_build_user_play_aab_v130.py'
   workflow_dispatch: {}
 
 permissions:
@@ -88,7 +93,6 @@ jobs:
           set -euo pipefail
           SCRIPT='deployment/scripts/build_user_native_push_fresh_v110.sh'
 
-          # Reconstruct exactly the current v1.3.0/code130/cap8 user app.
           python3 deployment/scripts/patch_build_user_native_v111.py "$SCRIPT"
           python3 deployment/scripts/patch_build_user_native_v112.py "$SCRIPT"
           python3 deployment/scripts/patch_build_user_native_v113.py "$SCRIPT"
@@ -108,8 +112,6 @@ jobs:
           python3 deployment/scripts/patch_build_user_native_v128_repeat_switch.py "$SCRIPT"
           python3 deployment/scripts/patch_build_user_native_v129_background_registration.py "$SCRIPT"
           python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$SCRIPT"
-
-          # Change only Play submission requirements: target API/signing/output format.
           python3 deployment/scripts/patch_build_user_play_aab_v130.py "$SCRIPT"
 
           grep -F 'VERSION="1.3.0"' "$SCRIPT" >/dev/null
