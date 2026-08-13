@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: member-seat-final-clean
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
@@ -40,7 +40,7 @@ jobs:
       - name: Install clasp
         run: npm install --global @google/clasp@latest
 
-      - name: Pull live and replace only approved three files
+      - name: Pull live and diagnose approved three files
         shell: bash
         run: |
           set -euo pipefail
@@ -54,23 +54,38 @@ jobs:
           cp "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js" Code.js
           cp "$GITHUB_WORKSPACE/source-snapshot/current-main/Index.html" Index.html
           cp "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html" Script.html
-          cmp Admin.html "$RUNNER_TEMP/live-before/Admin.html"
-          cmp Style.html "$RUNNER_TEMP/live-before/Style.html"
-          cmp check.js "$RUNNER_TEMP/live-before/check.js"
-          grep -F '이름 입력 또는 내 카드 두 번 터치로 자신을 설정해주세요.' Index.html >/dev/null
-          grep -F '빈자리 두 번 터치로 자리잡기 · 내 자리와 상대 자리를 차례로 터치하면 교환요청' Index.html >/dev/null
-          grep -F 'requestMemberWaitSeatSwap' Code.js >/dev/null
-          grep -F 'respondMemberWaitSeatSwap' Code.js >/dev/null
-          grep -F 'requestMemberWaitSeatSwap' Script.html >/dev/null
-          python3 - <<'PY'
+
+          check_same() { if cmp -s "$1" "$2"; then echo "OK preserve: $3"; else echo "FAIL preserve: $3"; return 1; fi; }
+          check_text() { if grep -Fq "$1" "$2"; then echo "OK text: $3"; else echo "FAIL text: $3"; return 1; fi; }
+
+          FAIL=0
+          check_same Admin.html "$RUNNER_TEMP/live-before/Admin.html" Admin.html || FAIL=1
+          check_same Style.html "$RUNNER_TEMP/live-before/Style.html" Style.html || FAIL=1
+          check_same check.js "$RUNNER_TEMP/live-before/check.js" check.js || FAIL=1
+          check_text '이름 입력 또는 내 카드 두 번 터치로 자신을 설정해주세요.' Index.html 'identity help' || FAIL=1
+          check_text '빈자리 두 번 터치로 자리잡기 · 내 자리와 상대 자리를 차례로 터치하면 교환요청' Index.html 'seat help' || FAIL=1
+          check_text 'requestMemberWaitSeatSwap' Code.js 'server request swap' || FAIL=1
+          check_text 'respondMemberWaitSeatSwap' Code.js 'server respond swap' || FAIL=1
+          check_text 'requestMemberWaitSeatSwap' Script.html 'client request swap' || FAIL=1
+
+          python3 - <<'PY' || FAIL=1
           from pathlib import Path
           s=Path('Script.html').read_text(encoding='utf-8')
           a=s.find('<script>'); b=s.rfind('</script>')
-          if a < 0 or b <= a: raise SystemExit('Script wrapper missing')
+          if a < 0 or b <= a:
+              raise SystemExit('FAIL syntax prep: Script wrapper missing')
           Path('verify.js').write_text(s[a+8:b], encoding='utf-8')
+          print('OK syntax prep: Script wrapper')
           PY
-          node --check verify.js
-          rm verify.js
+          if [ -f verify.js ]; then
+            if node --check verify.js; then echo 'OK syntax: Script.html'; else echo 'FAIL syntax: Script.html'; FAIL=1; fi
+            rm -f verify.js
+          fi
+          if [ "$FAIL" -ne 0 ]; then
+            echo 'GUARD_RESULT=FAILED - nothing was pushed.'
+            exit 1
+          fi
+          echo 'GUARD_RESULT=PASSED - push step may proceed.'
 
       - name: Push only after all guards pass
         shell: bash
