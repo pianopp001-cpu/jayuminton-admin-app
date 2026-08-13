@@ -1,0 +1,7 @@
+<script>
+/* Member-only controls. Kept isolated so admin behavior is unchanged. */
+(function(){
+  if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN) return;
+  window.__JAYUMINTON_MEMBER_ANYWHERE_V3__ = true;
+})();
+</script>
