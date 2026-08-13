@@ -40,3 +40,12 @@ function memberAnywhereSwapSnapshot_(fromMemberId,toMemberId){
 function memberAnywhereSwapCacheKey_(memberId){
   return 'ANYWHERE_SWAP_'+String(memberId||'');
 }
+
+function memberAnywhereSwapRequest_(requesterId,targetId){
+  return {
+    requesterId:String(requesterId||''),
+    targetId:String(targetId||''),
+    snapshot:memberAnywhereSwapSnapshot_(requesterId,targetId),
+    createdAt:Date.now()
+  };
+}
