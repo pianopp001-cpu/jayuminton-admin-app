@@ -24,3 +24,8 @@ function memberAnywhereLocationKey_(location){
   if(location.type==='status')return 'status:'+location.status;
   return '';
 }
+
+function memberAnywhereSnapshot_(memberId){
+  var location=memberAnywhereLocation_(memberId);
+  return {memberId:String(memberId||''),locationKey:memberAnywhereLocationKey_(location)};
+}
