@@ -1678,6 +1678,44 @@ function memberLeaveWaitGroup(sessionToken,memberId){
     writeWaitGroups_(waitGroups);updateMemberStatuses_([memberId],'active');touch_();return getPublicState();
   });
 }
+function memberWaitLocation_(waitGroups,memberId){
+  for(var g=0;g<waitGroups.length;g+=1){var p=(waitGroups[g]||[]).indexOf(String(memberId));if(p>=0)return {group:g,position:p};}
+  return null;
+}
+function memberWaitSwapCacheKey_(memberId){return 'JAYUMINTON_WAIT_SWAP_'+String(memberId);}
+function memberRequestWaitSwap(sessionToken,requesterId,targetId){
+  return withDocumentLock_('회원 자리 교환 요청',function(){
+    requesterId=memberSessionAuth_(sessionToken,requesterId);targetId=String(targetId||'');
+    if(!targetId||targetId===requesterId)throw new Error('교환할 다른 회원을 선택하세요.');
+    if(!readMembers_().some(function(m){return String(m.id)===targetId;}))throw new Error('상대 회원을 찾을 수 없습니다.');
+    var waitGroups=readWaitGroups_(),a=memberWaitLocation_(waitGroups,requesterId),b=memberWaitLocation_(waitGroups,targetId);
+    if(!a||!b)throw new Error('두 사람 모두 대기자리에 있을 때만 교환할 수 있습니다.');
+    var req={id:Utilities.getUuid(),requesterId:requesterId,targetId:targetId,createdAt:Date.now()};
+    CacheService.getDocumentCache().put(memberWaitSwapCacheKey_(targetId),JSON.stringify(req),300);
+    return {ok:true,message:'자리 교환을 요청했어요.'};
+  });
+}
+function memberGetWaitSwapRequest(sessionToken,memberId){
+  memberId=memberSessionAuth_(sessionToken,memberId);
+  var cache=CacheService.getDocumentCache(),key=memberWaitSwapCacheKey_(memberId),raw=cache.get(key);if(!raw)return null;
+  var req;try{req=JSON.parse(raw);}catch(e){cache.remove(key);return null;}
+  if(!req||String(req.targetId)!==memberId)return null;
+  var waitGroups=readWaitGroups_();if(!memberWaitLocation_(waitGroups,req.requesterId)||!memberWaitLocation_(waitGroups,memberId)){cache.remove(key);return null;}
+  var member=readMembers_().find(function(m){return String(m.id)===String(req.requesterId);});
+  return {id:String(req.id),requesterId:String(req.requesterId),requesterName:member?String(member.name):'다른 회원'};
+}
+function memberRespondWaitSwap(sessionToken,targetId,requestId,accept){
+  return withDocumentLock_('회원 자리 교환 응답',function(){
+    targetId=memberSessionAuth_(sessionToken,targetId);requestId=String(requestId||'');
+    var cache=CacheService.getDocumentCache(),key=memberWaitSwapCacheKey_(targetId),raw=cache.get(key);if(!raw)throw new Error('교환 요청이 만료되었어요.');
+    var req=JSON.parse(raw);if(String(req.id)!==requestId||String(req.targetId)!==targetId)throw new Error('교환 요청이 변경되었어요.');
+    cache.remove(key);if(!accept)return {ok:true,rejected:true};
+    var waitGroups=readWaitGroups_(),a=memberWaitLocation_(waitGroups,req.requesterId),b=memberWaitLocation_(waitGroups,targetId);
+    if(!a||!b)throw new Error('대기자리가 변경되어 교환할 수 없습니다. 다시 요청해 주세요.');
+    waitGroups[a.group][a.position]=targetId;waitGroups[b.group][b.position]=String(req.requesterId);
+    writeWaitGroups_(waitGroups);touch_();return getPublicState();
+  });
+}
 function changeMemberPassword(pin, newPassword) {
   return withDocumentLock_(
     '멤버 비밀번호 변경',

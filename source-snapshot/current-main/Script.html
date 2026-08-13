@@ -883,6 +883,7 @@ function server(name, args) {
     'resetSelectedGameCounts','resetAllOperationData',
     'adjustCourtMembers','adjustWaitGroupMembers',
     'memberMoveToWaitGroup','memberLeaveWaitGroup',
+    'memberRequestWaitSwap','memberRespondWaitSwap',
     'createManualBackup','restoreManualBackup','changeMemberPassword'
   ];
   const isMutation = mutationNames.indexOf(name) >= 0;
@@ -4096,6 +4097,36 @@ async function memberLeaveWaitGroup(){
   try{const state=await server('memberLeaveWaitGroup',[a.token,String(a.member.id)]);clearMemberWaitSeatPick();renderState(state);}
   catch(e){clearMemberWaitSeatPick();alert(e.message||e);}
 }
+async function memberRequestWaitSwap(targetMemberId){
+  const a=memberWaitSeatSessionArgs(); if(!a||ACTION_IN_FLIGHT)return;
+  try{const result=await server('memberRequestWaitSwap',[a.token,String(a.member.id),String(targetMemberId)]);clearMemberWaitSeatPick();showMemberSettingMessage(result&&result.message?result.message:'자리 교환을 요청했어요.');}
+  catch(e){clearMemberWaitSeatPick();alert(e.message||e);}
+}
+function handleMemberWaitOtherTap(groupIndex,targetMemberId,event){
+  if(IS_ADMIN)return;
+  if(event){event.preventDefault();event.stopPropagation();}
+  const a=memberWaitSeatSessionArgs(); if(!a)return;
+  if(String(targetMemberId)===String(a.member.id))return;
+  if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){clearMemberWaitSeatPick();memberRequestWaitSwap(targetMemberId);return;}
+  MEMBER_WAIT_SEAT_PICK={type:'other',groupIndex:Number(groupIndex),memberId:String(targetMemberId)};
+  showMemberSettingMessage('내 자리를 터치하면 교환 요청을 보냅니다.');
+}
+let MEMBER_WAIT_SWAP_CHECKING=false;
+let MEMBER_WAIT_SWAP_SHOWN='';
+async function checkMemberWaitSwapRequest(){
+  if(IS_ADMIN||MEMBER_WAIT_SWAP_CHECKING||ACTION_IN_FLIGHT)return;
+  const a=memberWaitSeatSessionArgs(); if(!a)return;
+  MEMBER_WAIT_SWAP_CHECKING=true;
+  try{
+    const req=await server('memberGetWaitSwapRequest',[a.token,String(a.member.id)]);
+    if(!req||!req.id||String(req.id)===MEMBER_WAIT_SWAP_SHOWN)return;
+    MEMBER_WAIT_SWAP_SHOWN=String(req.id);
+    const accepted=confirm(String(req.requesterName||'다른 회원')+'님이 자리 교환을 요청했어요.\n\n서로 상의하셨다면 확인을 눌러 교환하세요.');
+    const state=await server('memberRespondWaitSwap',[a.token,String(a.member.id),String(req.id),accepted]);
+    if(state&&state.members)renderState(state); else if(!accepted)showMemberSettingMessage('자리 교환 요청을 거절했습니다.');
+  }catch(e){console.warn(e);}finally{MEMBER_WAIT_SWAP_CHECKING=false;}
+}
+setInterval(checkMemberWaitSwapRequest,5000);
 function handleMemberWaitSelfTap(groupIndex,memberId,event){
   if(IS_ADMIN||String(memberId)!==storedSelfMemberId())return;
   if(event){event.preventDefault();event.stopPropagation();}
@@ -4106,6 +4137,7 @@ function handleMemberWaitSelfTap(groupIndex,memberId,event){
   MEMBER_WAIT_SELF_TAP.timer=setTimeout(function(){
     MEMBER_WAIT_SELF_TAP.timer=null;
     if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}
+    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='other'){const target=MEMBER_WAIT_SEAT_PICK.memberId;clearMemberWaitSeatPick();memberRequestWaitSwap(target);return;}
     MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};
   },430);
 }
@@ -4158,7 +4190,7 @@ function renderWaitGroups() {
                 if (isSelfMember(member)) {
                   return '<div class="person member-info-card ' + genderClass(member) + ' is-self-member" data-member-id="' + member.id + '" onclick="handleMemberWaitSelfTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="member-self-star" aria-label="내 이름">나</span><span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
                 }
-                return memberCard(member, false, false);
+                return '<div class="person member-info-card ' + genderClass(member) + '" data-member-id="' + member.id + '" onclick="handleMemberWaitOtherTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
               }
 
               return (
