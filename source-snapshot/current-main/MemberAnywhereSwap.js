@@ -49,3 +49,7 @@ function memberAnywhereSwapRequest_(requesterId,targetId){
     createdAt:Date.now()
   };
 }
+
+function memberAnywherePutSwapRequest_(targetId,request){
+  CacheService.getDocumentCache().put(memberAnywhereSwapCacheKey_(targetId),JSON.stringify(request),300);
+}
