@@ -57,3 +57,7 @@ function memberAnywherePutSwapRequest_(targetId,request){
 function memberAnywhereReadSwapRaw_(memberId){
   return CacheService.getDocumentCache().get(memberAnywhereSwapCacheKey_(memberId));
 }
+
+function memberAnywhereClearSwapRequest_(memberId){
+  CacheService.getDocumentCache().remove(memberAnywhereSwapCacheKey_(memberId));
+}
