@@ -36,3 +36,7 @@ function memberAnywhereSwapSnapshot_(fromMemberId,toMemberId){
     to:memberAnywhereSnapshot_(toMemberId)
   };
 }
+
+function memberAnywhereSwapCacheKey_(memberId){
+  return 'ANYWHERE_SWAP_'+String(memberId||'');
+}
