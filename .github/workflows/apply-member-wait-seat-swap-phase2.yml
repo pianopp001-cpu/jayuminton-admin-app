@@ -1,10 +1,11 @@
 name: Apply member wait-seat swap phase 2
-on:
-  workflow_dispatch:
+'on':
+  workflow_dispatch: {}
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
-      - '.github/workflows/apply-member-wait-seat-swap-phase2.yml'
+      - .github/workflows/apply-member-wait-seat-swap-phase2.yml
 permissions:
   contents: write
 concurrency:
@@ -30,7 +31,9 @@ jobs:
           c=cp.read_text(encoding='utf-8')
 
           if 'function memberRequestWaitSwap(' not in s:
-              anchor="async function memberLeaveWaitGroup(){\n  const a=memberWaitSeatSessionArgs(); if(!a||ACTION_IN_FLIGHT)return;\n  try{const state=await server('memberLeaveWaitGroup',[a.token,String(a.member.id)]);clearMemberWaitSeatPick();renderState(state);}\n  catch(e){clearMemberWaitSeatPick();alert(e.message||e);}\n}\n"
+              anchor="async function memberLeaveWaitGroup(){\n  const a=memberWaitSeatSessionArgs(); if(!a||ACTION_IN_FLIGHT)return;\n  try{const state=await server('memberLeaveWaitGroup',[a.token,String(a.member.id),Number(groupIndex)]);clearMemberWaitSeatPick();renderState(state);}\n  catch(e){clearMemberWaitSeatPick();alert(e.message||e);}\n}\n"
+              if anchor not in s:
+                  anchor="async function memberLeaveWaitGroup(){\n  const a=memberWaitSeatSessionArgs(); if(!a||ACTION_IN_FLIGHT)return;\n  try{const state=await server('memberLeaveWaitGroup',[a.token,String(a.member.id)]);clearMemberWaitSeatPick();renderState(state);}\n  catch(e){clearMemberWaitSeatPick();alert(e.message||e);}\n}\n"
               if anchor not in s: raise SystemExit('unsafe: member leave client anchor missing')
               add=r'''async function memberRequestWaitSwap(targetMemberId){
   const a=memberWaitSeatSessionArgs(); if(!a||ACTION_IN_FLIGHT)return;
@@ -72,8 +75,11 @@ setInterval(checkMemberWaitSwapRequest,5000);
 '''
               s=s.replace(anchor,anchor+add,1)
 
-              old="""    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}\n    MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};"""
-              new="""    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}\n    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='other'){const target=MEMBER_WAIT_SEAT_PICK.memberId;clearMemberWaitSeatPick();memberRequestWaitSwap(target);return;}\n    MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};"""
+              old="""    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}
+    MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};"""
+              new="""    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}
+    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='other'){const target=MEMBER_WAIT_SEAT_PICK.memberId;clearMemberWaitSeatPick();memberRequestWaitSwap(target);return;}
+    MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};"""
               if old not in s: raise SystemExit('unsafe: self tap anchor missing')
               s=s.replace(old,new,1)
 
