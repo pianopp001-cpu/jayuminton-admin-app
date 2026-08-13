@@ -1,9 +1,11 @@
 name: Apply member wait-seat move phase 1
-on:
+'on':
   push:
-    branches: [main]
-    paths: ['.github/workflows/apply-member-wait-seat-move-phase1.yml']
-  workflow_dispatch:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-member-wait-seat-move-phase1.yml
+  workflow_dispatch: {}
 permissions:
   contents: write
 jobs:
@@ -11,7 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: {ref: main, fetch-depth: 0}
+        with:
+          ref: main
+          fetch-depth: 0
       - name: Patch source safely
         shell: python
         run: |
@@ -138,4 +142,4 @@ function memberLeaveWaitGroup(sessionToken,memberId){
           git add source-snapshot/current-main/Script.html source-snapshot/current-main/Code.js
           git commit -m 'feat: add safe member wait-seat move and leave'
           git push origin HEAD:main
-# trigger: 2026-08-13 phase1 retry-2
+# trigger: 2026-08-13 phase1 retry-3
