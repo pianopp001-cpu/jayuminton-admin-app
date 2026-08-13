@@ -1,0 +1,81 @@
+name: Deploy guarded member seat final clean
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-member-seat-final-clean
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-seat-final-clean
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+
+      - name: Pull live and replace only approved three files
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main-live"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          mkdir -p "$RUNNER_TEMP/live-before"
+          cp Admin.html Style.html Code.js Index.html Script.html check.js "$RUNNER_TEMP/live-before/"
+          cp "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js" Code.js
+          cp "$GITHUB_WORKSPACE/source-snapshot/current-main/Index.html" Index.html
+          cp "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html" Script.html
+          cmp Admin.html "$RUNNER_TEMP/live-before/Admin.html"
+          cmp Style.html "$RUNNER_TEMP/live-before/Style.html"
+          cmp check.js "$RUNNER_TEMP/live-before/check.js"
+          grep -F '이름 입력 또는 내 카드 두 번 터치로 자신을 설정해주세요.' Index.html >/dev/null
+          grep -F '빈자리 두 번 터치로 자리잡기 · 내 자리와 상대 자리를 차례로 터치하면 교환요청' Index.html >/dev/null
+          grep -F 'requestMemberWaitSeatSwap' Code.js >/dev/null
+          grep -F 'respondMemberWaitSeatSwap' Code.js >/dev/null
+          grep -F 'requestMemberWaitSeatSwap' Script.html >/dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('Script.html').read_text(encoding='utf-8')
+          a=s.find('<script>'); b=s.rfind('</script>')
+          if a < 0 or b <= a: raise SystemExit('Script wrapper missing')
+          Path('verify.js').write_text(s[a+8:b], encoding='utf-8')
+          PY
+          node --check verify.js
+          rm verify.js
+
+      - name: Push only after all guards pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/main-live"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member seat move and approved swap $GITHUB_RUN_ID"
