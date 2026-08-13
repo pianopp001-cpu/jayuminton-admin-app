@@ -91,3 +91,7 @@ function memberAnywhereStatusForLocation_(location){
 function memberAnywhereApplyStatus_(member,location){
   member.status=memberAnywhereStatusForLocation_(location);
 }
+
+function memberAnywhereMemberById_(members,memberId){
+  return members.find(function(member){return String(member.id)===String(memberId);})||null;
+}
