@@ -86,3 +86,13 @@ function memberAnywhereSnapshotStillValid_(snapshot){
   return memberAnywhereSnapshot_(snapshot.from.memberId).locationKey===snapshot.from.locationKey&&
     memberAnywhereSnapshot_(snapshot.to.memberId).locationKey===snapshot.to.locationKey;
 }
+
+function memberAnywhereReplaceAtLocation_(location,memberId,courts,waitGroups){
+  if(location.type==='court'){
+    courts[String(location.courtNo)][Number(location.position)]=memberId;
+    return;
+  }
+  if(location.type==='wait'){
+    waitGroups[Number(location.group)][Number(location.position)]=memberId;
+  }
+}
