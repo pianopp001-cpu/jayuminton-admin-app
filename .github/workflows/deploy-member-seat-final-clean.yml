@@ -60,8 +60,8 @@ jobs:
           check_same Admin.html "$RUNNER_TEMP/live-before/Admin.html" Admin.html || FAIL=1
           check_same Style.html "$RUNNER_TEMP/live-before/Style.html" Style.html || FAIL=1
           check_same check.js "$RUNNER_TEMP/live-before/check.js" check.js || FAIL=1
-          check_text '이름 입력 또는 내 카드 두 번 터치로 자신을 설정해주세요.' Index.html 'identity help' || FAIL=1
-          check_text '빈자리 두 번 터치로 자리잡기 · 내 자리와 상대 자리를 차례로 터치하면 교환요청' Index.html 'seat help' || FAIL=1
+          check_text '대기자에서 내 카드를 한 번 터치하면 바로 본인 설정할 수 있어요.' Index.html 'identity help' || FAIL=1
+          check_text '빈자리 선택 → 자리잡기 · 내 자리 선택 → 바꿀 사람 선택' Index.html 'seat help' || FAIL=1
           check_text 'memberRequestWaitSwap' Code.js 'server request swap' || FAIL=1
           check_text 'memberGetWaitSwapRequest' Code.js 'server get swap request' || FAIL=1
           check_text 'memberRespondWaitSwap' Code.js 'server respond swap' || FAIL=1
