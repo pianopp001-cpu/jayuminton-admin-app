@@ -4105,11 +4105,32 @@ async function memberRequestWaitSwap(targetMemberId){
 function handleMemberWaitOtherTap(groupIndex,targetMemberId,event){
   if(IS_ADMIN)return;
   if(event){event.preventDefault();event.stopPropagation();}
+  const target=(STATE.members||[]).find(function(item){return item&&String(item.id)===String(targetMemberId);});
+  if(!target)return;
+  const selected=currentStoredWebPushMember();
+  if(!selected||!selected.id){
+    if(confirm(String(target.name||'선택한 회원')+'님이 본인인가요?')){
+      selectMemberSelf(target.id);
+      showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');
+    }
+    return;
+  }
   const a=memberWaitSeatSessionArgs(); if(!a)return;
   if(String(targetMemberId)===String(a.member.id))return;
-  if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){clearMemberWaitSeatPick();memberRequestWaitSwap(targetMemberId);return;}
+  if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){
+    MEMBER_WAIT_SEAT_PICK={type:'other',groupIndex:Number(groupIndex),memberId:String(targetMemberId),fromSelf:true};
+    renderWaitGroups();
+    setTimeout(function(){
+      const ok=confirm(String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?');
+      if(ok){memberRequestWaitSwap(targetMemberId);return;}
+      MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};
+      renderWaitGroups();
+    },0);
+    return;
+  }
   MEMBER_WAIT_SEAT_PICK={type:'other',groupIndex:Number(groupIndex),memberId:String(targetMemberId)};
-  showMemberSettingMessage('내 자리를 터치하면 교환 요청을 보냅니다.');
+  renderWaitGroups();
+  showMemberSettingMessage('내 자리를 선택하면 '+String(target.name||'상대')+'님과 자리 바꾸기를 요청할 수 있어요.');
 }
 let MEMBER_WAIT_SWAP_CHECKING=false;
 let MEMBER_WAIT_SWAP_SHOWN='';
@@ -4131,15 +4152,22 @@ function handleMemberWaitSelfTap(groupIndex,memberId,event){
   if(IS_ADMIN||String(memberId)!==storedSelfMemberId())return;
   if(event){event.preventDefault();event.stopPropagation();}
   const now=Date.now(),dbl=MEMBER_WAIT_SELF_TAP.memberId===String(memberId)&&now-MEMBER_WAIT_SELF_TAP.tappedAt<=420;
-  if(MEMBER_WAIT_SELF_TAP.timer)clearTimeout(MEMBER_WAIT_SELF_TAP.timer);
   MEMBER_WAIT_SELF_TAP={memberId:String(memberId),tappedAt:now,timer:null};
   if(dbl){MEMBER_WAIT_SELF_TAP={memberId:'',tappedAt:0,timer:null};memberLeaveWaitGroup();return;}
-  MEMBER_WAIT_SELF_TAP.timer=setTimeout(function(){
-    MEMBER_WAIT_SELF_TAP.timer=null;
-    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}
-    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='other'){const target=MEMBER_WAIT_SEAT_PICK.memberId;clearMemberWaitSeatPick();memberRequestWaitSwap(target);return;}
+  if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}
+  if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='other'){
+    const targetId=MEMBER_WAIT_SEAT_PICK.memberId;
+    const target=(STATE.members||[]).find(function(item){return item&&String(item.id)===String(targetId);});
     MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};
-  },430);
+    renderWaitGroups();
+    setTimeout(function(){
+      if(confirm(String(target&&target.name||'선택한 회원')+'님과 자리를 바꿀까요?'))memberRequestWaitSwap(targetId);
+    },0);
+    return;
+  }
+  MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};
+  renderWaitGroups();
+  showMemberSettingMessage('바꾸고 싶은 사람을 선택하세요.');
 }
 function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){
   if(IS_ADMIN)return; if(event){event.preventDefault();event.stopPropagation();}
@@ -4188,9 +4216,9 @@ function renderWaitGroups() {
 
               if (!IS_ADMIN) {
                 if (isSelfMember(member)) {
-                  return '<div class="person member-info-card ' + genderClass(member) + ' is-self-member" data-member-id="' + member.id + '" onclick="handleMemberWaitSelfTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="member-self-star" aria-label="내 이름">나</span><span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
+                  return '<div class="person member-info-card ' + genderClass(member) + ' is-self-member' + (MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'?' selected':'') + '" data-member-id="' + member.id + '" onclick="handleMemberWaitSelfTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="member-self-star" aria-label="내 이름">나</span><span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
                 }
-                return '<div class="person member-info-card ' + genderClass(member) + '" data-member-id="' + member.id + '" onclick="handleMemberWaitOtherTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
+                return '<div class="person member-info-card ' + genderClass(member) + (MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='other'&&String(MEMBER_WAIT_SEAT_PICK.memberId)===String(member.id)?' selected':'') + '" data-member-id="' + member.id + '" onclick="handleMemberWaitOtherTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
               }
 
               return (
