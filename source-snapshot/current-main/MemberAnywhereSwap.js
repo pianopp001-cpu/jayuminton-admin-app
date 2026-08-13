@@ -67,3 +67,10 @@ function memberAnywhereReadSwapRequest_(memberId){
   if(!raw)return null;
   try{return JSON.parse(raw);}catch(error){memberAnywhereClearSwapRequest_(memberId);return null;}
 }
+
+function memberGetAnywhereSwapRequest(sessionToken,memberId){
+  memberId=memberSessionAuth_(sessionToken,memberId);
+  var request=memberAnywhereReadSwapRequest_(memberId);
+  if(!request||String(request.targetId)!==memberId)return null;
+  return request;
+}
