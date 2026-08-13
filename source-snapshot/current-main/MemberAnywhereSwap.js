@@ -105,3 +105,9 @@ function memberAnywhereSwapPlacedMembers_(firstId,secondId,firstLocation,secondL
   writeCourts_(courts,readCourtStartedAt_());
   writeWaitGroups_(waitGroups);
 }
+
+function memberAnywhereStatusForLocation_(location){
+  if(location.type==='court')return 'playing';
+  if(location.type==='wait')return 'waiting';
+  return String(location.status||'active');
+}
