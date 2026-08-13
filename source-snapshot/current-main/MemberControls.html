@@ -30,6 +30,15 @@
     var memberId=String(card&&card.getAttribute('data-member-id')||'');
     return (STATE.members||[]).find(function(member){return member&&String(member.id)===memberId;})||null;
   }
+  function handleFirstMemberCardTap(event){
+    if(storedSelfMemberId())return;
+    var card=event.target&&event.target.closest?event.target.closest('[data-member-id]'):null;
+    if(!card)return;
+    var member=memberForCard(card); if(!member)return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    showSelfConfirm(member);
+  }
+  document.addEventListener('click',handleFirstMemberCardTap,true);
   window.memberAnywhereMemberForCard=memberForCard;
   window.memberAnywhereSelection={clear:clearMemberCardSelection,select:selectMemberCard,toggle:toggleMemberCard,current:function(){return selectedMemberId;}};
   window.memberAnywhereModal={show:showMemberModal,close:closeMemberModal,confirmSelf:showSelfConfirm};
