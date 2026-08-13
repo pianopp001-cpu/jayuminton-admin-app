@@ -1649,6 +1649,35 @@ function resetAllOperationDataUnlocked_(pin) {
 }
 
 
+function memberSessionAuth_(sessionToken,memberId){
+  const session=resumeMemberSession(sessionToken);
+  if(!session||!session.ok)throw new Error('회원 인증이 만료되었습니다. 다시 접속해 주세요.');
+  memberId=String(memberId==null?'':memberId).trim();
+  if(!memberId)throw new Error('본인 정보가 없습니다.');
+  if(!readMembers_().some(function(m){return String(m.id)===memberId;}))throw new Error('회원을 찾을 수 없습니다.');
+  return memberId;
+}
+function memberMoveToWaitGroup(sessionToken,memberId,groupIndex){
+  return withDocumentLock_('회원 대기자리 이동',function(){
+    memberId=memberSessionAuth_(sessionToken,memberId); groupIndex=Number(groupIndex);
+    if(groupIndex<0||groupIndex>=WAIT_GROUP_COUNT)throw new Error('잘못된 대기자리입니다.');
+    const courts=readCourts_(),waitGroups=readWaitGroups_();
+    if(Object.keys(courts).some(function(k){return (courts[k]||[]).indexOf(memberId)>=0;}))throw new Error('경기 중에는 대기자리를 직접 변경할 수 없습니다.');
+    const target=(waitGroups[groupIndex]||[]).slice(),already=target.indexOf(memberId)>=0;
+    if(!already&&target.length>=GROUP_SIZE)throw new Error('방금 다른 회원이 선택한 자리예요.');
+    for(let i=0;i<waitGroups.length;i+=1)waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});
+    if(!already)waitGroups[groupIndex].push(memberId);
+    writeWaitGroups_(waitGroups);updateMemberStatuses_([memberId],'waiting');touch_();return getPublicState();
+  });
+}
+function memberLeaveWaitGroup(sessionToken,memberId){
+  return withDocumentLock_('회원 대기열 나가기',function(){
+    memberId=memberSessionAuth_(sessionToken,memberId);const waitGroups=readWaitGroups_();let found=false;
+    for(let i=0;i<waitGroups.length;i+=1){const before=waitGroups[i].length;waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});if(waitGroups[i].length!==before)found=true;}
+    if(!found)throw new Error('현재 대기열에 있는 본인 자리만 해제할 수 있습니다.');
+    writeWaitGroups_(waitGroups);updateMemberStatuses_([memberId],'active');touch_();return getPublicState();
+  });
+}
 function changeMemberPassword(pin, newPassword) {
   return withDocumentLock_(
     '멤버 비밀번호 변경',

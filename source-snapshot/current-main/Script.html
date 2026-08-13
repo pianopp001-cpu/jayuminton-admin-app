@@ -298,6 +298,9 @@ let LAST_EMPTY_SLOT_TAP = {
   key: '',
   tappedAt: 0
 };
+let MEMBER_WAIT_SEAT_PICK=null;
+let MEMBER_WAIT_EMPTY_TAP={key:'',tappedAt:0,timer:null};
+let MEMBER_WAIT_SELF_TAP={memberId:'',tappedAt:0,timer:null};
 let QUICK_FILTER = 'all';
 let AUTO_ASSIGN_TARGET = null;
 let MEMBER_ACTION_IDS = [];
@@ -879,6 +882,7 @@ function server(name, args) {
     'undoLastAction','decreaseSelectedGameCounts',
     'resetSelectedGameCounts','resetAllOperationData',
     'adjustCourtMembers','adjustWaitGroupMembers',
+    'memberMoveToWaitGroup','memberLeaveWaitGroup',
     'createManualBackup','restoreManualBackup','changeMemberPassword'
   ];
   const isMutation = mutationNames.indexOf(name) >= 0;
@@ -4074,6 +4078,53 @@ function renderCourts() {
   applyCourtOrientation();
 }
 
+function clearMemberWaitSeatPick(){MEMBER_WAIT_SEAT_PICK=null;}
+function memberWaitSeatSessionArgs(){
+  const m=currentStoredWebPushMember();
+  if(!m||!m.id){showMemberSettingMessage('먼저 내 이름을 선택하세요.',true);return null;}
+  const t=currentMemberSessionToken();
+  if(!t){showMemberSettingMessage('회원 인증을 다시 해주세요.',true);return null;}
+  return {member:m,token:t};
+}
+async function memberMoveToWaitGroup(groupIndex){
+  const a=memberWaitSeatSessionArgs(); if(!a||ACTION_IN_FLIGHT)return;
+  try{const state=await server('memberMoveToWaitGroup',[a.token,String(a.member.id),Number(groupIndex)]);clearMemberWaitSeatPick();renderState(state);}
+  catch(e){clearMemberWaitSeatPick();alert(e.message||e);}
+}
+async function memberLeaveWaitGroup(){
+  const a=memberWaitSeatSessionArgs(); if(!a||ACTION_IN_FLIGHT)return;
+  try{const state=await server('memberLeaveWaitGroup',[a.token,String(a.member.id)]);clearMemberWaitSeatPick();renderState(state);}
+  catch(e){clearMemberWaitSeatPick();alert(e.message||e);}
+}
+function handleMemberWaitSelfTap(groupIndex,memberId,event){
+  if(IS_ADMIN||String(memberId)!==storedSelfMemberId())return;
+  if(event){event.preventDefault();event.stopPropagation();}
+  const now=Date.now(),dbl=MEMBER_WAIT_SELF_TAP.memberId===String(memberId)&&now-MEMBER_WAIT_SELF_TAP.tappedAt<=420;
+  if(MEMBER_WAIT_SELF_TAP.timer)clearTimeout(MEMBER_WAIT_SELF_TAP.timer);
+  MEMBER_WAIT_SELF_TAP={memberId:String(memberId),tappedAt:now,timer:null};
+  if(dbl){MEMBER_WAIT_SELF_TAP={memberId:'',tappedAt:0,timer:null};memberLeaveWaitGroup();return;}
+  MEMBER_WAIT_SELF_TAP.timer=setTimeout(function(){
+    MEMBER_WAIT_SELF_TAP.timer=null;
+    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}
+    MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};
+  },430);
+}
+function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){
+  if(IS_ADMIN)return; if(event){event.preventDefault();event.stopPropagation();}
+  if(!memberWaitSeatSessionArgs())return;
+  const key=String(groupIndex)+':'+String(slotIndex),now=Date.now(),dbl=MEMBER_WAIT_EMPTY_TAP.key===key&&now-MEMBER_WAIT_EMPTY_TAP.tappedAt<=420;
+  if(MEMBER_WAIT_EMPTY_TAP.timer)clearTimeout(MEMBER_WAIT_EMPTY_TAP.timer);
+  MEMBER_WAIT_EMPTY_TAP={key:key,tappedAt:now,timer:null};
+  if(dbl){MEMBER_WAIT_EMPTY_TAP={key:'',tappedAt:0,timer:null};memberMoveToWaitGroup(groupIndex);return;}
+  MEMBER_WAIT_EMPTY_TAP.timer=setTimeout(function(){
+    MEMBER_WAIT_EMPTY_TAP.timer=null;
+    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){clearMemberWaitSeatPick();memberMoveToWaitGroup(groupIndex);return;}
+    MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};
+  },430);
+}
+function memberWaitEmptySlotCard(groupIndex,slotIndex){
+  return '<div class=\"person empty\" onclick=\"handleMemberWaitEmptyTap('+groupIndex+','+slotIndex+',event)\" title=\"두 번 터치하면 이 대기자리에 들어갑니다\"><span class=\"empty-slot-label\">비어 있음</span></div>';
+}
 function renderWaitGroups() {
   const html =
     STATE.waitGroups
@@ -4097,18 +4148,17 @@ function renderWaitGroups() {
                 if (IS_ADMIN) {
                   return emptySlotCard('wait', groupIndex, slotIndex);
                 }
-                return memberCard(null, false, false);
+                return memberWaitEmptySlotCard(groupIndex, slotIndex);
               }
 
               const member =
                 memberById(id);
 
               if (!IS_ADMIN) {
-                return memberCard(
-                  member,
-                  false,
-                  false
-                );
+                if (isSelfMember(member)) {
+                  return '<div class="person member-info-card ' + genderClass(member) + ' is-self-member" data-member-id="' + member.id + '" onclick="handleMemberWaitSelfTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="member-self-star" aria-label="내 이름">나</span><span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
+                }
+                return memberCard(member, false, false);
               }
 
               return (
