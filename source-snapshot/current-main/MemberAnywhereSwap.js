@@ -74,3 +74,9 @@ function memberGetAnywhereSwapRequest(sessionToken,memberId){
   if(!request||String(request.targetId)!==memberId)return null;
   return request;
 }
+
+function memberRejectAnywhereSwap(sessionToken,memberId){
+  memberId=memberSessionAuth_(sessionToken,memberId);
+  memberAnywhereClearSwapRequest_(memberId);
+  return {ok:true,message:'자리 교환 요청을 거절했어요.'};
+}
