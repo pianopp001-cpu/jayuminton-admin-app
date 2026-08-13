@@ -29,3 +29,10 @@ function memberAnywhereSnapshot_(memberId){
   var location=memberAnywhereLocation_(memberId);
   return {memberId:String(memberId||''),locationKey:memberAnywhereLocationKey_(location)};
 }
+
+function memberAnywhereSwapSnapshot_(fromMemberId,toMemberId){
+  return {
+    from:memberAnywhereSnapshot_(fromMemberId),
+    to:memberAnywhereSnapshot_(toMemberId)
+  };
+}
