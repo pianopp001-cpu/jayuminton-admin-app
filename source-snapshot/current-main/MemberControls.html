@@ -15,14 +15,19 @@
     document.body.appendChild(root); return root;
   }
   function closeMemberModal(){ ensureMemberModal().classList.add('hidden'); }
-  function showMemberModal(title,body){
+  function showMemberModal(title,body){ var root=ensureMemberModal(); document.getElementById('memberAnywhereTitle').textContent=String(title||''); document.getElementById('memberAnywhereBody').textContent=String(body||''); root.classList.remove('hidden'); }
+  function showSelfConfirm(member){
     var root=ensureMemberModal();
-    document.getElementById('memberAnywhereTitle').textContent=String(title||'');
-    document.getElementById('memberAnywhereBody').textContent=String(body||'');
-    root.classList.remove('hidden');
+    document.getElementById('memberAnywhereTitle').textContent='내 이름 확인';
+    document.getElementById('memberAnywhereBody').textContent=String(member.name||'')+'님이 본인인가요?';
+    var actions=document.getElementById('memberAnywhereActions'); actions.innerHTML='';
+    var cancel=document.createElement('button'); cancel.type='button'; cancel.textContent='취소'; cancel.onclick=closeMemberModal;
+    var ok=document.createElement('button'); ok.type='button'; ok.className='primary'; ok.textContent='본인 맞아요';
+    ok.onclick=function(){ closeMemberModal(); selectMemberSelf(member.id); clearMemberCardSelection(); };
+    actions.appendChild(cancel); actions.appendChild(ok); root.classList.remove('hidden');
   }
   window.memberAnywhereSelection={clear:clearMemberCardSelection,select:selectMemberCard,toggle:toggleMemberCard,current:function(){return selectedMemberId;}};
-  window.memberAnywhereModal={show:showMemberModal,close:closeMemberModal};
-  var style=document.createElement('style'); style.textContent='.member-anywhere-selected{outline:3px solid currentColor!important;outline-offset:-3px!important}.member-anywhere-modal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}.member-anywhere-modal.hidden{display:none!important}.member-anywhere-dialog{width:min(92vw,380px);background:#fff;border-radius:18px;padding:20px}'; document.head.appendChild(style);
+  window.memberAnywhereModal={show:showMemberModal,close:closeMemberModal,confirmSelf:showSelfConfirm};
+  var style=document.createElement('style'); style.textContent='.member-anywhere-selected{outline:3px solid currentColor!important;outline-offset:-3px!important}.member-anywhere-modal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}.member-anywhere-modal.hidden{display:none!important}.member-anywhere-dialog{width:min(92vw,380px);background:#fff;border-radius:18px;padding:20px}#memberAnywhereTitle{font-size:20px;font-weight:800;margin-bottom:8px}#memberAnywhereBody{margin-bottom:16px}#memberAnywhereActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}#memberAnywhereActions button{min-height:44px}'; document.head.appendChild(style);
 })();
 </script>
