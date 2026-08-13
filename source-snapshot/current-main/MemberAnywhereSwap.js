@@ -16,3 +16,11 @@ function memberAnywhereLocation_(memberId){
   var member=readMembers_().find(function(item){return item&&String(item.id)===memberId;});
   return member?{type:'status',status:String(member.status||'active')}:null;
 }
+
+function memberAnywhereLocationKey_(location){
+  if(!location)return '';
+  if(location.type==='court')return 'court:'+location.courtNo+':'+location.position;
+  if(location.type==='wait')return 'wait:'+location.group+':'+location.position;
+  if(location.type==='status')return 'status:'+location.status;
+  return '';
+}
