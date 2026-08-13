@@ -5,34 +5,24 @@
   if (window.__JAYUMINTON_MEMBER_ANYWHERE_V3__) return;
   window.__JAYUMINTON_MEMBER_ANYWHERE_V3__ = true;
   var selectedMemberId = '';
-  function clearMemberCardSelection(){
-    selectedMemberId = '';
-    document.querySelectorAll('.member-anywhere-selected').forEach(function(el){ el.classList.remove('member-anywhere-selected'); });
-  }
-  function selectMemberCard(memberId){
-    clearMemberCardSelection();
-    selectedMemberId = String(memberId || '');
-    document.querySelectorAll('[data-member-id="' + selectedMemberId + '"]').forEach(function(el){ el.classList.add('member-anywhere-selected'); });
-  }
-  function toggleMemberCard(memberId){
-    memberId = String(memberId || '');
-    if (selectedMemberId === memberId) { clearMemberCardSelection(); return false; }
-    selectMemberCard(memberId); return true;
-  }
+  function clearMemberCardSelection(){ selectedMemberId=''; document.querySelectorAll('.member-anywhere-selected').forEach(function(el){el.classList.remove('member-anywhere-selected');}); }
+  function selectMemberCard(memberId){ clearMemberCardSelection(); selectedMemberId=String(memberId||''); document.querySelectorAll('[data-member-id="'+selectedMemberId+'"]').forEach(function(el){el.classList.add('member-anywhere-selected');}); }
+  function toggleMemberCard(memberId){ memberId=String(memberId||''); if(selectedMemberId===memberId){clearMemberCardSelection();return false;} selectMemberCard(memberId);return true; }
   function ensureMemberModal(){
-    var root = document.getElementById('memberAnywhereModal');
-    if (root) return root;
-    root = document.createElement('div');
-    root.id = 'memberAnywhereModal';
-    root.className = 'member-anywhere-modal hidden';
-    root.innerHTML = '<div class="member-anywhere-dialog"><div id="memberAnywhereTitle"></div><div id="memberAnywhereBody"></div><div id="memberAnywhereActions"></div></div>';
-    document.body.appendChild(root);
-    return root;
+    var root=document.getElementById('memberAnywhereModal'); if(root)return root;
+    root=document.createElement('div'); root.id='memberAnywhereModal'; root.className='member-anywhere-modal hidden';
+    root.innerHTML='<div class="member-anywhere-dialog"><div id="memberAnywhereTitle"></div><div id="memberAnywhereBody"></div><div id="memberAnywhereActions"></div></div>';
+    document.body.appendChild(root); return root;
   }
-  window.memberAnywhereSelection = {clear:clearMemberCardSelection,select:selectMemberCard,toggle:toggleMemberCard,current:function(){return selectedMemberId;}};
-  window.memberAnywhereModalRoot = ensureMemberModal;
-  var style = document.createElement('style');
-  style.textContent = '.member-anywhere-selected{outline:3px solid currentColor!important;outline-offset:-3px!important}.member-anywhere-modal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}.member-anywhere-modal.hidden{display:none!important}.member-anywhere-dialog{width:min(92vw,380px);background:#fff;border-radius:18px;padding:20px}';
-  document.head.appendChild(style);
+  function closeMemberModal(){ ensureMemberModal().classList.add('hidden'); }
+  function showMemberModal(title,body){
+    var root=ensureMemberModal();
+    document.getElementById('memberAnywhereTitle').textContent=String(title||'');
+    document.getElementById('memberAnywhereBody').textContent=String(body||'');
+    root.classList.remove('hidden');
+  }
+  window.memberAnywhereSelection={clear:clearMemberCardSelection,select:selectMemberCard,toggle:toggleMemberCard,current:function(){return selectedMemberId;}};
+  window.memberAnywhereModal={show:showMemberModal,close:closeMemberModal};
+  var style=document.createElement('style'); style.textContent='.member-anywhere-selected{outline:3px solid currentColor!important;outline-offset:-3px!important}.member-anywhere-modal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}.member-anywhere-modal.hidden{display:none!important}.member-anywhere-dialog{width:min(92vw,380px);background:#fff;border-radius:18px;padding:20px}'; document.head.appendChild(style);
 })();
 </script>
