@@ -96,3 +96,12 @@ function memberAnywhereReplaceAtLocation_(location,memberId,courts,waitGroups){
     waitGroups[Number(location.group)][Number(location.position)]=memberId;
   }
 }
+
+function memberAnywhereSwapPlacedMembers_(firstId,secondId,firstLocation,secondLocation){
+  var courts=readCourts_();
+  var waitGroups=readWaitGroups_();
+  memberAnywhereReplaceAtLocation_(firstLocation,secondId,courts,waitGroups);
+  memberAnywhereReplaceAtLocation_(secondLocation,firstId,courts,waitGroups);
+  writeCourts_(courts,readCourtStartedAt_());
+  writeWaitGroups_(waitGroups);
+}
