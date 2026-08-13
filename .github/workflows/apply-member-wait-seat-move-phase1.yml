@@ -137,3 +137,4 @@ jobs:
           git add source-snapshot/current-main/Script.html source-snapshot/current-main/Code.js
           git commit -m 'feat: add safe member wait-seat move and leave'
           git push origin HEAD:main
+# trigger: 2026-08-13 phase1
