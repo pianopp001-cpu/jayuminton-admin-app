@@ -4,46 +4,41 @@
   if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN) return;
   if (window.__JAYUMINTON_MEMBER_ANYWHERE_V3__) return;
   window.__JAYUMINTON_MEMBER_ANYWHERE_V3__ = true;
-  var selectedMemberId = '';
-  function clearMemberCardSelection(){ selectedMemberId=''; document.querySelectorAll('.member-anywhere-selected').forEach(function(el){el.classList.remove('member-anywhere-selected');}); }
-  function selectMemberCard(memberId){ clearMemberCardSelection(); selectedMemberId=String(memberId||''); document.querySelectorAll('[data-member-id="'+selectedMemberId+'"]').forEach(function(el){el.classList.add('member-anywhere-selected');}); }
-  function toggleMemberCard(memberId){ memberId=String(memberId||''); if(selectedMemberId===memberId){clearMemberCardSelection();return false;} selectMemberCard(memberId);return true; }
+  var selectedMemberIds = [];
+  function paintMemberCardSelection(){
+    document.querySelectorAll('.member-anywhere-selected').forEach(function(el){el.classList.remove('member-anywhere-selected');});
+    selectedMemberIds.forEach(function(memberId){document.querySelectorAll('[data-member-id="'+memberId+'"]').forEach(function(el){el.classList.add('member-anywhere-selected');});});
+  }
+  function clearMemberCardSelection(){selectedMemberIds=[];paintMemberCardSelection();}
+  function toggleMemberCard(memberId){
+    memberId=String(memberId||'');
+    var index=selectedMemberIds.indexOf(memberId);
+    if(index>=0){selectedMemberIds.splice(index,1);paintMemberCardSelection();return false;}
+    if(selectedMemberIds.length>=2)selectedMemberIds.shift();
+    selectedMemberIds.push(memberId);paintMemberCardSelection();return true;
+  }
   function ensureMemberModal(){
     var root=document.getElementById('memberAnywhereModal'); if(root)return root;
     root=document.createElement('div'); root.id='memberAnywhereModal'; root.className='member-anywhere-modal hidden';
     root.innerHTML='<div class="member-anywhere-dialog"><div id="memberAnywhereTitle"></div><div id="memberAnywhereBody"></div><div id="memberAnywhereActions"></div></div>';
     document.body.appendChild(root); return root;
   }
-  function closeMemberModal(){ ensureMemberModal().classList.add('hidden'); }
-  function showMemberModal(title,body){ var root=ensureMemberModal(); document.getElementById('memberAnywhereTitle').textContent=String(title||''); document.getElementById('memberAnywhereBody').textContent=String(body||''); root.classList.remove('hidden'); }
+  function closeMemberModal(){ensureMemberModal().classList.add('hidden');}
+  function showMemberModal(title,body){var root=ensureMemberModal();document.getElementById('memberAnywhereTitle').textContent=String(title||'');document.getElementById('memberAnywhereBody').textContent=String(body||'');root.classList.remove('hidden');}
   function showSelfConfirm(member){
-    var root=ensureMemberModal();
-    document.getElementById('memberAnywhereTitle').textContent='내 이름 확인';
-    document.getElementById('memberAnywhereBody').textContent=String(member.name||'')+'님이 본인인가요?';
-    var actions=document.getElementById('memberAnywhereActions'); actions.innerHTML='';
-    var cancel=document.createElement('button'); cancel.type='button'; cancel.textContent='취소'; cancel.onclick=closeMemberModal;
-    var ok=document.createElement('button'); ok.type='button'; ok.className='primary'; ok.textContent='본인 맞아요';
-    ok.onclick=function(){ closeMemberModal(); selectMemberSelf(member.id); clearMemberCardSelection(); };
-    actions.appendChild(cancel); actions.appendChild(ok); root.classList.remove('hidden');
+    var root=ensureMemberModal();document.getElementById('memberAnywhereTitle').textContent='내 이름 확인';document.getElementById('memberAnywhereBody').textContent=String(member.name||'')+'님이 본인인가요?';
+    var actions=document.getElementById('memberAnywhereActions');actions.innerHTML='';
+    var cancel=document.createElement('button');cancel.type='button';cancel.textContent='취소';cancel.onclick=closeMemberModal;
+    var ok=document.createElement('button');ok.type='button';ok.className='primary';ok.textContent='본인 맞아요';ok.onclick=function(){closeMemberModal();selectMemberSelf(member.id);clearMemberCardSelection();};
+    actions.appendChild(cancel);actions.appendChild(ok);root.classList.remove('hidden');
   }
-  function memberForCard(card){ var memberId=String(card&&card.getAttribute('data-member-id')||''); return (STATE.members||[]).find(function(member){return member&&String(member.id)===memberId;})||null; }
-  function handleFirstMemberCardTap(event){
-    if(storedSelfMemberId())return;
-    var card=event.target&&event.target.closest?event.target.closest('[data-member-id]'):null; if(!card)return;
-    var member=memberForCard(card); if(!member)return;
-    event.preventDefault(); event.stopImmediatePropagation(); showSelfConfirm(member);
-  }
-  function handleSelectedMemberCardTap(event){
-    if(!storedSelfMemberId())return;
-    var card=event.target&&event.target.closest?event.target.closest('[data-member-id]'):null; if(!card)return;
-    var member=memberForCard(card); if(!member)return;
-    event.preventDefault(); event.stopImmediatePropagation(); toggleMemberCard(member.id);
-  }
-  document.addEventListener('click',handleFirstMemberCardTap,true);
-  document.addEventListener('click',handleSelectedMemberCardTap,true);
+  function memberForCard(card){var memberId=String(card&&card.getAttribute('data-member-id')||'');return(STATE.members||[]).find(function(member){return member&&String(member.id)===memberId;})||null;}
+  function handleFirstMemberCardTap(event){if(storedSelfMemberId())return;var card=event.target&&event.target.closest?event.target.closest('[data-member-id]'):null;if(!card)return;var member=memberForCard(card);if(!member)return;event.preventDefault();event.stopImmediatePropagation();showSelfConfirm(member);}
+  function handleSelectedMemberCardTap(event){if(!storedSelfMemberId())return;var card=event.target&&event.target.closest?event.target.closest('[data-member-id]'):null;if(!card)return;var member=memberForCard(card);if(!member)return;event.preventDefault();event.stopImmediatePropagation();toggleMemberCard(member.id);}
+  document.addEventListener('click',handleFirstMemberCardTap,true);document.addEventListener('click',handleSelectedMemberCardTap,true);
   window.memberAnywhereMemberForCard=memberForCard;
-  window.memberAnywhereSelection={clear:clearMemberCardSelection,select:selectMemberCard,toggle:toggleMemberCard,current:function(){return selectedMemberId;}};
+  window.memberAnywhereSelection={clear:clearMemberCardSelection,toggle:toggleMemberCard,current:function(){return selectedMemberIds.slice();}};
   window.memberAnywhereModal={show:showMemberModal,close:closeMemberModal,confirmSelf:showSelfConfirm};
-  var style=document.createElement('style'); style.textContent='.member-anywhere-selected{outline:3px solid currentColor!important;outline-offset:-3px!important}.member-anywhere-modal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}.member-anywhere-modal.hidden{display:none!important}.member-anywhere-dialog{width:min(92vw,380px);background:#fff;border-radius:18px;padding:20px}#memberAnywhereTitle{font-size:20px;font-weight:800;margin-bottom:8px}#memberAnywhereBody{margin-bottom:16px}#memberAnywhereActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}#memberAnywhereActions button{min-height:44px}'; document.head.appendChild(style);
+  var style=document.createElement('style');style.textContent='.member-anywhere-selected{outline:3px solid currentColor!important;outline-offset:-3px!important}.member-anywhere-modal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}.member-anywhere-modal.hidden{display:none!important}.member-anywhere-dialog{width:min(92vw,380px);background:#fff;border-radius:18px;padding:20px}#memberAnywhereTitle{font-size:20px;font-weight:800;margin-bottom:8px}#memberAnywhereBody{margin-bottom:16px}#memberAnywhereActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}#memberAnywhereActions button{min-height:44px}';document.head.appendChild(style);
 })();
 </script>
