@@ -31,36 +31,18 @@ function memberAnywhereSnapshot_(memberId){
 }
 
 function memberAnywhereSwapSnapshot_(fromMemberId,toMemberId){
-  return {
-    from:memberAnywhereSnapshot_(fromMemberId),
-    to:memberAnywhereSnapshot_(toMemberId)
-  };
+  return {from:memberAnywhereSnapshot_(fromMemberId),to:memberAnywhereSnapshot_(toMemberId)};
 }
 
-function memberAnywhereSwapCacheKey_(memberId){
-  return 'ANYWHERE_SWAP_'+String(memberId||'');
-}
+function memberAnywhereSwapCacheKey_(memberId){return 'ANYWHERE_SWAP_'+String(memberId||'');}
 
 function memberAnywhereSwapRequest_(requesterId,targetId){
-  return {
-    requesterId:String(requesterId||''),
-    targetId:String(targetId||''),
-    snapshot:memberAnywhereSwapSnapshot_(requesterId,targetId),
-    createdAt:Date.now()
-  };
+  return {requesterId:String(requesterId||''),targetId:String(targetId||''),snapshot:memberAnywhereSwapSnapshot_(requesterId,targetId),createdAt:Date.now()};
 }
 
-function memberAnywherePutSwapRequest_(targetId,request){
-  CacheService.getDocumentCache().put(memberAnywhereSwapCacheKey_(targetId),JSON.stringify(request),300);
-}
-
-function memberAnywhereReadSwapRaw_(memberId){
-  return CacheService.getDocumentCache().get(memberAnywhereSwapCacheKey_(memberId));
-}
-
-function memberAnywhereClearSwapRequest_(memberId){
-  CacheService.getDocumentCache().remove(memberAnywhereSwapCacheKey_(memberId));
-}
+function memberAnywherePutSwapRequest_(targetId,request){CacheService.getDocumentCache().put(memberAnywhereSwapCacheKey_(targetId),JSON.stringify(request),300);}
+function memberAnywhereReadSwapRaw_(memberId){return CacheService.getDocumentCache().get(memberAnywhereSwapCacheKey_(memberId));}
+function memberAnywhereClearSwapRequest_(memberId){CacheService.getDocumentCache().remove(memberAnywhereSwapCacheKey_(memberId));}
 
 function memberAnywhereReadSwapRequest_(memberId){
   var raw=memberAnywhereReadSwapRaw_(memberId);
@@ -83,18 +65,12 @@ function memberRejectAnywhereSwap(sessionToken,memberId){
 
 function memberAnywhereSnapshotStillValid_(snapshot){
   if(!snapshot||!snapshot.from||!snapshot.to)return false;
-  return memberAnywhereSnapshot_(snapshot.from.memberId).locationKey===snapshot.from.locationKey&&
-    memberAnywhereSnapshot_(snapshot.to.memberId).locationKey===snapshot.to.locationKey;
+  return memberAnywhereSnapshot_(snapshot.from.memberId).locationKey===snapshot.from.locationKey&&memberAnywhereSnapshot_(snapshot.to.memberId).locationKey===snapshot.to.locationKey;
 }
 
 function memberAnywhereReplaceAtLocation_(location,memberId,courts,waitGroups){
-  if(location.type==='court'){
-    courts[String(location.courtNo)][Number(location.position)]=memberId;
-    return;
-  }
-  if(location.type==='wait'){
-    waitGroups[Number(location.group)][Number(location.position)]=memberId;
-  }
+  if(location.type==='court'){courts[String(location.courtNo)][Number(location.position)]=memberId;return;}
+  if(location.type==='wait')waitGroups[Number(location.group)][Number(location.position)]=memberId;
 }
 
 function memberAnywhereSwapPlacedMembers_(firstId,secondId,firstLocation,secondLocation){
@@ -110,4 +86,8 @@ function memberAnywhereStatusForLocation_(location){
   if(location.type==='court')return 'playing';
   if(location.type==='wait')return 'waiting';
   return String(location.status||'active');
+}
+
+function memberAnywhereApplyStatus_(member,location){
+  member.status=memberAnywhereStatusForLocation_(location);
 }
