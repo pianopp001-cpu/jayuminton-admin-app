@@ -17,6 +17,11 @@
     if(selectedMemberIds.length>=2)selectedMemberIds.shift();
     selectedMemberIds.push(memberId);paintMemberCardSelection();return true;
   }
+  function selectedPairHasSelf(){
+    if(selectedMemberIds.length!==2)return false;
+    var me=String(storedSelfMemberId()||'');
+    return !!me&&selectedMemberIds.indexOf(me)>=0;
+  }
   function ensureMemberModal(){
     var root=document.getElementById('memberAnywhereModal'); if(root)return root;
     root=document.createElement('div'); root.id='memberAnywhereModal'; root.className='member-anywhere-modal hidden';
@@ -37,6 +42,7 @@
   function handleSelectedMemberCardTap(event){if(!storedSelfMemberId())return;var card=event.target&&event.target.closest?event.target.closest('[data-member-id]'):null;if(!card)return;var member=memberForCard(card);if(!member)return;event.preventDefault();event.stopImmediatePropagation();toggleMemberCard(member.id);}
   document.addEventListener('click',handleFirstMemberCardTap,true);document.addEventListener('click',handleSelectedMemberCardTap,true);
   window.memberAnywhereMemberForCard=memberForCard;
+  window.memberAnywhereSelectedPairHasSelf=selectedPairHasSelf;
   window.memberAnywhereSelection={clear:clearMemberCardSelection,toggle:toggleMemberCard,current:function(){return selectedMemberIds.slice();}};
   window.memberAnywhereModal={show:showMemberModal,close:closeMemberModal,confirmSelf:showSelfConfirm};
   var style=document.createElement('style');style.textContent='.member-anywhere-selected{outline:3px solid currentColor!important;outline-offset:-3px!important}.member-anywhere-modal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}.member-anywhere-modal.hidden{display:none!important}.member-anywhere-dialog{width:min(92vw,380px);background:#fff;border-radius:18px;padding:20px}#memberAnywhereTitle{font-size:20px;font-weight:800;margin-bottom:8px}#memberAnywhereBody{margin-bottom:16px}#memberAnywhereActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}#memberAnywhereActions button{min-height:44px}';document.head.appendChild(style);
