@@ -9,17 +9,79 @@ name: Apply member wait-seat swap phase 2
 permissions:
   contents: write
 jobs:
-  verify-branch:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: phase4-exchange-patch
-      - name: Verify phase 3 base is intact
+          fetch-depth: 0
+      - name: Apply exchange approval patch
+        shell: python
+        run: |
+          from pathlib import Path
+          sp=Path('source-snapshot/current-main/Script.html')
+          cp=Path('source-snapshot/current-main/Code.js')
+          s=sp.read_text(encoding='utf-8'); c=cp.read_text(encoding='utf-8')
+          assert 'MEMBER_WAIT_SEAT_PICK' in s
+          assert 'function memberMoveToWaitGroup' in c and 'function memberLeaveWaitGroup' in c
+          if 'function memberRequestWaitSwap(' not in s:
+              anchor='function handleMemberWaitSelfTap(groupIndex,memberId,event){'
+              add="""async function memberRequestWaitSwap(targetMemberId){
+  const a=memberWaitSeatSessionArgs(); if(!a||ACTION_IN_FLIGHT)return;
+  try{const r=await server('memberRequestWaitSwap',[a.token,String(a.member.id),String(targetMemberId)]);clearMemberWaitSeatPick();showMemberSettingMessage((r&&r.message)||'자리 교환을 요청했어요.');}
+  catch(e){clearMemberWaitSeatPick();alert(e.message||e);}
+}
+function handleMemberWaitOtherTap(groupIndex,targetMemberId,event){
+  if(IS_ADMIN)return; if(event){event.preventDefault();event.stopPropagation();}
+  const a=memberWaitSeatSessionArgs(); if(!a)return;
+  if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){clearMemberWaitSeatPick();memberRequestWaitSwap(targetMemberId);return;}
+  MEMBER_WAIT_SEAT_PICK={type:'other',groupIndex:Number(groupIndex),memberId:String(targetMemberId)};
+  showMemberSettingMessage('내 자리를 터치하면 교환 요청을 보냅니다.');
+}
+let MEMBER_WAIT_SWAP_CHECKING=false, MEMBER_WAIT_SWAP_SHOWN='';
+async function checkMemberWaitSwapRequest(){
+  if(IS_ADMIN||MEMBER_WAIT_SWAP_CHECKING||ACTION_IN_FLIGHT)return;
+  const a=memberWaitSeatSessionArgs(); if(!a)return;
+  MEMBER_WAIT_SWAP_CHECKING=true;
+  try{const req=await server('memberGetWaitSwapRequest',[a.token,String(a.member.id)]);if(!req||!req.id||String(req.id)===MEMBER_WAIT_SWAP_SHOWN)return;MEMBER_WAIT_SWAP_SHOWN=String(req.id);const ok=confirm(String(req.requesterName||'다른 회원')+'님이 자리 교환을 요청했어요.\\n\\n서로 상의하셨다면 확인을 눌러 교환하세요.');const state=await server('memberRespondWaitSwap',[a.token,String(a.member.id),String(req.id),ok]);if(state&&state.members)renderState(state);else if(!ok)showMemberSettingMessage('자리 교환 요청을 거절했습니다.');}
+  catch(e){console.warn(e);}finally{MEMBER_WAIT_SWAP_CHECKING=false;}
+}
+setInterval(checkMemberWaitSwapRequest,5000);
+"""
+              assert anchor in s; s=s.replace(anchor,add+anchor,1)
+              old="if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}\n    MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};"
+              new="if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='empty'){const g=MEMBER_WAIT_SEAT_PICK.groupIndex;clearMemberWaitSeatPick();memberMoveToWaitGroup(g);return;}\n    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='other'){const target=MEMBER_WAIT_SEAT_PICK.memberId;clearMemberWaitSeatPick();memberRequestWaitSwap(target);return;}\n    MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};"
+              assert old in s; s=s.replace(old,new,1)
+              old='                return memberCard(member, false, false);'
+              new="                return '<div class=\"person member-info-card ' + genderClass(member) + '\" data-member-id=\"' + member.id + '\" onclick=\"handleMemberWaitOtherTap(' + groupIndex + ',\\\'' + member.id + '\\\',event)\">' + '<span class=\"name\">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';"
+              pos=s.find(old,s.find('function renderWaitGroups()'))
+              assert pos>=0; s=s[:pos]+new+s[pos+len(old):]
+              old="    'memberMoveToWaitGroup','memberLeaveWaitGroup',"
+              assert old in s; s=s.replace(old,old+"\n    'memberRequestWaitSwap','memberRespondWaitSwap',",1)
+          if 'function memberRequestWaitSwap(' not in c:
+              anchor='function changeMemberPassword(pin, newPassword) {'
+              add="""function memberWaitLocation_(groups,id){for(var g=0;g<groups.length;g+=1){var p=(groups[g]||[]).indexOf(String(id));if(p>=0)return {group:g,position:p};}return null;}
+function memberWaitSwapKey_(id){return 'JAYUMINTON_WAIT_SWAP_'+String(id);}
+function memberRequestWaitSwap(sessionToken,requesterId,targetId){return withDocumentLock_('회원 자리 교환 요청',function(){requesterId=memberSessionAuth_(sessionToken,requesterId);targetId=String(targetId||'');if(!targetId||targetId===requesterId)throw new Error('교환할 다른 회원을 선택하세요.');var groups=readWaitGroups_(),a=memberWaitLocation_(groups,requesterId),b=memberWaitLocation_(groups,targetId);if(!a||!b)throw new Error('두 사람 모두 대기자리에 있을 때만 교환할 수 있습니다.');var req={id:Utilities.getUuid(),requesterId:requesterId,targetId:targetId};CacheService.getDocumentCache().put(memberWaitSwapKey_(targetId),JSON.stringify(req),300);return {ok:true,message:'자리 교환을 요청했어요.'};});}
+function memberGetWaitSwapRequest(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);var cache=CacheService.getDocumentCache(),key=memberWaitSwapKey_(memberId),raw=cache.get(key);if(!raw)return null;var req=JSON.parse(raw),groups=readWaitGroups_();if(String(req.targetId)!==memberId||!memberWaitLocation_(groups,req.requesterId)||!memberWaitLocation_(groups,memberId)){cache.remove(key);return null;}var m=readMembers_().find(function(x){return String(x.id)===String(req.requesterId);});return {id:String(req.id),requesterName:m?String(m.name):'다른 회원'};}
+function memberRespondWaitSwap(sessionToken,targetId,requestId,accept){return withDocumentLock_('회원 자리 교환 응답',function(){targetId=memberSessionAuth_(sessionToken,targetId);var cache=CacheService.getDocumentCache(),key=memberWaitSwapKey_(targetId),raw=cache.get(key);if(!raw)throw new Error('교환 요청이 만료되었어요.');var req=JSON.parse(raw);if(String(req.id)!==String(requestId)||String(req.targetId)!==targetId)throw new Error('교환 요청이 변경되었어요.');cache.remove(key);if(!accept)return {ok:true,rejected:true};var groups=readWaitGroups_(),a=memberWaitLocation_(groups,req.requesterId),b=memberWaitLocation_(groups,targetId);if(!a||!b)throw new Error('대기자리가 변경되어 교환할 수 없습니다. 다시 요청해 주세요.');groups[a.group][a.position]=targetId;groups[b.group][b.position]=String(req.requesterId);writeWaitGroups_(groups);touch_();return getPublicState();});}
+"""
+              assert anchor in c; c=c.replace(anchor,add+anchor,1)
+          sp.write_text(s,encoding='utf-8'); cp.write_text(c,encoding='utf-8')
+      - name: Verify only intended source changes and commit
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'MEMBER_WAIT_SEAT_PICK' source-snapshot/current-main/Script.html
-          grep -q 'function memberMoveToWaitGroup' source-snapshot/current-main/Code.js
-          grep -q 'function memberLeaveWaitGroup' source-snapshot/current-main/Code.js
-          echo 'phase4 isolated branch base verified'
+          grep -q 'function memberRequestWaitSwap' source-snapshot/current-main/Script.html
+          grep -q 'function memberRespondWaitSwap' source-snapshot/current-main/Code.js
+          grep -q 'setInterval(checkMemberWaitSwapRequest,5000)' source-snapshot/current-main/Script.html
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected=$'source-snapshot/current-main/Code.js\nsource-snapshot/current-main/Script.html'
+          test "$changed" = "$expected"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source-snapshot/current-main/Script.html source-snapshot/current-main/Code.js
+          git commit -m 'feat: add member wait-seat exchange approval'
+          git push origin HEAD:phase4-exchange-patch
