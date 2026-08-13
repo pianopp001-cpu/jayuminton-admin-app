@@ -80,3 +80,9 @@ function memberRejectAnywhereSwap(sessionToken,memberId){
   memberAnywhereClearSwapRequest_(memberId);
   return {ok:true,message:'자리 교환 요청을 거절했어요.'};
 }
+
+function memberAnywhereSnapshotStillValid_(snapshot){
+  if(!snapshot||!snapshot.from||!snapshot.to)return false;
+  return memberAnywhereSnapshot_(snapshot.from.memberId).locationKey===snapshot.from.locationKey&&
+    memberAnywhereSnapshot_(snapshot.to.memberId).locationKey===snapshot.to.locationKey;
+}
