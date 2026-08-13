@@ -64,9 +64,11 @@ jobs:
           check_same check.js "$RUNNER_TEMP/live-before/check.js" check.js || FAIL=1
           check_text '이름 입력 또는 내 카드 두 번 터치로 자신을 설정해주세요.' Index.html 'identity help' || FAIL=1
           check_text '빈자리 두 번 터치로 자리잡기 · 내 자리와 상대 자리를 차례로 터치하면 교환요청' Index.html 'seat help' || FAIL=1
-          check_text 'requestMemberWaitSeatSwap' Code.js 'server request swap' || FAIL=1
-          check_text 'respondMemberWaitSeatSwap' Code.js 'server respond swap' || FAIL=1
-          check_text 'requestMemberWaitSeatSwap' Script.html 'client request swap' || FAIL=1
+          check_text 'memberRequestWaitSwap' Code.js 'server request swap' || FAIL=1
+          check_text 'memberGetWaitSwapRequest' Code.js 'server get swap request' || FAIL=1
+          check_text 'memberRespondWaitSwap' Code.js 'server respond swap' || FAIL=1
+          check_text 'memberRequestWaitSwap' Script.html 'client request swap' || FAIL=1
+          check_text 'checkMemberWaitSwapRequest' Script.html 'client receive swap' || FAIL=1
 
           python3 - <<'PY' || FAIL=1
           from pathlib import Path
