@@ -74,8 +74,21 @@ function memberRequestAnywhereSwap(sessionToken,memberId,targetId){
   if(!targetId||targetId===memberId)return {ok:false,message:'교환할 회원을 확인해 주세요.'};
   var members=readMembers_();
   if(!memberAnywhereMemberById_(members,targetId))return {ok:false,message:'교환할 회원을 찾을 수 없어요.'};
-  var request=memberAnywhereSwapRequest_(memberId,targetId);
-  if(!request.snapshot.from.locationKey||!request.snapshot.to.locationKey)return {ok:false,message:'현재 자리를 확인할 수 없어요.'};
-  memberAnywherePutSwapRequest_(targetId,request);
-  return {ok:true,message:'자리 교환을 요청했어요.'};
+  var lock=LockService.getScriptLock();
+  if(!lock.tryLock(3000))return {ok:false,message:'다른 자리 요청을 처리 중이에요. 잠시 후 다시 시도해 주세요.'};
+  try{
+    var incoming=memberAnywhereReadSwapRequest_(memberId);
+    if(incoming)return {ok:false,message:'먼저 받은 자리교환 요청을 처리해 주세요.'};
+    var pending=memberAnywhereReadSwapRequest_(targetId);
+    if(pending){
+      if(String(pending.requesterId)===memberId)return {ok:false,message:'이미 이 회원에게 자리교환을 요청했어요.'};
+      return {ok:false,message:'상대방이 다른 자리교환 요청을 처리 중이에요.'};
+    }
+    var request=memberAnywhereSwapRequest_(memberId,targetId);
+    if(!request.snapshot.from.locationKey||!request.snapshot.to.locationKey)return {ok:false,message:'현재 자리를 확인할 수 없어요.'};
+    memberAnywherePutSwapRequest_(targetId,request);
+    return {ok:true,message:'자리 교환을 요청했어요.'};
+  }finally{
+    lock.releaseLock();
+  }
 }
