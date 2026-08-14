@@ -21,11 +21,13 @@ function memberAnywhereLocationKey_(location){if(!location)return '';if(location
 function memberAnywhereSnapshot_(memberId){var location=memberAnywhereLocation_(memberId);return {memberId:String(memberId||''),locationKey:memberAnywhereLocationKey_(location)};}
 function memberAnywhereSwapSnapshot_(fromMemberId,toMemberId){return {from:memberAnywhereSnapshot_(fromMemberId),to:memberAnywhereSnapshot_(toMemberId)};}
 function memberAnywhereSwapCacheKey_(memberId){return 'ANYWHERE_SWAP_'+String(memberId||'');}
+function memberAnywhereOutgoingCacheKey_(memberId){return 'ANYWHERE_SWAP_OUT_'+String(memberId||'');}
 function memberAnywhereSwapRequest_(requesterId,targetId){return {requesterId:String(requesterId||''),targetId:String(targetId||''),snapshot:memberAnywhereSwapSnapshot_(requesterId,targetId),createdAt:Date.now()};}
-function memberAnywherePutSwapRequest_(targetId,request){CacheService.getDocumentCache().put(memberAnywhereSwapCacheKey_(targetId),JSON.stringify(request),300);}
+function memberAnywherePutSwapRequest_(targetId,request){var cache=CacheService.getDocumentCache();cache.put(memberAnywhereSwapCacheKey_(targetId),JSON.stringify(request),300);cache.put(memberAnywhereOutgoingCacheKey_(request.requesterId),String(targetId),300);}
 function memberAnywhereReadSwapRaw_(memberId){return CacheService.getDocumentCache().get(memberAnywhereSwapCacheKey_(memberId));}
-function memberAnywhereClearSwapRequest_(memberId){CacheService.getDocumentCache().remove(memberAnywhereSwapCacheKey_(memberId));}
-function memberAnywhereReadSwapRequest_(memberId){var raw=memberAnywhereReadSwapRaw_(memberId);if(!raw)return null;try{return JSON.parse(raw);}catch(error){memberAnywhereClearSwapRequest_(memberId);return null;}}
+function memberAnywhereReadOutgoingTarget_(memberId){return CacheService.getDocumentCache().get(memberAnywhereOutgoingCacheKey_(memberId));}
+function memberAnywhereClearSwapRequest_(memberId){var cache=CacheService.getDocumentCache();var request=memberAnywhereReadSwapRequest_(memberId);cache.remove(memberAnywhereSwapCacheKey_(memberId));if(request&&request.requesterId)cache.remove(memberAnywhereOutgoingCacheKey_(request.requesterId));}
+function memberAnywhereReadSwapRequest_(memberId){var raw=memberAnywhereReadSwapRaw_(memberId);if(!raw)return null;try{return JSON.parse(raw);}catch(error){CacheService.getDocumentCache().remove(memberAnywhereSwapCacheKey_(memberId));return null;}}
 function memberGetAnywhereSwapRequest(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);var request=memberAnywhereReadSwapRequest_(memberId);if(!request||String(request.targetId)!==memberId)return null;return request;}
 function memberRejectAnywhereSwap(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);memberAnywhereClearSwapRequest_(memberId);return {ok:true,message:'자리 교환 요청을 거절했어요.'};}
 function memberAnywhereSnapshotStillValid_(snapshot){if(!snapshot||!snapshot.from||!snapshot.to)return false;return memberAnywhereSnapshot_(snapshot.from.memberId).locationKey===snapshot.from.locationKey&&memberAnywhereSnapshot_(snapshot.to.memberId).locationKey===snapshot.to.locationKey;}
@@ -77,6 +79,8 @@ function memberRequestAnywhereSwap(sessionToken,memberId,targetId){
   var lock=LockService.getScriptLock();
   if(!lock.tryLock(3000))return {ok:false,message:'다른 자리 요청을 처리 중이에요. 잠시 후 다시 시도해 주세요.'};
   try{
+    var outgoingTarget=memberAnywhereReadOutgoingTarget_(memberId);
+    if(outgoingTarget)return {ok:false,message:outgoingTarget===targetId?'이미 이 회원에게 자리교환을 요청했어요.':'먼저 보낸 자리교환 요청을 처리해 주세요.'};
     var incoming=memberAnywhereReadSwapRequest_(memberId);
     if(incoming)return {ok:false,message:'먼저 받은 자리교환 요청을 처리해 주세요.'};
     var pending=memberAnywhereReadSwapRequest_(targetId);
