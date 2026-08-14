@@ -50,8 +50,6 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-
-          # Preserve every live file except the six files intentionally changed by v3.
           cp "$SRC/Index.html" Index.html
           cp "$SRC/MemberAnywhereSwap.js" MemberAnywhereSwap.js
           cp "$SRC/MemberControls.html" MemberControls.html
@@ -59,37 +57,118 @@ jobs:
           cp "$SRC/MemberSwapClient.html" MemberSwapClient.html
           cp "$SRC/MemberSwapInbox.html" MemberSwapInbox.html
 
-          # Guard: the redesigned Index must load all four client modules.
-          grep -F "include('MemberSwapClient')" Index.html >/dev/null
-          grep -F "include('MemberSwapAction')" Index.html >/dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+
+          code = Path('Code.js')
+          s = code.read_text(encoding='utf-8')
+          marker = 'function autoFillCourtUnlocked_(pin, courtNo, ids) {'
+          helper = r'''function pickAutoFillIds_(existingIds, needed, members) {
+            existingIds = normalizeIds_(existingIds);
+            needed = Number(needed) || 0;
+            if (needed <= 0) return [];
+            const existingMap = {};
+            existingIds.forEach(function(id) { existingMap[id] = true; });
+            const active = (members || []).filter(function(member) {
+              return member && member.status === 'active' && !existingMap[String(member.id)];
+            }).slice().sort(function(a, b) {
+              const gameDiff = (Number(a.games) || 0) - (Number(b.games) || 0);
+              if (gameDiff) return gameDiff;
+              return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+            });
+            let existingMale = 0;
+            existingIds.forEach(function(id) {
+              const member = (members || []).find(function(item) { return String(item.id) === String(id); });
+              if (member && member.gender !== 'female') existingMale += 1;
+            });
+            const targets = [4, 0, 2];
+            for (let t = 0; t < targets.length; t += 1) {
+              const needMale = targets[t] - existingMale;
+              const needFemale = needed - needMale;
+              if (needMale < 0 || needFemale < 0) continue;
+              const males = active.filter(function(m) { return m.gender !== 'female'; }).slice(0, needMale);
+              const females = active.filter(function(m) { return m.gender === 'female'; }).slice(0, needFemale);
+              if (males.length === needMale && females.length === needFemale) {
+                return males.concat(females).map(function(m) { return String(m.id); });
+              }
+            }
+            throw new Error('현재 코트배정 대기 인원으로 남복·여복·혼복 조합을 만들 수 없습니다.');
+          }
+
+          '''
+          if 'function pickAutoFillIds_' not in s:
+              if marker not in s: raise SystemExit('autoFillCourt marker missing')
+              s = s.replace(marker, helper + marker, 1)
+          old = """  const needed = GROUP_SIZE - existingIds.length;\n\n  if (needed <= 0 || ids.length !== needed) {"""
+          new = """  const needed = GROUP_SIZE - existingIds.length;\n\n  if (needed > 0 && ids.length === 0) {\n    ids = pickAutoFillIds_(existingIds, needed, readMembers_());\n  }\n\n  if (needed <= 0 || ids.length !== needed) {"""
+          if s.count(old) < 2: raise SystemExit('expected both auto-fill guards')
+          s = s.replace(old, new, 2)
+          code.write_text(s, encoding='utf-8')
+
+          script = Path('Script.html')
+          s = script.read_text(encoding='utf-8')
+          s = s.replace("let LAST_UNDO_STATE = null;", "let LAST_UNDO_STATE = null;\nlet LAST_REDO_STATE = null;", 1)
+          old_court_empty = """                return memberCard(null, false, false);"""
+          new_court_empty = """                return '<div class=\"person empty member-court-empty\" onclick=\"handleMemberCourtEmptyTap(' + courtNo + ',' + slotIndex + ',event)\" title=\"한 번 터치하면 이 코트로 이동합니다\"><span class=\"empty-slot-label\">비어 있음</span></div>';"""
+          if old_court_empty not in s: raise SystemExit('member court empty marker missing')
+          s = s.replace(old_court_empty, new_court_empty, 1)
+          wait_start = "function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){"
+          wait_end = "function memberWaitEmptySlotCard(groupIndex,slotIndex){"
+          a=s.find(wait_start); b=s.find(wait_end,a)
+          if a<0 or b<0: raise SystemExit('member wait empty handler markers missing')
+          wait_handler = r'''function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){
+            if(IS_ADMIN)return;
+            if(event){event.preventDefault();event.stopPropagation();}
+            if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;
+            MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};
+            renderWaitGroups();
+            if(typeof window.memberAnywhereMoveSelf==='function'){window.memberAnywhereMoveSelf({type:'wait',group:Number(groupIndex),slotIndex:Number(slotIndex)});return;}
+            memberMoveToWaitGroup(groupIndex);
+          }
+          function handleMemberCourtEmptyTap(courtNo,slotIndex,event){
+            if(IS_ADMIN)return;
+            if(event){event.preventDefault();event.stopPropagation();}
+            if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;
+            var target=event&&event.currentTarget;if(target)target.classList.add('selected','member-anywhere-processing');
+            if(typeof window.memberAnywhereMoveSelf==='function'){window.memberAnywhereMoveSelf({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)});return;}
+            Promise.resolve(memberAnywhereMoveSelfServer_({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)})).then(function(result){if(result&&result.ok&&result.state){STATE=result.state;renderState();return;}alert(result&&result.message||'코트 이동에 실패했습니다.');}).catch(function(error){alert(String(error&&error.message||error||'코트 이동에 실패했습니다.'));});
+          }
+          '''
+          s=s[:a]+wait_handler+s[b:]
+          addon = r'''
+          function adminRefreshNow(){if(!IS_ADMIN)return;server('getPublicState',[]).then(function(state){STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();}).catch(function(error){alert(String((error&&error.message)||error||'새로고침에 실패했습니다.'));});}
+          function updateUndoRedoButtons_(){const undo=document.getElementById('undoButton');const redo=document.getElementById('redoButton');if(undo)undo.disabled=!LAST_UNDO_STATE;if(redo)redo.disabled=!LAST_REDO_STATE;}
+          function redoLastAction(){if(!LAST_REDO_STATE)return;const target=JSON.parse(JSON.stringify(LAST_REDO_STATE));const current=JSON.parse(JSON.stringify(STATE));server('undoLastAction',[ADMIN_PIN_VALUE,target]).then(function(state){LAST_UNDO_STATE=current;LAST_REDO_STATE=null;STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();updateUndoRedoButtons_();}).catch(function(error){alert(String((error&&error.message)||error));});}
+          '''
+          if 'function redoLastAction()' not in s:s=s.replace('</script>',addon+'\n</script>',1)
+          script.write_text(s,encoding='utf-8')
+
+          admin=Path('Admin.html'); s=admin.read_text(encoding='utf-8')
+          mobile_needle='''    >↶ 실행 취소</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'''
+          mobile_replacement='''    >↶ 실행 취소</button>\n    <button id="mobileRefreshButton" class="ghost-button mobile-refresh-button" type="button" onclick="adminRefreshNow()">↻ 새로고침</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'''
+          if 'id="mobileRefreshButton"' not in s:
+              if mobile_needle not in s: raise SystemExit('mobile undo/assign marker missing')
+              s=s.replace(mobile_needle,mobile_replacement,1)
+          admin.write_text(s,encoding='utf-8')
+          PY
+
           grep -F "include('MemberControls')" Index.html >/dev/null
-          grep -F "include('MemberSwapInbox')" Index.html >/dev/null
-
-          # Guard: validate the actual server entry points used by MemberSwapClient.html.
-          grep -F 'function memberRequestAnywhereSwap' MemberAnywhereSwap.js >/dev/null
-          grep -F 'function memberGetAnywhereSwapRequest' MemberAnywhereSwap.js >/dev/null
-          grep -F 'function memberGetAnywhereOutgoingSwap' MemberAnywhereSwap.js >/dev/null
-          grep -F 'function memberAcceptAnywhereSwap' MemberAnywhereSwap.js >/dev/null
-          grep -F 'function memberRejectAnywhereSwap' MemberAnywhereSwap.js >/dev/null
-          grep -F "server('memberRequestAnywhereSwap'" MemberSwapClient.html >/dev/null
-          grep -F "server('memberAcceptAnywhereSwap'" MemberSwapClient.html >/dev/null
-          grep -F "server('memberRejectAnywhereSwap'" MemberSwapClient.html >/dev/null
-
-          # Syntax-check server JS and every HTML script body that contains a script wrapper.
+          grep -F 'function memberMoveSelf' MemberAnywhereSwap.js >/dev/null
+          grep -F 'memberAnywhereMoveSelfServer_' MemberSwapClient.html >/dev/null
+          grep -F 'showDestinationMenu' MemberControls.html >/dev/null
+          grep -F 'SELF_HOLD_MS=750' MemberControls.html >/dev/null
+          grep -F 'id="mobileRefreshButton"' Admin.html >/dev/null
+          grep -F 'adminRefreshNow' Script.html >/dev/null
+          grep -F 'handleMemberCourtEmptyTap' Script.html >/dev/null
+          node --check Code.js
           node --check MemberAnywhereSwap.js
           python3 - <<'PY'
           from pathlib import Path
-          for name in ['MemberControls.html','MemberSwapAction.html','MemberSwapClient.html','MemberSwapInbox.html']:
-              s=Path(name).read_text(encoding='utf-8')
-              a=s.find('<script>'); b=s.rfind('</script>')
-              if a >= 0 and b > a:
-                  out=Path('/tmp')/(name+'.js')
-                  out.write_text(s[a+8:b], encoding='utf-8')
+          for name in ['Script.html','MemberControls.html','MemberSwapAction.html','MemberSwapClient.html','MemberSwapInbox.html']:
+              s=Path(name).read_text(encoding='utf-8');a=s.find('<script>');b=s.rfind('</script>')
+              if a>=0 and b>a:(Path('/tmp')/(name+'.js')).write_text(s[a+8:b],encoding='utf-8')
           PY
-          for f in /tmp/Member*.html.js; do [ -e "$f" ] && node --check "$f"; done
-
-          echo 'Files that will be pushed:'
-          find . -maxdepth 1 -type f -printf '%f\n' | sort
+          for f in /tmp/*.html.js; do [ -e "$f" ] && node --check "$f"; done
 
       - name: Push and update existing MAIN deployment
         shell: bash
@@ -97,4 +176,4 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/main-live"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 latest $GITHUB_RUN_ID"
