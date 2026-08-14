@@ -21,11 +21,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: member-anywhere-controls-v3
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
       - name: Resolve deployment configuration
         shell: bash
         run: |
@@ -36,11 +34,9 @@ jobs:
           jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
           echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
-
       - name: Install clasp
         run: npm install --global @google/clasp@latest
-
-      - name: Pull live and overlay complete redesign
+      - name: Pull live and overlay member controls
         shell: bash
         run: |
           set -euo pipefail
@@ -56,107 +52,49 @@ jobs:
           cp "$SRC/MemberSwapAction.html" MemberSwapAction.html
           cp "$SRC/MemberSwapClient.html" MemberSwapClient.html
           cp "$SRC/MemberSwapInbox.html" MemberSwapInbox.html
-
           python3 - <<'PY'
           from pathlib import Path
-
-          code = Path('Code.js')
-          s = code.read_text(encoding='utf-8')
-          marker = 'function autoFillCourtUnlocked_(pin, courtNo, ids) {'
-          helper = r'''function pickAutoFillIds_(existingIds, needed, members) {
-            existingIds = normalizeIds_(existingIds);
-            needed = Number(needed) || 0;
-            if (needed <= 0) return [];
-            const existingMap = {};
-            existingIds.forEach(function(id) { existingMap[id] = true; });
-            const active = (members || []).filter(function(member) {
-              return member && member.status === 'active' && !existingMap[String(member.id)];
-            }).slice().sort(function(a, b) {
-              const gameDiff = (Number(a.games) || 0) - (Number(b.games) || 0);
-              if (gameDiff) return gameDiff;
-              return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
-            });
-            let existingMale = 0;
-            existingIds.forEach(function(id) {
-              const member = (members || []).find(function(item) { return String(item.id) === String(id); });
-              if (member && member.gender !== 'female') existingMale += 1;
-            });
-            const targets = [4, 0, 2];
-            for (let t = 0; t < targets.length; t += 1) {
-              const needMale = targets[t] - existingMale;
-              const needFemale = needed - needMale;
-              if (needMale < 0 || needFemale < 0) continue;
-              const males = active.filter(function(m) { return m.gender !== 'female'; }).slice(0, needMale);
-              const females = active.filter(function(m) { return m.gender === 'female'; }).slice(0, needFemale);
-              if (males.length === needMale && females.length === needFemale) {
-                return males.concat(females).map(function(m) { return String(m.id); });
-              }
-            }
-            throw new Error('현재 코트배정 대기 인원으로 남복·여복·혼복 조합을 만들 수 없습니다.');
-          }
-
-          '''
+          code=Path('Code.js'); s=code.read_text(encoding='utf-8')
+          marker='function autoFillCourtUnlocked_(pin, courtNo, ids) {'
+          helper='''function pickAutoFillIds_(existingIds, needed, members) {\n  existingIds = normalizeIds_(existingIds);\n  needed = Number(needed) || 0;\n  if (needed <= 0) return [];\n  const existingMap = {};\n  existingIds.forEach(function(id) { existingMap[id] = true; });\n  const active = (members || []).filter(function(member) { return member && member.status === 'active' && !existingMap[String(member.id)]; }).slice().sort(function(a,b) { const d=(Number(a.games)||0)-(Number(b.games)||0); return d || String(a.createdAt||'').localeCompare(String(b.createdAt||'')); });\n  let existingMale=0;\n  existingIds.forEach(function(id){ const member=(members||[]).find(function(item){return String(item.id)===String(id);}); if(member&&member.gender!=='female')existingMale+=1; });\n  const targets=[4,0,2];\n  for(let t=0;t<targets.length;t+=1){ const needMale=targets[t]-existingMale; const needFemale=needed-needMale; if(needMale<0||needFemale<0)continue; const males=active.filter(function(m){return m.gender!=='female';}).slice(0,needMale); const females=active.filter(function(m){return m.gender==='female';}).slice(0,needFemale); if(males.length===needMale&&females.length===needFemale)return males.concat(females).map(function(m){return String(m.id);}); }\n  throw new Error('현재 코트배정 대기 인원으로 남복·여복·혼복 조합을 만들 수 없습니다.');\n}\n\n'''
           if 'function pickAutoFillIds_' not in s:
               if marker not in s: raise SystemExit('autoFillCourt marker missing')
-              s = s.replace(marker, helper + marker, 1)
-          old = """  const needed = GROUP_SIZE - existingIds.length;\n\n  if (needed <= 0 || ids.length !== needed) {"""
-          new = """  const needed = GROUP_SIZE - existingIds.length;\n\n  if (needed > 0 && ids.length === 0) {\n    ids = pickAutoFillIds_(existingIds, needed, readMembers_());\n  }\n\n  if (needed <= 0 || ids.length !== needed) {"""
-          if s.count(old) < 2: raise SystemExit('expected both auto-fill guards')
-          s = s.replace(old, new, 2)
-          code.write_text(s, encoding='utf-8')
-
-          script = Path('Script.html')
-          s = script.read_text(encoding='utf-8')
-          s = s.replace("let LAST_UNDO_STATE = null;", "let LAST_UNDO_STATE = null;\nlet LAST_REDO_STATE = null;", 1)
-          old_court_empty = """                return memberCard(null, false, false);"""
-          new_court_empty = """                return '<div class=\"person empty member-court-empty\" onclick=\"handleMemberCourtEmptyTap(' + courtNo + ',' + slotIndex + ',event)\" title=\"한 번 터치하면 이 코트로 이동합니다\"><span class=\"empty-slot-label\">비어 있음</span></div>';"""
-          if old_court_empty not in s: raise SystemExit('member court empty marker missing')
-          s = s.replace(old_court_empty, new_court_empty, 1)
-          wait_start = "function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){"
-          wait_end = "function memberWaitEmptySlotCard(groupIndex,slotIndex){"
+              s=s.replace(marker,helper+marker,1)
+          old="  const needed = GROUP_SIZE - existingIds.length;\n\n  if (needed <= 0 || ids.length !== needed) {"
+          new="  const needed = GROUP_SIZE - existingIds.length;\n\n  if (needed > 0 && ids.length === 0) {\n    ids = pickAutoFillIds_(existingIds, needed, readMembers_());\n  }\n\n  if (needed <= 0 || ids.length !== needed) {"
+          if 'ids = pickAutoFillIds_(existingIds, needed, readMembers_());' not in s:
+              if old not in s: raise SystemExit('auto-fill guard marker missing')
+              s=s.replace(old,new)
+          code.write_text(s,encoding='utf-8')
+          script=Path('Script.html'); s=script.read_text(encoding='utf-8')
+          if 'let LAST_REDO_STATE = null;' not in s:s=s.replace('let LAST_UNDO_STATE = null;','let LAST_UNDO_STATE = null;\nlet LAST_REDO_STATE = null;',1)
+          old_empty='                return memberCard(null, false, false);'
+          new_empty='                return \'<div class="person empty member-court-empty" onclick="handleMemberCourtEmptyTap(\' + courtNo + \',\' + slotIndex + \',event)" title="한 번 터치하면 이 코트로 이동합니다"><span class="empty-slot-label">비어 있음</span></div>\';'
+          if 'handleMemberCourtEmptyTap(' not in s:
+              if old_empty not in s: raise SystemExit('member court empty marker missing')
+              s=s.replace(old_empty,new_empty,1)
+          wait_start='function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){'; wait_end='function memberWaitEmptySlotCard(groupIndex,slotIndex){'
           a=s.find(wait_start); b=s.find(wait_end,a)
-          if a<0 or b<0: raise SystemExit('member wait empty handler markers missing')
-          wait_handler = r'''function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){
-            if(IS_ADMIN)return;
-            if(event){event.preventDefault();event.stopPropagation();}
-            if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;
-            MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};
-            renderWaitGroups();
-            if(typeof window.memberAnywhereMoveSelf==='function'){window.memberAnywhereMoveSelf({type:'wait',group:Number(groupIndex),slotIndex:Number(slotIndex)});return;}
-            memberMoveToWaitGroup(groupIndex);
-          }
-          function handleMemberCourtEmptyTap(courtNo,slotIndex,event){
-            if(IS_ADMIN)return;
-            if(event){event.preventDefault();event.stopPropagation();}
-            if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;
-            var target=event&&event.currentTarget;if(target)target.classList.add('selected','member-anywhere-processing');
-            if(typeof window.memberAnywhereMoveSelf==='function'){window.memberAnywhereMoveSelf({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)});return;}
-            Promise.resolve(memberAnywhereMoveSelfServer_({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)})).then(function(result){if(result&&result.ok&&result.state){STATE=result.state;renderState();return;}alert(result&&result.message||'코트 이동에 실패했습니다.');}).catch(function(error){alert(String(error&&error.message||error||'코트 이동에 실패했습니다.'));});
-          }
-          '''
-          s=s[:a]+wait_handler+s[b:]
-          addon = r'''
-          function adminRefreshNow(){if(!IS_ADMIN)return;server('getPublicState',[]).then(function(state){STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();}).catch(function(error){alert(String((error&&error.message)||error||'새로고침에 실패했습니다.'));});}
-          function updateUndoRedoButtons_(){const undo=document.getElementById('undoButton');const redo=document.getElementById('redoButton');if(undo)undo.disabled=!LAST_UNDO_STATE;if(redo)redo.disabled=!LAST_REDO_STATE;}
-          function redoLastAction(){if(!LAST_REDO_STATE)return;const target=JSON.parse(JSON.stringify(LAST_REDO_STATE));const current=JSON.parse(JSON.stringify(STATE));server('undoLastAction',[ADMIN_PIN_VALUE,target]).then(function(state){LAST_UNDO_STATE=current;LAST_REDO_STATE=null;STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();updateUndoRedoButtons_();}).catch(function(error){alert(String((error&&error.message)||error));});}
-          '''
-          if 'function redoLastAction()' not in s:s=s.replace('</script>',addon+'\n</script>',1)
+          if a>=0 and b>=0 and 'window.memberAnywhereMoveSelf' not in s[a:b]:
+              wait_handler='''function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){\n  if(IS_ADMIN)return;\n  if(event){event.preventDefault();event.stopPropagation();}\n  if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;\n  MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};\n  renderWaitGroups();\n  if(typeof window.memberAnywhereMoveSelf==='function'){window.memberAnywhereMoveSelf({type:'wait',group:Number(groupIndex),slotIndex:Number(slotIndex)});return;}\n  memberMoveToWaitGroup(groupIndex);\n}\nfunction handleMemberCourtEmptyTap(courtNo,slotIndex,event){\n  if(IS_ADMIN)return;\n  if(event){event.preventDefault();event.stopPropagation();}\n  if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;\n  var target=event&&event.currentTarget;if(target)target.classList.add('selected','member-anywhere-processing');\n  if(typeof window.memberAnywhereMoveSelf==='function'){window.memberAnywhereMoveSelf({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)});return;}\n  Promise.resolve(memberAnywhereMoveSelfServer_({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)})).then(function(result){if(result&&result.ok&&result.state){STATE=result.state;renderState();return;}alert(result&&result.message||'코트 이동에 실패했습니다.');}).catch(function(error){alert(String(error&&error.message||error||'코트 이동에 실패했습니다.'));});\n}\n'''
+              s=s[:a]+wait_handler+s[b:]
+          addon='''\nfunction adminRefreshNow(){if(!IS_ADMIN)return;server('getPublicState',[]).then(function(state){STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();}).catch(function(error){alert(String((error&&error.message)||error||'새로고침에 실패했습니다.'));});}\nfunction updateUndoRedoButtons_(){const undo=document.getElementById('undoButton');const redo=document.getElementById('redoButton');if(undo)undo.disabled=!LAST_UNDO_STATE;if(redo)redo.disabled=!LAST_REDO_STATE;}\nfunction redoLastAction(){if(!LAST_REDO_STATE)return;const target=JSON.parse(JSON.stringify(LAST_REDO_STATE));const current=JSON.parse(JSON.stringify(STATE));server('undoLastAction',[ADMIN_PIN_VALUE,target]).then(function(state){LAST_UNDO_STATE=current;LAST_REDO_STATE=null;STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();updateUndoRedoButtons_();}).catch(function(error){alert(String((error&&error.message)||error));});}\n'''
+          if 'function adminRefreshNow()' not in s:s=s.replace('</script>',addon+'\n</script>',1)
           script.write_text(s,encoding='utf-8')
-
           admin=Path('Admin.html'); s=admin.read_text(encoding='utf-8')
-          mobile_needle='''    >↶ 실행 취소</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'''
-          mobile_replacement='''    >↶ 실행 취소</button>\n    <button id="mobileRefreshButton" class="ghost-button mobile-refresh-button" type="button" onclick="adminRefreshNow()">↻ 새로고침</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'''
+          needle='    >↶ 실행 취소</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'
+          replacement='    >↶ 실행 취소</button>\n    <button id="mobileRefreshButton" class="ghost-button mobile-refresh-button" type="button" onclick="adminRefreshNow()">↻ 새로고침</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'
           if 'id="mobileRefreshButton"' not in s:
-              if mobile_needle not in s: raise SystemExit('mobile undo/assign marker missing')
-              s=s.replace(mobile_needle,mobile_replacement,1)
+              if needle not in s: raise SystemExit('mobile undo/assign marker missing')
+              s=s.replace(needle,replacement,1)
           admin.write_text(s,encoding='utf-8')
           PY
-
           grep -F "include('MemberControls')" Index.html >/dev/null
           grep -F 'function memberMoveSelf' MemberAnywhereSwap.js >/dev/null
           grep -F 'memberAnywhereMoveSelfServer_' MemberSwapClient.html >/dev/null
           grep -F 'showDestinationMenu' MemberControls.html >/dev/null
-          grep -F 'SELF_HOLD_MS=750' MemberControls.html >/dev/null
+          grep -F 'SELF_HOLD_MS=650' MemberControls.html >/dev/null
+          grep -F "document.addEventListener('touchstart'" MemberControls.html >/dev/null
           grep -F 'id="mobileRefreshButton"' Admin.html >/dev/null
           grep -F 'adminRefreshNow' Script.html >/dev/null
           grep -F 'handleMemberCourtEmptyTap' Script.html >/dev/null
@@ -169,7 +107,6 @@ jobs:
               if a>=0 and b>a:(Path('/tmp')/(name+'.js')).write_text(s[a+8:b],encoding='utf-8')
           PY
           for f in /tmp/*.html.js; do [ -e "$f" ] && node --check "$f"; done
-
       - name: Push and update existing MAIN deployment
         shell: bash
         run: |
