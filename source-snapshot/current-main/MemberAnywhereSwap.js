@@ -36,8 +36,19 @@ function memberAnywhereApplyStatus_(member,location){member.status=memberAnywher
 function memberAnywhereMemberById_(members,memberId){return members.find(function(member){return String(member.id)===String(memberId);})||null;}
 function memberAnywhereApplyPairStatus_(members,firstId,secondId,firstLocation,secondLocation){var first=memberAnywhereMemberById_(members,firstId);var second=memberAnywhereMemberById_(members,secondId);if(!first||!second)return false;memberAnywhereApplyStatus_(first,secondLocation);memberAnywhereApplyStatus_(second,firstLocation);return true;}
 function memberAnywhereSavePairStatus_(firstId,secondId,firstLocation,secondLocation){var members=readMembers_();if(!memberAnywhereApplyPairStatus_(members,firstId,secondId,firstLocation,secondLocation))return false;writeMembers_(members);return true;}
+function memberAnywhereSwapAll_(firstId,secondId,firstLocation,secondLocation){memberAnywhereSwapPlacedMembers_(firstId,secondId,firstLocation,secondLocation);return memberAnywhereSavePairStatus_(firstId,secondId,firstLocation,secondLocation);}
 
-function memberAnywhereSwapAll_(firstId,secondId,firstLocation,secondLocation){
-  memberAnywhereSwapPlacedMembers_(firstId,secondId,firstLocation,secondLocation);
-  return memberAnywhereSavePairStatus_(firstId,secondId,firstLocation,secondLocation);
+function memberAcceptAnywhereSwap(sessionToken,memberId){
+  memberId=memberSessionAuth_(sessionToken,memberId);
+  var request=memberAnywhereReadSwapRequest_(memberId);
+  if(!request||String(request.targetId)!==memberId)return {ok:false,message:'교환 요청이 없거나 만료됐어요.'};
+  if(!memberAnywhereSnapshotStillValid_(request.snapshot)){
+    memberAnywhereClearSwapRequest_(memberId);
+    return {ok:false,message:'자리 상태가 변경되어 교환할 수 없어요.'};
+  }
+  var firstLocation=memberAnywhereLocation_(request.requesterId);
+  var secondLocation=memberAnywhereLocation_(memberId);
+  var ok=memberAnywhereSwapAll_(request.requesterId,memberId,firstLocation,secondLocation);
+  memberAnywhereClearSwapRequest_(memberId);
+  return ok?{ok:true,message:'자리 교환이 완료됐어요.'}:{ok:false,message:'회원 정보를 확인할 수 없어요.'};
 }
