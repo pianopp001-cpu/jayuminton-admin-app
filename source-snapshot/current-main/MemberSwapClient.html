@@ -11,6 +11,11 @@ function memberAnywherePendingServer_(){
   if(!auth.memberId)return Promise.resolve(null);
   return server('memberGetAnywhereSwapRequest',[auth.token,auth.memberId]);
 }
+function memberAnywhereOutgoingServer_(){
+  var auth=memberAnywhereSession_();
+  if(!auth.memberId||!auth.token)return Promise.resolve(null);
+  return server('memberGetAnywhereOutgoingSwap',[auth.token,auth.memberId]);
+}
 function memberAnywhereAcceptServer_(){
   var auth=memberAnywhereSession_();
   return server('memberAcceptAnywhereSwap',[auth.token,auth.memberId]);
