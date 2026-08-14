@@ -7,10 +7,11 @@ function memberAnywhereCheckOutgoing_(){
   if(memberAnywhereOutgoingSyncBusy_)return;memberAnywhereOutgoingSyncBusy_=true;
   var refresh=typeof refreshMemberState==='function'?Promise.resolve(refreshMemberState()).catch(function(){}):Promise.resolve();var outgoingPromise=Promise.resolve(typeof memberAnywhereOutgoingServer_==='function'?memberAnywhereOutgoingServer_():null);
   Promise.all([refresh,outgoingPromise]).then(function(values){
-    var outgoing=values[1];var current=memberAnywhereSelfLocationKey_();
-    if(current&&memberAnywhereOutgoingBaseline_&&current!==memberAnywhereOutgoingBaseline_){memberAnywhereStopOutgoingSync_();if(window.memberAnywhereModal)window.memberAnywhereModal.show('교환 완료','자리교환이 완료되어 새 위치로 갱신됐어요.');return;}
-    if(!outgoing){var elapsed=Date.now()-memberAnywhereOutgoingRequestStartedAt_;if(elapsed<2500){memberAnywhereOutgoingSyncBusy_=false;return;}memberAnywhereStopOutgoingSync_();if(window.memberAnywhereModal)window.memberAnywhereModal.show('요청 종료','자리교환 요청이 거절되었거나 만료됐어요.');return;}
-    memberAnywhereOutgoingSyncBusy_=false;
+    var outgoing=values[1];var current=memberAnywhereSelfLocationKey_();var moved=!!(current&&memberAnywhereOutgoingBaseline_&&current!==memberAnywhereOutgoingBaseline_);
+    if(outgoing){memberAnywhereOutgoingSyncBusy_=false;return;}
+    if(moved){memberAnywhereStopOutgoingSync_();if(window.memberAnywhereModal)window.memberAnywhereModal.show('교환 완료','자리교환이 완료되어 새 위치로 갱신됐어요.');return;}
+    var elapsed=Date.now()-memberAnywhereOutgoingRequestStartedAt_;if(elapsed<2500){memberAnywhereOutgoingSyncBusy_=false;return;}
+    memberAnywhereStopOutgoingSync_();if(window.memberAnywhereModal)window.memberAnywhereModal.show('요청 종료','자리교환 요청이 거절되었거나 만료됐어요.');
   }).catch(function(){memberAnywhereOutgoingSyncBusy_=false;});
 }
 function memberAnywhereStartOutgoingSync_(baseline,startedAt){memberAnywhereStopOutgoingSync_();memberAnywhereOutgoingBaseline_=String(baseline||memberAnywhereSelfLocationKey_()||'');memberAnywhereOutgoingRequestStartedAt_=Number(startedAt||0)||Date.now();memberAnywhereOutgoingSyncTimer_=setInterval(memberAnywhereCheckOutgoing_,3000);setTimeout(memberAnywhereCheckOutgoing_,500);}
