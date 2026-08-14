@@ -1,0 +1,7 @@
+<script>
+function memberAnywhereRequestServer_(targetId){
+  var me=String(storedSelfMemberId()||'');
+  var token=String(MEMBER_SESSION_VALUE||localStorage.getItem(MEMBER_SESSION_KEY)||'');
+  return server('memberRequestAnywhereSwap',[token,me,String(targetId||'')]);
+}
+</script>
