@@ -4,4 +4,21 @@ function memberAnywhereRequestSelected_(){
   if(!partner)return Promise.resolve({ok:false,message:'교환할 회원을 선택해 주세요.'});
   return memberAnywhereRequestServer_(partner.id);
 }
+
+function memberAnywhereHandleRequestClick_(event){
+  var button=event.target&&event.target.closest?event.target.closest('#memberAnywhereActions button.primary'):null;
+  if(!button||button.textContent!=='교환요청')return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  button.disabled=true;
+  memberAnywhereRequestSelected_().then(function(result){
+    if(window.memberAnywhereSelection)window.memberAnywhereSelection.clear();
+    if(window.memberAnywhereModal)window.memberAnywhereModal.show(result&&result.ok?'요청 완료':'요청 실패',result&&result.message||'자리교환 요청을 처리하지 못했어요.');
+  }).catch(function(error){
+    button.disabled=false;
+    if(window.memberAnywhereModal)window.memberAnywhereModal.show('요청 실패',String(error&&error.message||error||'자리교환 요청을 처리하지 못했어요.'));
+  });
+}
+
+document.addEventListener('click',memberAnywhereHandleRequestClick_,true);
 </script>
