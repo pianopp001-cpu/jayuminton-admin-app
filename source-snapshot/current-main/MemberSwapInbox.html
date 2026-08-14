@@ -1,28 +1,37 @@
 <script>
 (function(){
   var shownRequestKey='';
+  var activeRequestKey='';
   function requesterName_(request){
     var id=String(request&&request.requesterId||'');
     var member=(STATE.members||[]).find(function(item){return item&&String(item.id)===id;});
     return member?String(member.name||'회원'):'회원';
   }
   function requestKey_(request){return String(request&&request.requesterId||'')+':'+String(request&&request.createdAt||'');}
+  function clearIncoming_(){
+    shownRequestKey='';activeRequestKey='';
+    var title=document.getElementById('memberAnywhereTitle');
+    if(title&&title.textContent==='자리교환 요청'&&window.memberAnywhereModal)window.memberAnywhereModal.close();
+  }
   function showIncoming_(request){
-    var key=requestKey_(request);if(!key||key===shownRequestKey)return;shownRequestKey=key;
+    var key=requestKey_(request);if(!key||key===shownRequestKey)return;shownRequestKey=key;activeRequestKey=key;
     var root=window.memberAnywhereModal&&window.memberAnywhereModal;
-    if(!root){shownRequestKey='';return;}
+    if(!root){shownRequestKey='';activeRequestKey='';return;}
     root.show('자리교환 요청',requesterName_(request)+'님이 자리교환을 요청했어요.');
-    var actions=document.getElementById('memberAnywhereActions');if(!actions){shownRequestKey='';return;}actions.innerHTML='';
+    var actions=document.getElementById('memberAnywhereActions');if(!actions){shownRequestKey='';activeRequestKey='';return;}actions.innerHTML='';
     var reject=document.createElement('button');reject.type='button';reject.textContent='거절';
     var accept=document.createElement('button');accept.type='button';accept.className='primary';accept.textContent='수락';
-    reject.onclick=function(){reject.disabled=true;accept.disabled=true;memberAnywhereRejectServer_().then(function(result){root.show('자리교환',result&&result.message||'요청을 거절했어요.');shownRequestKey='';}).catch(function(){reject.disabled=false;accept.disabled=false;});};
-    accept.onclick=function(){reject.disabled=true;accept.disabled=true;memberAnywhereAcceptServer_().then(function(result){root.show(result&&result.ok?'교환 완료':'교환 실패',result&&result.message||'자리교환을 처리하지 못했어요.');shownRequestKey='';if(result&&result.ok&&typeof refreshMemberState==='function')refreshMemberState();}).catch(function(){reject.disabled=false;accept.disabled=false;});};
+    reject.onclick=function(){reject.disabled=true;accept.disabled=true;memberAnywhereRejectServer_().then(function(result){activeRequestKey='';root.show('자리교환',result&&result.message||'요청을 거절했어요.');shownRequestKey='';}).catch(function(){reject.disabled=false;accept.disabled=false;});};
+    accept.onclick=function(){reject.disabled=true;accept.disabled=true;memberAnywhereAcceptServer_().then(function(result){activeRequestKey='';root.show(result&&result.ok?'교환 완료':'교환 실패',result&&result.message||'자리교환을 처리하지 못했어요.');shownRequestKey='';if(result&&result.ok&&typeof refreshMemberState==='function')refreshMemberState();}).catch(function(){reject.disabled=false;accept.disabled=false;});};
     actions.appendChild(reject);actions.appendChild(accept);
   }
   function poll_(){
     var auth=typeof memberAnywhereSession_==='function'?memberAnywhereSession_():null;
     if(!auth||!auth.memberId||!auth.token)return;
-    memberAnywherePendingServer_().then(function(request){if(request)showIncoming_(request);}).catch(function(){});
+    memberAnywherePendingServer_().then(function(request){
+      if(request){showIncoming_(request);return;}
+      if(activeRequestKey)clearIncoming_();
+    }).catch(function(){});
   }
   window.memberAnywherePollSwapInbox=poll_;
   setInterval(poll_,3000);setTimeout(poll_,800);
