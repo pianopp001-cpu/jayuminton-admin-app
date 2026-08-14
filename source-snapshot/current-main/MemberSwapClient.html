@@ -6,4 +6,5 @@ function memberAnywherePendingServer_(){var auth=memberAnywhereReadySession_();i
 function memberAnywhereOutgoingServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve(null);return server('memberGetAnywhereOutgoingSwap',[auth.token,auth.memberId]);}
 function memberAnywhereAcceptServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return server('memberAcceptAnywhereSwap',[auth.token,auth.memberId]);}
 function memberAnywhereRejectServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return server('memberRejectAnywhereSwap',[auth.token,auth.memberId]);}
+function memberAnywhereReturnSelfToWaitServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return server('memberReturnSelfToWait',[auth.token,auth.memberId]);}
 </script>
