@@ -1,0 +1,86 @@
+name: Fix member swap requester alert
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [member-anywhere-controls-v3]
+    paths:
+      - .github/workflows/fix-member-swap-requester-alert.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-member-swap-requester-alert
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+          fetch-depth: 0
+
+      - name: Patch requester foreground alert suppression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('source-snapshot/current-main/MemberSwapAction.html')
+          s = p.read_text(encoding='utf-8')
+
+          old_head = "var memberAnywhereOutgoingSyncTimer_=null;var memberAnywhereOutgoingBaseline_='';var memberAnywhereOutgoingSyncBusy_=false;var memberAnywhereOutgoingRequestStartedAt_=0;"
+          new_head = old_head + "var memberAnywhereSuppressForegroundOnce_=false;"
+          if old_head not in s:
+              raise SystemExit('unsafe: requester sync header changed')
+          s = s.replace(old_head, new_head, 1)
+
+          old_check = "function memberAnywhereCheckOutgoing_(){\n  if(memberAnywhereOutgoingSyncBusy_)return;memberAnywhereOutgoingSyncBusy_=true;\n  var outgoingPromise=Promise.resolve(typeof memberAnywhereOutgoingServer_==='function'?memberAnywhereOutgoingServer_():null);\n  outgoingPromise.then(function(outgoing){\n    var refresh=typeof refreshMemberState==='function'?Promise.resolve(refreshMemberState()).catch(function(){}):Promise.resolve();"
+          new_check = "function memberAnywhereCheckOutgoing_(){\n  if(memberAnywhereOutgoingSyncBusy_)return;memberAnywhereOutgoingSyncBusy_=true;\n  var outgoingPromise=Promise.resolve(typeof memberAnywhereOutgoingServer_==='function'?memberAnywhereOutgoingServer_():null);\n  outgoingPromise.then(function(outgoing){\n    if(!outgoing&&memberAnywhereOutgoingBaseline_){memberAnywhereSuppressForegroundOnce_=true;}\n    var refresh=typeof refreshMemberState==='function'?Promise.resolve(refreshMemberState()).catch(function(){}):Promise.resolve();"
+          if old_check not in s:
+              raise SystemExit('unsafe: requester outgoing check block changed')
+          s = s.replace(old_check, new_check, 1)
+
+          insert_anchor = "function memberAnywhereRequestSelected_(){var partner=window.memberAnywhereSelectedSwapPartner&&window.memberAnywhereSelectedSwapPartner();if(!partner)return Promise.resolve({ok:false,message:'교환할 회원을 선택해 주세요.'});return memberAnywhereRequestServer_(partner.id);}\n"
+          wrapper = """function memberAnywhereRequestSelected_(){var partner=window.memberAnywhereSelectedSwapPartner&&window.memberAnywhereSelectedSwapPartner();if(!partner)return Promise.resolve({ok:false,message:'교환할 회원을 선택해 주세요.'});return memberAnywhereRequestServer_(partner.id);}\n(function installMemberAnywhereForegroundGuard_(){\n  if(typeof detectMemberForegroundTransition!=='function'||window.__memberAnywhereForegroundGuardInstalled)return;\n  var original=detectMemberForegroundTransition;\n  detectMemberForegroundTransition=function(previousState,nextState){\n    if(memberAnywhereSuppressForegroundOnce_){memberAnywhereSuppressForegroundOnce_=false;return;}\n    return original(previousState,nextState);\n  };\n  window.__memberAnywhereForegroundGuardInstalled=true;\n})();\n"""
+          if insert_anchor not in s:
+              raise SystemExit('unsafe: requester request anchor changed')
+          s = s.replace(insert_anchor, wrapper, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Guard exact scope and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "memberAnywhereSuppressForegroundOnce_=true" source-snapshot/current-main/MemberSwapAction.html
+          grep -Fq "__memberAnywhereForegroundGuardInstalled" source-snapshot/current-main/MemberSwapAction.html
+          grep -Fq "memberAnywhereSuppressForegroundOnce_=false;return;" source-snapshot/current-main/MemberSwapAction.html
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('source-snapshot/current-main/MemberSwapAction.html').read_text(encoding='utf-8')
+          a=s.find('<script>'); b=s.rfind('</script>')
+          assert a>=0 and b>a
+          Path('/tmp/member-swap-requester-alert.js').write_text(s[a+8:b],encoding='utf-8')
+          PY
+          node --check /tmp/member-swap-requester-alert.js
+          git diff --check
+          changed="$(git diff --name-only)"
+          test "$changed" = "source-snapshot/current-main/MemberSwapAction.html"
+
+      - name: Commit guarded fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source-snapshot/current-main/MemberSwapAction.html
+          git commit -m 'fix: suppress requester foreground alert after swap resolution'
+          git push origin HEAD:member-anywhere-controls-v3
