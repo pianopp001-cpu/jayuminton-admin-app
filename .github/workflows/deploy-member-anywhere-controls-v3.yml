@@ -1,0 +1,91 @@
+name: Deploy member anywhere controls v3
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-member-anywhere-controls-v3
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+
+      - name: Pull live and overlay complete redesign
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main-live"
+          SRC="$GITHUB_WORKSPACE/source-snapshot/current-main"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          cp "$SRC/Index.html" Index.html
+          cp "$SRC/MemberAnywhereSwap.js" MemberAnywhereSwap.js
+          cp "$SRC/MemberControls.html" MemberControls.html
+          cp "$SRC/MemberSwapAction.html" MemberSwapAction.html
+          cp "$SRC/MemberSwapClient.html" MemberSwapClient.html
+          cp "$SRC/MemberSwapInbox.html" MemberSwapInbox.html
+
+          grep -F "include('MemberSwapClient')" Index.html >/dev/null
+          grep -F "include('MemberSwapAction')" Index.html >/dev/null
+          grep -F "include('MemberControls')" Index.html >/dev/null
+          grep -F "include('MemberSwapInbox')" Index.html >/dev/null
+
+          grep -F 'memberRequestAnywhereSwap' MemberAnywhereSwap.js >/dev/null
+          grep -F 'memberAcceptAnywhereSwap' MemberAnywhereSwap.js >/dev/null
+          grep -F 'memberRejectAnywhereSwap' MemberAnywhereSwap.js >/dev/null
+          grep -F 'memberReturnSelfToWait' MemberAnywhereSwap.js >/dev/null
+          grep -F 'memberAnywhereReturnSelfToWaitServer_' MemberSwapClient.html >/dev/null
+          grep -F '이미 ' MemberControls.html >/dev/null
+          grep -F 'SELF_HOLD_MS=750' MemberControls.html >/dev/null
+
+          node --check MemberAnywhereSwap.js
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ['MemberControls.html','MemberSwapAction.html','MemberSwapClient.html','MemberSwapInbox.html']:
+              s=Path(name).read_text(encoding='utf-8')
+              a=s.find('<script>'); b=s.rfind('</script>')
+              if a >= 0 and b > a:
+                  out=Path('/tmp')/(name+'.js')
+                  out.write_text(s[a+8:b], encoding='utf-8')
+          PY
+          for f in /tmp/Member*.html.js; do [ -e "$f" ] && node --check "$f"; done
+
+      - name: Push and update existing MAIN deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/main-live"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 $GITHUB_RUN_ID"
