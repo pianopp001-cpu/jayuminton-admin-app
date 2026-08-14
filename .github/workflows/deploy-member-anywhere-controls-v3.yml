@@ -110,15 +110,53 @@ jobs:
           script = Path('Script.html')
           s = script.read_text(encoding='utf-8')
           s = s.replace("let LAST_UNDO_STATE = null;", "let LAST_UNDO_STATE = null;\nlet LAST_REDO_STATE = null;", 1)
-          s = s.replace("'undoLastAction','decreaseSelectedGameCounts',", "'undoLastAction','decreaseSelectedGameCounts',", 1)
           s = s.replace("reject(error);", "const raw=String((error&&error.message)||error||'오류가 발생했습니다.');\n        reject(new Error(raw.replace(/^.*?script\\.google\\.com[^:]*:\\s*(?:Error:\\s*)?/i,'').replace(/^Error:\\s*/i,'')));", 1)
+
+          # Member: every empty court slot is a one-tap destination.
+          old_court_empty = """                return memberCard(null, false, false);"""
+          new_court_empty = """                return '<div class=\"person empty member-court-empty\" onclick=\"handleMemberCourtEmptyTap(' + courtNo + ',' + slotIndex + ',event)\" title=\"한 번 터치하면 이 코트로 이동합니다\"><span class=\"empty-slot-label\">비어 있음</span></div>';"""
+          if old_court_empty not in s: raise SystemExit('member court empty marker missing')
+          s = s.replace(old_court_empty, new_court_empty, 1)
+
+          # Member: wait empty slot moves immediately on one tap, with instant visual feedback.
+          wait_start = "function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){"
+          wait_end = "function memberWaitEmptySlotCard(groupIndex,slotIndex){"
+          a = s.find(wait_start); b = s.find(wait_end, a)
+          if a < 0 or b < 0: raise SystemExit('member wait empty handler markers missing')
+          wait_handler = r'''function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){
+            if(IS_ADMIN)return;
+            if(event){event.preventDefault();event.stopPropagation();}
+            if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;
+            MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};
+            renderWaitGroups();
+            memberMoveToWaitGroup(groupIndex);
+          }
+          function handleMemberCourtEmptyTap(courtNo,slotIndex,event){
+            if(IS_ADMIN)return;
+            if(event){event.preventDefault();event.stopPropagation();}
+            if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;
+            var target=event&&event.currentTarget;
+            if(target)target.classList.add('selected','member-anywhere-processing');
+            if(typeof window.memberAnywhereMoveSelf==='function'){
+              window.memberAnywhereMoveSelf({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)});
+              return;
+            }
+            Promise.resolve(memberAnywhereMoveSelfServer_({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)})).then(function(result){
+              if(result&&result.ok&&result.state){STATE=result.state;renderState();return;}
+              alert(result&&result.message||'코트 이동에 실패했습니다.');
+            }).catch(function(error){alert(String(error&&error.message||error||'코트 이동에 실패했습니다.'));});
+          }
+          '''
+          s = s[:a] + wait_handler + s[b:]
+          s = s.replace('title=\\"두 번 터치하면 이 대기자리에 들어갑니다\\"', 'title=\\"한 번 터치하면 이 대기자리로 이동합니다\\"', 1)
+
           addon = r'''
           function adminRefreshNow() {
             if (!IS_ADMIN) return;
             server('getPublicState', []).then(function(state) {
               STATE = normalizeStateMemberProfiles(state);
               SELECTED.clear();
-              render();
+              renderState();
             }).catch(function(error) {
               alert(String((error && error.message) || error || '새로고침에 실패했습니다.'));
             });
@@ -146,7 +184,7 @@ jobs:
               LAST_UNDO_STATE = null;
               STATE = normalizeStateMemberProfiles(state);
               SELECTED.clear();
-              render();
+              renderState();
               updateUndoRedoButtons_();
             }).catch(function(error) {
               alert(String((error && error.message) || error));
@@ -162,7 +200,7 @@ jobs:
               LAST_REDO_STATE = null;
               STATE = normalizeStateMemberProfiles(state);
               SELECTED.clear();
-              render();
+              renderState();
               updateUndoRedoButtons_();
             }).catch(function(error) {
               alert(String((error && error.message) || error));
@@ -175,11 +213,17 @@ jobs:
 
           admin = Path('Admin.html')
           s = admin.read_text(encoding='utf-8')
+          # Keep redo in the desktop header, but put refresh exactly in the mobile bottom bar.
           needle = '''    <button\n      id="undoButton"\n      class="ghost-button undo-button header-undo-button"\n      onclick="undoLastAction()"\n      disabled\n    >\n      ↶ 실행 취소\n    </button>'''
-          replacement = needle + '''\n\n    <button id="redoButton" class="ghost-button undo-button header-undo-button" onclick="redoLastAction()" disabled>↷ 다시 실행</button>\n    <button class="ghost-button header-undo-button" onclick="adminRefreshNow()">↻ 새로고침</button>'''
+          replacement = needle + '''\n\n    <button id="redoButton" class="ghost-button undo-button header-undo-button" onclick="redoLastAction()" disabled>↷ 다시 실행</button>'''
           if 'id="redoButton"' not in s:
               if needle not in s: raise SystemExit('admin undo button marker missing')
               s = s.replace(needle, replacement, 1)
+          mobile_needle = '''    >↶ 실행 취소</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'''
+          mobile_replacement = '''    >↶ 실행 취소</button>\n    <button id="mobileRefreshButton" class="ghost-button mobile-refresh-button" type="button" onclick="adminRefreshNow()">↻ 새로고침</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'''
+          if 'id="mobileRefreshButton"' not in s:
+              if mobile_needle not in s: raise SystemExit('mobile undo/assign marker missing')
+              s = s.replace(mobile_needle, mobile_replacement, 1)
           admin.write_text(s, encoding='utf-8')
           PY
 
@@ -187,8 +231,11 @@ jobs:
           grep -F 'memberReturnSelfToWait' MemberAnywhereSwap.js >/dev/null
           grep -F 'function pickAutoFillIds_' Code.js >/dev/null
           grep -F 'id="redoButton"' Admin.html >/dev/null
+          grep -F 'id="mobileRefreshButton"' Admin.html >/dev/null
           grep -F 'adminRefreshNow' Script.html >/dev/null
           grep -F 'function redoLastAction()' Script.html >/dev/null
+          grep -F 'handleMemberCourtEmptyTap' Script.html >/dev/null
+          grep -F '한 번 터치하면 이 대기자리로 이동합니다' Script.html >/dev/null
           node --check Code.js
           python3 - <<'PY'
           from pathlib import Path
@@ -207,4 +254,4 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/main-live"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 admin-fix $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 empty-slot-mobile-refresh $GITHUB_RUN_ID"
