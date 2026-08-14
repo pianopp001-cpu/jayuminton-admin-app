@@ -1,7 +1,22 @@
 <script>
+function memberAnywhereSession_(){
+  return {memberId:String(storedSelfMemberId()||''),token:String(MEMBER_SESSION_VALUE||localStorage.getItem(MEMBER_SESSION_KEY)||'')};
+}
 function memberAnywhereRequestServer_(targetId){
-  var me=String(storedSelfMemberId()||'');
-  var token=String(MEMBER_SESSION_VALUE||localStorage.getItem(MEMBER_SESSION_KEY)||'');
-  return server('memberRequestAnywhereSwap',[token,me,String(targetId||'')]);
+  var auth=memberAnywhereSession_();
+  return server('memberRequestAnywhereSwap',[auth.token,auth.memberId,String(targetId||'')]);
+}
+function memberAnywherePendingServer_(){
+  var auth=memberAnywhereSession_();
+  if(!auth.memberId)return Promise.resolve(null);
+  return server('memberGetAnywhereSwapRequest',[auth.token,auth.memberId]);
+}
+function memberAnywhereAcceptServer_(){
+  var auth=memberAnywhereSession_();
+  return server('memberAcceptAnywhereSwap',[auth.token,auth.memberId]);
+}
+function memberAnywhereRejectServer_(){
+  var auth=memberAnywhereSession_();
+  return server('memberRejectAnywhereSwap',[auth.token,auth.memberId]);
 }
 </script>
