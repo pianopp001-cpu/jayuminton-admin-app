@@ -38,6 +38,11 @@ function memberReturnSelfToWait(sessionToken,memberId){
   try{
     var location=memberAnywhereLocation_(memberId);
     if(!location||location.type!=='court')return {ok:false,message:'현재 코트에 있을 때만 대기목록으로 이동할 수 있어요.'};
+    var outgoingTarget=memberAnywhereReadActiveOutgoingTarget_(memberId);
+    if(outgoingTarget)return {ok:false,message:'보낸 자리교환 요청을 먼저 처리해 주세요.'};
+    var incoming=memberAnywhereReadSwapRequest_(memberId);
+    if(incoming&&!memberAnywhereRequestStillValid_(incoming)){memberAnywhereClearSwapRequest_(memberId);incoming=null;}
+    if(incoming)return {ok:false,message:'받은 자리교환 요청을 먼저 처리해 주세요.'};
     var courts=readCourts_(),waitGroups=readWaitGroups_(),members=readMembers_();
     var targetGroup=-1;
     for(var g=0;g<waitGroups.length;g+=1){if((waitGroups[g]||[]).length<GROUP_SIZE){targetGroup=g;break;}}
