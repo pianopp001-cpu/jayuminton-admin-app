@@ -34,12 +34,11 @@ function memberAnywhereSwapPlacedMembers_(firstId,secondId,firstLocation,secondL
 function memberAnywhereStatusForLocation_(location){if(location.type==='court')return 'playing';if(location.type==='wait')return 'waiting';return String(location.status||'active');}
 function memberAnywhereApplyStatus_(member,location){member.status=memberAnywhereStatusForLocation_(location);}
 function memberAnywhereMemberById_(members,memberId){return members.find(function(member){return String(member.id)===String(memberId);})||null;}
+function memberAnywhereApplyPairStatus_(members,firstId,secondId,firstLocation,secondLocation){var first=memberAnywhereMemberById_(members,firstId);var second=memberAnywhereMemberById_(members,secondId);if(!first||!second)return false;memberAnywhereApplyStatus_(first,secondLocation);memberAnywhereApplyStatus_(second,firstLocation);return true;}
 
-function memberAnywhereApplyPairStatus_(members,firstId,secondId,firstLocation,secondLocation){
-  var first=memberAnywhereMemberById_(members,firstId);
-  var second=memberAnywhereMemberById_(members,secondId);
-  if(!first||!second)return false;
-  memberAnywhereApplyStatus_(first,secondLocation);
-  memberAnywhereApplyStatus_(second,firstLocation);
+function memberAnywhereSavePairStatus_(firstId,secondId,firstLocation,secondLocation){
+  var members=readMembers_();
+  if(!memberAnywhereApplyPairStatus_(members,firstId,secondId,firstLocation,secondLocation))return false;
+  writeMembers_(members);
   return true;
 }
