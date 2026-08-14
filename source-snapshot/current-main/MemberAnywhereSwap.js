@@ -30,29 +30,31 @@ function memberAnywhereSwapAll_(firstId,secondId,firstLocation,secondLocation){v
 function memberAcceptAnywhereSwap(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);var lock=LockService.getDocumentLock();if(!lock.tryLock(5000))return {ok:false,message:'다른 자리 변경을 처리 중이에요. 잠시 후 다시 시도해 주세요.'};try{var request=memberAnywhereReadSwapRequest_(memberId);if(!request||String(request.targetId)!==memberId)return {ok:false,message:'교환 요청이 없거나 만료됐어요.'};var snapshot=request.snapshot||{};if(snapshot.from&&snapshot.to&&snapshot.from.locationKey&&snapshot.from.locationKey===snapshot.to.locationKey){memberAnywhereClearSwapRequest_(memberId);return {ok:false,message:'이미 같은 상태라 자리교환이 필요하지 않아요.'};}if(!memberAnywhereSnapshotStillValid_(request.snapshot)){memberAnywhereClearSwapRequest_(memberId);return {ok:false,message:'자리 상태가 변경되어 교환할 수 없어요.'};}var firstLocation=memberAnywhereLocation_(request.requesterId);var secondLocation=memberAnywhereLocation_(memberId);var ok=memberAnywhereSwapAll_(request.requesterId,memberId,firstLocation,secondLocation);memberAnywhereClearSwapRequest_(memberId);return ok?{ok:true,message:'자리 교환이 완료됐어요.'}:{ok:false,message:'회원 정보를 확인할 수 없어요.'};}finally{lock.releaseLock();}}
 function memberRequestAnywhereSwap(sessionToken,memberId,targetId){memberId=memberSessionAuth_(sessionToken,memberId);targetId=String(targetId||'');if(!targetId||targetId===memberId)return {ok:false,message:'교환할 회원을 확인해 주세요.'};var members=readMembers_();if(!memberAnywhereMemberById_(members,targetId))return {ok:false,message:'교환할 회원을 찾을 수 없어요.'};var lock=LockService.getDocumentLock();if(!lock.tryLock(3000))return {ok:false,message:'다른 자리 요청을 처리 중이에요. 잠시 후 다시 시도해 주세요.'};try{var outgoingTarget=memberAnywhereReadActiveOutgoingTarget_(memberId);if(outgoingTarget)return {ok:false,message:outgoingTarget===targetId?'이미 이 회원에게 자리교환을 요청했어요.':'먼저 보낸 자리교환 요청을 처리해 주세요.'};var incoming=memberAnywhereReadSwapRequest_(memberId);if(incoming&&!memberAnywhereRequestStillValid_(incoming)){memberAnywhereClearSwapRequest_(memberId);incoming=null;}if(incoming)return {ok:false,message:'먼저 받은 자리교환 요청을 처리해 주세요.'};var targetOutgoing=memberAnywhereReadActiveOutgoingTarget_(targetId);if(targetOutgoing)return {ok:false,message:'상대방이 다른 자리교환 요청을 처리 중이에요.'};var pending=memberAnywhereReadSwapRequest_(targetId);if(pending&&!memberAnywhereRequestStillValid_(pending)){memberAnywhereClearSwapRequest_(targetId);pending=null;}if(pending){if(String(pending.requesterId)===memberId)return {ok:false,message:'이미 이 회원에게 자리교환을 요청했어요.'};return {ok:false,message:'상대방이 다른 자리교환 요청을 처리 중이에요.'};}var request=memberAnywhereSwapRequest_(memberId,targetId);if(!request.snapshot.from.locationKey||!request.snapshot.to.locationKey)return {ok:false,message:'현재 자리를 확인할 수 없어요.'};if(request.snapshot.from.locationKey===request.snapshot.to.locationKey)return {ok:false,message:'이미 같은 상태라 자리교환이 필요하지 않아요.'};memberAnywherePutSwapRequest_(targetId,request);return {ok:true,message:'자리 교환을 요청했어요.',createdAt:Number(request.createdAt||0),requesterLocationKey:String(request.snapshot.from.locationKey||''),targetLocationKey:String(request.snapshot.to.locationKey||'')};}finally{lock.releaseLock();}}
 
-/* Signed-in member only: atomically leave a court and join the first available wait group. */
-function memberReturnSelfToWait(sessionToken,memberId){
-  memberId=memberSessionAuth_(sessionToken,memberId);
-  var lock=LockService.getDocumentLock();
-  if(!lock.tryLock(5000))return {ok:false,message:'다른 자리 변경을 처리 중이에요. 잠시 후 다시 시도해 주세요.'};
+function memberMoveSelf(sessionToken,memberId,destination){
+  memberId=memberSessionAuth_(sessionToken,memberId);destination=destination||{};
+  var lock=LockService.getDocumentLock();if(!lock.tryLock(5000))return {ok:false,message:'다른 자리 변경을 처리 중이에요. 잠시 후 다시 시도해 주세요.'};
   try{
-    var location=memberAnywhereLocation_(memberId);
-    if(!location||location.type!=='court')return {ok:false,message:'현재 코트에 있을 때만 대기목록으로 이동할 수 있어요.'};
-    var outgoingTarget=memberAnywhereReadActiveOutgoingTarget_(memberId);
-    if(outgoingTarget)return {ok:false,message:'보낸 자리교환 요청을 먼저 처리해 주세요.'};
-    var incoming=memberAnywhereReadSwapRequest_(memberId);
-    if(incoming&&!memberAnywhereRequestStillValid_(incoming)){memberAnywhereClearSwapRequest_(memberId);incoming=null;}
-    if(incoming)return {ok:false,message:'받은 자리교환 요청을 먼저 처리해 주세요.'};
-    var courts=readCourts_(),waitGroups=readWaitGroups_(),members=readMembers_();
-    var targetGroup=-1;
-    for(var g=0;g<waitGroups.length;g+=1){if((waitGroups[g]||[]).length<GROUP_SIZE){targetGroup=g;break;}}
-    if(targetGroup<0)return {ok:false,message:'현재 대기목록에 빈자리가 없어요.'};
-    /* Build the complete next state in memory first. Nothing is written until a valid destination exists. */
-    Object.keys(courts).forEach(function(courtNo){courts[courtNo]=(courts[courtNo]||[]).filter(function(id){return String(id)!==memberId;});});
-    for(var i=0;i<waitGroups.length;i+=1)waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});
-    waitGroups[targetGroup].push(memberId);
-    var member=memberAnywhereMemberById_(members,memberId);if(!member)return {ok:false,message:'회원 정보를 확인할 수 없어요.'};member.status='waiting';
+    if(memberAnywhereReadActiveOutgoingTarget_(memberId))return {ok:false,message:'보낸 자리교환 요청을 먼저 처리해 주세요.'};
+    var incoming=memberAnywhereReadSwapRequest_(memberId);if(incoming&&!memberAnywhereRequestStillValid_(incoming)){memberAnywhereClearSwapRequest_(memberId);incoming=null;}if(incoming)return {ok:false,message:'받은 자리교환 요청을 먼저 처리해 주세요.'};
+    var courts=readCourts_(),waitGroups=readWaitGroups_(),members=readMembers_(),member=memberAnywhereMemberById_(members,memberId);if(!member)return {ok:false,message:'회원 정보를 확인할 수 없어요.'};
+    var type=String(destination.type||''),status=String(destination.status||'');
+    if(type==='court'){
+      var courtNo=String(destination.courtNo||''),court=courts[courtNo];if(!court)return {ok:false,message:'코트를 확인할 수 없어요.'};if(court.length>=GROUP_SIZE)return {ok:false,message:'선택한 코트에 빈자리가 없어요.'};
+    }else if(type==='wait'){
+      var group=Number(destination.group);if(!isFinite(group)||group<0||group>=waitGroups.length)return {ok:false,message:'대기 자리를 확인할 수 없어요.'};if((waitGroups[group]||[]).length>=GROUP_SIZE)return {ok:false,message:'선택한 대기조에 빈자리가 없어요.'};
+    }else if(type==='status'){
+      if(['active','rest','away','before'].indexOf(status)<0)return {ok:false,message:'이동 상태를 확인할 수 없어요.'};
+    }else return {ok:false,message:'이동할 위치를 확인해 주세요.'};
+    Object.keys(courts).forEach(function(no){courts[no]=(courts[no]||[]).filter(function(id){return String(id)!==memberId;});});
+    for(var g=0;g<waitGroups.length;g+=1)waitGroups[g]=(waitGroups[g]||[]).filter(function(id){return String(id)!==memberId;});
+    if(type==='court'){courts[String(destination.courtNo)].push(memberId);member.status='playing';}
+    else if(type==='wait'){waitGroups[Number(destination.group)].push(memberId);member.status='waiting';}
+    else member.status=status;
     writeMembers_(members);writeCourts_(courts,readCourtStartedAt_());writeWaitGroups_(waitGroups);touch_();
-    return {ok:true,message:'대기목록으로 이동했어요.',state:getPublicState(),waitGroup:targetGroup};
+    return {ok:true,message:type==='court'?'코트로 이동했어요.':type==='wait'?'대기 자리로 이동했어요.':status==='rest'?'휴식으로 이동했어요.':status==='away'?'귀가로 이동했어요.':status==='before'?'도착전으로 이동했어요.':'대기로 이동했어요.',state:getPublicState()};
   }finally{lock.releaseLock();}
+}
+
+function memberReturnSelfToWait(sessionToken,memberId){
+  memberId=memberSessionAuth_(sessionToken,memberId);var waitGroups=readWaitGroups_(),target=-1;for(var g=0;g<waitGroups.length;g+=1){if((waitGroups[g]||[]).length<GROUP_SIZE){target=g;break;}}if(target<0)return {ok:false,message:'현재 대기목록에 빈자리가 없어요.'};return memberMoveSelf(sessionToken,memberId,{type:'wait',group:target});
 }
