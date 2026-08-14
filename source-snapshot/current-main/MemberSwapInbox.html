@@ -9,8 +9,15 @@
     var selfId=String(storedSelfMemberId()||'');if(!selfId)return;
     try{applyMoveOrSwapLocally(String(request.requesterId),'','',selfId);if(typeof renderState==='function')renderState();}catch(error){}
   }
+  function incomingPromptVisible_(key){
+    if(!key||key!==shownRequestKey)return false;
+    var title=document.getElementById('memberAnywhereTitle');var actions=document.getElementById('memberAnywhereActions');
+    if(!title||title.textContent!=='자리교환 요청'||!actions)return false;
+    var labels=Array.prototype.map.call(actions.querySelectorAll('button'),function(button){return String(button.textContent||'');});
+    return labels.indexOf('거절')>=0&&labels.indexOf('수락')>=0;
+  }
   function showIncoming_(request){
-    var key=requestKey_(request);if(!key||key===shownRequestKey||responsePending)return;shownRequestKey=key;activeRequestKey=key;
+    var key=requestKey_(request);if(!key||responsePending||incomingPromptVisible_(key))return;shownRequestKey=key;activeRequestKey=key;
     var root=window.memberAnywhereModal&&window.memberAnywhereModal;if(!root){shownRequestKey='';activeRequestKey='';return;}
     root.show('자리교환 요청',requesterName_(request)+'님이 자리교환을 요청했어요.');
     var actions=document.getElementById('memberAnywhereActions');if(!actions){shownRequestKey='';activeRequestKey='';return;}actions.innerHTML='';
