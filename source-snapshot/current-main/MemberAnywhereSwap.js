@@ -30,27 +30,42 @@ function memberGetAnywhereSwapRequest(sessionToken,memberId){memberId=memberSess
 function memberRejectAnywhereSwap(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);memberAnywhereClearSwapRequest_(memberId);return {ok:true,message:'자리 교환 요청을 거절했어요.'};}
 function memberAnywhereSnapshotStillValid_(snapshot){if(!snapshot||!snapshot.from||!snapshot.to)return false;return memberAnywhereSnapshot_(snapshot.from.memberId).locationKey===snapshot.from.locationKey&&memberAnywhereSnapshot_(snapshot.to.memberId).locationKey===snapshot.to.locationKey;}
 function memberAnywhereReplaceAtLocation_(location,memberId,courts,waitGroups){if(location.type==='court'){courts[String(location.courtNo)][Number(location.position)]=memberId;return;}if(location.type==='wait')waitGroups[Number(location.group)][Number(location.position)]=memberId;}
-function memberAnywhereSwapPlacedMembers_(firstId,secondId,firstLocation,secondLocation){var courts=readCourts_();var waitGroups=readWaitGroups_();memberAnywhereReplaceAtLocation_(firstLocation,secondId,courts,waitGroups);memberAnywhereReplaceAtLocation_(secondLocation,firstId,courts,waitGroups);writeCourts_(courts,readCourtStartedAt_());writeWaitGroups_(waitGroups);}
 function memberAnywhereStatusForLocation_(location){if(location.type==='court')return 'playing';if(location.type==='wait')return 'waiting';return String(location.status||'active');}
 function memberAnywhereApplyStatus_(member,location){member.status=memberAnywhereStatusForLocation_(location);}
 function memberAnywhereMemberById_(members,memberId){return members.find(function(member){return String(member.id)===String(memberId);})||null;}
 function memberAnywhereApplyPairStatus_(members,firstId,secondId,firstLocation,secondLocation){var first=memberAnywhereMemberById_(members,firstId);var second=memberAnywhereMemberById_(members,secondId);if(!first||!second)return false;memberAnywhereApplyStatus_(first,secondLocation);memberAnywhereApplyStatus_(second,firstLocation);return true;}
-function memberAnywhereSavePairStatus_(firstId,secondId,firstLocation,secondLocation){var members=readMembers_();if(!memberAnywhereApplyPairStatus_(members,firstId,secondId,firstLocation,secondLocation))return false;writeMembers_(members);return true;}
-function memberAnywhereSwapAll_(firstId,secondId,firstLocation,secondLocation){memberAnywhereSwapPlacedMembers_(firstId,secondId,firstLocation,secondLocation);return memberAnywhereSavePairStatus_(firstId,secondId,firstLocation,secondLocation);}
+function memberAnywhereSwapAll_(firstId,secondId,firstLocation,secondLocation){
+  var courts=readCourts_();
+  var waitGroups=readWaitGroups_();
+  var members=readMembers_();
+  if(!memberAnywhereApplyPairStatus_(members,firstId,secondId,firstLocation,secondLocation))return false;
+  memberAnywhereReplaceAtLocation_(firstLocation,secondId,courts,waitGroups);
+  memberAnywhereReplaceAtLocation_(secondLocation,firstId,courts,waitGroups);
+  writeMembers_(members);
+  writeCourts_(courts,readCourtStartedAt_());
+  writeWaitGroups_(waitGroups);
+  return true;
+}
 
 function memberAcceptAnywhereSwap(sessionToken,memberId){
   memberId=memberSessionAuth_(sessionToken,memberId);
-  var request=memberAnywhereReadSwapRequest_(memberId);
-  if(!request||String(request.targetId)!==memberId)return {ok:false,message:'교환 요청이 없거나 만료됐어요.'};
-  if(!memberAnywhereSnapshotStillValid_(request.snapshot)){
+  var lock=LockService.getScriptLock();
+  if(!lock.tryLock(5000))return {ok:false,message:'다른 자리 변경을 처리 중이에요. 잠시 후 다시 시도해 주세요.'};
+  try{
+    var request=memberAnywhereReadSwapRequest_(memberId);
+    if(!request||String(request.targetId)!==memberId)return {ok:false,message:'교환 요청이 없거나 만료됐어요.'};
+    if(!memberAnywhereSnapshotStillValid_(request.snapshot)){
+      memberAnywhereClearSwapRequest_(memberId);
+      return {ok:false,message:'자리 상태가 변경되어 교환할 수 없어요.'};
+    }
+    var firstLocation=memberAnywhereLocation_(request.requesterId);
+    var secondLocation=memberAnywhereLocation_(memberId);
+    var ok=memberAnywhereSwapAll_(request.requesterId,memberId,firstLocation,secondLocation);
     memberAnywhereClearSwapRequest_(memberId);
-    return {ok:false,message:'자리 상태가 변경되어 교환할 수 없어요.'};
+    return ok?{ok:true,message:'자리 교환이 완료됐어요.'}:{ok:false,message:'회원 정보를 확인할 수 없어요.'};
+  }finally{
+    lock.releaseLock();
   }
-  var firstLocation=memberAnywhereLocation_(request.requesterId);
-  var secondLocation=memberAnywhereLocation_(memberId);
-  var ok=memberAnywhereSwapAll_(request.requesterId,memberId,firstLocation,secondLocation);
-  memberAnywhereClearSwapRequest_(memberId);
-  return ok?{ok:true,message:'자리 교환이 완료됐어요.'}:{ok:false,message:'회원 정보를 확인할 수 없어요.'};
 }
 
 function memberRequestAnywhereSwap(sessionToken,memberId,targetId){
