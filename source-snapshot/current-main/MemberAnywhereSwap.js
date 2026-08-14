@@ -37,7 +37,7 @@ function memberMoveSelf(sessionToken,memberId,destination){
   try{
     if(memberAnywhereReadActiveOutgoingTarget_(memberId))return {ok:false,message:'보낸 자리교환 요청을 먼저 처리해 주세요.'};
     var incoming=memberAnywhereReadSwapRequest_(memberId);if(incoming&&!memberAnywhereRequestStillValid_(incoming)){memberAnywhereClearSwapRequest_(memberId);incoming=null;}if(incoming)return {ok:false,message:'받은 자리교환 요청을 먼저 처리해 주세요.'};
-    var courts=readCourts_(),waitGroups=readWaitGroups_(),members=readMembers_(),member=memberAnywhereMemberById_(members,memberId);if(!member)return {ok:false,message:'회원 정보를 확인할 수 없어요.'};
+    var courts=readCourts_(),waitGroups=readWaitGroups_(),members=readMembers_(),startedAt=readCourtStartedAt_(),member=memberAnywhereMemberById_(members,memberId);if(!member)return {ok:false,message:'회원 정보를 확인할 수 없어요.'};
     var type=String(destination.type||''),status=String(destination.status||'');
     if(type==='court'){
       var courtNo=String(destination.courtNo||''),court=courts[courtNo];if(!court)return {ok:false,message:'코트를 확인할 수 없어요.'};if(court.length>=GROUP_SIZE)return {ok:false,message:'선택한 코트에 빈자리가 없어요.'};
@@ -46,12 +46,12 @@ function memberMoveSelf(sessionToken,memberId,destination){
     }else if(type==='status'){
       if(['active','rest','away','before'].indexOf(status)<0)return {ok:false,message:'이동 상태를 확인할 수 없어요.'};
     }else return {ok:false,message:'이동할 위치를 확인해 주세요.'};
-    Object.keys(courts).forEach(function(no){courts[no]=(courts[no]||[]).filter(function(id){return String(id)!==memberId;});});
+    Object.keys(courts).forEach(function(no){var before=(courts[no]||[]).length;courts[no]=(courts[no]||[]).filter(function(id){return String(id)!==memberId;});if(courts[no].length!==before&&courts[no].length<GROUP_SIZE)startedAt[no]='';});
     for(var g=0;g<waitGroups.length;g+=1)waitGroups[g]=(waitGroups[g]||[]).filter(function(id){return String(id)!==memberId;});
-    if(type==='court'){courts[String(destination.courtNo)].push(memberId);member.status='playing';}
+    if(type==='court'){var targetCourtNo=String(destination.courtNo);courts[targetCourtNo].push(memberId);startedAt[targetCourtNo]=courts[targetCourtNo].length===GROUP_SIZE?(startedAt[targetCourtNo]||new Date().toISOString()):'';member.status='playing';}
     else if(type==='wait'){waitGroups[Number(destination.group)].push(memberId);member.status='waiting';}
     else member.status=status;
-    writeMembers_(members);writeCourts_(courts,readCourtStartedAt_());writeWaitGroups_(waitGroups);touch_();
+    writeMembers_(members);writeCourts_(courts,startedAt);writeWaitGroups_(waitGroups);touch_();
     return {ok:true,message:type==='court'?'코트에 배정했어요.':type==='wait'?'코트 배정되었어요.':status==='rest'?'휴식으로 이동했어요.':status==='away'?'귀가로 이동했어요.':status==='before'?'도착전으로 이동했어요.':'코트배정대기에 등록했어요.',state:getPublicState()};
   }finally{lock.releaseLock();}
 }
