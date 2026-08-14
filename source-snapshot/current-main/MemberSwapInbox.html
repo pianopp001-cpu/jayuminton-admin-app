@@ -31,4 +31,25 @@
   function poll_(){var auth=typeof memberAnywhereSession_==='function'?memberAnywhereSession_():null;if(!auth||!auth.memberId||!auth.token||responsePending)return;memberAnywherePendingServer_().then(function(request){if(request){showIncoming_(request);return;}if(activeRequestKey)clearIncoming_();}).catch(function(){});}
   window.memberAnywherePollSwapInbox=poll_;setInterval(poll_,3000);setTimeout(poll_,800);
 })();
+
+/* 사용자 카드에서 현재 제외 상태를 작게 표시한다. 코트/대기1~5/코트배정대기는 별도 배지를 붙이지 않는다. */
+(function installMemberStatusBadges(){
+  if(typeof window.memberCard!=='function'||window.__jayumintonStatusBadgeInstalled)return;
+  window.__jayumintonStatusBadgeInstalled=true;
+  var originalMemberCard=window.memberCard;
+  function badgeText(member){
+    if(!member)return '';
+    if(member.status==='away')return '귀가';
+    if(member.status==='before')return '도착 전';
+    if(member.status==='rest')return '휴식';
+    return '';
+  }
+  window.memberCard=function(member,showGames,clickable){
+    var html=originalMemberCard.apply(this,arguments);
+    var label=badgeText(member);
+    if(!label||IS_ADMIN)return html;
+    var badge='<span class="member-status-mini" style="display:inline-flex;align-items:center;justify-content:center;margin-left:5px;padding:1px 5px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;white-space:nowrap;background:rgba(0,0,0,.08);">'+escapeMemberInfo(label)+'</span>';
+    return html.replace('</span>'+((showGames)?'<span class="meta">':''),'</span>'+badge+((showGames)?'<span class="meta">':''));
+  };
+})();
 </script>
