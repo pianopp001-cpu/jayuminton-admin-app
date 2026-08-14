@@ -65,9 +65,15 @@ jobs:
           grep -F "include('MemberControls')" Index.html >/dev/null
           grep -F "include('MemberSwapInbox')" Index.html >/dev/null
 
-          # Guard: server/client swap entry points must exist.
-          grep -F 'requestMemberAnywhereSwap' MemberAnywhereSwap.js >/dev/null
-          grep -F 'respondMemberAnywhereSwap' MemberAnywhereSwap.js >/dev/null
+          # Guard: validate the actual server entry points used by MemberSwapClient.html.
+          grep -F 'function memberRequestAnywhereSwap' MemberAnywhereSwap.js >/dev/null
+          grep -F 'function memberGetAnywhereSwapRequest' MemberAnywhereSwap.js >/dev/null
+          grep -F 'function memberGetAnywhereOutgoingSwap' MemberAnywhereSwap.js >/dev/null
+          grep -F 'function memberAcceptAnywhereSwap' MemberAnywhereSwap.js >/dev/null
+          grep -F 'function memberRejectAnywhereSwap' MemberAnywhereSwap.js >/dev/null
+          grep -F "server('memberRequestAnywhereSwap'" MemberSwapClient.html >/dev/null
+          grep -F "server('memberAcceptAnywhereSwap'" MemberSwapClient.html >/dev/null
+          grep -F "server('memberRejectAnywhereSwap'" MemberSwapClient.html >/dev/null
 
           # Syntax-check server JS and every HTML script body that contains a script wrapper.
           node --check MemberAnywhereSwap.js
