@@ -57,30 +57,149 @@ jobs:
           cp "$SRC/MemberSwapClient.html" MemberSwapClient.html
           cp "$SRC/MemberSwapInbox.html" MemberSwapInbox.html
 
-          grep -F "include('MemberSwapClient')" Index.html >/dev/null
-          grep -F "include('MemberSwapAction')" Index.html >/dev/null
-          grep -F "include('MemberControls')" Index.html >/dev/null
-          grep -F "include('MemberSwapInbox')" Index.html >/dev/null
-
-          grep -F 'memberRequestAnywhereSwap' MemberAnywhereSwap.js >/dev/null
-          grep -F 'memberAcceptAnywhereSwap' MemberAnywhereSwap.js >/dev/null
-          grep -F 'memberRejectAnywhereSwap' MemberAnywhereSwap.js >/dev/null
-          grep -F 'memberReturnSelfToWait' MemberAnywhereSwap.js >/dev/null
-          grep -F 'memberAnywhereReturnSelfToWaitServer_' MemberSwapClient.html >/dev/null
-          grep -F '이미 ' MemberControls.html >/dev/null
-          grep -F 'SELF_HOLD_MS=750' MemberControls.html >/dev/null
-
-          node --check MemberAnywhereSwap.js
           python3 - <<'PY'
           from pathlib import Path
-          for name in ['MemberControls.html','MemberSwapAction.html','MemberSwapClient.html','MemberSwapInbox.html']:
+
+          code = Path('Code.js')
+          s = code.read_text(encoding='utf-8')
+          marker = 'function autoFillCourtUnlocked_(pin, courtNo, ids) {'
+          helper = r'''function pickAutoFillIds_(existingIds, needed, members) {
+            existingIds = normalizeIds_(existingIds);
+            needed = Number(needed) || 0;
+            if (needed <= 0) return [];
+            const existingMap = {};
+            existingIds.forEach(function(id) { existingMap[id] = true; });
+            const active = (members || []).filter(function(member) {
+              return member && member.status === 'active' && !existingMap[String(member.id)];
+            }).slice().sort(function(a, b) {
+              const gameDiff = (Number(a.games) || 0) - (Number(b.games) || 0);
+              if (gameDiff) return gameDiff;
+              return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+            });
+            let existingMale = 0;
+            existingIds.forEach(function(id) {
+              const member = (members || []).find(function(item) { return String(item.id) === String(id); });
+              if (member && member.gender !== 'female') existingMale += 1;
+            });
+            const targets = [4, 0, 2];
+            for (let t = 0; t < targets.length; t += 1) {
+              const needMale = targets[t] - existingMale;
+              const needFemale = needed - needMale;
+              if (needMale < 0 || needFemale < 0) continue;
+              const males = active.filter(function(m) { return m.gender !== 'female'; }).slice(0, needMale);
+              const females = active.filter(function(m) { return m.gender === 'female'; }).slice(0, needFemale);
+              if (males.length === needMale && females.length === needFemale) {
+                return males.concat(females).map(function(m) { return String(m.id); });
+              }
+            }
+            throw new Error('현재 코트배정 대기 인원으로 남복·여복·혼복 조합을 만들 수 없습니다.');
+          }
+
+          '''
+          if 'function pickAutoFillIds_' not in s:
+              if marker not in s: raise SystemExit('autoFillCourt marker missing')
+              s = s.replace(marker, helper + marker, 1)
+
+          old = """  const needed = GROUP_SIZE - existingIds.length;\n\n  if (needed <= 0 || ids.length !== needed) {"""
+          new = """  const needed = GROUP_SIZE - existingIds.length;\n\n  if (needed > 0 && ids.length === 0) {\n    ids = pickAutoFillIds_(existingIds, needed, readMembers_());\n  }\n\n  if (needed <= 0 || ids.length !== needed) {"""
+          count = s.count(old)
+          if count < 2: raise SystemExit('expected both auto-fill guards')
+          s = s.replace(old, new, 2)
+          code.write_text(s, encoding='utf-8')
+
+          script = Path('Script.html')
+          s = script.read_text(encoding='utf-8')
+          s = s.replace("let LAST_UNDO_STATE = null;", "let LAST_UNDO_STATE = null;\nlet LAST_REDO_STATE = null;", 1)
+          s = s.replace("'undoLastAction','decreaseSelectedGameCounts',", "'undoLastAction','decreaseSelectedGameCounts',", 1)
+          s = s.replace("reject(error);", "const raw=String((error&&error.message)||error||'오류가 발생했습니다.');\n        reject(new Error(raw.replace(/^.*?script\\.google\\.com[^:]*:\\s*(?:Error:\\s*)?/i,'').replace(/^Error:\\s*/i,'')));", 1)
+          addon = r'''
+          function adminRefreshNow() {
+            if (!IS_ADMIN) return;
+            server('getPublicState', []).then(function(state) {
+              STATE = normalizeStateMemberProfiles(state);
+              SELECTED.clear();
+              render();
+            }).catch(function(error) {
+              alert(String((error && error.message) || error || '새로고침에 실패했습니다.'));
+            });
+          }
+
+          function updateUndoRedoButtons_() {
+            const undo = document.getElementById('undoButton');
+            const redo = document.getElementById('redoButton');
+            if (undo) undo.disabled = !LAST_UNDO_STATE;
+            if (redo) redo.disabled = !LAST_REDO_STATE;
+          }
+
+          function setUndoState(state) {
+            LAST_UNDO_STATE = state ? JSON.parse(JSON.stringify(state)) : null;
+            LAST_REDO_STATE = null;
+            updateUndoRedoButtons_();
+          }
+
+          function undoLastAction() {
+            if (!LAST_UNDO_STATE) return;
+            const target = JSON.parse(JSON.stringify(LAST_UNDO_STATE));
+            const current = JSON.parse(JSON.stringify(STATE));
+            server('undoLastAction', [ADMIN_PIN_VALUE, target]).then(function(state) {
+              LAST_REDO_STATE = current;
+              LAST_UNDO_STATE = null;
+              STATE = normalizeStateMemberProfiles(state);
+              SELECTED.clear();
+              render();
+              updateUndoRedoButtons_();
+            }).catch(function(error) {
+              alert(String((error && error.message) || error));
+            });
+          }
+
+          function redoLastAction() {
+            if (!LAST_REDO_STATE) return;
+            const target = JSON.parse(JSON.stringify(LAST_REDO_STATE));
+            const current = JSON.parse(JSON.stringify(STATE));
+            server('undoLastAction', [ADMIN_PIN_VALUE, target]).then(function(state) {
+              LAST_UNDO_STATE = current;
+              LAST_REDO_STATE = null;
+              STATE = normalizeStateMemberProfiles(state);
+              SELECTED.clear();
+              render();
+              updateUndoRedoButtons_();
+            }).catch(function(error) {
+              alert(String((error && error.message) || error));
+            });
+          }
+          '''
+          if 'function redoLastAction()' not in s:
+              s = s.replace('</script>', addon + '\n</script>', 1)
+          script.write_text(s, encoding='utf-8')
+
+          admin = Path('Admin.html')
+          s = admin.read_text(encoding='utf-8')
+          needle = '''    <button\n      id="undoButton"\n      class="ghost-button undo-button header-undo-button"\n      onclick="undoLastAction()"\n      disabled\n    >\n      ↶ 실행 취소\n    </button>'''
+          replacement = needle + '''\n\n    <button id="redoButton" class="ghost-button undo-button header-undo-button" onclick="redoLastAction()" disabled>↷ 다시 실행</button>\n    <button class="ghost-button header-undo-button" onclick="adminRefreshNow()">↻ 새로고침</button>'''
+          if 'id="redoButton"' not in s:
+              if needle not in s: raise SystemExit('admin undo button marker missing')
+              s = s.replace(needle, replacement, 1)
+          admin.write_text(s, encoding='utf-8')
+          PY
+
+          grep -F "include('MemberSwapClient')" Index.html >/dev/null
+          grep -F 'memberReturnSelfToWait' MemberAnywhereSwap.js >/dev/null
+          grep -F 'function pickAutoFillIds_' Code.js >/dev/null
+          grep -F 'id="redoButton"' Admin.html >/dev/null
+          grep -F 'adminRefreshNow' Script.html >/dev/null
+          grep -F 'function redoLastAction()' Script.html >/dev/null
+          node --check Code.js
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ['Script.html','MemberControls.html','MemberSwapAction.html','MemberSwapClient.html','MemberSwapInbox.html']:
               s=Path(name).read_text(encoding='utf-8')
               a=s.find('<script>'); b=s.rfind('</script>')
               if a >= 0 and b > a:
                   out=Path('/tmp')/(name+'.js')
                   out.write_text(s[a+8:b], encoding='utf-8')
           PY
-          for f in /tmp/Member*.html.js; do [ -e "$f" ] && node --check "$f"; done
+          for f in /tmp/*.html.js; do [ -e "$f" ] && node --check "$f"; done
 
       - name: Push and update existing MAIN deployment
         shell: bash
@@ -88,4 +207,4 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/main-live"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 admin-fix $GITHUB_RUN_ID"
