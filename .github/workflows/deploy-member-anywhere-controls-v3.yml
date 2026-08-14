@@ -54,9 +54,10 @@ jobs:
           cp "$SRC/MemberSwapInbox.html" MemberSwapInbox.html
           python3 - <<'PY'
           from pathlib import Path
+          import re
           code=Path('Code.js'); s=code.read_text(encoding='utf-8')
           marker='function autoFillCourtUnlocked_(pin, courtNo, ids) {'
-          helper='''function pickAutoFillIds_(existingIds, needed, members) {\n  existingIds = normalizeIds_(existingIds);\n  needed = Number(needed) || 0;\n  if (needed <= 0) return [];\n  const existingMap = {};\n  existingIds.forEach(function(id) { existingMap[id] = true; });\n  const active = (members || []).filter(function(member) { return member && member.status === 'active' && !existingMap[String(member.id)]; }).slice().sort(function(a,b) { const d=(Number(a.games)||0)-(Number(b.games)||0); return d || String(a.createdAt||'').localeCompare(String(b.createdAt||'')); });\n  let existingMale=0;\n  existingIds.forEach(function(id){ const member=(members||[]).find(function(item){return String(item.id)===String(id);}); if(member&&member.gender!=='female')existingMale+=1; });\n  const targets=[4,0,2];\n  for(let t=0;t<targets.length;t+=1){ const needMale=targets[t]-existingMale; const needFemale=needed-needMale; if(needMale<0||needFemale<0)continue; const males=active.filter(function(m){return m.gender!=='female';}).slice(0,needMale); const females=active.filter(function(m){return m.gender==='female';}).slice(0,needFemale); if(males.length===needMale&&females.length===needFemale)return males.concat(females).map(function(m){return String(m.id);}); }\n  throw new Error('현재 코트배정 대기 인원으로 남복·여복·혼복 조합을 만들 수 없습니다.');\n}\n\n'''
+          helper='''function pickAutoFillIds_(existingIds, needed, members) {\n  existingIds = normalizeIds_(existingIds);\n  needed = Number(needed) || 0;\n  if (needed <= 0) return [];\n  const occupied = {};\n  Object.keys(readCourts_()).forEach(function(no){ (readCourts_()[no]||[]).forEach(function(id){occupied[String(id)]=true;}); });\n  (readWaitGroups_()||[]).forEach(function(group){ (group||[]).forEach(function(id){occupied[String(id)]=true;}); });\n  existingIds.forEach(function(id){ occupied[String(id)] = true; });\n  const active = (members || []).filter(function(member) { return member && member.status === 'active' && !occupied[String(member.id)]; }).slice().sort(function(a,b) { const d=(Number(a.games)||0)-(Number(b.games)||0); return d || String(a.createdAt||'').localeCompare(String(b.createdAt||'')); });\n  let existingMale=0;\n  existingIds.forEach(function(id){ const member=(members||[]).find(function(item){return String(item.id)===String(id);}); if(member&&member.gender!=='female')existingMale+=1; });\n  const targets=[4,0,2];\n  for(let t=0;t<targets.length;t+=1){ const needMale=targets[t]-existingMale; const needFemale=needed-needMale; if(needMale<0||needFemale<0)continue; const males=active.filter(function(m){return m.gender!=='female';}).slice(0,needMale); const females=active.filter(function(m){return m.gender==='female';}).slice(0,needFemale); if(males.length===needMale&&females.length===needFemale)return males.concat(females).map(function(m){return String(m.id);}); }\n  throw new Error('현재 코트배정 대기 인원으로 남복·여복·혼복 조합을 만들 수 없습니다.');\n}\n\n'''
           if 'function pickAutoFillIds_' not in s:
               if marker not in s: raise SystemExit('autoFillCourt marker missing')
               s=s.replace(marker,helper+marker,1)
@@ -66,28 +67,28 @@ jobs:
               if old not in s: raise SystemExit('auto-fill guard marker missing')
               s=s.replace(old,new)
           code.write_text(s,encoding='utf-8')
+
           script=Path('Script.html'); s=script.read_text(encoding='utf-8')
           if 'let LAST_REDO_STATE = null;' not in s:s=s.replace('let LAST_UNDO_STATE = null;','let LAST_UNDO_STATE = null;\nlet LAST_REDO_STATE = null;',1)
-          old_empty='                return memberCard(null, false, false);'
-          new_empty='                return \'<div class="person empty member-court-empty" onclick="handleMemberCourtEmptyTap(\' + courtNo + \',\' + slotIndex + \',event)" title="한 번 터치하면 이 코트로 이동합니다"><span class="empty-slot-label">비어 있음</span></div>\';'
-          if 'handleMemberCourtEmptyTap(' not in s:
-              if old_empty not in s: raise SystemExit('member court empty marker missing')
-              s=s.replace(old_empty,new_empty,1)
-          wait_start='function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){'; wait_end='function memberWaitEmptySlotCard(groupIndex,slotIndex){'
-          a=s.find(wait_start); b=s.find(wait_end,a)
-          if a>=0 and b>=0 and 'window.memberAnywhereMoveSelf' not in s[a:b]:
-              wait_handler='''function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){\n  if(IS_ADMIN)return;\n  if(event){event.preventDefault();event.stopPropagation();}\n  if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;\n  MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};\n  renderWaitGroups();\n  if(typeof window.memberAnywhereMoveSelf==='function'){window.memberAnywhereMoveSelf({type:'wait',group:Number(groupIndex),slotIndex:Number(slotIndex)});return;}\n  memberMoveToWaitGroup(groupIndex);\n}\nfunction handleMemberCourtEmptyTap(courtNo,slotIndex,event){\n  if(IS_ADMIN)return;\n  if(event){event.preventDefault();event.stopPropagation();}\n  if(!memberWaitSeatSessionArgs()||ACTION_IN_FLIGHT)return;\n  var target=event&&event.currentTarget;if(target)target.classList.add('selected','member-anywhere-processing');\n  if(typeof window.memberAnywhereMoveSelf==='function'){window.memberAnywhereMoveSelf({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)});return;}\n  Promise.resolve(memberAnywhereMoveSelfServer_({type:'court',courtNo:Number(courtNo),slotIndex:Number(slotIndex)})).then(function(result){if(result&&result.ok&&result.state){STATE=result.state;renderState();return;}alert(result&&result.message||'코트 이동에 실패했습니다.');}).catch(function(error){alert(String(error&&error.message||error||'코트 이동에 실패했습니다.'));});\n}\n'''
-              s=s[:a]+wait_handler+s[b:]
-          addon='''\nfunction adminRefreshNow(){if(!IS_ADMIN)return;server('getPublicState',[]).then(function(state){STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();}).catch(function(error){alert(String((error&&error.message)||error||'새로고침에 실패했습니다.'));});}\nfunction updateUndoRedoButtons_(){const undo=document.getElementById('undoButton');const redo=document.getElementById('redoButton');if(undo)undo.disabled=!LAST_UNDO_STATE;if(redo)redo.disabled=!LAST_REDO_STATE;}\nfunction redoLastAction(){if(!LAST_REDO_STATE)return;const target=JSON.parse(JSON.stringify(LAST_REDO_STATE));const current=JSON.parse(JSON.stringify(STATE));server('undoLastAction',[ADMIN_PIN_VALUE,target]).then(function(state){LAST_UNDO_STATE=current;LAST_REDO_STATE=null;STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();updateUndoRedoButtons_();}).catch(function(error){alert(String((error&&error.message)||error));});}\n'''
-          if 'function adminRefreshNow()' not in s:s=s.replace('</script>',addon+'\n</script>',1)
+          # Admin two-person click always uses immediate admin move/swap; never member request flow.
+          s=s.replace("if (IS_ADMIN) {\n    toggleSelected(memberId);\n    return;\n  }", "if (IS_ADMIN) {\n    quickPickMember(memberId);\n    return;\n  }")
+          # Make admin saving state unmistakable and block duplicate actions.
+          addon='''\nfunction adminRefreshNow(){if(!IS_ADMIN)return;showAdminSaving_('새로고침 중입니다 · 잠시 기다려 주세요');server('getPublicState',[]).then(function(state){STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();}).catch(function(error){alert(String((error&&error.message)||error||'새로고침에 실패했습니다.'));}).finally(hideAdminSaving_);}\nfunction showAdminSaving_(text){if(!IS_ADMIN)return;var el=document.getElementById('adminSavingOverlay');if(!el){el=document.createElement('div');el.id='adminSavingOverlay';el.className='admin-saving-overlay';el.innerHTML='<div class="admin-saving-card"><div class="admin-saving-spinner"></div><strong id="adminSavingText"></strong><small>처리가 끝날 때까지 잠시 기다려 주세요.</small></div>';document.body.appendChild(el);}var t=document.getElementById('adminSavingText');if(t)t.textContent=text||'저장 중입니다';el.classList.add('show');}\nfunction hideAdminSaving_(){var el=document.getElementById('adminSavingOverlay');if(el)el.classList.remove('show');}\nfunction updateUndoRedoButtons_(){const undo=document.getElementById('undoButton');const redo=document.getElementById('redoButton');if(undo)undo.disabled=!LAST_UNDO_STATE;if(redo)redo.disabled=!LAST_REDO_STATE;}\nfunction redoLastAction(){if(!LAST_REDO_STATE)return;const target=JSON.parse(JSON.stringify(LAST_REDO_STATE));const current=JSON.parse(JSON.stringify(STATE));showAdminSaving_('다시 실행 중입니다');server('undoLastAction',[ADMIN_PIN_VALUE,target]).then(function(state){LAST_UNDO_STATE=current;LAST_REDO_STATE=null;STATE=normalizeStateMemberProfiles(state);SELECTED.clear();renderState();updateUndoRedoButtons_();}).catch(function(error){alert(String((error&&error.message)||error));}).finally(hideAdminSaving_);}\n'''
+          if 'function showAdminSaving_' not in s:s=s.replace('</script>',addon+'\n</script>',1)
           script.write_text(s,encoding='utf-8')
-          admin=Path('Admin.html'); s=admin.read_text(encoding='utf-8')
+
+          admin=Path('Admin.html'); a=admin.read_text(encoding='utf-8')
           needle='    >↶ 실행 취소</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'
           replacement='    >↶ 실행 취소</button>\n    <button id="mobileRefreshButton" class="ghost-button mobile-refresh-button" type="button" onclick="adminRefreshNow()">↻ 새로고침</button>\n    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>'
-          if 'id="mobileRefreshButton"' not in s:
-              if needle not in s: raise SystemExit('mobile undo/assign marker missing')
-              s=s.replace(needle,replacement,1)
-          admin.write_text(s,encoding='utf-8')
+          if 'id="mobileRefreshButton"' not in a:
+              if needle not in a: raise SystemExit('mobile undo/assign marker missing')
+              a=a.replace(needle,replacement,1)
+          admin.write_text(a,encoding='utf-8')
+
+          style=Path('Style.html'); css=style.read_text(encoding='utf-8')
+          patch='''\n/* JAYUMINTON_ADMIN_SAFE_UX_V1 */\n.mobile-refresh-button{font-size:12px!important;font-weight:500!important;line-height:1!important;min-height:36px!important;height:36px!important;padding:0 10px!important;white-space:nowrap!important}\n.admin-saving-overlay{position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.48);display:none;align-items:center;justify-content:center;pointer-events:all}.admin-saving-overlay.show{display:flex}.admin-saving-card{background:#fff;border-radius:18px;padding:24px 28px;min-width:260px;text-align:center;box-shadow:0 18px 55px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:8px;align-items:center}.admin-saving-card strong{font-size:18px}.admin-saving-card small{font-size:12px;color:#64748b}.admin-saving-spinner{width:34px;height:34px;border:4px solid #e2e8f0;border-top-color:#475569;border-radius:50%;animation:adminSavingSpin .8s linear infinite}@keyframes adminSavingSpin{to{transform:rotate(360deg)}}\n'''
+          if 'JAYUMINTON_ADMIN_SAFE_UX_V1' not in css: css=css.rstrip()+patch
+          style.write_text(css,encoding='utf-8')
           PY
           grep -F "include('MemberControls')" Index.html >/dev/null
           grep -F 'function memberMoveSelf' MemberAnywhereSwap.js >/dev/null
@@ -96,8 +97,7 @@ jobs:
           grep -F 'SELF_HOLD_MS=650' MemberControls.html >/dev/null
           grep -F "document.addEventListener('touchstart'" MemberControls.html >/dev/null
           grep -F 'id="mobileRefreshButton"' Admin.html >/dev/null
-          grep -F 'adminRefreshNow' Script.html >/dev/null
-          grep -F 'handleMemberCourtEmptyTap' Script.html >/dev/null
+          grep -F 'showAdminSaving_' Script.html >/dev/null
           node --check Code.js
           node --check MemberAnywhereSwap.js
           python3 - <<'PY'
@@ -113,4 +113,4 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/main-live"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 latest $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "member anywhere controls v3 safe latest $GITHUB_RUN_ID"
