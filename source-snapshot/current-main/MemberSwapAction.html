@@ -1,0 +1,7 @@
+<script>
+function memberAnywhereRequestSelected_(){
+  var partner=window.memberAnywhereSelectedSwapPartner&&window.memberAnywhereSelectedSwapPartner();
+  if(!partner)return Promise.resolve({ok:false,message:'교환할 회원을 선택해 주세요.'});
+  return memberAnywhereRequestServer_(partner.id);
+}
+</script>
