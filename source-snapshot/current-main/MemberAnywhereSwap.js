@@ -51,7 +51,7 @@ function memberMoveSelf(sessionToken,memberId,destination){
     else if(type==='wait'){waitGroups[Number(destination.group)].push(memberId);member.status='waiting';}
     else member.status=status;
     writeMembers_(members);writeCourts_(courts,readCourtStartedAt_());writeWaitGroups_(waitGroups);touch_();
-    return {ok:true,message:type==='court'?'코트로 이동했어요.':type==='wait'?'대기 자리로 이동했어요.':status==='rest'?'휴식으로 이동했어요.':status==='away'?'귀가로 이동했어요.':status==='before'?'도착전으로 이동했어요.':'대기로 이동했어요.',state:getPublicState()};
+    return {ok:true,message:type==='court'?'코트에 배정했어요.':type==='wait'?'대기에 배정했어요.':status==='rest'?'휴식으로 이동했어요.':status==='away'?'귀가로 이동했어요.':status==='before'?'도착전으로 이동했어요.':'대기에 배정했어요.',state:getPublicState()};
   }finally{lock.releaseLock();}
 }
 
