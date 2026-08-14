@@ -1,12 +1,22 @@
 <script>
-var memberAnywhereOutgoingSyncTimer_=null;var memberAnywhereOutgoingBaseline_='';var memberAnywhereOutgoingSyncBusy_=false;var memberAnywhereOutgoingRequestStartedAt_=0;
+var memberAnywhereOutgoingSyncTimer_=null;var memberAnywhereOutgoingBaseline_='';var memberAnywhereOutgoingSyncBusy_=false;var memberAnywhereOutgoingRequestStartedAt_=0;var memberAnywhereSuppressForegroundOnce_=false;
 function memberAnywhereRequestSelected_(){var partner=window.memberAnywhereSelectedSwapPartner&&window.memberAnywhereSelectedSwapPartner();if(!partner)return Promise.resolve({ok:false,message:'교환할 회원을 선택해 주세요.'});return memberAnywhereRequestServer_(partner.id);}
+(function installMemberAnywhereForegroundGuard_(){
+  if(typeof detectMemberForegroundTransition!=='function'||window.__memberAnywhereForegroundGuardInstalled)return;
+  var original=detectMemberForegroundTransition;
+  detectMemberForegroundTransition=function(previousState,nextState){
+    if(memberAnywhereSuppressForegroundOnce_){memberAnywhereSuppressForegroundOnce_=false;return;}
+    return original(previousState,nextState);
+  };
+  window.__memberAnywhereForegroundGuardInstalled=true;
+})();
 function memberAnywhereSelfLocationKey_(){var me=String(storedSelfMemberId()||'');if(!me)return '';var courts=STATE.courts||{};var courtKeys=Object.keys(courts);for(var c=0;c<courtKeys.length;c+=1){var pos=(courts[courtKeys[c]]||[]).indexOf(me);if(pos>=0)return 'court:'+courtKeys[c]+':'+pos;}var groups=STATE.waitGroups||[];for(var g=0;g<groups.length;g+=1){var waitPos=(groups[g]||[]).indexOf(me);if(waitPos>=0)return 'wait:'+g+':'+waitPos;}var member=(STATE.members||[]).find(function(item){return item&&String(item.id)===me;});return member?'status:'+String(member.status||'active'):'';}
 function memberAnywhereStopOutgoingSync_(){if(memberAnywhereOutgoingSyncTimer_){clearInterval(memberAnywhereOutgoingSyncTimer_);memberAnywhereOutgoingSyncTimer_=null;}memberAnywhereOutgoingSyncBusy_=false;memberAnywhereOutgoingRequestStartedAt_=0;}
 function memberAnywhereCheckOutgoing_(){
   if(memberAnywhereOutgoingSyncBusy_)return;memberAnywhereOutgoingSyncBusy_=true;
   var outgoingPromise=Promise.resolve(typeof memberAnywhereOutgoingServer_==='function'?memberAnywhereOutgoingServer_():null);
   outgoingPromise.then(function(outgoing){
+    if(!outgoing&&memberAnywhereOutgoingBaseline_){memberAnywhereSuppressForegroundOnce_=true;}
     var refresh=typeof refreshMemberState==='function'?Promise.resolve(refreshMemberState()).catch(function(){}):Promise.resolve();
     return refresh.then(function(){
       var current=memberAnywhereSelfLocationKey_();var moved=!!(current&&memberAnywhereOutgoingBaseline_&&current!==memberAnywhereOutgoingBaseline_);
