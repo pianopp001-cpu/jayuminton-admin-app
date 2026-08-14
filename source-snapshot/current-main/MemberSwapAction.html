@@ -13,7 +13,13 @@ function memberAnywhereCheckOutgoing_(){
     memberAnywhereOutgoingSyncBusy_=false;
   }).catch(function(){memberAnywhereOutgoingSyncBusy_=false;});
 }
-function memberAnywhereStartOutgoingSync_(){memberAnywhereStopOutgoingSync_();memberAnywhereOutgoingBaseline_=memberAnywhereSelfLocationKey_();memberAnywhereOutgoingRequestStartedAt_=Date.now();memberAnywhereOutgoingSyncTimer_=setInterval(memberAnywhereCheckOutgoing_,3000);setTimeout(memberAnywhereCheckOutgoing_,500);}
+function memberAnywhereStartOutgoingSync_(baseline,startedAt){memberAnywhereStopOutgoingSync_();memberAnywhereOutgoingBaseline_=String(baseline||memberAnywhereSelfLocationKey_()||'');memberAnywhereOutgoingRequestStartedAt_=Number(startedAt||0)||Date.now();memberAnywhereOutgoingSyncTimer_=setInterval(memberAnywhereCheckOutgoing_,3000);setTimeout(memberAnywhereCheckOutgoing_,500);}
+function memberAnywhereResumeOutgoingSync_(){
+  if(memberAnywhereOutgoingSyncTimer_)return Promise.resolve(true);
+  var auth=typeof memberAnywhereReadySession_==='function'?memberAnywhereReadySession_():null;if(!auth)return Promise.resolve(false);
+  return Promise.resolve(memberAnywhereOutgoingServer_()).then(function(outgoing){if(outgoing&&outgoing.requesterLocationKey){memberAnywhereStartOutgoingSync_(outgoing.requesterLocationKey,outgoing.createdAt);}return true;}).catch(function(){return false;});
+}
+(function(){var attempts=0;var timer=setInterval(function(){attempts+=1;memberAnywhereResumeOutgoingSync_().then(function(done){if(done||attempts>=20)clearInterval(timer);});},1000);setTimeout(function(){memberAnywhereResumeOutgoingSync_().then(function(done){if(done){clearInterval(timer);}});},350);})();
 function memberAnywhereHandleRequestClick_(event){var button=event.target&&event.target.closest?event.target.closest('#memberAnywhereActions button.primary'):null;if(!button||button.textContent!=='교환요청')return;event.preventDefault();event.stopImmediatePropagation();button.disabled=true;memberAnywhereRequestSelected_().then(function(result){if(window.memberAnywhereSelection)window.memberAnywhereSelection.clear();if(result&&result.ok)memberAnywhereStartOutgoingSync_();if(window.memberAnywhereModal)window.memberAnywhereModal.show(result&&result.ok?'요청 완료':'요청 실패',result&&result.message||'자리교환 요청을 처리하지 못했어요.');}).catch(function(error){button.disabled=false;if(window.memberAnywhereModal)window.memberAnywhereModal.show('요청 실패',String(error&&error.message||error||'자리교환 요청을 처리하지 못했어요.'));});}
 document.addEventListener('click',memberAnywhereHandleRequestClick_,true);
 </script>
