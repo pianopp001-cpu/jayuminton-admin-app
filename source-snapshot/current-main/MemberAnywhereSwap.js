@@ -1,20 +1,8 @@
 function memberAnywhereLocation_(memberId){
-  memberId=String(memberId||'');
-  var courts=readCourts_();
-  var courtKeys=Object.keys(courts);
-  for(var c=0;c<courtKeys.length;c+=1){
-    var courtNo=courtKeys[c];
-    var court=(courts[courtNo]||[]);
-    var courtPos=court.indexOf(memberId);
-    if(courtPos>=0)return {type:'court',courtNo:String(courtNo),position:courtPos};
-  }
-  var waitGroups=readWaitGroups_();
-  for(var g=0;g<waitGroups.length;g+=1){
-    var waitPos=(waitGroups[g]||[]).indexOf(memberId);
-    if(waitPos>=0)return {type:'wait',group:g,position:waitPos};
-  }
-  var member=readMembers_().find(function(item){return item&&String(item.id)===memberId;});
-  return member?{type:'status',status:String(member.status||'active')}:null;
+  memberId=String(memberId||'');var courts=readCourts_();var courtKeys=Object.keys(courts);
+  for(var c=0;c<courtKeys.length;c+=1){var courtNo=courtKeys[c];var court=(courts[courtNo]||[]);var courtPos=court.indexOf(memberId);if(courtPos>=0)return {type:'court',courtNo:String(courtNo),position:courtPos};}
+  var waitGroups=readWaitGroups_();for(var g=0;g<waitGroups.length;g+=1){var waitPos=(waitGroups[g]||[]).indexOf(memberId);if(waitPos>=0)return {type:'wait',group:g,position:waitPos};}
+  var member=readMembers_().find(function(item){return item&&String(item.id)===memberId;});return member?{type:'status',status:String(member.status||'active')}:null;
 }
 function memberAnywhereLocationKey_(location){if(!location)return '';if(location.type==='court')return 'court:'+location.courtNo+':'+location.position;if(location.type==='wait')return 'wait:'+location.group+':'+location.position;if(location.type==='status')return 'status:'+location.status;return '';}
 function memberAnywhereSnapshot_(memberId){var location=memberAnywhereLocation_(memberId);return {memberId:String(memberId||''),locationKey:memberAnywhereLocationKey_(location)};}
@@ -29,7 +17,7 @@ function memberAnywhereReadSwapRequest_(memberId){var raw=memberAnywhereReadSwap
 function memberAnywhereClearSwapRequest_(memberId){var cache=CacheService.getDocumentCache();var request=memberAnywhereReadSwapRequest_(memberId);cache.remove(memberAnywhereSwapCacheKey_(memberId));if(request&&request.requesterId)cache.remove(memberAnywhereOutgoingCacheKey_(request.requesterId));}
 function memberGetAnywhereSwapRequest(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);var request=memberAnywhereReadSwapRequest_(memberId);if(!request||String(request.targetId)!==memberId)return null;return request;}
 function memberGetAnywhereOutgoingSwap(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);var targetId=memberAnywhereReadOutgoingTarget_(memberId);if(!targetId)return null;var request=memberAnywhereReadSwapRequest_(targetId);if(!request||String(request.requesterId)!==memberId){CacheService.getDocumentCache().remove(memberAnywhereOutgoingCacheKey_(memberId));return null;}return {targetId:String(targetId),createdAt:Number(request.createdAt||0)};}
-function memberRejectAnywhereSwap(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);memberAnywhereClearSwapRequest_(memberId);return {ok:true,message:'자리 교환 요청을 거절했어요.'};}
+function memberRejectAnywhereSwap(sessionToken,memberId){memberId=memberSessionAuth_(sessionToken,memberId);var lock=LockService.getScriptLock();if(!lock.tryLock(3000))return {ok:false,message:'다른 자리 요청을 처리 중이에요. 잠시 후 다시 시도해 주세요.'};try{var request=memberAnywhereReadSwapRequest_(memberId);if(!request||String(request.targetId)!==memberId)return {ok:false,message:'교환 요청이 없거나 만료됐어요.'};memberAnywhereClearSwapRequest_(memberId);return {ok:true,message:'자리 교환 요청을 거절했어요.'};}finally{lock.releaseLock();}}
 function memberAnywhereSnapshotStillValid_(snapshot){if(!snapshot||!snapshot.from||!snapshot.to)return false;return memberAnywhereSnapshot_(snapshot.from.memberId).locationKey===snapshot.from.locationKey&&memberAnywhereSnapshot_(snapshot.to.memberId).locationKey===snapshot.to.locationKey;}
 function memberAnywhereReplaceAtLocation_(location,memberId,courts,waitGroups){if(location.type==='court'){courts[String(location.courtNo)][Number(location.position)]=memberId;return;}if(location.type==='wait')waitGroups[Number(location.group)][Number(location.position)]=memberId;}
 function memberAnywhereStatusForLocation_(location){if(location.type==='court')return 'playing';if(location.type==='wait')return 'waiting';return String(location.status||'active');}
