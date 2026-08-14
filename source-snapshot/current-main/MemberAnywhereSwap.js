@@ -52,3 +52,15 @@ function memberAcceptAnywhereSwap(sessionToken,memberId){
   memberAnywhereClearSwapRequest_(memberId);
   return ok?{ok:true,message:'자리 교환이 완료됐어요.'}:{ok:false,message:'회원 정보를 확인할 수 없어요.'};
 }
+
+function memberRequestAnywhereSwap(sessionToken,memberId,targetId){
+  memberId=memberSessionAuth_(sessionToken,memberId);
+  targetId=String(targetId||'');
+  if(!targetId||targetId===memberId)return {ok:false,message:'교환할 회원을 확인해 주세요.'};
+  var members=readMembers_();
+  if(!memberAnywhereMemberById_(members,targetId))return {ok:false,message:'교환할 회원을 찾을 수 없어요.'};
+  var request=memberAnywhereSwapRequest_(memberId,targetId);
+  if(!request.snapshot.from.locationKey||!request.snapshot.to.locationKey)return {ok:false,message:'현재 자리를 확인할 수 없어요.'};
+  memberAnywherePutSwapRequest_(targetId,request);
+  return {ok:true,message:'자리 교환을 요청했어요.'};
+}
