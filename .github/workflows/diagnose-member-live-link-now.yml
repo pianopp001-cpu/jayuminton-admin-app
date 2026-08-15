@@ -1,0 +1,87 @@
+name: Diagnose member live link now
+
+on:
+  push:
+    branches: [member-anywhere-controls-v3]
+    paths:
+      - '.github/workflows/diagnose-member-live-link-now.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+
+      - name: Probe configured member URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          HOSTING_URL="$(jq -r '.hostingUrl' "$C")"
+          MAIN_URL="https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec"
+          BASE="${HOSTING_URL%/}"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/.clasp.json"
+          cd "$RUNNER_TEMP"
+          clasp deployments > deployments.txt || true
+
+          probe() {
+            name="$1"; url="$2"
+            body="$RUNNER_TEMP/$name.body"
+            hdr="$RUNNER_TEMP/$name.headers"
+            meta="$RUNNER_TEMP/$name.meta"
+            code=$(curl -L -sS --max-time 60 -D "$hdr" -o "$body" -w '%{http_code}' "$url" || true)
+            final=$(curl -L -sS --max-time 60 -o /dev/null -w '%{url_effective}' "$url" || true)
+            bytes=$(wc -c < "$body" 2>/dev/null || echo 0)
+            drive=no
+            if grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$body" 2>/dev/null; then drive=yes; fi
+            html=no
+            if grep -Eqi '<html|<!doctype html' "$body" 2>/dev/null; then html=yes; fi
+            printf '%s_http=%s\n%s_final=%s\n%s_bytes=%s\n%s_drive_error=%s\n%s_html=%s\n' "$name" "$code" "$name" "$final" "$name" "$bytes" "$name" "$drive" "$name" "$html" > "$meta"
+          }
+
+          probe main "$MAIN_URL?mode=user&app=user&diag=$GITHUB_RUN_ID"
+          probe hosting "$BASE/?diag=$GITHUB_RUN_ID"
+          probe badminton "$BASE/badminton.html?diag=$GITHUB_RUN_ID"
+
+          mkdir -p "$GITHUB_WORKSPACE/deployment/status"
+          {
+            echo "checked_at=$(date -u +%FT%TZ)"
+            echo "main_url=$MAIN_URL"
+            echo "hosting_url=$BASE/"
+            echo "badminton_url=$BASE/badminton.html"
+            cat "$RUNNER_TEMP/main.meta"
+            cat "$RUNNER_TEMP/hosting.meta"
+            cat "$RUNNER_TEMP/badminton.meta"
+            echo 'deployments_begin'
+            sed -n '1,80p' deployments.txt
+            echo 'deployments_end'
+          } > "$GITHUB_WORKSPACE/deployment/status/member-live-link-now.txt"
+
+      - name: Commit diagnostic result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/member-live-link-now.txt
+          git commit -m 'diagnose: record member live link status' || exit 0
+          git pull --rebase origin member-anywhere-controls-v3 || true
+          git push origin HEAD:member-anywhere-controls-v3
