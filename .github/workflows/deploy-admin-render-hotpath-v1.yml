@@ -49,81 +49,24 @@ jobs:
           from pathlib import Path
           p=Path('Script.html')
           s=p.read_text(encoding='utf-8')
-          old='''async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId) {
-  const previousState = JSON.parse(JSON.stringify(STATE));
-  try {
-    applyMoveOrSwapLocally(
-      memberId,
-      targetType,
-      targetIndex,
-      targetMemberId || ''
-    );
-    renderState();
-    const state = await server('moveOrSwapMember', [
-      ADMIN_PIN_VALUE,
-      memberId,
-      targetType,
-      String(targetIndex),
-      targetMemberId || ''
-    ]);
-    renderState(state);
-    setUndoState(previousState);
-  } catch (error) {
-    STATE = previousState;
-    renderState();
-    alert(error.message || error);
-  }
-}'''
-          new='''function adminPlacementSignature_(state) {
-  state = state || {};
-  const courts = state.courts || {};
-  const waits = state.waitGroups || [];
-  return JSON.stringify({
-    courts: [1,2,3,4].map(function(no) {
-      return (courts[no] || courts[String(no)] || []).map(String);
-    }),
-    waitGroups: [0,1,2,3,4].map(function(i) {
-      return (waits[i] || []).map(String);
-    })
-  });
-}
-
-async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId) {
-  const previousState = JSON.parse(JSON.stringify(STATE));
-  try {
-    applyMoveOrSwapLocally(
-      memberId,
-      targetType,
-      targetIndex,
-      targetMemberId || ''
-    );
-    renderState();
-    const optimisticSignature = adminPlacementSignature_(STATE);
-    const state = await server('moveOrSwapMember', [
-      ADMIN_PIN_VALUE,
-      memberId,
-      targetType,
-      String(targetIndex),
-      targetMemberId || ''
-    ]);
-    const normalized = normalizeStateMemberProfiles(state);
-    if (adminPlacementSignature_(normalized) !== optimisticSignature) {
-      renderState(normalized);
-    } else {
-      STATE = normalized;
-    }
-    setUndoState(previousState);
-  } catch (error) {
-    STATE = previousState;
-    renderState();
-    alert(error.message || error);
-  }
-}'''
+          start=s.find('async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId) {')
+          end=s.find('\nasync function ', start + 10)
+          if start < 0:
+              raise SystemExit('quickMoveOrSwap baseline missing; refusing deployment')
           if 'function adminPlacementSignature_' in s:
               raise SystemExit('hotpath patch already present; refusing duplicate patch')
-          if s.count(old) != 1:
-              raise SystemExit('quickMoveOrSwap exact baseline mismatch; refusing deployment')
-          s=s.replace(old,new,1)
+          if end < 0:
+              raise SystemExit('quickMoveOrSwap end marker missing; refusing deployment')
+          old=s[start:end]
+          required=["applyMoveOrSwapLocally(","renderState();","const state = await server('moveOrSwapMember'","renderState(state);","setUndoState(previousState);"]
+          if not all(x in old for x in required):
+              raise SystemExit('quickMoveOrSwap baseline mismatch; refusing deployment')
+          helper="function adminPlacementSignature_(state) {\n  state = state || {};\n  const courts = state.courts || {};\n  const waits = state.waitGroups || [];\n  return JSON.stringify({\n    courts: [1,2,3,4].map(function(no) { return (courts[no] || courts[String(no)] || []).map(String); }),\n    waitGroups: [0,1,2,3,4].map(function(i) { return (waits[i] || []).map(String); })\n  });\n}\n\n"
+          new=old.replace('    renderState();\n    const state = await server', '    renderState();\n    const optimisticSignature = adminPlacementSignature_(STATE);\n    const state = await server', 1)
+          new=new.replace('    renderState(state);\n    setUndoState(previousState);', "    const normalized = normalizeStateMemberProfiles(state);\n    if (adminPlacementSignature_(normalized) !== optimisticSignature) {\n      renderState(normalized);\n    } else {\n      STATE = normalized;\n    }\n    setUndoState(previousState);", 1)
+          if new == old:
+              raise SystemExit('hotpath replacement failed; refusing deployment')
+          s=s[:start]+helper+new+s[end:]
           p.write_text(s,encoding='utf-8')
           PY
           grep -F 'function adminPlacementSignature_' Script.html >/dev/null
