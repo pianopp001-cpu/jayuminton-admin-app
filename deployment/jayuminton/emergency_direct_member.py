@@ -44,7 +44,7 @@ function memberFirebaseJsonpRpc_(e) {
 '''
 
 BRIDGE = r'''<script>
-/* firebase-direct-rpc-v1 */
+/* firebase-direct-rpc-v2 */
 (function(){
   var endpoint=RPC_URL_JSON,seq=0;
   function enc(args){var b=new TextEncoder().encode(JSON.stringify(args||[])),s='';for(var i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
@@ -63,6 +63,52 @@ BRIDGE = r'''<script>
   window.google.script=window.google.script||{};
   window.google.script.run=runner(null,null);
   window.__JAYUMINTON_FIREBASE_DIRECT_RPC__=true;
+
+  var loginBusy=false;
+  window.memberFirebaseLoginClick_=function(event){
+    if(event){try{event.preventDefault();event.stopPropagation();}catch(e){}}
+    if(loginBusy)return;
+    var button=document.getElementById('memberLoginButton');
+    var input=document.getElementById('memberPasswordInput');
+    if(!input)return;
+    if(!String(input.value||'').trim()){
+      try{input.focus();}catch(e){}
+      alert('멤버 비밀번호를 입력하세요.');
+      return;
+    }
+    loginBusy=true;
+    if(button){button.disabled=true;button.textContent='확인 중…';}
+    var task;
+    try{
+      if(typeof window.memberLogin!=='function')throw new Error('로그인 기능을 불러오지 못했습니다.');
+      task=window.memberLogin();
+    }catch(error){
+      task=Promise.reject(error);
+    }
+    Promise.resolve(task).catch(function(error){
+      alert('로그인 처리 중 오류가 발생했습니다.\n'+String(error&&error.message||error||'서버 연결 오류'));
+    }).finally(function(){
+      loginBusy=false;
+      if(button){button.disabled=false;button.textContent='확인';}
+    });
+  };
+
+  function bindLogin(){
+    var button=document.getElementById('memberLoginButton');
+    var input=document.getElementById('memberPasswordInput');
+    if(button&&!button.__jmLoginBound){
+      button.__jmLoginBound=true;
+      button.addEventListener('click',window.memberFirebaseLoginClick_,false);
+    }
+    if(input&&!input.__jmLoginBound){
+      input.__jmLoginBound=true;
+      input.addEventListener('keydown',function(event){
+        if(event.key==='Enter'){window.memberFirebaseLoginClick_(event);}
+      },false);
+    }
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bindLogin,{once:true});
+  else setTimeout(bindLogin,0);
 })();
 </script>'''
 
