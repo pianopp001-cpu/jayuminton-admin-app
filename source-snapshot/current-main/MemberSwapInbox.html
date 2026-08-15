@@ -3,7 +3,7 @@
   var shownRequestKey='';var activeRequestKey='';var responsePending=false;
   function requesterName_(request){var id=String(request&&request.requesterId||'');var member=(STATE.members||[]).find(function(item){return item&&String(item.id)===id;});return member?String(member.name||'회원'):'회원';}
   function requestKey_(request){return String(request&&request.requesterId||'')+':'+String(request&&request.createdAt||'');}
-  function clearIncoming_(){shownRequestKey='';activeRequestKey='';responsePending=false;var title=document.getElementById('memberAnywhereTitle');if(title&&title.textContent==='자리교환 요청'&&window.memberAnywhereModal)window.memberAnywhereModal.close();}
+  function clearIncoming_(){var shouldClose=incomingPromptVisible_(activeRequestKey);shownRequestKey='';activeRequestKey='';responsePending=false;if(shouldClose&&window.memberAnywhereModal)window.memberAnywhereModal.close();}
   function applyAcceptedSwapLocally_(request){
     if(!request||!request.requesterId||typeof applyMoveOrSwapLocally!=='function')return;
     var selfId=String(storedSelfMemberId()||'');if(!selfId)return;
@@ -15,13 +15,21 @@
   }
   function incomingPromptVisible_(key){
     if(!key||key!==shownRequestKey)return false;
-    var title=document.getElementById('memberAnywhereTitle');var actions=document.getElementById('memberAnywhereActions');
-    if(!title||title.textContent!=='자리교환 요청'||!actions)return false;
+    var root=document.getElementById('memberAnywhereModal');var title=document.getElementById('memberAnywhereTitle');var actions=document.getElementById('memberAnywhereActions');
+    if(!root||root.classList.contains('hidden')||!title||title.textContent!=='자리교환 요청'||!actions)return false;
     var labels=Array.prototype.map.call(actions.querySelectorAll('button'),function(button){return String(button.textContent||'');});
     return labels.indexOf('거절')>=0&&labels.indexOf('수락')>=0;
   }
+  function anotherMemberModalVisible_(){
+    var root=document.getElementById('memberAnywhereModal');
+    if(!root||root.classList.contains('hidden'))return false;
+    var actions=document.getElementById('memberAnywhereActions');
+    if(!actions)return true;
+    var labels=Array.prototype.map.call(actions.querySelectorAll('button'),function(button){return String(button.textContent||'');});
+    return !(labels.indexOf('거절')>=0&&labels.indexOf('수락')>=0);
+  }
   function showIncoming_(request){
-    var key=requestKey_(request);if(!key||responsePending||incomingPromptVisible_(key))return;shownRequestKey=key;activeRequestKey=key;
+    var key=requestKey_(request);if(!key||responsePending||incomingPromptVisible_(key)||anotherMemberModalVisible_())return;shownRequestKey=key;activeRequestKey=key;
     var root=window.memberAnywhereModal&&window.memberAnywhereModal;if(!root){shownRequestKey='';activeRequestKey='';return;}
     root.show('자리교환 요청',requesterName_(request)+'님이 자리교환을 요청했어요.');
     var actions=document.getElementById('memberAnywhereActions');if(!actions){shownRequestKey='';activeRequestKey='';return;}actions.innerHTML='';
