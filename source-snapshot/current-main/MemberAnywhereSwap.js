@@ -39,6 +39,11 @@ function memberMoveSelf(sessionToken,memberId,destination){
     var incoming=memberAnywhereReadSwapRequest_(memberId);if(incoming&&!memberAnywhereRequestStillValid_(incoming)){memberAnywhereClearSwapRequest_(memberId);incoming=null;}if(incoming)return {ok:false,message:'받은 자리교환 요청을 먼저 처리해 주세요.'};
     var courts=readCourts_(),waitGroups=readWaitGroups_(),members=readMembers_(),startedAt=readCourtStartedAt_(),member=memberAnywhereMemberById_(members,memberId);if(!member)return {ok:false,message:'회원 정보를 확인할 수 없어요.'};
     var type=String(destination.type||''),status=String(destination.status||'');
+    if(type==='wait-auto'){
+      var autoGroup=-1;for(var autoIndex=0;autoIndex<waitGroups.length;autoIndex+=1){if((waitGroups[autoIndex]||[]).length<GROUP_SIZE){autoGroup=autoIndex;break;}}
+      if(autoGroup<0)return {ok:false,message:'현재 대기목록에 빈자리가 없어요.'};
+      type='wait';destination={type:'wait',group:autoGroup};
+    }
     if(type==='court'){
       var courtNo=String(destination.courtNo||''),court=courts[courtNo];if(!court)return {ok:false,message:'코트를 확인할 수 없어요.'};if(court.length>=GROUP_SIZE)return {ok:false,message:'선택한 코트에 빈자리가 없어요.'};
     }else if(type==='wait'){
@@ -57,5 +62,5 @@ function memberMoveSelf(sessionToken,memberId,destination){
 }
 
 function memberReturnSelfToWait(sessionToken,memberId){
-  memberId=memberSessionAuth_(sessionToken,memberId);var waitGroups=readWaitGroups_(),target=-1;for(var g=0;g<waitGroups.length;g+=1){if((waitGroups[g]||[]).length<GROUP_SIZE){target=g;break;}}if(target<0)return {ok:false,message:'현재 대기목록에 빈자리가 없어요.'};return memberMoveSelf(sessionToken,memberId,{type:'wait',group:target});
+  return memberMoveSelf(sessionToken,memberId,{type:'wait-auto'});
 }
