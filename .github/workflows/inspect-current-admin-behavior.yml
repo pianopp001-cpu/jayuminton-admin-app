@@ -1,0 +1,78 @@
+name: Inspect current admin behavior
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Pull current Apps Script source read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainScriptId')"
+          test -n "$MAIN_SCRIPT_ID"
+          mkdir -p "$RUNNER_TEMP/current-admin"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/current-admin/.clasp.json"
+          cd "$RUNNER_TEMP/current-admin"
+          clasp pull
+      - name: Inspect assignment finish selection and card logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/current-admin"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          names = [
+            'assignMembersToCourt','assignMembersToWaitGroup','assignWaitGroupToCourt',
+            'moveOrSwapMember','finishCourt','adjustCourtMembers','adjustWaitGroupMembers',
+            'renderCourt','renderWait','renderMember','renderMembers','renderState'
+          ]
+          files=list(Path('.').glob('*.js'))+list(Path('.').glob('*.html'))
+          print('=== FUNCTION BLOCKS ===')
+          for p in files:
+            s=p.read_text(encoding='utf-8',errors='replace')
+            for name in names:
+              for m in re.finditer(r'function\s+'+re.escape(name)+r'\s*\(',s):
+                start=m.start(); brace=s.find('{',m.end());
+                if brace<0: continue
+                depth=0; end=brace
+                for i in range(brace,len(s)):
+                  if s[i]=='{': depth+=1
+                  elif s[i]=='}':
+                    depth-=1
+                    if depth==0: end=i+1; break
+                print(f'\n--- {p}:{name} ---\n{s[start:end][:16000]}')
+          print('\n=== RELEVANT UI / COUNT / NOTIFY LINES ===')
+          pats=['실행취소','새로고침','위치자동배정','신규','gameCount','game_count','games','경기종료','진동','vibrat','notify','알림','대기 1','대기1','selected','swap','교환']
+          for p in files:
+            s=p.read_text(encoding='utf-8',errors='replace').splitlines()
+            hits=[]
+            for i,line in enumerate(s,1):
+              if any(x.lower() in line.lower() for x in pats): hits.append((i,line))
+            if hits:
+              print(f'\n--- {p} ---')
+              for i,line in hits[:500]: print(f'{i}: {line[:500]}')
+          PY
+      - name: Confirm read-only inspection
+        run: |
+          echo 'NO_APPS_SCRIPT_PUSH'
+          echo 'NO_DEPLOYMENT_UPDATE'
+          echo 'NO_FIREBASE_UPDATE'
+          echo 'NO_CLOUDFLARE_UPDATE'
