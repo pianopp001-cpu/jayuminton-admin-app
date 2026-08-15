@@ -21,7 +21,7 @@ jobs:
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      MEMBER_URL: https://script.google.com/macros/s/AKfycbwVrOLZypNahfSE6IPyyQmxvd4YJ1cetcpaHNJDVh2RQ2dxpH7nQSLT-CLfNPFCwbQDJA/exec
+      MEMBER_URL: https://script.google.com/macros/s/AKfycbz0PgGVehRRgjPPjKTEQf3omLfr3iGB6PnQ3eYl-FoySFyjdlNI56S1aWkfT-Z8EnmlHg/exec
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -63,7 +63,6 @@ jobs:
           p.write_text(s,encoding='utf-8')
           PY
           grep -F "$MEMBER_URL" "$BUILD/web-push/config-v204.js"
-          # Emergency placeholder icon; restore visual assets after service recovery.
           printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl7mAAAAABJRU5ErkJggg==' | base64 -d > "$BUILD/web-push/icon-198.png"
           cp "$BUILD/web-push/icon-198.png" "$BUILD/web-push/icon-512.png"
           cp "$BUILD/web-push/icon-198.png" "$BUILD/web-push/apple-touch-icon-180.png"
