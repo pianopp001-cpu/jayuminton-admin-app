@@ -17,12 +17,13 @@ concurrency:
 jobs:
   restore:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      V130_MEMBER_URL: https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec
     steps:
       - name: Checkout exact verified v130 source
         uses: actions/checkout@v4
@@ -41,29 +42,39 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Restore exact v130 bare member URL hosting
+      - name: Restore exact v130 hosting and exact backend URL
         shell: bash
         run: |
           set -euo pipefail
           SCRIPT='deployment/scripts/hotfix_v130_white_screen.sh'
           python3 - <<'PY'
           from pathlib import Path
+          import os
           p=Path('deployment/scripts/hotfix_v130_white_screen.sh')
           s=p.read_text(encoding='utf-8')
           old='export WHITEFIX_MAIN_URL="${MAIN_URL}?build=v130-whitefix-${GITHUB_RUN_ID}"'
-          new='export WHITEFIX_MAIN_URL="${MAIN_URL}"'
+          new='export WHITEFIX_MAIN_URL="'+os.environ['V130_MEMBER_URL']+'"'
           if s.count(old) != 1:
-              raise SystemExit('v130 bare URL anchor missing')
-          p.write_text(s.replace(old,new,1), encoding='utf-8')
+              raise SystemExit('v130 member URL anchor missing')
+          s=s.replace(old,new,1)
+          deploy='firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive'
+          if s.count(deploy) != 1:
+              raise SystemExit('hosting deploy anchor missing')
+          s=s.replace(deploy, deploy+'\nexit 0', 1)
+          p.write_text(s, encoding='utf-8')
           PY
-          grep -F 'export WHITEFIX_MAIN_URL="${MAIN_URL}"' "$SCRIPT"
+          grep -F "$V130_MEMBER_URL" "$SCRIPT"
           bash "$SCRIPT"
 
-      - name: Confirm restored proof
+      - name: Verify live hosting points to exact v130 backend
         shell: bash
         run: |
           set -euo pipefail
-          grep -F 'status=success' deployment/status/v130-white-screen-hotfix.txt
-          grep -F 'version_code=130' deployment/status/v130-white-screen-hotfix.txt
-          grep -F 'visible_page=yes' deployment/status/v130-white-screen-hotfix.txt
-          echo 'v130-known-good-restored'
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          BASE="$(jq -r '.hostingUrl' "$C")"
+          BASE="${BASE%/}"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/?restore=v130-exact-$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F "src=\"$V130_MEMBER_URL\"" "$RUNNER_TEMP/live.html"
+          ! grep -F '/api/member-rpc' "$RUNNER_TEMP/live.html"
+          echo 'EXACT_V130_RESTORE_LIVE_OK'
