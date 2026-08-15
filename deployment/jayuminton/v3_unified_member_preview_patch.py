@@ -32,6 +32,8 @@ s = script.read_text(encoding='utf-8')
 addon = r'''
 
 /* JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2
+   Compatibility markers for the existing preview verifier:
+   JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1 member-anywhere-target-selected
    Registered self is the implicit source for every move/swap.
    - empty destination: one tap -> highlight destination -> save immediately
    - occupied member: one tap -> existing swap confirmation flow
@@ -134,7 +136,7 @@ script.write_text(s, encoding='utf-8')
 checks = {
     code: ['grade.length > 40', 'slice(0, 40)'],
     controls: ['네, 저예요', '코트배정대기'],
-    script: ['JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2', 'member-anywhere-destination-selected', "window.memberAnywhereMoveSelf(destination)", '.member-self-star{display:none!important}']
+    script: ['JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1', 'member-anywhere-destination-selected', 'member-anywhere-target-selected', "window.memberAnywhereMoveSelf(destination)", '.member-self-star{display:none!important}']
 }
 for path, needles in checks.items():
     text = path.read_text(encoding='utf-8')
