@@ -1,0 +1,69 @@
+name: Restore verified v1.3.0 code130 hosting
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-v130-known-good.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-restore-v130-known-good
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout exact verified v130 source
+        uses: actions/checkout@v4
+        with:
+          ref: e88774455545529ab27e02d0587085a46351345b
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Restore exact v130 bare member URL hosting
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCRIPT='deployment/scripts/hotfix_v130_white_screen.sh'
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deployment/scripts/hotfix_v130_white_screen.sh')
+          s=p.read_text(encoding='utf-8')
+          old='export WHITEFIX_MAIN_URL="${MAIN_URL}?build=v130-whitefix-${GITHUB_RUN_ID}"'
+          new='export WHITEFIX_MAIN_URL="${MAIN_URL}"'
+          if s.count(old) != 1:
+              raise SystemExit('v130 bare URL anchor missing')
+          p.write_text(s.replace(old,new,1), encoding='utf-8')
+          PY
+          grep -F 'export WHITEFIX_MAIN_URL="${MAIN_URL}"' "$SCRIPT"
+          bash "$SCRIPT"
+
+      - name: Confirm restored proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'status=success' deployment/status/v130-white-screen-hotfix.txt
+          grep -F 'version_code=130' deployment/status/v130-white-screen-hotfix.txt
+          grep -F 'visible_page=yes' deployment/status/v130-white-screen-hotfix.txt
+          echo 'v130-known-good-restored'
