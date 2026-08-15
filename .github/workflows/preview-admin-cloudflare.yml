@@ -81,19 +81,24 @@ jobs:
           set -euo pipefail
           sleep 6
           URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
-          CALLBACK="jmAdminState$GITHUB_RUN_ID"
-          curl --fail --location --retry 5 --max-time 60 \
-            "$URL?adminRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
-            -o "$RUNNER_TEMP/admin-state.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/admin-state.js"
+          rpc(){
+            local name="$1" payload="$2" callback="$3" out="$4"
+            curl --fail --location --retry 5 --max-time 60 \
+              "$URL?adminRpc=1&rpc=$name&callback=$callback&payload=$payload&nonce=$GITHUB_RUN_ID" -o "$out"
+            grep -F "$callback(" "$out"
+          }
+          rpc getPublicState W10 "jmAdminState$GITHUB_RUN_ID" "$RUNNER_TEMP/admin-state.js"
           grep -F '"ok":true' "$RUNNER_TEMP/admin-state.js"
+          # Exercise the same RPC used by the browser login. An invalid PIN is intentional:
+          # transport success means we receive a JSONP packet, not a script/network error.
+          LOGIN_PAYLOAD="$(printf '[\"__transport_probe_invalid_pin__\"]' | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+          rpc createAdminSession "$LOGIN_PAYLOAD" "jmAdminLogin$GITHUB_RUN_ID" "$RUNNER_TEMP/admin-login.js"
+          grep -F '"ok":' "$RUNNER_TEMP/admin-login.js"
       - name: Build iframe-free admin frontend
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"
-          # Use a same-origin Firebase Hosting path. The preview rewrite below proxies it
-          # to the isolated Apps Script admin RPC deployment, avoiding the member Worker.
           python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "/admin-rpc"
           grep -F 'jayuminton-admin-cloudflare-rpc' "$ROOT/public/index.html"
           grep -F '/admin-rpc' "$ROOT/public/index.html"
@@ -121,12 +126,17 @@ jobs:
           grep -F '/admin-rpc' "$RUNNER_TEMP/admin-live.html"
           ! grep -F 'shy-morning-f0e4.pianopp001.workers.dev' "$RUNNER_TEMP/admin-live.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-live.html"
-          CALLBACK="jmAdminProxy$GITHUB_RUN_ID"
-          curl --fail --location --retry 5 --max-time 60 \
-            "$ADMIN_PREVIEW_URL/admin-rpc?adminRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
-            -o "$RUNNER_TEMP/admin-proxy-state.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/admin-proxy-state.js"
+          proxy_rpc(){
+            local name="$1" payload="$2" callback="$3" out="$4"
+            curl --fail --location --retry 5 --max-time 60 \
+              "$ADMIN_PREVIEW_URL/admin-rpc?adminRpc=1&rpc=$name&callback=$callback&payload=$payload&nonce=$GITHUB_RUN_ID" -o "$out"
+            grep -F "$callback(" "$out"
+          }
+          proxy_rpc getPublicState W10 "jmAdminProxy$GITHUB_RUN_ID" "$RUNNER_TEMP/admin-proxy-state.js"
           grep -F '"ok":true' "$RUNNER_TEMP/admin-proxy-state.js"
+          LOGIN_PAYLOAD="$(printf '[\"__transport_probe_invalid_pin__\"]' | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+          proxy_rpc createAdminSession "$LOGIN_PAYLOAD" "jmAdminProxyLogin$GITHUB_RUN_ID" "$RUNNER_TEMP/admin-proxy-login.js"
+          grep -F '"ok":' "$RUNNER_TEMP/admin-proxy-login.js"
           echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
           echo 'MEMBER_PRODUCTION_NOT_UPDATED'
           echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
