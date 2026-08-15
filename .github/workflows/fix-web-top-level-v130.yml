@@ -1,0 +1,78 @@
+name: Fix web top-level v130
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-web-top-level-v130.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-web-top-level-v130
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      V130_MEMBER_URL: https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Resolve hosting project
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")" >> "$GITHUB_ENV"
+          echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")" >> "$GITHUB_ENV"
+      - name: Build top-level redirect shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public
+          cat > public/index.html <<EOF
+          <!doctype html>
+          <html lang="ko"><head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+          <meta http-equiv="refresh" content="0; url=$V130_MEMBER_URL">
+          <title>자유민턴 코트배정 현황</title>
+          <style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f5f7fb;color:#14213d}.box{text-align:center;padding:24px}.btn{display:inline-block;margin-top:18px;padding:14px 20px;border-radius:12px;background:#2563eb;color:white;text-decoration:none;font-weight:800}</style>
+          </head><body><div class="box"><h2>자유민턴을 여는 중입니다.</h2><p>자동으로 열리지 않으면 아래 버튼을 눌러주세요.</p><a class="btn" href="$V130_MEMBER_URL">자유민턴 열기</a></div>
+          <script>window.location.replace(${V130_MEMBER_URL@Q});</script>
+          </body></html>
+          EOF
+          cp public/index.html public/badminton.html
+          cat > firebase.json <<'EOF'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"cleanUrls":true,"trailingSlash":false,"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          EOF
+          ! grep -F '<iframe' public/index.html
+          grep -F "$V130_MEMBER_URL" public/index.html
+      - name: Deploy hosting only
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive
+      - name: Verify live page is iframe-free and top-level redirect
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/?top=v130-$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          ! grep -F '<iframe' "$RUNNER_TEMP/live.html"
+          grep -F "$V130_MEMBER_URL" "$RUNNER_TEMP/live.html"
+          grep -F 'window.location.replace' "$RUNNER_TEMP/live.html"
+          echo WEB_TOP_LEVEL_V130_OK
