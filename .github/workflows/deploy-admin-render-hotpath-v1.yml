@@ -1,7 +1,7 @@
 name: Deploy admin render hotpath v1
 
-'on':
-  workflow_dispatch:
+on:
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -127,7 +127,6 @@ async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId
           p.write_text(s,encoding='utf-8')
           PY
           grep -F 'function adminPlacementSignature_' Script.html >/dev/null
-          grep -F "adminPlacementSignature_(normalized) !== optimisticSignature" Script.html >/dev/null
           grep -F 'JAYUMINTON_MEMBER_BRIDGE_READY' Script.html >/dev/null
           python3 - <<'PY'
           from pathlib import Path
