@@ -18,7 +18,6 @@ jobs:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
       PREVIEW_CHANNEL: admin-cloudflare
 
     steps:
@@ -41,9 +40,6 @@ jobs:
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
-          # Reuse the already-established isolated v3 preview deployment when a dedicated
-          # admin preview deployment has not yet been added to deploy config. Never fall
-          # back to the production MAIN deployment.
           PREVIEW_DEPLOYMENT_ID="$(jq -r '.adminPreviewDeploymentId // .previewDeploymentId // empty' "$CONFIG")"
           if [ -z "$PREVIEW_DEPLOYMENT_ID" ]; then
             PREVIEW_DEPLOYMENT_ID='AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ'
@@ -79,17 +75,32 @@ jobs:
           (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin cloudflare preview $GITHUB_RUN_ID")
           restore_head
           trap - EXIT
+      - name: Verify isolated admin RPC directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 6
+          URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
+          CALLBACK="jmAdminState$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "$URL?adminRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/admin-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/admin-state.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/admin-state.js"
       - name: Build iframe-free admin frontend
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"
-          python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$CLOUDFLARE_RPC_URL"
+          # Use a same-origin Firebase Hosting path. The preview rewrite below proxies it
+          # to the isolated Apps Script admin RPC deployment, avoiding the member Worker.
+          python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "/admin-rpc"
           grep -F 'jayuminton-admin-cloudflare-rpc' "$ROOT/public/index.html"
-          grep -F "$CLOUDFLARE_RPC_URL" "$ROOT/public/index.html"
+          grep -F '/admin-rpc' "$ROOT/public/index.html"
+          ! grep -F 'shy-morning-f0e4.pianopp001.workers.dev' "$ROOT/public/index.html"
           ! grep -F 'script.google.com/macros/s/' "$ROOT/public/index.html"
-          cat > "$ROOT/firebase.json" <<'JSON'
-          {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          cat > "$ROOT/firebase.json" <<JSON
+          {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"redirects":[{"source":"/admin-rpc","destination":"https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec","type":302}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
       - name: Deploy admin preview channel only
         shell: bash
@@ -100,14 +111,22 @@ jobs:
           URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/admin-channel.json" | head -1)"
           test -n "$URL"
           echo "ADMIN_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
-      - name: Verify deployed admin preview
+      - name: Verify deployed admin preview and proxy
         shell: bash
         run: |
+          set -euo pipefail
           sleep 5
           curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-live.html"
           grep -F 'jayuminton-admin-cloudflare-rpc' "$RUNNER_TEMP/admin-live.html"
-          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/admin-live.html"
+          grep -F '/admin-rpc' "$RUNNER_TEMP/admin-live.html"
+          ! grep -F 'shy-morning-f0e4.pianopp001.workers.dev' "$RUNNER_TEMP/admin-live.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-live.html"
+          CALLBACK="jmAdminProxy$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "$ADMIN_PREVIEW_URL/admin-rpc?adminRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/admin-proxy-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/admin-proxy-state.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/admin-proxy-state.js"
           echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
           echo 'MEMBER_PRODUCTION_NOT_UPDATED'
           echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
