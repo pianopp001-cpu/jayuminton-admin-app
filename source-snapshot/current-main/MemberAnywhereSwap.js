@@ -53,7 +53,7 @@ function memberMoveSelf(sessionToken,memberId,destination){
     }else if(type==='wait'){
       var group=Number(destination.group);if(!isFinite(group)||group<0||group>=waitGroups.length)return {ok:false,message:'대기 자리를 확인할 수 없어요.'};if((waitGroups[group]||[]).length>=GROUP_SIZE)return {ok:false,message:'선택한 대기조에 빈자리가 없어요.'};
     }else if(type==='status'){
-      if(['active','rest','away','before'].indexOf(status)<0)return {ok:false,message:'이동 상태를 확인해 주세요.'};
+      if(['active','rest','away','before'].indexOf(status)<0)return {ok:false,message:'이동 상태를 확인할 수 없어요.'};
     }else return {ok:false,message:'이동할 위치를 확인해 주세요.'};
     Object.keys(courts).forEach(function(no){var before=(courts[no]||[]).length;courts[no]=(courts[no]||[]).filter(function(id){return String(id)!==memberId;});if(courts[no].length!==before&&courts[no].length<GROUP_SIZE)startedAt[no]='';});
     for(var g=0;g<waitGroups.length;g+=1)waitGroups[g]=(waitGroups[g]||[]).filter(function(id){return String(id)!==memberId;});
