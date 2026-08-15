@@ -1,56 +1,53 @@
-checked_at=2026-08-15T04:23:01Z
+checked_at=2026-08-15T05:02:37Z
 main_url=https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec
+legacy_url=https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec
 hosting_url=https://jayuminton-push.web.app/
 badminton_url=https://jayuminton-push.web.app/badminton.html
 main_http=200
-main_final=https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?mode=user&app=user&diag=31864229451
+main_final=https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?mode=user&app=user&diag=31865921441
 main_bytes=354951
 main_drive_error=no
 main_html=yes
+legacy_http=200
+legacy_final=https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?mode=user&app=user&diag=31865921441
+legacy_bytes=306769
+legacy_drive_error=no
+legacy_html=yes
+legacy_plain_http=200
+legacy_plain_final=https://script.google.com/macros/s/AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww/exec?diag=31865921441
+legacy_plain_bytes=306742
+legacy_plain_drive_error=no
+legacy_plain_html=yes
 hosting_http=200
-hosting_final=https://jayuminton-push.web.app/?diag=31864229451
-hosting_bytes=4712
+hosting_final=https://jayuminton-push.web.app/?diag=31865921441
+hosting_bytes=4441
 hosting_drive_error=no
 hosting_html=yes
 badminton_http=200
-badminton_final=https://jayuminton-push.web.app/badminton.html?diag=31864229451
-badminton_bytes=4712
+badminton_final=https://jayuminton-push.web.app/badminton.html?diag=31865921441
+badminton_bytes=4441
 badminton_drive_error=no
 badminton_html=yes
 deployments_begin
-Found 34 deployments.
+Found 20 deployments.
 - AKfycbxOWvesa7BfvSzp0VS8VJL6WZdww8rFQggne6qtAsJS @HEAD 
-- AKfycbwVrOLZypNahfSE6IPyyQmxvd4YJ1cetcpaHNJDVh2RQ2dxpH7nQSLT-CLfNPFCwbQDJA @1 - 자유민턴
 - AKfycbz0PgGVehRRgjPPjKTEQf3omLfr3iGB6PnQ3eYl-FoySFyjdlNI56S1aWkfT-Z8EnmlHg @27 
 - AKfycby_bqJuMGOvA1EF4pJLAcUtetZ0Ib30awXW-iacHqm6h5DhIPOnig1Ws8t_eMAhKFV-Aw @16 
 - AKfycbwgyWowjE3j1Q1fgSp95BgW-DOO9SQ_ICGXZdl47NizJMxek0MzKmwRlUTZiddLdFrdKw @29 
 - AKfycbyDOnZoiIAtsx2roKevbvFu4wDdhPhrBuc8bXQv0J6EBZysssqaamX9q_GKPS9BkqXUIA @22 
-- AKfycbxjFcahezegWjJv2pGh2hUTgyCaXJH2uoRpdQRRpYlVibhKOkazYdGm18EUus1cm1yWAA @14 
 - AKfycbwgPNGulzc-RSxnXcFbVl9sjJ6-QM7E35pE2ZgvzwgWV2K6k3CE9izLePy2M4CQIT8WOw @18 
-- AKfycbzIXlqJeMrk7ib86fxAPqFiHDosavlkwDzdb1p_tudzyW0VNFaOCVAfDJpdUmIlL1hxNg @5 - 0725
-- AKfycby3y7_fBajDt3OfswqC__E73fxWtMCWeNBHIyXbgpeEzDecozTQvCSVAqZH99dYPpmmeA @15 
-- AKfycbySVu3o2pLStTnZlS-Pecowf7rljgZQhyjBTpV9HaZO65psOgz4EYdojUTaX9R4Xrns0Q @10 
 - AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_ @245 - member anywhere controls v3 latest 31839749716
 - AKfycbymrWachry8IUqQMMDCg7c4ZW3ZjFbbGAihV5C7s2UxHdJf26FVDfkIOze7ysy7PH0JpA @19 
-- AKfycbybQD1aPXgH1mQiR6d_Pf34mikeQ5FLcyV08ModC9a0M5hfDpHmE65pTa34qeWM4Kl_dw @12 
 - AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww @192 - v1.6.37 real Chrome tap final8 c7fed42
 - AKfycbxBAYsihgb7Co-90dSw-9WXVXPijj_E3l7txuPPUaRaTwexVypSgUk-wYV82goE8mm28Q @24 
-- AKfycbwrJpc33FE3iKxg_kIvXLnt8bGFyLSZILhgT03XExhz6AojSPYcNsN1l0KSQq7WtCVw9w @7 - 자유민턴
 - AKfycbzZ2_4F0CeXGVEZRocI3chS42mhXfoJxJEYZDvnBk33YNt6M9jefiR5dEO3ppnWyjH6_Q @17 
+- AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w @247 - member web recovery after v1-v15 prune 31864908498
 - AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q @88 
-- AKfycbwpcfJO9P3A1HBjOQTzPipfRCtjidKGHC2ia17OOJaFabv8Vkp1MZQ5EE78nqyg2g8B @11 
-- AKfycbxhnkOr7eQmsrcD2Ux8ervf6gtdS5dGjrAGEgkM7WeoQaW6Fx81tsQOflcx5DlocUKeMg @2 
 - AKfycbz6krZ0FoxW8zcBpKmCE7hv6D4g0Fej4fXRNjI3xAZaeJZWJcxyZAKHqh4Hrnc2cuitPA @21 
-- AKfycbzY7wT9q27M2FeUHwp1MeodUsut21xmWClTLKlDiSh-tbmrLqg2JWNZHh-VjsxT2PpA4A @13 
 - AKfycbyJzVZQIevVUSCnUZG1PhuppuQ2jC1ytMdQ4H-791df5aMcO6Ju6GRTTQ1XWP9vgULBLQ @20 
 - AKfycbwC8EscAx4JkI6yWknEgAWOghXhaTxEvYyc8ldHrIe2G2hzCf9q9FUcYuIDgi22RLnsQw @127 
-- AKfycbyrR-DiB4SdeBqunn1Z8xdyZ3giCN4SMlSEqTVXi5EGtBJkSn7rGJr2WuSyTQfAjPA5 @8 
 - AKfycbwZTZQ7ET3ytxlF_O9Y6RkX6m3bzsSv1tnKdVddarhCyByuFH0oit5qraPuhZKMCx3SpA @25 
 - AKfycbyk8VWvl7CUGVH_s0hk7Hqly3m_csoILPTvcP9ah_wEteCaI7l19G5Z5rbBmwlvUFXu2w @124 
 - AKfycbxxnppFQxkwwsoAqVegF_So6HrVzlnIIltydJuBNjHfaXBgM9Bpgu-zuZdFwAiNv15yVw @23 
-- AKfycbzuuarLV3qGuwVS86DtXPB8hSBkI8v67xB6DLLEqSC_5hjzPhHdWBPdqtukCHlEoFK9Nw @6 - 오전10시
 - AKfycbw4osXUHFOjuh0eVU5TSuzHeTDXZC67Qv15nxwcLVfq7M09ZeUufKoJOSAzfSjvKtup @26 
-- AKfycbwlBC_RovtO62Qcqs7ljc25OuY-Qp5qS12X3hJh7MwXdUua99lG4859Db6MFFMSojAHBw @9 
-- AKfycby3r7tzHUmu9DNtwtj7eVtgdho7YgcGXYVu5G8sF9631c_dw-lpbYRUkWRpmCVaQksv7Q @4 
-- AKfycbzPkc_uLyjBJHBuqX2N4-2ocLhpiUm6vOuJhwhTMF1_TAVMy_yQHjZLtkXABCIvl_5n @3 
 deployments_end
