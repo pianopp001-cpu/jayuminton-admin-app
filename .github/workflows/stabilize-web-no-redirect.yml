@@ -1,0 +1,87 @@
+name: Stabilize web without Apps Script redirect
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stabilize-web-no-redirect.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-web-stabilize
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      OLD_URL: https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec
+      USER_URL: https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Resolve hosting project
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")" >> "$GITHUB_ENV"
+          echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")" >> "$GITHUB_ENV"
+      - name: Diagnose both Apps Script endpoints without changing backend
+        shell: bash
+        run: |
+          set -u
+          for name in OLD USER; do
+            urlvar="${name}_URL"
+            url="${!urlvar}"
+            code=$(curl -L -sS -o "$RUNNER_TEMP/${name}.html" -w '%{http_code}' --max-time 45 "$url" || true)
+            bytes=$(wc -c < "$RUNNER_TEMP/${name}.html" 2>/dev/null || echo 0)
+            echo "${name}_HTTP=$code ${name}_BYTES=$bytes"
+            head -c 300 "$RUNNER_TEMP/${name}.html" 2>/dev/null | tr '\n' ' ' || true
+            echo
+          done
+      - name: Build stable Firebase page with no automatic redirect
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf public
+          mkdir -p public
+          cat > public/index.html <<'EOF'
+          <!doctype html>
+          <html lang="ko"><head>
+          <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+          <title>자유민턴 코트배정 현황</title>
+          <style>*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:#14213d;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:520px;margin:0 auto;padding:20px}.card{margin-top:40px;background:#fff;border-radius:22px;padding:26px;box-shadow:0 10px 28px rgba(15,23,42,.09)}h1{margin:0 0 10px;font-size:28px}p{line-height:1.6;color:#64748b}.status{margin-top:18px;padding:14px;border-radius:12px;background:#eef2ff;font-weight:700}</style>
+          </head><body><main class="wrap"><section class="card"><h1>자유민턴 코트배정 현황</h1><p>웹 연결을 복구 중입니다. 현재 페이지는 외부 Apps Script 주소로 자동 이동하지 않습니다.</p><div class="status">Firebase 웹주소 자체는 정상 유지 중</div></section></main></body></html>
+          EOF
+          cp public/index.html public/badminton.html
+          cat > firebase.json <<'EOF'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"cleanUrls":true,"trailingSlash":false,"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          EOF
+          ! grep -E '<iframe|window\.location|http-equiv="refresh"|script\.google\.com' public/index.html
+      - name: Deploy hosting only
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive
+      - name: Verify Firebase stays on Firebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/?stable=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F 'Firebase 웹주소 자체는 정상 유지 중' "$RUNNER_TEMP/live.html"
+          ! grep -E '<iframe|window\.location|http-equiv="refresh"|script\.google\.com' "$RUNNER_TEMP/live.html"
+          echo FIREBASE_STABLE_NO_REDIRECT_OK
