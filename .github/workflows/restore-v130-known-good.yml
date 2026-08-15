@@ -49,12 +49,32 @@ jobs:
           from pathlib import Path
           p = Path('deployment/jayuminton/v1637-web/index.html')
           s = p.read_text(encoding='utf-8')
-          guard = r'''\n<script id="v130-frame-recovery">\n(() => {\n  const frame = document.getElementById('courtFrame');\n  if (!frame) return;\n  const recover = () => {\n    const cfg = window.JAYUMINTON_PUSH_SETUP_CONFIG || {};\n    const target = String(cfg.memberPageUrl || frame.getAttribute('src') || '').trim();\n    const current = String(frame.getAttribute('src') || '').trim();\n    if (target && (!current || current === 'about:blank')) frame.setAttribute('src', target);\n  };\n  recover();\n  let count = 0;\n  const timer = setInterval(() => {\n    recover();\n    if (++count >= 20) clearInterval(timer);\n  }, 500);\n})();\n</script>\n'''
+          guard = '''
+<script id="v130-frame-recovery">
+(() => {
+  const frame = document.getElementById('courtFrame');
+  if (!frame) return;
+  const recover = () => {
+    const cfg = window.JAYUMINTON_PUSH_SETUP_CONFIG || {};
+    const target = String(cfg.memberPageUrl || frame.getAttribute('src') || '').trim();
+    const current = String(frame.getAttribute('src') || '').trim();
+    if (target && (!current || current === 'about:blank')) frame.setAttribute('src', target);
+  };
+  recover();
+  let count = 0;
+  const timer = setInterval(() => {
+    recover();
+    if (++count >= 20) clearInterval(timer);
+  }, 500);
+})();
+</script>
+'''
           if 'id="v130-frame-recovery"' not in s:
               s = s.replace('</body>', guard + '</body>')
           p.write_text(s, encoding='utf-8')
           PY
-          grep -F 'v130-frame-recovery' deployment/jayuminton/v1637-web/index.html
+          grep -F '<script id="v130-frame-recovery">' deployment/jayuminton/v1637-web/index.html
+          ! grep -F '\n<script id="v130-frame-recovery">' deployment/jayuminton/v1637-web/index.html
 
       - name: Restore v130 hosting against restored main backend
         shell: bash
