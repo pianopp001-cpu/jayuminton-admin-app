@@ -105,15 +105,39 @@ addon = r'''
     if (ids.length > 1) clearDestination();
   });
 
+  function cleanMemberLabels(root){
+    var scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('#memberApp .person, #memberApp .member-info-detail').forEach(function(node){
+      var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      var textNode;
+      while ((textNode = walker.nextNode())) {
+        var original = String(textNode.nodeValue || '');
+        if (original.indexOf('구력') >= 0) {
+          textNode.nodeValue = original.replace(/구력\s*[:：]?\s*/g, '');
+        }
+      }
+    });
+  }
+
   var style = document.createElement('style');
   style.id = 'jayuminton-unified-member-pick-preview-style';
   style.textContent = [
     '.member-self-star{position:static!important;inset:auto!important;transform:none!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:14px!important;min-width:14px!important;height:14px!important;padding:0!important;margin:0 3px 0 0!important;border-radius:4px!important;font-size:8px!important;font-weight:900!important;line-height:14px!important;vertical-align:middle!important;pointer-events:none!important;z-index:auto!important;overflow:hidden!important;white-space:nowrap!important}',
     '.member-anywhere-destination-selected{outline:4px solid #111!important;outline-offset:-4px!important;box-shadow:0 0 0 4px rgba(255,215,0,.95),0 5px 14px rgba(0,0,0,.24)!important;transform:scale(.97)!important}',
-    '#memberApp .member-info-detail,#memberApp .member-info-detail *{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;max-width:100%!important;overflow-wrap:anywhere!important;word-break:keep-all!important}',
-    '#memberApp .person.member-info-card{height:auto!important;min-height:52px!important;overflow:visible!important}'
+    '#memberApp .member-info-detail,#memberApp .member-info-detail *,#memberApp .person [class*="grade"],#memberApp .person [class*="info"]{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;max-width:none!important;max-height:none!important;height:auto!important;-webkit-line-clamp:unset!important;line-clamp:unset!important;overflow-wrap:anywhere!important;word-break:keep-all!important}',
+    '#memberApp .person.member-info-card,#memberApp .person{overflow:visible!important}',
+    '#memberApp .person.member-info-card{height:auto!important;min-height:52px!important}'
   ].join('');
   document.head.appendChild(style);
+
+  cleanMemberLabels(document);
+  new MutationObserver(function(mutations){
+    mutations.forEach(function(m){
+      m.addedNodes && m.addedNodes.forEach(function(node){
+        if (node && node.nodeType === 1) cleanMemberLabels(node);
+      });
+    });
+  }).observe(document.documentElement,{childList:true,subtree:true});
 })();
 '''
 
@@ -136,7 +160,7 @@ script.write_text(s, encoding='utf-8')
 checks = {
     code: ['grade.length > 40', 'slice(0, 40)'],
     controls: ['네, 저예요', '코트배정대기'],
-    script: ['JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1', 'member-anywhere-destination-selected', 'member-anywhere-target-selected', "window.memberAnywhereMoveSelf(destination)", 'width:14px!important', 'font-size:8px!important']
+    script: ['JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1', 'member-anywhere-destination-selected', 'member-anywhere-target-selected', "window.memberAnywhereMoveSelf(destination)", 'width:14px!important', 'font-size:8px!important', '구력\\s*[:：]?', '-webkit-line-clamp:unset']
 }
 for path, needles in checks.items():
     text = path.read_text(encoding='utf-8')
