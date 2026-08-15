@@ -1,4 +1,4 @@
-name: Restore v130 direct member without iframe
+name: Restore v130 same-origin member
 on:
   push:
     branches: [main]
@@ -9,12 +9,12 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: jayuminton-v130-direct-no-iframe
+  group: jayuminton-v130-same-origin
   cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
@@ -45,7 +45,7 @@ jobs:
           echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")" >> "$GITHUB_ENV"
           echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")" >> "$GITHUB_ENV"
           curl --fail --location --retry 4 https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/deployment/jayuminton/v130_direct_member.py -o "$RUNNER_TEMP/v130_direct_member.py"
-      - name: Patch v130 backend with safe JSONP
+      - name: Patch exact v130 Apps Script backend
         shell: bash
         run: |
           set -euo pipefail
@@ -54,79 +54,98 @@ jobs:
           cp source-snapshot/current-main/* "$WORK/"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           python3 "$RUNNER_TEMP/v130_direct_member.py" patch --work "$WORK"
-          grep -F 'memberV130JsonpRpc_' "$WORK/Code.js" >/dev/null
-          ! grep -F 'eval(name)' "$WORK/Code.js" >/dev/null
           cd "$WORK"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v130 direct no iframe $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v130 same origin $GITHUB_RUN_ID"
           echo "RPC_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
           sleep 7
-      - name: Verify JSONP login backend
+      - name: Verify Apps Script backend
         shell: bash
         run: |
           set -euo pipefail
-          CB="jmV130Probe$GITHUB_RUN_ID"
+          CB="jmProbe$GITHUB_RUN_ID"
           curl --fail --location --retry 5 --max-time 60 "$RPC_URL?rpc=getMemberPasswordVersion&callback=$CB&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/version.js"
           grep -F "$CB(" "$RUNNER_TEMP/version.js" >/dev/null
           grep -F '"ok":true' "$RUNNER_TEMP/version.js" >/dev/null
-          CB2="jmV130Login$GITHUB_RUN_ID"
-          P="$(printf '%s' '["__wrong_probe_password__"]' | base64 -w0 | tr '+/' '-_' | tr -d '=')"
-          curl --fail --location --retry 5 --max-time 60 "$RPC_URL?rpc=verifyMemberPassword&callback=$CB2&payload=$P&nonce=login_$GITHUB_RUN_ID" -o "$RUNNER_TEMP/login.js"
-          grep -F "$CB2(" "$RUNNER_TEMP/login.js" >/dev/null
-          grep -F '"ok":true' "$RUNNER_TEMP/login.js" >/dev/null
-      - name: Build iframe-free Firebase page
+      - name: Build same-origin Hosting and Function
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="$RUNNER_TEMP/v130-direct-hosting"
-          mkdir -p "$ROOT/public"
-          python3 "$RUNNER_TEMP/v130_direct_member.py" build --work "$RUNNER_TEMP/v130-backend" --out "$ROOT/public" --rpc-url "$RPC_URL" --hosting-url "$HOSTING_URL"
-          grep -F 'jayuminton-v130-direct' "$ROOT/public/index.html" >/dev/null
-          grep -F '__JAYUMINTON_V130_DIRECT_RPC__' "$ROOT/public/index.html" >/dev/null
-          grep -F 'memberV130LoginClick_(this)' "$ROOT/public/index.html" >/dev/null
+          ROOT="$RUNNER_TEMP/v130-same-origin"
+          mkdir -p "$ROOT/public" "$ROOT/functions"
+          python3 "$RUNNER_TEMP/v130_direct_member.py" build --work "$RUNNER_TEMP/v130-backend" --out "$ROOT/public" --hosting-url "$HOSTING_URL"
+          grep -F '/api/member' "$ROOT/public/index.html" >/dev/null
+          grep -F '__JAYUMINTON_SAME_ORIGIN_RPC__' "$ROOT/public/index.html" >/dev/null
+          ! grep -F 'script.google.com/macros' "$ROOT/public/index.html"
           ! grep -Eqi '<iframe' "$ROOT/public/index.html"
-          cat > "$ROOT/firebase.json" <<'JSON'
-          {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          cat > "$ROOT/functions/package.json" <<'JSON'
+          {"name":"jayuminton-member-proxy","private":true,"main":"index.js","engines":{"node":"20"},"dependencies":{"firebase-functions":"^6.0.1"}}
           JSON
-      - name: Deploy same Firebase URL
+          cat > "$ROOT/functions/index.js" <<'JS'
+          const {onRequest}=require('firebase-functions/v2/https');
+          const DEPLOYMENT_ID='__DEPLOYMENT_ID__';
+          const allowed=new Set(['getPublicState','verifyMemberPassword','resumeMemberSession','getMemberPasswordVersion']);
+          exports.memberProxy=onRequest({region:'asia-northeast3',timeoutSeconds:45,memory:'256MiB'},async(req,res)=>{
+            res.set('Cache-Control','no-store');
+            if(req.method!=='POST')return res.status(405).json({ok:false,error:'method not allowed'});
+            const rpc=String(req.body&&req.body.rpc||'');
+            const args=req.body&&Array.isArray(req.body.args)?req.body.args:[];
+            if(!allowed.has(rpc))return res.status(400).json({ok:false,error:'허용되지 않은 서버 함수입니다.'});
+            const payload=Buffer.from(JSON.stringify(args),'utf8').toString('base64url');
+            const callback='jmProxy'+Date.now()+Math.floor(Math.random()*1000000);
+            const url='https://script.google.com/macros/s/'+DEPLOYMENT_ID+'/exec?rpc='+encodeURIComponent(rpc)+'&callback='+encodeURIComponent(callback)+'&payload='+encodeURIComponent(payload)+'&nonce='+Date.now();
+            try{
+              const upstream=await fetch(url,{redirect:'follow',signal:AbortSignal.timeout(35000)});
+              const text=await upstream.text();
+              const prefix=callback+'(';
+              if(!upstream.ok||!text.startsWith(prefix)||!text.endsWith(');'))throw new Error('invalid upstream response');
+              const packet=JSON.parse(text.slice(prefix.length,-2));
+              return res.status(packet&&packet.ok===true?200:502).json(packet||{ok:false,error:'empty response'});
+            }catch(error){return res.status(502).json({ok:false,error:String(error&&error.message||error||'proxy error')});}
+          });
+          JS
+          sed -i "s/__DEPLOYMENT_ID__/$MAIN_DEPLOYMENT_ID/g" "$ROOT/functions/index.js"
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"functions":{"source":"functions"},"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"/api/member","function":{"functionId":"memberProxy","region":"asia-northeast3","pinTag":true}},{"source":"**","destination":"/index.html"}]}}
+          JSON
+      - name: Deploy Function and Hosting
         shell: bash
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP/v130-direct-hosting"
-          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config firebase.json --non-interactive --message "v130 direct no iframe $GITHUB_RUN_ID"
-      - name: Android login click end-to-end verify on both hosts
+          cd "$RUNNER_TEMP/v130-same-origin"
+          npm --prefix functions install --omit=dev
+          firebase deploy --only functions:memberProxy,hosting --project "$FIREBASE_PROJECT_ID" --config firebase.json --non-interactive --message "v130 same origin $GITHUB_RUN_ID"
+      - name: Verify same-origin API and Android login click
         shell: bash
         run: |
           set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          curl --fail --retry 5 --max-time 60 -H 'Content-Type: application/json' -d '{"rpc":"getMemberPasswordVersion","args":[]}' "$BASE/api/member" -o "$RUNNER_TEMP/api.json"
+          grep -F '"ok":true' "$RUNNER_TEMP/api.json" >/dev/null
           mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
           npm init -y >/dev/null 2>&1
           npm i playwright@1.54.2 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
           cat > verify.mjs <<'JS'
-          import { chromium } from 'playwright';
-          const web=process.env.HOSTING_URL.replace(/\/$/,'');
-          const firebaseapp=web.replace('.web.app','.firebaseapp.com');
+          import {chromium} from 'playwright';
+          const bases=[process.env.HOSTING_URL.replace(/\/$/,''),process.env.HOSTING_URL.replace(/\.web\.app\/$/,'.firebaseapp.com')];
           const browser=await chromium.launch({headless:true});
-          for (const base of [web,firebaseapp]) {
-            const page=await browser.newPage({viewport:{width:412,height:915},userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S928N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36'});
-            const errors=[]; page.on('pageerror',e=>errors.push(e.message));
-            await page.goto(base+'/?direct='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
+          for(const base of bases){
+            const page=await browser.newPage({viewport:{width:412,height:915},userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S928N) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36'});
+            const requests=[]; page.on('request',r=>requests.push(r.url()));
+            await page.goto(base+'/?sameorigin='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
             await page.waitForFunction(()=>document.getElementById('memberLoginBox')&&!document.getElementById('memberLoginBox').classList.contains('hidden'),null,{timeout:30000});
-            if(await page.locator('iframe').count()) throw new Error(base+' iframe remains');
-            if(!(await page.evaluate(()=>window.__JAYUMINTON_V130_DIRECT_RPC__===true))) throw new Error(base+' direct RPC bridge missing');
             await page.locator('#memberPasswordInput').fill('__wrong_probe_password__');
-            const dialogPromise=new Promise((resolve,reject)=>{
-              const timer=setTimeout(()=>reject(new Error(base+' login click produced no dialog')),30000);
-              page.once('dialog',async d=>{clearTimeout(timer);const msg=d.message();await d.accept();resolve(msg);});
-            });
+            const dialog=new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error('no login dialog')),40000);page.once('dialog',async d=>{clearTimeout(t);const m=d.message();await d.accept();resolve(m);});});
             await page.locator('#memberLoginBox button.primary').click();
-            const msg=await dialogPromise;
-            if(!msg.includes('멤버 비밀번호가 틀렸습니다.')) throw new Error(base+' unexpected login result: '+msg);
-            if(errors.length) throw new Error(base+' page errors: '+errors.join(' | '));
-            console.log(JSON.stringify({base,loginClick:true,message:msg,errors}));
+            const msg=await dialog;
+            if(!msg.includes('멤버 비밀번호가 틀렸습니다.'))throw new Error(base+' bad result '+msg);
+            if(requests.some(u=>u.includes('script.google.com')))throw new Error(base+' browser contacted Apps Script directly');
+            if(!requests.some(u=>u.includes('/api/member')))throw new Error(base+' same-origin API not used');
+            console.log(JSON.stringify({base,msg,sameOrigin:true}));
             await page.close();
           }
           await browser.close();
           JS
           HOSTING_URL="$HOSTING_URL" node verify.mjs
-          echo V130_DIRECT_ANDROID_LOGIN_CLICK_OK
+          echo V130_SAME_ORIGIN_ANDROID_OK
