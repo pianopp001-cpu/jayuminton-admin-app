@@ -77,3 +77,6 @@ jobs:
           grep -F '멤버 열람 비밀번호' "$RUNNER_TEMP/v130-live.html"
           ! grep -qi 'Google Drive' "$RUNNER_TEMP/v130-live.html"
           echo "V130_BACKEND_RESTORED=$DEPLOYMENT_ID"
+
+      - name: Restore trigger marker
+        run: echo 'restore-triggered'
