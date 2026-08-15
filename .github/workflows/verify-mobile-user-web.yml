@@ -1,0 +1,26 @@
+name: Verify Android user web
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/scripts/verify_mobile_user_web.mjs'
+      - '.github/workflows/verify-mobile-user-web.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright@latest
+          npx playwright install --with-deps chromium
+      - name: Verify Android mobile member screen
+        run: node deployment/scripts/verify_mobile_user_web.mjs
