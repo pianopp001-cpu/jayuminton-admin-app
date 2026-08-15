@@ -1,0 +1,40 @@
+name: Verify admin render hotpath
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+      - name: Verify move/swap hotpath before optimization
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="source-snapshot/current-main/Script.html"
+          test -f "$FILE"
+          grep -F 'function quickMoveOrSwap' "$FILE" >/dev/null
+          grep -F 'function applyMoveOrSwapLocally' "$FILE" >/dev/null
+          grep -F 'function batchAssignToTarget' "$FILE" >/dev/null
+          grep -F 'ACTION_IN_FLIGHT' "$FILE" >/dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('source-snapshot/current-main/Script.html').read_text(encoding='utf-8')
+          for fn in ['quickMoveOrSwap','applyMoveOrSwapLocally','batchAssignToTarget']:
+              marker='function '+fn
+              start=s.find(marker)
+              if start < 0:
+                  raise SystemExit(fn+' missing')
+              nxt=s.find('\nfunction ', start+len(marker))
+              body=s[start:nxt if nxt >= 0 else len(s)]
+              print(fn, 'renderState calls=', body.count('renderState('))
+          if 'JAYUMINTON_MEMBER_BRIDGE_READY' not in s:
+              raise SystemExit('member native bridge guard missing')
+          print('hotpath verification passed')
+          PY
