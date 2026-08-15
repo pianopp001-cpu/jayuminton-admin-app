@@ -1,0 +1,79 @@
+name: Restore v130 Apps Script backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-v130-appscript-backend.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-restore-v130-appscript-backend
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - name: Checkout exact v130-known-good source
+        uses: actions/checkout@v4
+        with:
+          ref: e88774455545529ab27e02d0587085a46351345b
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+
+      - name: Restore exact snapshot to current main deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          test -n "$SCRIPT_ID" && test "$SCRIPT_ID" != null
+          test -n "$DEPLOYMENT_ID" && test "$DEPLOYMENT_ID" != null
+
+          SRC="$GITHUB_WORKSPACE/source-snapshot/current-main"
+          WORK="$RUNNER_TEMP/v130-appscript"
+          mkdir -p "$WORK"
+          cp "$SRC/Code.js" "$WORK/Code.js"
+          cp "$SRC/Index.html" "$WORK/Index.html"
+          cp "$SRC/Script.html" "$WORK/Script.html"
+          cp "$SRC/Style.html" "$WORK/Style.html"
+          cp "$SRC/Admin.html" "$WORK/Admin.html"
+          cp "$SRC/appsscript.json" "$WORK/appsscript.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
+
+          cd "$WORK"
+          node --check Code.js
+          clasp push --force
+          clasp create-deployment --deploymentId "$DEPLOYMENT_ID" --description "restore exact v130 known good backend $GITHUB_RUN_ID"
+          clasp deployments | tee "$RUNNER_TEMP/deployments-after.txt"
+          grep -F "$DEPLOYMENT_ID" "$RUNNER_TEMP/deployments-after.txt"
+
+          URL="https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec?mode=user&app=user&source=pwa"
+          for i in 1 2 3 4 5; do
+            if curl --fail --location --retry 2 --max-time 40 -A 'Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 Chrome/139 Mobile Safari/537.36' "$URL" -o "$RUNNER_TEMP/v130-live.html"; then
+              break
+            fi
+            sleep 5
+          done
+          test -s "$RUNNER_TEMP/v130-live.html"
+          grep -F '자유민턴 코트배정 현황' "$RUNNER_TEMP/v130-live.html"
+          grep -F '멤버 열람 비밀번호' "$RUNNER_TEMP/v130-live.html"
+          ! grep -qi 'Google Drive' "$RUNNER_TEMP/v130-live.html"
+          echo "V130_BACKEND_RESTORED=$DEPLOYMENT_ID"
