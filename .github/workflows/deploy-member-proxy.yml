@@ -1,0 +1,47 @@
+name: Deploy Firebase member proxy
+on:
+  push:
+    branches: [main]
+    paths:
+      - functions/**
+      - .github/workflows/deploy-member-proxy.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Resolve config and install function
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          PROJECT="$(jq -r '.firebaseProjectId' "$RUNNER_TEMP/deploy.json")"
+          DEPLOYMENT="$(jq -r '.mainDeploymentId' "$RUNNER_TEMP/deploy.json")"
+          echo "FIREBASE_PROJECT_ID=$PROJECT" >> "$GITHUB_ENV"
+          echo "MEMBER_RPC_URL=https://script.google.com/macros/s/$DEPLOYMENT/exec" >> "$GITHUB_ENV"
+          cd functions && npm install
+      - name: Write Firebase config
+        shell: bash
+        run: |
+          cat > firebase.json <<'JSON'
+          {"functions":{"source":"functions","runtime":"nodejs22"},"hosting":{"public":"deployment/jayuminton/web-push-overrides","rewrites":[{"source":"/api/member-rpc","function":{"functionId":"memberRpc","region":"asia-northeast3"}},{"source":"**","destination":"/index.html"}]}}
+          JSON
+      - name: Deploy function
+        run: firebase deploy --only functions:memberRpc --project "$FIREBASE_PROJECT_ID" --non-interactive
+        env:
+          MEMBER_RPC_URL: ${{ env.MEMBER_RPC_URL }}
