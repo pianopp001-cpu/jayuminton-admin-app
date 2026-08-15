@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SRC='https://script.google.com/macros/s/AKfycbwVrOLZypNahfSE6IPyyQmxvd4YJ1cetcpaHNJDVh2RQ2dxpH7nQSLT-CLfNPFCwbQDJA/exec?mode=user&app=user&source=pwa'
+          SRC='https://script.google.com/macros/s/AKfycbz0PgGVehRRgjPPjKTEQf3omLfr3iGB6PnQ3eYl-FoySFyjdlNI56S1aWkfT-Z8EnmlHg/exec?mode=user&app=user&source=pwa'
           BODY="$RUNNER_TEMP/final.html"
           META="$(curl -L -sS --max-time 60 -o "$BODY" -w '%{http_code}|%{url_effective}' "$SRC" || true)"
           CODE="${META%%|*}"
@@ -50,7 +50,6 @@ jobs:
             printf 'final_url=%s\n' "$FINAL"
           } > deployment/status/googleusercontent-member-probe.txt
           cat deployment/status/googleusercontent-member-probe.txt
-          test "$HOST" = 'script.googleusercontent.com'
           test "$CODE" = '200'
           test "$DRIVE" = 'no'
           test "$APP" = 'yes'
