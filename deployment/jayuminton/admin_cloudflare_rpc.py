@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-import argparse, json, re
+import argparse, json
 from pathlib import Path
 
 # Admin transport only. Existing member Cloudflare/Firebase paths are untouched.
 # The allow-list is intentionally explicit: never eval arbitrary function names.
 ALLOWED = [
-    'createAdminSession','resumeAdminSession','getCurrentMemberPassword','getPublicState',
-    'addMember','setMemberStatus','updateMember','deleteMember','changeMemberPassword',
-    'assignMembersToCourt','smartAssignSelected','moveOrSwapMember','finishCourt',
-    'swapCourts','undoLastAction','resetAll','createBackup','restoreBackup'
+    'createAdminSession','resumeAdminSession','getCurrentMemberPassword','getPublicState','getSystemStatus',
+    'addMember','setMemberStatus','updateMember','deleteMember','deleteMembers','changeMemberPassword',
+    'assignMembersToCourt','assignMembersToWaitGroup','assignWaitGroupToCourt',
+    'autoFillCourt','autoFillWaitGroup','moveOrSwapMember','finishCourt',
+    'swapCourts','swapWaitGroups','undoLastAction','decreaseSelectedGameCounts','resetSelectedGameCounts',
+    'removeFromCourt','removeFromWaitGroup','adjustCourtMembers','adjustWaitGroupMembers',
+    'resetAll','resetAllOperationData','createBackup','restoreBackup','createManualBackup','restoreManualBackup'
 ]
 
 def rpc_helper():
@@ -46,6 +49,10 @@ BRIDGE=r'''<script id="jayuminton-admin-cloudflare-rpc">
   function invoke(name,args,success,failure){var cb='__jmAdmin'+Date.now()+'_'+(++seq),sc=document.createElement('script'),done=false;var timer=setTimeout(function(){finish(new Error('서버 응답 시간이 초과되었습니다.'));},20000);function cleanup(){clearTimeout(timer);try{delete window[cb];}catch(e){window[cb]=undefined;}if(sc.parentNode)sc.parentNode.removeChild(sc);}function finish(err,val){if(done)return;done=true;cleanup();if(err){if(typeof failure==='function')failure(err);}else if(typeof success==='function')success(val);}window[cb]=function(packet){if(packet&&packet.ok)finish(null,packet.result);else finish(new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.')));};sc.onerror=function(){finish(new Error('서버에 연결할 수 없습니다.'));};var sep=endpoint.indexOf('?')>=0?'&':'?';sc.src=endpoint+sep+'rpc='+encodeURIComponent(String(name))+'&callback='+encodeURIComponent(cb)+'&payload='+encodeURIComponent(enc(args))+'&nonce='+Date.now()+'_'+seq;document.head.appendChild(sc);}
   function runner(success,failure){return new Proxy({}, {get:function(_,prop){if(prop==='withSuccessHandler')return function(fn){return runner(fn,failure);};if(prop==='withFailureHandler')return function(fn){return runner(success,fn);};if(prop==='then')return undefined;return function(){invoke(String(prop),Array.prototype.slice.call(arguments),success,failure);};}});}
   window.google=window.google||{};window.google.script=window.google.script||{};window.google.script.run=runner(null,null);window.__JAYUMINTON_ADMIN_CLOUDFLARE__=true;
+  function ensureStatus(){var box=document.getElementById('adminLoginBox');if(!box||document.getElementById('adminCloudflareLoginStatus'))return;var el=document.createElement('div');el.id='adminCloudflareLoginStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='margin-top:10px;font-size:13px;font-weight:700;text-align:center';box.appendChild(el);}
+  function status(text,error){var el=document.getElementById('adminCloudflareLoginStatus');if(el){el.textContent=String(text||'');el.style.color=error?'#b42318':'#667085';}}
+  function bindLogin(){ensureStatus();var b=document.getElementById('adminCloudflareLoginButton'),input=document.getElementById('adminPinInput');if(b&&!b.__jmBound){b.__jmBound=true;b.addEventListener('click',function(){if(b.disabled)return;var pin=String(input&&input.value||'').trim();if(!pin){status('관리자 PIN을 입력하세요.',true);return;}b.disabled=true;var old=b.textContent;b.textContent='확인 중…';status('관리자 서버에 연결하고 있습니다.',false);Promise.resolve().then(function(){return window.adminLogin();}).then(function(){status('',false);}).catch(function(e){status(String(e&&e.message||e||'서버 연결 오류'),true);}).finally(function(){b.disabled=false;b.textContent=old||'로그인';});});}if(input&&!input.__jmBound){input.__jmBound=true;input.addEventListener('keydown',function(ev){if(ev.key==='Enter'&&b){ev.preventDefault();b.click();}});}}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bindLogin,{once:true});else setTimeout(bindLogin,0);
 })();
 </script>'''
 
@@ -67,6 +74,9 @@ def build_frontend(work,out,rpc_url):
         if marker in s:s=s.replace(marker,(work/(name+'.html')).read_text(encoding='utf-8'))
         return s
     for n in ['Style']: index=include(n,index)
+    # The standalone Firebase page owns the login click so errors are visible instead of
+    # becoming unhandled promise rejections from the old inline Apps Script handler.
+    index=index.replace('class="primary"\n      onclick="adminLogin()"','id="adminCloudflareLoginButton"\n      class="primary"\n      type="button"',1)
     bridge=BRIDGE.replace('RPC_URL_JSON',json.dumps(rpc_url.rstrip('/')+'/?adminRpc=1'))
     marker='<script>const IS_ADMIN = true;</script>'
     if marker not in index: marker='<script>\nconst IS_ADMIN = true;\n</script>'
@@ -75,6 +85,7 @@ def build_frontend(work,out,rpc_url):
     for n in ['Script','MemberSwapClient','MemberSwapAction','MemberControls','MemberSwapInbox']: index=include(n,index)
     if '<?!=' in index: raise SystemExit('Apps Script template marker remains')
     if 'script.google.com/macros/s/' in index: raise SystemExit('direct Apps Script URL remains')
+    if 'adminCloudflareLoginButton' not in index: raise SystemExit('standalone admin login button patch missing')
     (out/'index.html').write_text(index,encoding='utf-8')
 
 def main():
