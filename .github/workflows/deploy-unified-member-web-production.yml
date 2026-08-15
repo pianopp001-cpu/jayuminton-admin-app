@@ -1,0 +1,178 @@
+name: Deploy unified member web production
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-unified-member-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      V3_COMMIT: 1c3aa7a4f77a280805cf43570b3a7f1695998711
+      PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
+      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deployment tools
+        run: npm install --global @google/clasp@latest firebase-tools@latest
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
+          for value in "$MAIN_SCRIPT_ID" "$FIREBASE_PROJECT_ID"; do
+            test -n "$value"; test "$value" != null
+          done
+          {
+            echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare unified member backend on isolated RPC deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKUP="$RUNNER_TEMP/current-head-backup"
+          WORK="$RUNNER_TEMP/v3-production-backend"
+          mkdir -p "$BACKUP" "$WORK"
+
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
+          (cd "$BACKUP" && clasp pull)
+
+          for file in Admin.html appsscript.json Code.js Index.html Script.html Style.html MemberAnywhereSwap.js MemberSwapClient.html MemberSwapAction.html MemberControls.html MemberSwapInbox.html; do
+            git show "$V3_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
+          done
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+
+          python3 deployment/jayuminton/v3_unified_member_preview_patch.py "$WORK"
+          python3 deployment/jayuminton/v3_cloudflare_member_preview.py patch-backend --work "$WORK"
+
+          grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
+          grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2' "$WORK/Script.html" >/dev/null
+          grep -F 'member-anywhere-destination-selected' "$WORK/Script.html" >/dev/null
+          grep -F '네, 저예요' "$WORK/MemberControls.html" >/dev/null
+          grep -F '코트배정대기' "$WORK/MemberControls.html" >/dev/null
+
+          restore_head() {
+            echo 'Restoring Apps Script project HEAD without updating MAIN/ADMIN deployments...'
+            (cd "$BACKUP" && clasp push --force)
+          }
+          trap restore_head EXIT
+
+          (cd "$WORK" && clasp push --force)
+          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "unified member production rpc $GITHUB_RUN_ID")
+
+          restore_head
+          trap - EXIT
+
+      - name: Verify isolated member RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 6
+          URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
+          CALLBACK="jmProdState$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "$URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/member-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/member-state.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/member-state.js" >/dev/null
+
+      - name: Build production member frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/v3-production-backend"
+          ROOT="$RUNNER_TEMP/unified-member-production"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+
+          python3 deployment/jayuminton/v3_cloudflare_member_preview.py \
+            build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$CLOUDFLARE_RPC_URL"
+
+          grep -F 'jayuminton-v3-cloudflare-member-preview' "$PUBLIC/index.html" >/dev/null
+          grep -F 'showSelfConfirm' "$PUBLIC/index.html" >/dev/null
+          grep -F 'memberAnywhereRequestSelected_' "$PUBLIC/index.html" >/dev/null
+          grep -F 'showIncoming_' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F 'member-anywhere-destination-selected' "$PUBLIC/index.html" >/dev/null
+          grep -F 'width:14px!important' "$PUBLIC/index.html" >/dev/null
+          grep -F '구력\\s*[:：]?' "$PUBLIC/index.html" >/dev/null
+          ! grep -Eqi '<iframe' "$PUBLIC/index.html"
+          ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
+
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {
+            "hosting": {
+              "public": "public",
+              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+              "headers": [
+                {"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}
+              ],
+              "rewrites": [{"source":"**","destination":"/index.html"}]
+            }
+          }
+          JSON
+
+      - name: Deploy member frontend to production Hosting
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/unified-member-production"
+          cd "$ROOT"
+          firebase deploy --only hosting \
+            --project "$FIREBASE_PROJECT_ID" \
+            --config firebase.json \
+            --non-interactive
+
+      - name: Verify production member web
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          URL='https://jayuminton-push.web.app/'
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$URL?verify=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/live-production.html"
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'member-anywhere-destination-selected' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'width:14px!important' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F '구력\\s*[:：]?' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live-production.html" >/dev/null
+          ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-production.html"
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live-production.html"
+          echo 'PRODUCTION_MEMBER_WEB_OK'
+          echo 'PLAY_V131_AAB_NOT_CHANGED'
+          echo 'MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED'
