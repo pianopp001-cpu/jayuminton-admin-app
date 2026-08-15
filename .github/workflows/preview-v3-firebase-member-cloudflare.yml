@@ -18,7 +18,7 @@ jobs:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      V3_COMMIT: 71313ea74326333ead54d2fb73f2814198a39ae4
+      V3_COMMIT: 1c3aa7a4f77a280805cf43570b3a7f1695998711
       PREVIEW_CHANNEL: v3-member-cloudflare
       PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
       CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
@@ -72,10 +72,16 @@ jobs:
           done
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
 
+          python3 deployment/jayuminton/v3_unified_member_preview_patch.py "$WORK"
           python3 deployment/jayuminton/v3_cloudflare_member_preview.py patch-backend --work "$WORK"
           grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
           grep -F 'memberRequestAnywhereSwap' "$WORK/Code.js" >/dev/null
           grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1' "$WORK/Script.html" >/dev/null
+          grep -F 'member-anywhere-destination-selected' "$WORK/Script.html" >/dev/null
+          grep -F 'member-anywhere-target-selected' "$WORK/Script.html" >/dev/null
+          grep -F '네, 저예요' "$WORK/MemberControls.html" >/dev/null
+          grep -F '코트배정대기' "$WORK/MemberControls.html" >/dev/null
 
           restore_head() {
             echo 'Restoring Apps Script project HEAD without updating production deployments...'
@@ -84,7 +90,7 @@ jobs:
           trap restore_head EXIT
 
           (cd "$WORK" && clasp push --force)
-          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "v3 member Cloudflare preview $GITHUB_RUN_ID")
+          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "v3 unified member Cloudflare preview $GITHUB_RUN_ID")
 
           restore_head
           trap - EXIT
@@ -119,6 +125,9 @@ jobs:
           grep -F 'memberAnywhereRequestSelected_' "$PUBLIC/index.html"
           grep -F 'showIncoming_' "$PUBLIC/index.html"
           grep -F 'jayuminton-v3-preview-wrap-fix' "$PUBLIC/index.html"
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1' "$PUBLIC/index.html"
+          grep -F 'member-anywhere-destination-selected' "$PUBLIC/index.html"
+          grep -F 'member-anywhere-target-selected' "$PUBLIC/index.html"
           ! grep -Eqi '<iframe' "$PUBLIC/index.html"
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
 
@@ -164,6 +173,9 @@ jobs:
           grep -F 'showSelfConfirm' "$RUNNER_TEMP/live-v3.html"
           grep -F 'memberAnywhereRequestSelected_' "$RUNNER_TEMP/live-v3.html"
           grep -F 'showIncoming_' "$RUNNER_TEMP/live-v3.html"
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1' "$RUNNER_TEMP/live-v3.html"
+          grep -F 'member-anywhere-destination-selected' "$RUNNER_TEMP/live-v3.html"
+          grep -F 'member-anywhere-target-selected' "$RUNNER_TEMP/live-v3.html"
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live-v3.html"
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-v3.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live-v3.html"
@@ -173,6 +185,8 @@ jobs:
         run: |
           echo "OPEN_THIS_ON_ANDROID=$FIREBASE_PREVIEW_URL"
           echo "V3_SWAP_UI_INCLUDED"
-          echo "GRADE_EXPERIENCE_WRAP_FIX_INCLUDED"
+          echo "UNIFIED_SELF_TARGET_DESTINATION_SELECTION_INCLUDED"
+          echo "GRADE_LIMIT_40_AND_WRAP_INCLUDED"
+          echo "SELF_BADGE_INLINE_INCLUDED"
           echo "PRODUCTION_HOSTING_NOT_DEPLOYED"
           echo "MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED"
