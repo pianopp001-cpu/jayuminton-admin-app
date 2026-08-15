@@ -60,3 +60,4 @@ jobs:
           grep -F 'AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w' "$RUNNER_TEMP/live-runtime.js"
           curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-index.html"
           grep -F 'runtime-fix-v209.js' "$RUNNER_TEMP/live-index.html"
+          echo 'firebase-member-frame-recovery-complete'
