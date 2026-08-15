@@ -1,0 +1,117 @@
+name: Emergency restore exact v130 backend and hosting
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-restore-v130-backend-and-hosting.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-emergency-v130-full-restore
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - name: Checkout exact verified v130 source
+        uses: actions/checkout@v4
+        with:
+          ref: e88774455545529ab27e02d0587085a46351345b
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deployment tools
+        run: npm install --global @google/clasp@latest firebase-tools@latest
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve exact deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$C")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")" >> "$GITHUB_ENV"
+          echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")" >> "$GITHUB_ENV"
+
+      - name: Restore exact v130 Apps Script backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/v130-exact-backend"
+          mkdir -p "$WORK"
+          cp source-snapshot/current-main/Admin.html "$WORK/"
+          cp source-snapshot/current-main/appsscript.json "$WORK/"
+          cp source-snapshot/current-main/Code.js "$WORK/"
+          cp source-snapshot/current-main/Index.html "$WORK/"
+          cp source-snapshot/current-main/Script.html "$WORK/"
+          cp source-snapshot/current-main/Style.html "$WORK/"
+          ! grep -R -F 'memberBootstrapSession' "$WORK"
+          ! grep -R -F 'MEMBER_BOOTSTRAP_SESSION' "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "exact v130 backend restore $GITHUB_RUN_ID"
+          echo "V130_MEMBER_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+          sleep 7
+
+      - name: Verify restored Apps Script no longer has bootstrap ReferenceError
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$V130_MEMBER_URL?restore=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/apps-script.html"
+          ! grep -F 'memberBootstrapSession is not defined' "$RUNNER_TEMP/apps-script.html"
+          ! grep -F 'ReferenceError: memberBootstrapSession' "$RUNNER_TEMP/apps-script.html"
+          grep -E '자유민턴|코트배정|memberLogin|memberPassword' "$RUNNER_TEMP/apps-script.html" >/dev/null
+          echo EXACT_V130_BACKEND_OK
+
+      - name: Restore exact v130 Firebase Hosting wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCRIPT='deployment/scripts/hotfix_v130_white_screen.sh'
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p=Path('deployment/scripts/hotfix_v130_white_screen.sh')
+          s=p.read_text(encoding='utf-8')
+          old='export WHITEFIX_MAIN_URL="${MAIN_URL}?build=v130-whitefix-${GITHUB_RUN_ID}"'
+          new='export WHITEFIX_MAIN_URL="'+os.environ['V130_MEMBER_URL']+'"'
+          if s.count(old) != 1:
+              raise SystemExit('v130 member URL anchor missing')
+          s=s.replace(old,new,1)
+          deploy='firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive'
+          if s.count(deploy) != 1:
+              raise SystemExit('hosting deploy anchor missing')
+          s=s.replace(deploy, deploy+'\nexit 0', 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          bash "$SCRIPT"
+
+      - name: Verify live Hosting points to restored backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/?restore=v130-full-$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F "src=\"$V130_MEMBER_URL\"" "$RUNNER_TEMP/live.html"
+          ! grep -F 'memberBootstrapSession' "$RUNNER_TEMP/live.html"
+          echo EXACT_V130_FULL_RESTORE_OK
