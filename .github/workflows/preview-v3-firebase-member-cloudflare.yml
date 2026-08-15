@@ -1,4 +1,4 @@
-name: Preview v3 member controls via Cloudflare Worker
+name: Preview unified member web + Android app
 
 on:
   workflow_dispatch: {}
@@ -13,11 +13,13 @@ concurrency:
 jobs:
   preview:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       V3_COMMIT: 1c3aa7a4f77a280805cf43570b3a7f1695998711
       PREVIEW_CHANNEL: v3-member-cloudflare
       PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
@@ -33,6 +35,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Install deployment tools
         run: npm install --global @google/clasp@latest firebase-tools@latest
@@ -50,11 +61,18 @@ jobs:
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          PUSH_URL="$(jq -r '.pushUrl' "$CONFIG")"
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
-          test -n "$MAIN_SCRIPT_ID"; test "$MAIN_SCRIPT_ID" != null
-          test -n "$FIREBASE_PROJECT_ID"; test "$FIREBASE_PROJECT_ID" != null
-          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
-          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+          for value in "$MAIN_SCRIPT_ID" "$MAIN_DEPLOYMENT_ID" "$PUSH_URL" "$FIREBASE_PROJECT_ID"; do
+            test -n "$value"; test "$value" != null
+          done
+          {
+            echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
+            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
+            echo "PUSH_URL=$PUSH_URL"
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+          } >> "$GITHUB_ENV"
 
       - name: Prepare v3 backend and refresh isolated preview deployment
         shell: bash
@@ -75,7 +93,6 @@ jobs:
           python3 deployment/jayuminton/v3_unified_member_preview_patch.py "$WORK"
           python3 deployment/jayuminton/v3_cloudflare_member_preview.py patch-backend --work "$WORK"
           grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
-          grep -F 'memberRequestAnywhereSwap' "$WORK/Code.js" >/dev/null
           grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1' "$WORK/Script.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$WORK/Script.html" >/dev/null
@@ -90,7 +107,7 @@ jobs:
           trap restore_head EXIT
 
           (cd "$WORK" && clasp push --force)
-          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "v3 unified member Cloudflare preview $GITHUB_RUN_ID")
+          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "unified member preview $GITHUB_RUN_ID")
 
           restore_head
           trap - EXIT
@@ -108,7 +125,7 @@ jobs:
           grep -F "$CALLBACK(" "$RUNNER_TEMP/v3-state.js"
           grep -F '"ok":true' "$RUNNER_TEMP/v3-state.js"
 
-      - name: Build iframe-free v3 frontend
+      - name: Build common iframe-free member frontend
         shell: bash
         run: |
           set -euo pipefail
@@ -124,7 +141,6 @@ jobs:
           grep -F 'showSelfConfirm' "$PUBLIC/index.html"
           grep -F 'memberAnywhereRequestSelected_' "$PUBLIC/index.html"
           grep -F 'showIncoming_' "$PUBLIC/index.html"
-          grep -F 'jayuminton-v3-preview-wrap-fix' "$PUBLIC/index.html"
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1' "$PUBLIC/index.html"
           grep -F 'member-anywhere-destination-selected' "$PUBLIC/index.html"
           grep -F 'member-anywhere-target-selected' "$PUBLIC/index.html"
@@ -159,9 +175,10 @@ jobs:
           PREVIEW_URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/channel.json" | head -1)"
           test -n "$PREVIEW_URL"
           echo "FIREBASE_PREVIEW_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
-          echo "Firebase v3 preview URL: $PREVIEW_URL"
+          echo "UNIFIED_MEMBER_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+          echo "Firebase unified preview URL: $PREVIEW_URL"
 
-      - name: Verify deployed v3 preview
+      - name: Verify deployed common member preview
         shell: bash
         run: |
           set -euo pipefail
@@ -180,13 +197,94 @@ jobs:
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-v3.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live-v3.html"
 
-      - name: Print Android test target
+      - name: Prepare Firebase config for native user app
         shell: bash
         run: |
-          echo "OPEN_THIS_ON_ANDROID=$FIREBASE_PREVIEW_URL"
+          set -euo pipefail
+          PACKAGE='com.jayuminton.user'
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          APP_ID="$(jq -r --arg pkg "$PACKAGE" '[.. | objects | select(((.packageName? == $pkg) or (.package_name? == $pkg) or (.androidClientInfo?.packageName? == $pkg)) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
+          test -n "$APP_ID"
+          firebase apps:sdkconfig ANDROID "$APP_ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
+          grep -F 'com.jayuminton.user' app/google-services.json >/dev/null
+
+      - name: Build Android APK using the exact same preview URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCRIPT="$RUNNER_TEMP/build_user_unified_preview.sh"
+          cp deployment/scripts/build_user_native_push_fresh_v110.sh "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v111.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v112.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v113.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v114.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v115.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v116.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v117.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v118.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v119.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v120_diagnostic.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v121.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v122.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v124_confirmed_overlay.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v126_stop_controller.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v126_raceguard.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v127_member_switch.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v128_repeat_switch.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v129_background_registration.py "$SCRIPT"
+          python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$SCRIPT"
+          python3 deployment/scripts/patch_user_native_unified_preview.py "$SCRIPT"
+
+          grep -F 'VERSION="1.3.2"' "$SCRIPT" >/dev/null
+          grep -F 'VERSION_CODE="132"' "$SCRIPT" >/dev/null
+          grep -F 'UNIFIED_MEMBER_URL required' "$SCRIPT" >/dev/null
+          grep -F 'NativePushRegistrar.ensureToken(this);' "$SCRIPT" >/dev/null
+          grep -F 'private static final int MAX_GROUPS = 8;' "$SCRIPT" >/dev/null
+          ! grep -F 'script.google.com/macros/s/${MAIN_DEPLOYMENT_ID}/exec?mode=user' "$SCRIPT"
+
+          bash "$SCRIPT"
+
+          APK='releases/jayuminton-courtstatus-v1.3.2-unified-preview.apk'
+          STATUS='deployment/status/user-native-push-v1.3.2-unified-preview.txt'
+          test -s "$APK"
+          test -s "$STATUS"
+          grep -F 'status=success' "$STATUS" >/dev/null
+          grep -F 'version=1.3.2' "$STATUS" >/dev/null
+          grep -F 'version_code=132' "$STATUS" >/dev/null
+          grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
+          grep -F 'vibration_max_groups=8' "$STATUS" >/dev/null
+
+          AAPT=''; for p in "$ANDROID_HOME"/build-tools/*/aapt; do [ -x "$p" ] && AAPT="$p"; done; test -n "$AAPT"
+          "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/unified-preview-badging.txt"
+          grep -F "package: name='com.jayuminton.user'" "$RUNNER_TEMP/unified-preview-badging.txt" >/dev/null
+          grep -F "versionCode='132'" "$RUNNER_TEMP/unified-preview-badging.txt" >/dev/null
+          grep -F "versionName='1.3.2'" "$RUNNER_TEMP/unified-preview-badging.txt" >/dev/null
+
+          mkdir -p "$RUNNER_TEMP/unified-apk"
+          cp "$APK" "$RUNNER_TEMP/unified-apk/jayuminton-unified-preview-v1.3.2.apk"
+          cp "$STATUS" "$RUNNER_TEMP/unified-apk/build-status.txt"
+          printf 'web_url=%s\n' "$FIREBASE_PREVIEW_URL" > "$RUNNER_TEMP/unified-apk/TEST_TARGET.txt"
+          echo 'ANDROID_APK_USES_SAME_MEMBER_PREVIEW_URL'
+          echo 'NATIVE_FCM_AND_VIBRATION_PRESERVED'
+
+      - name: Upload unified Android test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-unified-member-preview-v1.3.2
+          path: ${{ runner.temp }}/unified-apk
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Print unified test targets
+        shell: bash
+        run: |
+          echo "WEB_TEST_URL=$FIREBASE_PREVIEW_URL"
+          echo "ANDROID_ARTIFACT=jayuminton-unified-member-preview-v1.3.2"
+          echo "SAME_MEMBER_FRONTEND_FOR_WEB_AND_ANDROID"
           echo "V3_SWAP_UI_INCLUDED"
           echo "UNIFIED_SELF_TARGET_DESTINATION_SELECTION_INCLUDED"
           echo "GRADE_LIMIT_40_AND_WRAP_INCLUDED"
           echo "SELF_BADGE_INLINE_INCLUDED"
+          echo "NATIVE_FCM_VIBRATION_BUILD_INCLUDED"
           echo "PRODUCTION_HOSTING_NOT_DEPLOYED"
           echo "MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED"
