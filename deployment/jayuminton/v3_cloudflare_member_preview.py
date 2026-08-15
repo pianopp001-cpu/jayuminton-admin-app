@@ -137,15 +137,34 @@ WRAP_STYLE = r'''<style id="jayuminton-v3-preview-wrap-fix">
 #memberApp .member-info-detail,
 #memberApp .meta,
 #memberApp .person .meta,
-#memberApp .member .meta{
+#memberApp .member .meta,
+#memberApp .v4-court-card .member-info-detail,
+#memberApp .v4-wait-card .member-info-detail,
+#memberApp #activeMembersMember .member-info-detail{
   white-space:normal!important;
   overflow:visible!important;
   text-overflow:clip!important;
-  max-width:none!important;
+  max-width:100%!important;
+  width:100%!important;
   height:auto!important;
   line-height:1.3!important;
   overflow-wrap:anywhere!important;
   word-break:keep-all!important;
+}
+#memberApp .v4-court-card .person.member-info-card,
+#memberApp .v4-wait-card .person.member-info-card,
+#memberApp #activeMembersMember .person.member-info-card{
+  height:auto!important;
+  min-height:52px!important;
+  overflow:visible!important;
+  align-items:stretch!important;
+}
+#memberApp .v4-court-card .person.member-info-card>span,
+#memberApp .v4-wait-card .person.member-info-card>span,
+#memberApp #activeMembersMember .person.member-info-card>span{
+  width:100%!important;
+  min-width:0!important;
+  overflow:visible!important;
 }
 </style>'''
 
