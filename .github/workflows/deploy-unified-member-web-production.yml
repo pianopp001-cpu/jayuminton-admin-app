@@ -79,7 +79,7 @@ jobs:
 
           grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
           grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2' "$WORK/Script.html" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3' "$WORK/Script.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$WORK/Script.html" >/dev/null
           grep -F '네, 저예요' "$WORK/MemberControls.html" >/dev/null
           grep -F '코트배정대기' "$WORK/MemberControls.html" >/dev/null
@@ -125,9 +125,11 @@ jobs:
           grep -F 'showSelfConfirm' "$PUBLIC/index.html" >/dev/null
           grep -F 'memberAnywhereRequestSelected_' "$PUBLIC/index.html" >/dev/null
           grep -F 'showIncoming_' "$PUBLIC/index.html" >/dev/null
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3' "$PUBLIC/index.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$PUBLIC/index.html" >/dev/null
-          grep -F 'width:14px!important' "$PUBLIC/index.html" >/dev/null
+          grep -F 'width:11px!important' "$PUBLIC/index.html" >/dev/null
+          grep -F 'font-size:6px!important' "$PUBLIC/index.html" >/dev/null
+          grep -F '#memberApp .v4-court-card .member-info-detail' "$PUBLIC/index.html" >/dev/null
           grep -F 'cleanMemberLabels' "$PUBLIC/index.html" >/dev/null
           grep -F -- '-webkit-line-clamp:unset' "$PUBLIC/index.html" >/dev/null
           ! grep -Eqi '<iframe' "$PUBLIC/index.html"
@@ -167,9 +169,11 @@ jobs:
             -H 'Cache-Control: no-cache, no-store' \
             "$URL?verify=$GITHUB_RUN_ID" \
             -o "$RUNNER_TEMP/live-production.html"
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'width:14px!important' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'width:11px!important' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'font-size:6px!important' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F '#memberApp .v4-court-card .member-info-detail' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'cleanMemberLabels' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F -- '-webkit-line-clamp:unset' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live-production.html" >/dev/null
