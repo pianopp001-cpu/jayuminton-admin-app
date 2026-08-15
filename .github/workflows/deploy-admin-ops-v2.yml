@@ -56,6 +56,7 @@ jobs:
           python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_ops_v2_backend_extra.py" "$WORK"
           python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_overlay_guarantee.py" "$WORK"
           python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_fast_render_patch.py" "$WORK"
+          python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_compact_fast_v3.py" "$WORK"
 
           grep -F 'id="headerRefreshButton"' Admin.html >/dev/null
           grep -F 'id="newIsNew"' Admin.html >/dev/null
@@ -66,11 +67,15 @@ jobs:
           grep -F 'JAYUMINTON_ADMIN_OPS_V2' Script.html >/dev/null
           grep -F 'JAYUMINTON_ADMIN_SAVING_GUARANTEE_V1' Script.html >/dev/null
           grep -F 'JAYUMINTON_ADMIN_FAST_RENDER_V1' Script.html >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_COMPACT_FAST_V3' Script.html >/dev/null
+          grep -F 'member.isNew === true' Script.html >/dev/null
+          grep -F 'member-game-count' Script.html >/dev/null
           grep -F 'decorateAdminNewCards' Script.html >/dev/null
           grep -F '회원 저장 중...' Script.html >/dev/null
           grep -F '.header-refresh-button' Style.html >/dev/null
-          grep -F '.admin-saving-card strong' Style.html >/dev/null
-          grep -F '.member-new-inline' Style.html >/dev/null
+          grep -F '.mobile-assign-button' Style.html >/dev/null
+          grep -F '.member-game-count' Style.html >/dev/null
+          grep -F 'pointer-events:none!important' Style.html >/dev/null
           ! grep -F '급수·구력 미입력' Script.html
 
           node --check Code.js
@@ -91,7 +96,7 @@ jobs:
           clasp push --force
           clasp create-deployment \
             --deploymentId "$MAIN_DEPLOYMENT_ID" \
-            --description "admin ops v2 $GITHUB_RUN_ID"
+            --description "admin ops v2 compact fast $GITHUB_RUN_ID"
 
       - name: Verify deployment metadata
         shell: bash
