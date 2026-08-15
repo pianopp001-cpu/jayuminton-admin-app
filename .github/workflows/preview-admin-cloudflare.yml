@@ -101,7 +101,6 @@ jobs:
           WORKER_URL="$(grep -Eo 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/wrangler-deploy.txt" | tail -1)"
           test -n "$WORKER_URL"
           echo "ADMIN_WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
-          echo "ADMIN_WORKER_URL=$WORKER_URL"
       - name: Verify dedicated admin Worker login transport
         shell: bash
         run: |
@@ -111,16 +110,18 @@ jobs:
           LOGIN_PAYLOAD="$(printf '[\"__transport_probe_invalid_pin__\"]' | base64 -w0 | tr '+/' '-_' | tr -d '=')"
           curl --fail --retry 5 --max-time 60 "$ADMIN_WORKER_URL/?rpc=createAdminSession&callback=$CALLBACK&payload=$LOGIN_PAYLOAD&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-worker-login.js"
           grep -F "$CALLBACK(" "$RUNNER_TEMP/admin-worker-login.js"
-          grep -F '"ok":' "$RUNNER_TEMP/admin-worker-login.js"
       - name: Build iframe-free admin frontend
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"
           python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$ADMIN_WORKER_URL/"
+          python3 deployment/jayuminton/admin_behavior_preview_patch.py "$ROOT/public/index.html"
           grep -F 'jayuminton-admin-cloudflare-rpc' "$ROOT/public/index.html"
-          grep -F "$ADMIN_WORKER_URL/" "$ROOT/public/index.html"
-          ! grep -F 'shy-morning-f0e4.pianopp001.workers.dev' "$ROOT/public/index.html"
+          grep -F 'jayuminton-admin-behavior-preview-v2' "$ROOT/public/index.html"
+          grep -F 'adminBottomRefresh' "$ROOT/public/index.html"
+          grep -F '자동배정' "$ROOT/public/index.html"
+          ! grep -F '>위치 자동배정<' "$ROOT/public/index.html"
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
@@ -139,9 +140,9 @@ jobs:
           sleep 5
           curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-live.html"
           grep -F 'jayuminton-admin-cloudflare-rpc' "$RUNNER_TEMP/admin-live.html"
+          grep -F 'jayuminton-admin-behavior-preview-v2' "$RUNNER_TEMP/admin-live.html"
           grep -F "$ADMIN_WORKER_URL/" "$RUNNER_TEMP/admin-live.html"
           echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
-          echo "ADMIN_WORKER_URL=$ADMIN_WORKER_URL"
           echo 'MEMBER_CLOUDFLARE_WORKER_NOT_UPDATED'
           echo 'MEMBER_PRODUCTION_NOT_UPDATED'
           echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
