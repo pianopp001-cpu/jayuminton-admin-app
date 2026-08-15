@@ -5,8 +5,6 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/recover-firebase-member-frame-now.yml'
-      - 'deployment/jayuminton/web-push-overrides/**'
-      - 'deployment/jayuminton/firebase.json'
   workflow_dispatch:
 
 permissions:
@@ -32,32 +30,113 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      - name: Rebuild current Hosting with recovery overrides
+
+      - name: Select a currently live member deployment
+        id: member
         shell: bash
+        run: |
+          set -euo pipefail
+          STATUS='deployment/status/current-member-deployment-reprobe.txt'
+          test -s "$STATUS"
+          best=''
+          while IFS= read -r line; do
+            url="$(printf '%s\n' "$line" | sed -nE 's/^id=[^ ]+ .* url=(https:\/\/script\.google\.com\/macros\/s\/[^ ]+\/exec)$/\1/p')"
+            [ -n "$url" ] || continue
+            body="$RUNNER_TEMP/member-probe.html"
+            code="$(curl -L -sS --connect-timeout 8 --max-time 35 -o "$body" -w '%{http_code}' "$url?mode=user&app=user&source=firebase-direct&probe=$GITHUB_RUN_ID" || true)"
+            drive=no; app=no
+            if grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$body" 2>/dev/null; then drive=yes; fi
+            if grep -Eqi 'memberSelfSearchInput|MemberControls|자유민턴|코트배정|대기1|court-grid|waitGroups' "$body" 2>/dev/null; then app=yes; fi
+            echo "candidate=$url http=$code drive=$drive app=$app"
+            if [ "$code" = 200 ] && [ "$drive" = no ] && [ "$app" = yes ]; then
+              best="$url"
+              break
+            fi
+          done < "$STATUS"
+          test -n "$best"
+          echo "url=$best" >> "$GITHUB_OUTPUT"
+          echo "selected_member_url=$best"
+
+      - name: Build iframe-free emergency Hosting
+        shell: bash
+        env:
+          MEMBER_URL: ${{ steps.member.outputs.url }}
         run: |
           set -euo pipefail
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
-          HOSTING_URL="$(jq -r '.hostingUrl' "$CONFIG")"
           test -n "$FIREBASE_PROJECT_ID"
-          test -n "$HOSTING_URL"
-          BUILD="$RUNNER_TEMP/firebase-recovery"
+
+          BUILD="$RUNNER_TEMP/firebase-direct"
           mkdir -p "$BUILD/web-push"
           cp deployment/jayuminton/firebase.json "$BUILD/firebase.json"
-          BASE="${HOSTING_URL%/}"
-          for asset in index.html manifest.webmanifest setup-v208.css setup-v208.js config-v203.js firebase-messaging-sw.js icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png runtime-fix-v209.js; do
-            if curl --fail --location --retry 3 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/$asset?recovery=$GITHUB_RUN_ID" --output "$BUILD/web-push/$asset"; then
-              test -s "$BUILD/web-push/$asset"
-            fi
-          done
-          rsync -a --exclude='.gitkeep' deployment/jayuminton/web-push-overrides/ "$BUILD/web-push/"
-          grep -F 'AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w' "$BUILD/web-push/runtime-fix-v209.js"
+
+          python3 - "$MEMBER_URL" "$BUILD/web-push/index.html" <<'PY'
+          import html, json, sys
+          url, out = sys.argv[1], sys.argv[2]
+          target = url + '?mode=user&app=user&source=firebase-direct'
+          doc = '''<!doctype html>
+          <html lang="ko">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+            <meta name="theme-color" content="#315efb">
+            <title>자유민턴 코트현황</title>
+            <meta name="jayuminton-emergency-route" content="firebase-direct-member-handoff">
+            <style>
+              html,body{height:100%;margin:0;font-family:system-ui,-apple-system,sans-serif;background:#fff;color:#222}
+              body{display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box}
+              .box{max-width:420px}.spinner{width:34px;height:34px;margin:0 auto 18px;border:4px solid #ddd;border-top-color:#315efb;border-radius:50%;animation:s .8s linear infinite}
+              a{display:inline-block;margin-top:18px;padding:12px 18px;border-radius:10px;background:#315efb;color:#fff;text-decoration:none;font-weight:700}
+              @keyframes s{to{transform:rotate(360deg)}}
+            </style>
+          </head>
+          <body>
+            <div class="box"><div class="spinner"></div><strong>자유민턴 회원 화면을 여는 중입니다.</strong><br><a id="fallback" href="TARGET">회원 화면 열기</a></div>
+            <script>
+              // firebase-direct-member-handoff: no iframe, no embedded Apps Script document.
+              (function(){
+                var target = TARGET_JSON;
+                try { window.location.replace(target); }
+                catch (_) { window.location.href = target; }
+              })();
+            </script>
+          </body>
+          </html>'''
+          doc = doc.replace('TARGET_JSON', json.dumps(target)).replace('TARGET', html.escape(target, quote=True))
+          open(out, 'w', encoding='utf-8').write(doc)
+          PY
+
+          # Keep a valid manifest so installed/PWA entry does not 404 during the emergency handoff.
+          cp deployment/jayuminton/exact-v1637-web/manifest.webmanifest "$BUILD/web-push/manifest.webmanifest" || true
+
+          grep -F 'firebase-direct-member-handoff' "$BUILD/web-push/index.html"
+          grep -F "$MEMBER_URL" "$BUILD/web-push/index.html"
+          if grep -Eqi '<iframe|courtFrame' "$BUILD/web-push/index.html"; then
+            echo 'ERROR: iframe still exists in emergency index' >&2
+            exit 1
+          fi
+
           cd "$BUILD"
-          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "member frame recovery ${GITHUB_SHA::7}"
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "iframe-free member handoff ${GITHUB_SHA::7}"
+
+      - name: Verify live Hosting has no iframe
+        shell: bash
+        env:
+          MEMBER_URL: ${{ steps.member.outputs.url }}
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          BASE="$(jq -r '.hostingUrl' "$CONFIG")"
+          BASE="${BASE%/}"
           sleep 5
-          curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/runtime-fix-v209.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-runtime.js"
-          grep -F 'AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w' "$RUNNER_TEMP/live-runtime.js"
           curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-index.html"
-          grep -F 'runtime-fix-v209.js' "$RUNNER_TEMP/live-index.html"
-          echo 'firebase-member-frame-recovery-complete'
+          grep -F 'firebase-direct-member-handoff' "$RUNNER_TEMP/live-index.html"
+          grep -F "$MEMBER_URL" "$RUNNER_TEMP/live-index.html"
+          if grep -Eqi '<iframe|courtFrame' "$RUNNER_TEMP/live-index.html"; then
+            echo 'ERROR: live Hosting still contains iframe' >&2
+            exit 1
+          fi
+          echo 'iframe-free-firebase-handoff-live'
