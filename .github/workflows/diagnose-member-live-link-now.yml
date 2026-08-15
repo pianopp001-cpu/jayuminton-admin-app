@@ -26,7 +26,7 @@ jobs:
           node-version: '22'
       - run: npm install --global @google/clasp@latest
 
-      - name: Probe configured member URLs
+      - name: Probe configured and known-good member URLs
         shell: bash
         run: |
           set -euo pipefail
@@ -37,6 +37,8 @@ jobs:
           MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
           HOSTING_URL="$(jq -r '.hostingUrl' "$C")"
           MAIN_URL="https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec"
+          LEGACY_ID="AKfycbzaExnvUwO1FWcLhXQxUUJyHLXgC7mZHM0Z2T33Z4EvNap3lqHPryOV-FlQ09NJKt48Ww"
+          LEGACY_URL="https://script.google.com/macros/s/$LEGACY_ID/exec"
           BASE="${HOSTING_URL%/}"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/.clasp.json"
           cd "$RUNNER_TEMP"
@@ -58,6 +60,8 @@ jobs:
           }
 
           probe main "$MAIN_URL?mode=user&app=user&diag=$GITHUB_RUN_ID"
+          probe legacy "$LEGACY_URL?mode=user&app=user&diag=$GITHUB_RUN_ID"
+          probe legacy_plain "$LEGACY_URL?diag=$GITHUB_RUN_ID"
           probe hosting "$BASE/?diag=$GITHUB_RUN_ID"
           probe badminton "$BASE/badminton.html?diag=$GITHUB_RUN_ID"
 
@@ -65,9 +69,12 @@ jobs:
           {
             echo "checked_at=$(date -u +%FT%TZ)"
             echo "main_url=$MAIN_URL"
+            echo "legacy_url=$LEGACY_URL"
             echo "hosting_url=$BASE/"
             echo "badminton_url=$BASE/badminton.html"
             cat "$RUNNER_TEMP/main.meta"
+            cat "$RUNNER_TEMP/legacy.meta"
+            cat "$RUNNER_TEMP/legacy_plain.meta"
             cat "$RUNNER_TEMP/hosting.meta"
             cat "$RUNNER_TEMP/badminton.meta"
             echo 'deployments_begin'
