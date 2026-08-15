@@ -1,17 +1,13 @@
 name: Emergency restore exact v130 backend and hosting
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/emergency-restore-v130-backend-and-hosting.yml'
   workflow_dispatch: {}
 
 permissions:
   contents: read
 
 concurrency:
-  group: jayuminton-emergency-v130-full-restore
+  group: jayuminton-production-deploy
   cancel-in-progress: false
 
 jobs:
@@ -22,6 +18,8 @@ jobs:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ADMIN_DEPLOYMENT_ID: AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q
+
     steps:
       - name: Checkout exact verified v130 source
         uses: actions/checkout@v4
@@ -47,71 +45,175 @@ jobs:
           C="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$C")" >> "$GITHUB_ENV"
-          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")" >> "$GITHUB_ENV"
-          echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")" >> "$GITHUB_ENV"
-          echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")" >> "$GITHUB_ENV"
 
-      - name: Restore exact v130 Apps Script backend
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$C")"
+          HOSTING_URL="$(jq -r '.hostingUrl' "$C")"
+
+          test -n "$MAIN_SCRIPT_ID"
+          test -n "$MAIN_DEPLOYMENT_ID"
+          test -n "$ADMIN_DEPLOYMENT_ID"
+          test -n "$FIREBASE_PROJECT_ID"
+          test -n "$HOSTING_URL"
+
+          {
+            echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
+            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            echo "HOSTING_URL=$HOSTING_URL"
+            echo "MAIN_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec"
+            echo "ADMIN_URL=https://script.google.com/macros/s/$ADMIN_DEPLOYMENT_ID/exec"
+          } >> "$GITHUB_ENV"
+
+      - name: Confirm both deployment IDs belong to MAIN Apps Script project
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/deployment-check"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp deployments > "$RUNNER_TEMP/deployments-before.txt"
+
+          grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/deployments-before.txt"
+          grep -F "$ADMIN_DEPLOYMENT_ID" "$RUNNER_TEMP/deployments-before.txt"
+
+          echo "BOTH_DEPLOYMENTS_BELONG_TO_MAIN_PROJECT"
+
+      - name: Prepare exact original v130 Apps Script bundle
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/v130-exact-backend"
+          rm -rf "$WORK"
           mkdir -p "$WORK"
+
           cp source-snapshot/current-main/Admin.html "$WORK/"
           cp source-snapshot/current-main/appsscript.json "$WORK/"
           cp source-snapshot/current-main/Code.js "$WORK/"
           cp source-snapshot/current-main/Index.html "$WORK/"
           cp source-snapshot/current-main/Script.html "$WORK/"
           cp source-snapshot/current-main/Style.html "$WORK/"
+
+          # Exact original v130 must not contain the temporary bootstrap patch.
           ! grep -R -F 'memberBootstrapSession' "$WORK"
           ! grep -R -F 'MEMBER_BOOTSTRAP_SESSION' "$WORK"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
-          cd "$WORK"
-          clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "exact v130 backend restore $GITHUB_RUN_ID"
-          echo "V130_MEMBER_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
-          sleep 7
 
-      - name: Verify restored Apps Script no longer has bootstrap ReferenceError
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+
+      - name: Push exact v130 source once and update both existing deployments
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$V130_MEMBER_URL?restore=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/apps-script.html"
-          ! grep -F 'memberBootstrapSession is not defined' "$RUNNER_TEMP/apps-script.html"
-          ! grep -F 'ReferenceError: memberBootstrapSession' "$RUNNER_TEMP/apps-script.html"
-          grep -E '자유민턴|코트배정|memberLogin|memberPassword' "$RUNNER_TEMP/apps-script.html" >/dev/null
-          echo EXACT_V130_BACKEND_OK
+          cd "$RUNNER_TEMP/v130-exact-backend"
+
+          clasp push --force
+
+          clasp create-deployment \
+            --deploymentId "$MAIN_DEPLOYMENT_ID" \
+            --description "exact v130 MAIN recovery $GITHUB_RUN_ID"
+
+          clasp create-deployment \
+            --deploymentId "$ADMIN_DEPLOYMENT_ID" \
+            --description "exact v130 ADMIN recovery $GITHUB_RUN_ID"
+
+          sleep 7
+
+      - name: Verify both Apps Script deployments render exact v130 without bootstrap error
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$MAIN_URL?restore=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/main-app.html"
+
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$ADMIN_URL?mode=admin&restore=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/admin-app.html"
+
+          for FILE in "$RUNNER_TEMP/main-app.html" "$RUNNER_TEMP/admin-app.html"; do
+            ! grep -F 'memberBootstrapSession is not defined' "$FILE"
+            ! grep -F 'ReferenceError: memberBootstrapSession' "$FILE"
+            ! grep -F 'MEMBER_BOOTSTRAP_SESSION' "$FILE"
+          done
+
+          grep -E '자유민턴|코트배정|memberLogin|memberPassword|waitGroups|court' \
+            "$RUNNER_TEMP/main-app.html" >/dev/null
+
+          grep -E '자유민턴|관리자|코트배정|admin|court' \
+            "$RUNNER_TEMP/admin-app.html" >/dev/null
+
+          echo "BOTH_V130_DEPLOYMENTS_OK"
 
       - name: Restore exact v130 Firebase Hosting wrapper
         shell: bash
+        env:
+          V130_MEMBER_URL: ${{ env.MAIN_URL }}
         run: |
           set -euo pipefail
+
           SCRIPT='deployment/scripts/hotfix_v130_white_screen.sh'
+
           python3 - <<'PY'
           from pathlib import Path
           import os
-          p=Path('deployment/scripts/hotfix_v130_white_screen.sh')
-          s=p.read_text(encoding='utf-8')
-          old='export WHITEFIX_MAIN_URL="${MAIN_URL}?build=v130-whitefix-${GITHUB_RUN_ID}"'
-          new='export WHITEFIX_MAIN_URL="'+os.environ['V130_MEMBER_URL']+'"'
+
+          p = Path('deployment/scripts/hotfix_v130_white_screen.sh')
+          s = p.read_text(encoding='utf-8')
+
+          old = 'export WHITEFIX_MAIN_URL="${MAIN_URL}?build=v130-whitefix-${GITHUB_RUN_ID}"'
+          new = 'export WHITEFIX_MAIN_URL="' + os.environ['V130_MEMBER_URL'] + '"'
+
           if s.count(old) != 1:
               raise SystemExit('v130 member URL anchor missing')
-          s=s.replace(old,new,1)
-          deploy='firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive'
+
+          s = s.replace(old, new, 1)
+
+          deploy = 'firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive'
+
           if s.count(deploy) != 1:
               raise SystemExit('hosting deploy anchor missing')
-          s=s.replace(deploy, deploy+'\nexit 0', 1)
+
+          # Stop helper after hosting deploy so it cannot perform unrelated later writes.
+          s = s.replace(deploy, deploy + '\nexit 0', 1)
+
           p.write_text(s, encoding='utf-8')
           PY
+
           bash "$SCRIPT"
 
-      - name: Verify live Hosting points to restored backend
+      - name: Verify live Hosting points to restored MAIN v130 deployment
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
-          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$BASE/?restore=v130-full-$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          grep -F "src=\"$V130_MEMBER_URL\"" "$RUNNER_TEMP/live.html"
+
+          curl --fail --location --retry 5 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$BASE/?restore=v130-full-$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/live.html"
+
+          grep -F "src=\"$MAIN_URL\"" "$RUNNER_TEMP/live.html"
           ! grep -F 'memberBootstrapSession' "$RUNNER_TEMP/live.html"
-          echo EXACT_V130_FULL_RESTORE_OK
+          ! grep -F 'ReferenceError: memberBootstrapSession' "$RUNNER_TEMP/live.html"
+
+          echo "EXACT_V130_FULL_RESTORE_OK"
+
+      - name: Print manual acceptance checklist
+        shell: bash
+        run: |
+          cat <<'EOF'
+          ACTION_SUCCESS_IS_NOT_FINAL_ACCEPTANCE.
+
+          Final acceptance must be checked manually:
+          1. https://jayuminton-push.web.app/ shows the real current court/wait/member state.
+          2. No memberBootstrapSession ReferenceError.
+          3. Installed user app opens normally and shows the same live data.
+          4. Installed admin app opens normally and shows the same live data.
+          5. Existing members/courts/wait data are unchanged.
+          6. No competing production deployment workflow starts for at least 5-10 minutes.
+          EOF
