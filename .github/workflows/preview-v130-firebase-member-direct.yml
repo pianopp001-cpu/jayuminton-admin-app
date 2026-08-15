@@ -20,6 +20,7 @@ jobs:
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       V130_COMMIT: e88774455545529ab27e02d0587085a46351345b
       PREVIEW_CHANNEL: v130-member-direct
+      PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
 
     steps:
       - name: Checkout repository
@@ -51,12 +52,14 @@ jobs:
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
           test -n "$MAIN_SCRIPT_ID"; test "$MAIN_SCRIPT_ID" != null
           test -n "$FIREBASE_PROJECT_ID"; test "$FIREBASE_PROJECT_ID" != null
+          test -n "$PREVIEW_DEPLOYMENT_ID"
           {
             echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
             echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            echo "PREVIEW_RPC_URL=https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
           } >> "$GITHUB_ENV"
 
-      - name: Prepare exact v130 and create isolated preview deployment
+      - name: Prepare exact v130 and update isolated preview deployment
         shell: bash
         run: |
           set -euo pipefail
@@ -78,22 +81,16 @@ jobs:
           grep -F '"executeAs": "USER_DEPLOYING"' "$WORK/appsscript.json" >/dev/null
 
           restore_head() {
-            echo 'Restoring Apps Script project HEAD without touching existing deployments...'
+            echo 'Restoring Apps Script project HEAD without touching existing MAIN/ADMIN deployments...'
             (cd "$BACKUP" && clasp push --force)
           }
           trap restore_head EXIT
 
           cd "$WORK"
           clasp push --force
-          DEPLOY_LOG="$RUNNER_TEMP/preview-deploy.log"
-          clasp create-deployment --description "v130 firebase member preview $GITHUB_RUN_ID" | tee "$DEPLOY_LOG"
-          PREVIEW_DEPLOYMENT_ID="$(grep -Eo 'AKfy[A-Za-z0-9_-]+' "$DEPLOY_LOG" | tail -1)"
-          test -n "$PREVIEW_DEPLOYMENT_ID"
-          PREVIEW_RPC_URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
-          {
-            echo "PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID"
-            echo "PREVIEW_RPC_URL=$PREVIEW_RPC_URL"
-          } >> "$GITHUB_ENV"
+          clasp create-deployment \
+            --deploymentId "$PREVIEW_DEPLOYMENT_ID" \
+            --description "v130 firebase member preview refresh $GITHUB_RUN_ID"
 
           restore_head
           trap - EXIT
@@ -127,6 +124,8 @@ jobs:
           grep -F 'jayuminton-v130-firebase-member-preview' "$PUBLIC/index.html"
           grep -F 'memberLoginBox' "$PUBLIC/index.html"
           grep -F 'memberApp' "$PUBLIC/index.html"
+          grep -F 'memberLoginButton' "$PUBLIC/index.html"
+          grep -F 'memberLoginStatus' "$PUBLIC/index.html"
           ! grep -Eqi '<iframe' "$PUBLIC/index.html"
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html" || grep -F "$PREVIEW_RPC_URL" "$PUBLIC/index.html"
 
@@ -172,6 +171,8 @@ jobs:
           grep -F 'jayuminton-v130-firebase-member-preview' "$RUNNER_TEMP/live-preview.html"
           grep -F 'memberLoginBox' "$RUNNER_TEMP/live-preview.html"
           grep -F 'memberApp' "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberLoginButton' "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberLoginStatus' "$RUNNER_TEMP/live-preview.html"
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-preview.html"
           echo "V130_MEMBER_FIREBASE_PREVIEW_READY=$FIREBASE_PREVIEW_URL"
 
@@ -181,3 +182,4 @@ jobs:
           echo "OPEN_THIS_ON_ANDROID=$FIREBASE_PREVIEW_URL"
           echo "LIVE_PRODUCTION_WAS_NOT_DEPLOYED_BY_THIS_WORKFLOW"
           echo "EXISTING_MAIN_AND_ADMIN_DEPLOYMENT_IDS_WERE_NOT_UPDATED"
+          echo "REUSED_PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID"
