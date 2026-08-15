@@ -2,7 +2,6 @@
 import argparse, json
 from pathlib import Path
 
-ALLOWED = ['getPublicState','verifyMemberPassword','resumeMemberSession','getMemberPasswordVersion']
 RPC = r'''
 function memberV130JsonpRpc_(e) {
   ensureSetup_();
@@ -34,23 +33,22 @@ function memberV130JsonpRpc_(e) {
 }
 
 '''
-BRIDGE = r'''<script id="v130-direct-rpc">
+
+BRIDGE = r'''<script id="v130-same-origin-rpc">
 (function(){
-  const endpoint=__RPC_URL__, timeoutMs=25000; let seq=0, loginBusy=false;
-  function enc(args){const bytes=new TextEncoder().encode(JSON.stringify(args||[]));let s='';for(const b of bytes)s+=String.fromCharCode(b);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+  const endpoint='/api/member', timeoutMs=30000; let loginBusy=false;
   function invoke(name,args,success,failure){
-    const cb='__jmV130_'+Date.now()+'_'+(++seq), sc=document.createElement('script'); let done=false;
-    const timer=setTimeout(()=>finish(new Error('서버 응답 시간이 초과되었습니다.')),timeoutMs);
-    function clean(){clearTimeout(timer);try{delete window[cb];}catch(e){window[cb]=undefined;}sc.remove();}
-    function finish(err,val){if(done)return;done=true;clean();if(err){if(failure)failure(err);}else if(success)success(val);}
-    window[cb]=packet=>packet&&packet.ok?finish(null,packet.result):finish(new Error(String(packet&&packet.error||'서버 요청 실패')));
-    sc.onerror=()=>finish(new Error('서버에 연결할 수 없습니다.'));
-    sc.src=endpoint+'?rpc='+encodeURIComponent(name)+'&callback='+encodeURIComponent(cb)+'&payload='+encodeURIComponent(enc(args))+'&nonce='+Date.now();
-    document.head.appendChild(sc);
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),timeoutMs);
+    fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rpc:String(name),args:Array.isArray(args)?args:[]}),signal:controller.signal,cache:'no-store',credentials:'same-origin'})
+      .then(async response=>{const packet=await response.json().catch(()=>null);if(!response.ok||!packet||packet.ok!==true)throw new Error(String(packet&&packet.error||'서버 요청 실패'));return packet.result;})
+      .then(result=>{clearTimeout(timer);if(success)success(result);})
+      .catch(error=>{clearTimeout(timer);if(failure)failure(new Error(error&&error.name==='AbortError'?'서버 응답 시간이 초과되었습니다.':String(error&&error.message||error||'서버에 연결할 수 없습니다.')));});
   }
   function runner(success,failure){return new Proxy({}, {get(_,prop){if(prop==='withSuccessHandler')return fn=>runner(fn,failure);if(prop==='withFailureHandler')return fn=>runner(success,fn);if(prop==='then')return undefined;return function(){invoke(String(prop),Array.from(arguments),success,failure);};}});}
   window.google=window.google||{}; window.google.script=window.google.script||{}; window.google.script.run=runner(null,null);
   window.__JAYUMINTON_V130_DIRECT_RPC__=true;
+  window.__JAYUMINTON_SAME_ORIGIN_RPC__=true;
   window.memberV130LoginClick_=async function(button){
     if(loginBusy)return;
     const input=document.getElementById('memberPasswordInput');
@@ -58,14 +56,9 @@ BRIDGE = r'''<script id="v130-direct-rpc">
     loginBusy=true;
     const oldText=button&&button.textContent||'확인';
     if(button){button.disabled=true;button.textContent='확인 중…';}
-    try {
-      await window.memberLogin();
-    } catch(error) {
-      alert('서버 연결 중 오류가 발생했습니다.\n'+String(error&&error.message||error||'서버 연결 오류'));
-    } finally {
-      loginBusy=false;
-      if(button){button.disabled=false;button.textContent=oldText;}
-    }
+    try { await window.memberLogin(); }
+    catch(error){ alert('서버 연결 중 오류가 발생했습니다.\n'+String(error&&error.message||error||'서버 연결 오류')); }
+    finally { loginBusy=false; if(button){button.disabled=false;button.textContent=oldText;} }
   };
 })();
 </script>'''
@@ -87,19 +80,19 @@ def build(work,out,rpc_url,hosting_url):
     s=s.replace("<?!= include('Style'); ?>",(work/'Style.html').read_text(encoding='utf-8'))
     s=s.replace("<?!= JSON.stringify(memberPageUrl || '') ?>",json.dumps(hosting_url.rstrip('/')+'/'))
     s=s.replace("<?!= pushReturn || '{\"connected\":false,\"memberId\":\"\",\"memberName\":\"\"}' ?>",'{"connected":false,"memberId":"","memberName":""}')
-    s=s.replace('<script>\nconst IS_ADMIN = false;\n</script>','<script>\nconst IS_ADMIN = false;\n</script>\n'+BRIDGE.replace('__RPC_URL__',json.dumps(rpc_url)),1)
+    s=s.replace('<script>\nconst IS_ADMIN = false;\n</script>','<script>\nconst IS_ADMIN = false;\n</script>\n'+BRIDGE,1)
     s=s.replace('onclick="memberLogin()"','onclick="memberV130LoginClick_(this)"',1)
     s=s.replace("<?!= include('Script'); ?>",(work/'Script.html').read_text(encoding='utf-8'),1)
     if '<?!=' in s or '<iframe' in s: raise SystemExit('template or iframe remains')
-    if 'memberV130LoginClick_(this)' not in s: raise SystemExit('safe login handler missing')
-    s=s.replace('</head>','<meta name="jayuminton-v130-direct" content="1"></head>',1)
+    if '/api/member' not in s or '__JAYUMINTON_SAME_ORIGIN_RPC__' not in s: raise SystemExit('same-origin bridge missing')
+    s=s.replace('</head>','<meta name="jayuminton-v130-direct" content="2"></head>',1)
     (out/'index.html').write_text(s,encoding='utf-8')
     (out/'badminton.html').write_text(s,encoding='utf-8')
 
 def main():
     ap=argparse.ArgumentParser(); sub=ap.add_subparsers(dest='cmd',required=True)
     a=sub.add_parser('patch'); a.add_argument('--work',required=True)
-    b=sub.add_parser('build'); b.add_argument('--work',required=True); b.add_argument('--out',required=True); b.add_argument('--rpc-url',required=True); b.add_argument('--hosting-url',required=True)
+    b=sub.add_parser('build'); b.add_argument('--work',required=True); b.add_argument('--out',required=True); b.add_argument('--rpc-url',required=False,default=''); b.add_argument('--hosting-url',required=True)
     x=ap.parse_args(); work=Path(x.work)
     patch(work) if x.cmd=='patch' else build(work,Path(x.out),x.rpc_url,x.hosting_url)
 if __name__=='__main__': main()
