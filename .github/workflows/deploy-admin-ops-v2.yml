@@ -54,6 +54,7 @@ jobs:
 
           python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_ops_v2_patch.py" "$WORK"
           python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_ops_v2_backend_extra.py" "$WORK"
+          python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_overlay_guarantee.py" "$WORK"
 
           grep -F 'id="headerRefreshButton"' Admin.html >/dev/null
           grep -F 'id="newIsNew"' Admin.html >/dev/null
@@ -62,6 +63,7 @@ jobs:
           grep -F 'JAYUMINTON_SELF_SEAT_PRIORITY_AUTOFILL_V2' Code.js >/dev/null
           grep -F 'if (finished.length === 0)' Code.js >/dev/null
           grep -F 'JAYUMINTON_ADMIN_OPS_V2' Script.html >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_SAVING_GUARANTEE_V1' Script.html >/dev/null
           grep -F 'decorateAdminNewCards' Script.html >/dev/null
           grep -F '회원 저장 중...' Script.html >/dev/null
           grep -F '.header-refresh-button' Style.html >/dev/null
