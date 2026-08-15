@@ -55,22 +55,23 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           python3 "$RUNNER_TEMP/v130_direct_member.py" patch --work "$WORK"
           grep -F 'function doPost(e)' "$WORK/Code.js" >/dev/null
+          grep -F 'function memberV130Render_' "$WORK/Code.js" >/dev/null
+          grep -F 'MEMBER_BOOTSTRAP_SESSION' "$WORK/Index.html" >/dev/null
+          grep -F 'MEMBER_BOOTSTRAP_SESSION' "$WORK/Script.html" >/dev/null
           cd "$WORK"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v130 top level login $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v130 direct post render $GITHUB_RUN_ID"
           echo "RPC_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
           sleep 7
-      - name: Verify top-level POST endpoint
+      - name: Verify top-level POST endpoint responds
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --location --retry 5 --max-time 60 \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'memberPassword=__wrong_probe_password__' \
-            --data-urlencode 'returnUrl=https://jayuminton-push.firebaseapp.com/' \
             "$RPC_URL" -o "$RUNNER_TEMP/post.html"
-          grep -F 'jayuminton-push.firebaseapp.com' "$RUNNER_TEMP/post.html" >/dev/null
-          grep -F 'loginError=1' "$RUNNER_TEMP/post.html" >/dev/null
+          test "$(wc -c < "$RUNNER_TEMP/post.html")" -gt 1000
       - name: Build Firebase login gate
         shell: bash
         run: |
@@ -95,8 +96,8 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/v130-top-login"
-          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config firebase.json --non-interactive --message "v130 top level login $GITHUB_RUN_ID"
-      - name: Android top-level login round-trip verify
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config firebase.json --non-interactive --message "v130 direct post render $GITHUB_RUN_ID"
+      - name: Android top-level POST direct-render verify
         shell: bash
         run: |
           set -euo pipefail
@@ -110,17 +111,33 @@ jobs:
           const browser=await chromium.launch({headless:true});
           const page=await browser.newPage({viewport:{width:412,height:915},userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S928N) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36'});
           const requests=[]; page.on('request',r=>requests.push({url:r.url(),type:r.resourceType(),method:r.method()}));
-          await page.goto(base+'/?toplogin='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
+          await page.goto(base+'/?postrender='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
           await page.locator('#memberPasswordInput').fill('__wrong_probe_password__');
+          const dialogPromise=new Promise((resolve,reject)=>{
+            const t=setTimeout(()=>reject(new Error('wrong-password dialog not shown')),60000);
+            page.once('dialog',async d=>{clearTimeout(t);const m=d.message();await d.accept();resolve(m);});
+          });
           await page.locator('#memberLoginButton').click();
-          await page.waitForURL(/jayuminton-push\.firebaseapp\.com\/\?loginError=1/,{timeout:60000});
-          await page.waitForFunction(()=>getComputedStyle(document.getElementById('loginError')).display!=='none',null,{timeout:15000});
+          const msg=await dialogPromise;
+          if(!msg.includes('멤버 비밀번호가 틀렸습니다.')) throw new Error('unexpected dialog: '+msg);
+          await page.waitForTimeout(1500);
+          const frameStates=[];
+          for(const f of page.frames()){
+            try{
+              const count=await f.locator('#memberLoginBox').count();
+              if(count){
+                const hidden=await f.locator('#memberLoginBox').evaluate(el=>el.classList.contains('hidden'));
+                frameStates.push({url:f.url(),hidden});
+              }
+            }catch(e){}
+          }
+          if(!frameStates.some(x=>x.hidden===false)) throw new Error('v130 member login UI not rendered after POST: '+JSON.stringify(frameStates));
           const post=requests.find(r=>r.method==='POST'&&r.url.includes('script.google.com/macros/s/'));
-          if(!post)throw new Error('top-level Apps Script POST missing');
+          if(!post) throw new Error('top-level Apps Script POST missing');
           const forbidden=requests.filter(r=>r.type==='script'&&r.url.includes('script.google.com'));
-          if(forbidden.length)throw new Error('Apps Script loaded as script subresource');
-          console.log(JSON.stringify({finalUrl:page.url(),topLevelPost:true,scriptSubresource:false}));
+          if(forbidden.length) throw new Error('Apps Script loaded as script subresource');
+          console.log(JSON.stringify({url:page.url(),msg,frameStates,topLevelPost:true}));
           await browser.close();
           JS
           node verify.mjs
-          echo V130_TOP_LEVEL_LOGIN_ANDROID_OK
+          echo V130_DIRECT_POST_RENDER_ANDROID_OK
