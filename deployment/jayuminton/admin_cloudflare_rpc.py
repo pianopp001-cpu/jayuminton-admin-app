@@ -2,8 +2,6 @@
 import argparse, json
 from pathlib import Path
 
-# Admin transport only. Existing member Cloudflare/Firebase paths are untouched.
-# The allow-list is intentionally explicit: never eval arbitrary function names.
 ALLOWED = [
     'createAdminSession','resumeAdminSession','getCurrentMemberPassword','getPublicState','getSystemStatus',
     'addMember','setMemberStatus','updateMember','deleteMember','deleteMembers','changeMemberPassword',
@@ -21,24 +19,18 @@ def rpc_helper():
 function adminCloudflareRpc_(e) {
   ensureSetup_();
   const p=e&&e.parameter?e.parameter:{};
-  const callback=String(p.callback||'');
-  const name=String(p.rpc||'');
+  const callback=String(p.callback||''); const name=String(p.rpc||'');
   const allowed={__ALLOWED__};
   if(!/^[A-Za-z_$][A-Za-z0-9_$]{0,80}$/.test(callback)) throw new Error('잘못된 callback입니다.');
   if(!allowed[name]) return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:false,error:'허용되지 않은 관리자 함수입니다.'})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
   let args=[];
-  try {
-    const encoded=String(p.payload||'');
-    if(encoded){const normalized=encoded.replace(/-/g,'+').replace(/_/g,'/');const pad='='.repeat((4-normalized.length%4)%4);args=JSON.parse(Utilities.newBlob(Utilities.base64Decode(normalized+pad)).getDataAsString('UTF-8'));}
-    if(!Array.isArray(args)) throw new Error('args');
-  } catch(error) { return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:false,error:'요청 데이터를 읽을 수 없습니다.'})+');').setMimeType(ContentService.MimeType.JAVASCRIPT); }
-  try {
-    let result;
-    if(name==='createAdminSession') result=createAdminSession.apply(null,args);
+  try { const encoded=String(p.payload||''); if(encoded){const normalized=encoded.replace(/-/g,'+').replace(/_/g,'/');const pad='='.repeat((4-normalized.length%4)%4);args=JSON.parse(Utilities.newBlob(Utilities.base64Decode(normalized+pad)).getDataAsString('UTF-8'));} if(!Array.isArray(args)) throw new Error('args'); }
+  catch(error){return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:false,error:'요청 데이터를 읽을 수 없습니다.'})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);}
+  try { let result; if(name==='createAdminSession') result=createAdminSession.apply(null,args);
 __CASES__
     else throw new Error('허용되지 않은 관리자 함수입니다.');
     return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:true,result:result})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  } catch(error) { return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:false,error:String(error&&error.message||error||'서버 오류')})+');').setMimeType(ContentService.MimeType.JAVASCRIPT); }
+  } catch(error){return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:false,error:String(error&&error.message||error||'서버 오류')})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);}
 }
 '''.replace('__ALLOWED__',allowed).replace('__CASES__',cases)
 
@@ -49,9 +41,15 @@ BRIDGE=r'''<script id="jayuminton-admin-cloudflare-rpc">
   function invoke(name,args,success,failure){var cb='__jmAdmin'+Date.now()+'_'+(++seq),sc=document.createElement('script'),done=false;var timer=setTimeout(function(){finish(new Error('서버 응답 시간이 초과되었습니다.'));},20000);function cleanup(){clearTimeout(timer);try{delete window[cb];}catch(e){window[cb]=undefined;}if(sc.parentNode)sc.parentNode.removeChild(sc);}function finish(err,val){if(done)return;done=true;cleanup();if(err){if(typeof failure==='function')failure(err);}else if(typeof success==='function')success(val);}window[cb]=function(packet){if(packet&&packet.ok)finish(null,packet.result);else finish(new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.')));};sc.onerror=function(){finish(new Error('서버에 연결할 수 없습니다.'));};var sep=endpoint.indexOf('?')>=0?'&':'?';sc.src=endpoint+sep+'rpc='+encodeURIComponent(String(name))+'&callback='+encodeURIComponent(cb)+'&payload='+encodeURIComponent(enc(args))+'&nonce='+Date.now()+'_'+seq;document.head.appendChild(sc);}
   function runner(success,failure){return new Proxy({}, {get:function(_,prop){if(prop==='withSuccessHandler')return function(fn){return runner(fn,failure);};if(prop==='withFailureHandler')return function(fn){return runner(success,fn);};if(prop==='then')return undefined;return function(){invoke(String(prop),Array.prototype.slice.call(arguments),success,failure);};}});}
   window.google=window.google||{};window.google.script=window.google.script||{};window.google.script.run=runner(null,null);window.__JAYUMINTON_ADMIN_CLOUDFLARE__=true;
+  function forceLoginVisible(){
+    var box=document.getElementById('adminLoginBox'), input=document.getElementById('adminPinInput'), button=document.getElementById('adminCloudflareLoginButton');
+    if(box){box.hidden=false;box.removeAttribute('hidden');box.style.setProperty('display','block','important');box.style.setProperty('visibility','visible','important');box.style.setProperty('opacity','1','important');}
+    if(input){input.disabled=false;input.removeAttribute('disabled');input.style.setProperty('display','block','important');input.style.setProperty('visibility','visible','important');}
+    if(button){button.disabled=false;button.removeAttribute('disabled');button.style.setProperty('display','inline-flex','important');button.style.setProperty('visibility','visible','important');}
+  }
   function ensureStatus(){var box=document.getElementById('adminLoginBox');if(!box||document.getElementById('adminCloudflareLoginStatus'))return;var el=document.createElement('div');el.id='adminCloudflareLoginStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='margin-top:10px;font-size:13px;font-weight:700;text-align:center';box.appendChild(el);}
   function status(text,error){var el=document.getElementById('adminCloudflareLoginStatus');if(el){el.textContent=String(text||'');el.style.color=error?'#b42318':'#667085';}}
-  function bindLogin(){ensureStatus();var b=document.getElementById('adminCloudflareLoginButton'),input=document.getElementById('adminPinInput');if(b&&!b.__jmBound){b.__jmBound=true;b.addEventListener('click',function(){if(b.disabled)return;var pin=String(input&&input.value||'').trim();if(!pin){status('관리자 PIN을 입력하세요.',true);return;}b.disabled=true;var old=b.textContent;b.textContent='확인 중…';status('관리자 서버에 연결하고 있습니다.',false);Promise.resolve().then(function(){return window.adminLogin();}).then(function(){status('',false);}).catch(function(e){status(String(e&&e.message||e||'서버 연결 오류'),true);}).finally(function(){b.disabled=false;b.textContent=old||'로그인';});});}if(input&&!input.__jmBound){input.__jmBound=true;input.addEventListener('keydown',function(ev){if(ev.key==='Enter'&&b){ev.preventDefault();b.click();}});}}
+  function bindLogin(){forceLoginVisible();ensureStatus();var b=document.getElementById('adminCloudflareLoginButton'),input=document.getElementById('adminPinInput');if(b&&!b.__jmBound){b.__jmBound=true;b.addEventListener('click',function(){if(b.disabled)return;var pin=String(input&&input.value||'').trim();if(!pin){status('관리자 PIN을 입력하세요.',true);return;}b.disabled=true;var old=b.textContent;b.textContent='확인 중…';status('관리자 서버에 연결하고 있습니다.',false);try{window.adminLogin();}catch(e){status(String(e&&e.message||e||'서버 연결 오류'),true);b.disabled=false;b.textContent=old||'로그인';setTimeout(forceLoginVisible,0);return;}setTimeout(function(){if(document.getElementById('adminLoginBox')&&getComputedStyle(document.getElementById('adminLoginBox')).display!=='none'){b.disabled=false;b.textContent=old||'로그인';}},2500);});}if(input&&!input.__jmBound){input.__jmBound=true;input.addEventListener('keydown',function(ev){if(ev.key==='Enter'&&b){ev.preventDefault();b.click();}});}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bindLogin,{once:true});else setTimeout(bindLogin,0);
 })();
 </script>'''
@@ -74,8 +72,6 @@ def build_frontend(work,out,rpc_url):
         if marker in s:s=s.replace(marker,(work/(name+'.html')).read_text(encoding='utf-8'))
         return s
     for n in ['Style']: index=include(n,index)
-    # The standalone Firebase page owns the login click so errors are visible instead of
-    # becoming unhandled promise rejections from the old inline Apps Script handler.
     index=index.replace('class="primary"\n      onclick="adminLogin()"','id="adminCloudflareLoginButton"\n      class="primary"\n      type="button"',1)
     bridge=BRIDGE.replace('RPC_URL_JSON',json.dumps(rpc_url.rstrip('/')+'/?adminRpc=1'))
     marker='<script>const IS_ADMIN = true;</script>'
