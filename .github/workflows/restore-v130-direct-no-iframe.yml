@@ -83,6 +83,7 @@ jobs:
           python3 "$RUNNER_TEMP/v130_direct_member.py" build --work "$RUNNER_TEMP/v130-backend" --out "$ROOT/public" --rpc-url "$RPC_URL" --hosting-url "$HOSTING_URL"
           grep -F 'jayuminton-v130-direct' "$ROOT/public/index.html" >/dev/null
           grep -F '__JAYUMINTON_V130_DIRECT_RPC__' "$ROOT/public/index.html" >/dev/null
+          grep -F 'memberV130LoginClick_(this)' "$ROOT/public/index.html" >/dev/null
           ! grep -Eqi '<iframe' "$ROOT/public/index.html"
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
@@ -93,7 +94,7 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/v130-direct-hosting"
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config firebase.json --non-interactive --message "v130 direct no iframe $GITHUB_RUN_ID"
-      - name: Android browser end-to-end verify
+      - name: Android login click end-to-end verify on both hosts
         shell: bash
         run: |
           set -euo pipefail
@@ -103,18 +104,29 @@ jobs:
           npx playwright install --with-deps chromium >/dev/null 2>&1
           cat > verify.mjs <<'JS'
           import { chromium } from 'playwright';
-          const base=process.env.HOSTING_URL.replace(/\/$/,'');
+          const web=process.env.HOSTING_URL.replace(/\/$/,'');
+          const firebaseapp=web.replace('.web.app','.firebaseapp.com');
           const browser=await chromium.launch({headless:true});
-          const page=await browser.newPage({viewport:{width:412,height:915},userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S928N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36'});
-          const errors=[]; page.on('pageerror',e=>errors.push(e.message));
-          await page.goto(base+'/?direct='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
-          await page.waitForFunction(()=>document.getElementById('memberLoginBox')&&!document.getElementById('memberLoginBox').classList.contains('hidden'),null,{timeout:30000});
-          const text=(await page.locator('body').innerText()).replace(/\s+/g,' ');
-          if(!text.includes('관리자가 알려준 멤버 열람 비밀번호를 입력하세요.')) throw new Error('member login screen missing');
-          if(await page.locator('iframe').count()) throw new Error('iframe remains');
-          if(!(await page.evaluate(()=>window.__JAYUMINTON_V130_DIRECT_RPC__===true))) throw new Error('direct RPC bridge missing');
-          console.log(JSON.stringify({url:page.url(),loginVisible:true,iframeCount:0,errors}));
+          for (const base of [web,firebaseapp]) {
+            const page=await browser.newPage({viewport:{width:412,height:915},userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S928N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36'});
+            const errors=[]; page.on('pageerror',e=>errors.push(e.message));
+            await page.goto(base+'/?direct='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForFunction(()=>document.getElementById('memberLoginBox')&&!document.getElementById('memberLoginBox').classList.contains('hidden'),null,{timeout:30000});
+            if(await page.locator('iframe').count()) throw new Error(base+' iframe remains');
+            if(!(await page.evaluate(()=>window.__JAYUMINTON_V130_DIRECT_RPC__===true))) throw new Error(base+' direct RPC bridge missing');
+            await page.locator('#memberPasswordInput').fill('__wrong_probe_password__');
+            const dialogPromise=new Promise((resolve,reject)=>{
+              const timer=setTimeout(()=>reject(new Error(base+' login click produced no dialog')),30000);
+              page.once('dialog',async d=>{clearTimeout(timer);const msg=d.message();await d.accept();resolve(msg);});
+            });
+            await page.locator('#memberLoginBox button.primary').click();
+            const msg=await dialogPromise;
+            if(!msg.includes('멤버 비밀번호가 틀렸습니다.')) throw new Error(base+' unexpected login result: '+msg);
+            if(errors.length) throw new Error(base+' page errors: '+errors.join(' | '));
+            console.log(JSON.stringify({base,loginClick:true,message:msg,errors}));
+            await page.close();
+          }
           await browser.close();
           JS
           HOSTING_URL="$HOSTING_URL" node verify.mjs
-          echo V130_DIRECT_ANDROID_OK
+          echo V130_DIRECT_ANDROID_LOGIN_CLICK_OK
