@@ -1,0 +1,70 @@
+name: Probe Apps Script deployments now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/probe-apps-script-deployments-now.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Probe all deployment URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          MAIN_ID="$(jq -r '.mainDeploymentId' "$C")"
+          WORK="$RUNNER_TEMP/main"; mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp deployments > "$RUNNER_TEMP/deployments.txt"
+          OUT="$GITHUB_WORKSPACE/deployment/status/apps-script-deployment-probe-now.txt"
+          mkdir -p "$(dirname "$OUT")"
+          : > "$OUT"
+          echo "configured_main_id=$MAIN_ID" >> "$OUT"
+          echo "probe_time=$(date -u +%FT%TZ)" >> "$OUT"
+          best=''
+          while IFS= read -r line; do
+            id="$(printf '%s\n' "$line" | sed -nE 's/^- ([^ ]+) @.*/\1/p')"
+            [ -n "$id" ] || continue
+            [ "$id" = "AKfycbxOWvesa7BfvSzp0VS8VJL6WZdww8rFQggne6qtAsJS" ] && continue
+            url="https://script.google.com/macros/s/$id/exec"
+            body="$RUNNER_TEMP/$id.html"
+            code=$(curl -L -sS --connect-timeout 8 --max-time 25 -o "$body" -w '%{http_code}' "$url?mode=user&app=user&probe=$GITHUB_RUN_ID" || true)
+            drive=no; app=no
+            if grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$body" 2>/dev/null; then drive=yes; fi
+            if grep -Eqi 'memberSelfSearchInput|memberSelfSettings|자유민턴|코트배정|대기1|court-grid|waitGroups' "$body" 2>/dev/null; then app=yes; fi
+            bytes=$(wc -c < "$body" 2>/dev/null || echo 0)
+            printf 'id=%s http=%s drive=%s app=%s bytes=%s url=%s\n' "$id" "$code" "$drive" "$app" "$bytes" "$url" >> "$OUT"
+            if [ -z "$best" ] && [ "$code" = 200 ] && [ "$drive" = no ] && [ "$app" = yes ]; then best="$url"; fi
+          done < "$RUNNER_TEMP/deployments.txt"
+          echo "best_working_url=$best" >> "$OUT"
+          cat "$OUT"
+      - name: Publish probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/apps-script-deployment-probe-now.txt
+          git commit -m 'diagnose: probe existing Apps Script web links' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
