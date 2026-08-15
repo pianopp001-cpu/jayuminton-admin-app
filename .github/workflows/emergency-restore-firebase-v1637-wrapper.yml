@@ -80,3 +80,4 @@ jobs:
           grep -F "$MEMBER_URL" /tmp/live-config.js
           grep -F 'setup-v205.js' /tmp/live-index.html
           ! grep -qi '<!doctype html' /tmp/live-setup.js
+          echo 'known-good wrapper live verification passed'
