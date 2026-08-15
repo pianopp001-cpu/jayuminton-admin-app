@@ -79,4 +79,4 @@ jobs:
           echo "V130_BACKEND_RESTORED=$DEPLOYMENT_ID"
 
       - name: Restore trigger marker
-        run: echo 'restore-triggered'
+        run: echo 'restore-triggered-2'
