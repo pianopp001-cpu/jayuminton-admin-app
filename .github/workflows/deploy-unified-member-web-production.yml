@@ -75,15 +75,13 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
 
           python3 deployment/jayuminton/v3_unified_member_preview_patch.py "$WORK"
-          python3 deployment/jayuminton/v3_member_court_empty_star_patch.py "$WORK"
           python3 deployment/jayuminton/v3_cloudflare_member_preview.py patch-backend --work "$WORK"
 
           grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
           grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3' "$WORK/Script.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_COURT_EMPTY_STAR_V1' "$WORK/Script.html" >/dev/null
-          grep -F "#memberCourts .v4-court-card .person.empty" "$WORK/Script.html" >/dev/null
-          grep -F 'content:"★"!important' "$WORK/Script.html" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$WORK/Script.html" >/dev/null
+          grep -F 'courtDestinationFromCard' "$WORK/Script.html" >/dev/null
+          grep -F 'content:"★ "' "$WORK/Script.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$WORK/Script.html" >/dev/null
           grep -F '네, 저예요' "$WORK/MemberControls.html" >/dev/null
           grep -F '코트배정대기' "$WORK/MemberControls.html" >/dev/null
@@ -129,11 +127,10 @@ jobs:
           grep -F 'showSelfConfirm' "$PUBLIC/index.html" >/dev/null
           grep -F 'memberAnywhereRequestSelected_' "$PUBLIC/index.html" >/dev/null
           grep -F 'showIncoming_' "$PUBLIC/index.html" >/dev/null
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3' "$PUBLIC/index.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_COURT_EMPTY_STAR_V1' "$PUBLIC/index.html" >/dev/null
-          grep -F "#memberCourts .v4-court-card .person.empty" "$PUBLIC/index.html" >/dev/null
-          grep -F 'content:"★"!important' "$PUBLIC/index.html" >/dev/null
-          grep -F 'color:#e11d48!important' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$PUBLIC/index.html" >/dev/null
+          grep -F 'courtDestinationFromCard' "$PUBLIC/index.html" >/dev/null
+          grep -F 'content:"★ "' "$PUBLIC/index.html" >/dev/null
+          grep -F 'font-size:8px!important' "$PUBLIC/index.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$PUBLIC/index.html" >/dev/null
           grep -F '#memberApp .v4-court-card .member-info-detail' "$PUBLIC/index.html" >/dev/null
           grep -F 'cleanMemberLabels' "$PUBLIC/index.html" >/dev/null
@@ -175,11 +172,10 @@ jobs:
             -H 'Cache-Control: no-cache, no-store' \
             "$URL?verify=$GITHUB_RUN_ID" \
             -o "$RUNNER_TEMP/live-production.html"
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_COURT_EMPTY_STAR_V1' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "#memberCourts .v4-court-card .person.empty" "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'content:"★"!important' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'color:#e11d48!important' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'courtDestinationFromCard' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'content:"★ "' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'font-size:8px!important' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F '#memberApp .v4-court-card .member-info-detail' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'cleanMemberLabels' "$RUNNER_TEMP/live-production.html" >/dev/null
