@@ -1,0 +1,48 @@
+=== MEMBER HEADERS ===
+HTTP/2 200 
+content-type: text/html; charset=utf-8
+=== MEMBER FINAL SIZE ===
+354959 /tmp/member.html
+=== SETUP courtFrame/memberPageUrl snippets ===
+62:        <div class="install-logo"><img src="/icon-198.png?v=205" alt="자유민턴 강아지 로고"></div>
+78:    <iframe id="courtFrame" src="https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec" title="자유민턴 코트현황" scrolling="no" allow="clipboard-read; clipboard-write"></iframe>
+84:  <script src="/config-v204.js?v=v130-whitefix-31617688115"></script>
+85:  <script src="/setup-v205.js?v=v130-whitefix-31617688115"></script>
+86:  <script src="/alert-self-test.js?v=1"></script>
+=== CONFIG snippets ===
+3:  relayUrl: 'https://script.google.com/macros/s/AKfycbyVPlL35pwN9QXvyzUG_TRaE4zC9QiEBB3z4jg3PjJwcuUmX-MI_hKuFX6FO757WaRHIg/exec',
+4:  memberPageUrl: 'https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec',
+=== RUNTIME snippets ===
+8:    'https://script.google.com/macros/s/AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w/exec';
+27:    memberPageUrl: STABLE_MEMBER_PAGE_URL
+=== MEMBER HTML markers ===
+<title>자유민턴 코트배정 현황
+자유민턴
+자유민턴
+자유민턴
+자유민턴
+자유민턴
+자유민턴
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
+memberAnywhere
