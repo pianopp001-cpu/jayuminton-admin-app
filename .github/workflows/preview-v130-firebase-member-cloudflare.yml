@@ -1,0 +1,146 @@
+name: Preview exact v130 member via Cloudflare Worker
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-v130-member-cloudflare-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      V130_COMMIT: e88774455545529ab27e02d0587085a46351345b
+      PREVIEW_CHANNEL: v130-member-cloudflare
+      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Firebase tools
+        run: npm install --global firebase-tools@latest
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve Firebase project
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
+          test -n "$FIREBASE_PROJECT_ID"; test "$FIREBASE_PROJECT_ID" != null
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Verify Cloudflare Worker reaches Apps Script preview RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          CALLBACK="jmCloudflarePreflight$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "${CLOUDFLARE_RPC_URL}?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/cloudflare-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/cloudflare-state.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/cloudflare-state.js"
+
+          BLOCKED="jmCloudflareBlocked$GITHUB_RUN_ID"
+          curl --location --retry 3 --max-time 60 \
+            "${CLOUDFLARE_RPC_URL}?rpc=resetAllOperationData&callback=$BLOCKED&payload=W10&nonce=blocked_$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/cloudflare-blocked.js"
+          grep -F '허용되지 않은 서버 함수입니다.' "$RUNNER_TEMP/cloudflare-blocked.js"
+
+      - name: Build iframe-free exact v130 member frontend using Cloudflare RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/v130-cloudflare-work"
+          PUBLIC="$RUNNER_TEMP/v130-member-cloudflare/public"
+          mkdir -p "$WORK" "$PUBLIC"
+
+          for file in Admin.html appsscript.json Code.js Index.html Script.html Style.html; do
+            git show "$V130_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
+          done
+
+          python3 deployment/jayuminton/v130_firebase_member_preview.py \
+            build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$CLOUDFLARE_RPC_URL"
+
+          grep -F 'jayuminton-v130-firebase-member-preview' "$PUBLIC/index.html"
+          grep -F 'memberLoginBox' "$PUBLIC/index.html"
+          grep -F 'memberApp' "$PUBLIC/index.html"
+          grep -F 'memberPreviewLoginButton' "$PUBLIC/index.html"
+          grep -F 'memberPreviewLoginStatus' "$PUBLIC/index.html"
+          grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html"
+          ! grep -Eqi '<iframe' "$PUBLIC/index.html"
+          ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
+
+          cat > "$RUNNER_TEMP/v130-member-cloudflare/firebase.json" <<'JSON'
+          {
+            "hosting": {
+              "public": "public",
+              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+              "headers": [
+                {"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}
+              ],
+              "rewrites": [{"source":"**","destination":"/index.html"}]
+            }
+          }
+          JSON
+
+      - name: Deploy Firebase preview channel only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/v130-member-cloudflare"
+          firebase hosting:channel:deploy "$PREVIEW_CHANNEL" \
+            --project "$FIREBASE_PROJECT_ID" \
+            --expires 1d \
+            --config firebase.json \
+            --non-interactive \
+            --json | tee "$RUNNER_TEMP/channel.json"
+
+          PREVIEW_URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/channel.json" | head -1)"
+          test -n "$PREVIEW_URL"
+          echo "FIREBASE_PREVIEW_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+          echo "Firebase Cloudflare preview URL: $PREVIEW_URL"
+
+      - name: Verify deployed preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$FIREBASE_PREVIEW_URL/?verify=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberPreviewLoginButton' "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberPreviewLoginStatus' "$RUNNER_TEMP/live-preview.html"
+          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live-preview.html"
+          ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-preview.html"
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live-preview.html"
+          echo "V130_MEMBER_CLOUDFLARE_PREVIEW_READY=$FIREBASE_PREVIEW_URL"
+
+      - name: Print Android test target
+        shell: bash
+        run: |
+          echo "OPEN_THIS_ON_ANDROID=$FIREBASE_PREVIEW_URL"
+          echo "BROWSER_RPC_TARGET=$CLOUDFLARE_RPC_URL"
+          echo "NO_APPS_SCRIPT_PUSH_OR_DEPLOY_PERFORMED"
+          echo "LIVE_PRODUCTION_HOSTING_WAS_NOT_DEPLOYED"
