@@ -39,15 +39,29 @@ jobs:
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
-          echo "PREVIEW_DEPLOYMENT_ID=$(jq -r '.previewDeploymentId // empty' "$CONFIG")" >> "$GITHUB_ENV"
-          echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")" >> "$GITHUB_ENV"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
+          # Reuse the already-established isolated v3 preview deployment when a dedicated
+          # admin preview deployment has not yet been added to deploy config. Never fall
+          # back to the production MAIN deployment.
+          PREVIEW_DEPLOYMENT_ID="$(jq -r '.adminPreviewDeploymentId // .previewDeploymentId // empty' "$CONFIG")"
+          if [ -z "$PREVIEW_DEPLOYMENT_ID" ]; then
+            PREVIEW_DEPLOYMENT_ID='AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ'
+            echo 'Using established isolated preview deployment as admin test backend.'
+          fi
+          {
+            echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
+            echo "PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID"
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+          } >> "$GITHUB_ENV"
       - name: Require isolated Apps Script preview deployment
         run: |
+          set -euo pipefail
           test -n "$MAIN_SCRIPT_ID"
           test -n "$PREVIEW_DEPLOYMENT_ID"
           test -n "$FIREBASE_PROJECT_ID"
           test "$PREVIEW_DEPLOYMENT_ID" != null
+          test "$PREVIEW_DEPLOYMENT_ID" != "$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId')"
       - name: Patch isolated backend and restore HEAD afterwards
         shell: bash
         run: |
