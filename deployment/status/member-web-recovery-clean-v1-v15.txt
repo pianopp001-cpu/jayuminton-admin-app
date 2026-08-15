@@ -1,0 +1,10 @@
+status=success
+configured_main_preserved=AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_
+deleted_old_versions=15
+new_deployment_id=AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w
+new_url=https://script.google.com/macros/s/AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w/exec
+new_http=200
+new_drive_error=no
+new_has_app_marker=yes
+new_bytes=354960
+checked_at=2026-08-15T04:39:09Z
