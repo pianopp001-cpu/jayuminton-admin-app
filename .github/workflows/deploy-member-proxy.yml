@@ -23,8 +23,6 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools@latest
       - name: Resolve config and install function
         shell: bash
         run: |
@@ -35,13 +33,23 @@ jobs:
           echo "FIREBASE_PROJECT_ID=$PROJECT" >> "$GITHUB_ENV"
           echo "MEMBER_RPC_URL=https://script.google.com/macros/s/$DEPLOYMENT/exec" >> "$GITHUB_ENV"
           cd functions && npm install
-      - name: Write Firebase config
+      - name: Probe Cloud Functions API
         shell: bash
         run: |
-          cat > firebase.json <<'JSON'
-          {"functions":{"source":"functions","runtime":"nodejs22"},"hosting":{"public":"deployment/jayuminton/web-push-overrides","rewrites":[{"source":"/api/member-rpc","function":{"functionId":"memberRpc","region":"asia-northeast3"}},{"source":"**","destination":"/index.html"}]}}
-          JSON
-      - name: Deploy function
-        run: firebase deploy --only functions:memberRpc --project "$FIREBASE_PROJECT_ID" --non-interactive
-        env:
-          MEMBER_RPC_URL: ${{ env.MEMBER_RPC_URL }}
+          set -euo pipefail
+          gcloud functions list --gen2 --regions=asia-northeast3 --project "$FIREBASE_PROJECT_ID" --format='value(name)' || true
+      - name: Deploy function directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud functions deploy memberRpc \
+            --gen2 \
+            --runtime=nodejs22 \
+            --region=asia-northeast3 \
+            --source=functions \
+            --entry-point=memberRpc \
+            --trigger-http \
+            --allow-unauthenticated \
+            --set-env-vars="MEMBER_RPC_URL=$MEMBER_RPC_URL" \
+            --project="$FIREBASE_PROJECT_ID" \
+            --quiet
