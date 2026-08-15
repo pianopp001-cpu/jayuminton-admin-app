@@ -124,8 +124,8 @@ jobs:
           grep -F 'jayuminton-v130-firebase-member-preview' "$PUBLIC/index.html"
           grep -F 'memberLoginBox' "$PUBLIC/index.html"
           grep -F 'memberApp' "$PUBLIC/index.html"
-          grep -F 'memberLoginButton' "$PUBLIC/index.html"
-          grep -F 'memberLoginStatus' "$PUBLIC/index.html"
+          grep -F 'memberPreviewLoginButton' "$PUBLIC/index.html"
+          grep -F 'memberPreviewLoginStatus' "$PUBLIC/index.html"
           ! grep -Eqi '<iframe' "$PUBLIC/index.html"
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html" || grep -F "$PREVIEW_RPC_URL" "$PUBLIC/index.html"
 
@@ -171,8 +171,8 @@ jobs:
           grep -F 'jayuminton-v130-firebase-member-preview' "$RUNNER_TEMP/live-preview.html"
           grep -F 'memberLoginBox' "$RUNNER_TEMP/live-preview.html"
           grep -F 'memberApp' "$RUNNER_TEMP/live-preview.html"
-          grep -F 'memberLoginButton' "$RUNNER_TEMP/live-preview.html"
-          grep -F 'memberLoginStatus' "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberPreviewLoginButton' "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberPreviewLoginStatus' "$RUNNER_TEMP/live-preview.html"
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-preview.html"
           echo "V130_MEMBER_FIREBASE_PREVIEW_READY=$FIREBASE_PREVIEW_URL"
 
