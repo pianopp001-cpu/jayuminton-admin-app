@@ -41,6 +41,15 @@ lines[i:i+1] = [
 ]
 s = '\n'.join(lines) + '\n'
 
+# The original native build proves the WebView target by searching classes.dex
+# for the Apps Script deployment id. Unified preview intentionally removes that
+# URL, so keep the same binary-level proof but require the Firebase preview URL.
+old_url_proof = 'grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/classes.txt" >/dev/null'
+new_url_proof = 'grep -F "${UNIFIED_MEMBER_URL%/}" "$RUNNER_TEMP/classes.txt" >/dev/null'
+if s.count(old_url_proof) != 1:
+    raise SystemExit('unified preview classes.dex URL proof anchor missing')
+s = s.replace(old_url_proof, new_url_proof, 1)
+
 for required in (
     'VERSION="1.3.2"',
     'VERSION_CODE="132"',
@@ -57,6 +66,7 @@ for required in (
     'JAYUMINTON_V126_START_STOP_RACE_GUARD',
     'UNIFIED_MEMBER_URL required',
     'unifiedMember=1',
+    'grep -F "${UNIFIED_MEMBER_URL%/}" "$RUNNER_TEMP/classes.txt" >/dev/null',
 ):
     if required not in s:
         raise SystemExit('unified preview required marker missing: ' + required)
@@ -65,9 +75,10 @@ for forbidden in (
     'VERSION="1.3.0"',
     'VERSION_CODE="130"',
     'script.google.com/macros/s/${MAIN_DEPLOYMENT_ID}/exec?mode=user',
+    'grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/classes.txt" >/dev/null',
 ):
     if forbidden in s:
         raise SystemExit('unified preview stale marker remained: ' + forbidden)
 
 path.write_text(s, encoding='utf-8')
-print('Prepared v1.3.2 unified-preview APK: native FCM/vibration preserved; WebView uses UNIFIED_MEMBER_URL.')
+print('Prepared v1.3.2 unified-preview APK: native FCM/vibration preserved; WebView and classes.dex proof use UNIFIED_MEMBER_URL.')
