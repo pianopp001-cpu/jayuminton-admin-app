@@ -128,7 +128,8 @@ jobs:
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$PUBLIC/index.html" >/dev/null
           grep -F 'width:14px!important' "$PUBLIC/index.html" >/dev/null
-          grep -F '구력\\s*[:：]?' "$PUBLIC/index.html" >/dev/null
+          grep -F 'cleanMemberLabels' "$PUBLIC/index.html" >/dev/null
+          grep -F -- '-webkit-line-clamp:unset' "$PUBLIC/index.html" >/dev/null
           ! grep -Eqi '<iframe' "$PUBLIC/index.html"
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
 
@@ -169,7 +170,8 @@ jobs:
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'width:14px!important' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F '구력\\s*[:：]?' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'cleanMemberLabels' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F -- '-webkit-line-clamp:unset' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live-production.html" >/dev/null
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-production.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live-production.html"
