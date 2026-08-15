@@ -1,0 +1,99 @@
+name: Deploy admin ops v2
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-admin-ops-v2
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve Apps Script deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+
+      - name: Pull live and apply admin ops patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/admin-live"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+
+          python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_ops_v2_patch.py" "$WORK"
+          python3 "$GITHUB_WORKSPACE/deployment/jayuminton/v3_admin_ops_v2_backend_extra.py" "$WORK"
+
+          grep -F 'id="headerRefreshButton"' Admin.html >/dev/null
+          grep -F 'id="newIsNew"' Admin.html >/dev/null
+          grep -F 'id="quickMoveName"' Admin.html >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_NEW_FLAG_V2' Code.js >/dev/null
+          grep -F 'JAYUMINTON_SELF_SEAT_PRIORITY_AUTOFILL_V2' Code.js >/dev/null
+          grep -F 'if (finished.length === 0)' Code.js >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_OPS_V2' Script.html >/dev/null
+          grep -F 'decorateAdminNewCards' Script.html >/dev/null
+          grep -F '회원 저장 중...' Script.html >/dev/null
+          grep -F '.header-refresh-button' Style.html >/dev/null
+          grep -F '.admin-saving-card strong' Style.html >/dev/null
+          grep -F '.member-new-inline' Style.html >/dev/null
+          ! grep -F '급수·구력 미입력' Script.html
+
+          node --check Code.js
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('Script.html').read_text(encoding='utf-8')
+          a=s.find('<script>'); b=s.rfind('</script>')
+          if a < 0 or b <= a: raise SystemExit('Script.html script block missing')
+          Path('/tmp/admin-script.js').write_text(s[a+8:b],encoding='utf-8')
+          PY
+          node --check /tmp/admin-script.js
+
+      - name: Push and update existing MAIN deployment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNNER_TEMP/admin-live"
+          clasp push --force
+          clasp create-deployment \
+            --deploymentId "$MAIN_DEPLOYMENT_ID" \
+            --description "admin ops v2 $GITHUB_RUN_ID"
+
+      - name: Verify deployment metadata
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNNER_TEMP/admin-live"
+          clasp deployments | grep -F "$MAIN_DEPLOYMENT_ID" >/dev/null
+          echo 'ADMIN_OPS_V2_DEPLOYED'
+          echo 'MEMBER_APK_AAB_NOT_CHANGED'
