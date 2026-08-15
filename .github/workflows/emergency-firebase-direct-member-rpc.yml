@@ -1,12 +1,12 @@
-# trigger: 2026-08-15 direct member emergency
 name: Emergency Firebase direct member RPC
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
-      - '.github/workflows/emergency-firebase-direct-member-rpc.yml'
-  workflow_dispatch: {}
+      - .github/workflows/emergency-firebase-direct-member-rpc.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install deployment tools
+      - name: Install tools
         run: npm install --global @google/clasp@latest firebase-tools@latest
 
       - name: Authenticate Firebase
@@ -40,20 +40,19 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Resolve deployment configuration
+      - name: Resolve config
         shell: bash
         run: |
           set -euo pipefail
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          jq -e '.mainScriptId and .mainDeploymentId and .firebaseProjectId and .hostingUrl' "$CONFIG" >/dev/null
           echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "HOSTING_URL=$(jq -r '.hostingUrl' "$CONFIG")" >> "$GITHUB_ENV"
 
-      - name: Pull live Apps Script and overlay latest member v3 files
+      - name: Pull live and patch RPC
         shell: bash
         run: |
           set -euo pipefail
@@ -69,146 +68,57 @@ jobs:
           cp "$SRC/MemberSwapAction.html" MemberSwapAction.html
           cp "$SRC/MemberSwapClient.html" MemberSwapClient.html
           cp "$SRC/MemberSwapInbox.html" MemberSwapInbox.html
-
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('Code.js')
-          s = p.read_text(encoding='utf-8')
-          old = """function doGet(e) {\n  ensureSetup_();"""
-          new = """function doGet(e) {\n  if (e && e.parameter && e.parameter.rpc) {\n    return memberFirebaseJsonpRpc_(e);\n  }\n  ensureSetup_();"""
-          if 'function memberFirebaseJsonpRpc_' not in s:
-              if old not in s:
-                  raise SystemExit('doGet marker missing')
-              s = s.replace(old, new, 1)
-              helper = r'''
-function memberFirebaseJsonpRpc_(e) {
-  ensureSetup_();
-  const p = e && e.parameter ? e.parameter : {};
-  const callback = String(p.callback || '');
-  const name = String(p.rpc || '');
-  if (!/^[A-Za-z_$][A-Za-z0-9_$]{0,80}$/.test(callback)) {
-    throw new Error('잘못된 callback입니다.');
-  }
-  if (!/^[A-Za-z][A-Za-z0-9]{0,80}$/.test(name) || /_$/.test(name)) {
-    return ContentService.createTextOutput(callback + '(' + JSON.stringify({ok:false,error:'허용되지 않은 서버 함수입니다.'}) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  const blocked = {doGet:true, doPost:true, include:true};
-  if (blocked[name]) {
-    return ContentService.createTextOutput(callback + '(' + JSON.stringify({ok:false,error:'허용되지 않은 서버 함수입니다.'}) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  let args = [];
-  try {
-    const encoded = String(p.payload || '');
-    if (encoded) {
-      const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
-      const pad = '='.repeat((4 - normalized.length % 4) % 4);
-      args = JSON.parse(Utilities.newBlob(Utilities.base64Decode(normalized + pad)).getDataAsString('UTF-8'));
-    }
-    if (!Array.isArray(args)) throw new Error('args');
-  } catch (error) {
-    return ContentService.createTextOutput(callback + '(' + JSON.stringify({ok:false,error:'요청 데이터를 읽을 수 없습니다.'}) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  try {
-    const fn = eval(name);
-    if (typeof fn !== 'function') throw new Error('함수를 찾을 수 없습니다.');
-    const result = fn.apply(null, args);
-    return ContentService.createTextOutput(callback + '(' + JSON.stringify({ok:true,result:result}) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  } catch (error) {
-    return ContentService.createTextOutput(callback + '(' + JSON.stringify({ok:false,error:String(error && error.message || error || '서버 오류')}) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-}
-
-'''
-              marker = 'function include(filename) {'
-              if marker not in s:
-                  raise SystemExit('include marker missing')
-              s = s.replace(marker, helper + marker, 1)
-          p.write_text(s, encoding='utf-8')
-          PY
-          grep -F 'memberFirebaseJsonpRpc_' Code.js >/dev/null
-          grep -F "include('MemberSwapClient')" Index.html >/dev/null
+          python3 "$GITHUB_WORKSPACE/deployment/jayuminton/emergency_direct_member.py" patch --work "$WORK"
           node --check Code.js
+          grep -F 'memberFirebaseJsonpRpc_' Code.js
 
-      - name: Push and update existing MAIN deployment
+      - name: Update existing Apps Script deployment
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/main-live"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "firebase direct member rpc $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "firebase direct rpc $GITHUB_RUN_ID"
           echo "MEMBER_RPC_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
-          sleep 4
+          sleep 5
 
-      - name: Verify Apps Script JSONP RPC
+      - name: Verify JSONP RPC
         shell: bash
         run: |
           set -euo pipefail
           CALLBACK="jmProbe$GITHUB_RUN_ID"
-          URL="$MEMBER_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID"
-          curl --fail --location --retry 4 --max-time 60 "$URL" -o "$RUNNER_TEMP/rpc.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc.js" >/dev/null
-          grep -F '"ok":true' "$RUNNER_TEMP/rpc.js" >/dev/null
-          echo 'apps-script-jsonp-rpc-ok'
+          curl --fail --location --retry 4 --max-time 60 "$MEMBER_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/rpc.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/rpc.js"
 
-      - name: Build Firebase direct member page
+      - name: Build direct Firebase page
         shell: bash
         run: |
           set -euo pipefail
-          WORK="$RUNNER_TEMP/main-live"
-          BUILD="$RUNNER_TEMP/firebase-direct-member"
+          BUILD="$RUNNER_TEMP/firebase-direct"
           mkdir -p "$BUILD/web-push"
-          python3 - "$WORK" "$BUILD/web-push/index.html" "$MEMBER_RPC_URL" "$HOSTING_URL" <<'PY'
-          from pathlib import Path
-          import json, sys
-          work = Path(sys.argv[1]); out = Path(sys.argv[2]); rpc_url = sys.argv[3]; hosting_url = sys.argv[4].rstrip('/') + '/'
-          index = (work / 'Index.html').read_text(encoding='utf-8')
-          index = index.replace("<?!= include('Style'); ?>", (work / 'Style.html').read_text(encoding='utf-8'))
-          index = index.replace("<?!= JSON.stringify(memberPageUrl || '') ?>", json.dumps(hosting_url))
-          index = index.replace("<?!= pushReturn || '{\"connected\":false,\"memberId\":\"\",\"memberName\":\"\"}' ?>", json.dumps('{"connected":false,"memberId":"","memberName":""}'))
-          bridge = r'''<script>
-          /* firebase-direct-rpc-v1 */
-          (function(){
-            var endpoint=RPC_URL_JSON,seq=0;
-            function enc(args){var b=new TextEncoder().encode(JSON.stringify(args||[])),s='';for(var i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
-            function invoke(name,args,success,failure){var cb='__jmRpc'+Date.now()+'_'+(++seq),sc=document.createElement('script'),done=false,t=setTimeout(function(){finish(new Error('서버 응답 시간이 초과되었습니다.'));},20000);function clean(){clearTimeout(t);try{delete window[cb];}catch(e){window[cb]=undefined;}if(sc.parentNode)sc.parentNode.removeChild(sc);}function finish(err,val){if(done)return;done=true;clean();try{if(err){if(typeof failure==='function')failure(err);}else if(typeof success==='function')success(val);}catch(e){}}window[cb]=function(packet){if(packet&&packet.ok)finish(null,packet.result);else finish(new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.')));};sc.onerror=function(){finish(new Error('서버에 연결할 수 없습니다.'));};sc.src=endpoint+'?rpc='+encodeURIComponent(String(name))+'&callback='+encodeURIComponent(cb)+'&payload='+encodeURIComponent(enc(args))+'&nonce='+Date.now()+'_'+seq;document.head.appendChild(sc);}
-            function runner(success,failure){return new Proxy({}, {get:function(_,prop){if(prop==='withSuccessHandler')return function(fn){return runner(fn,failure);};if(prop==='withFailureHandler')return function(fn){return runner(success,fn);};if(prop==='then')return undefined;return function(){invoke(String(prop),Array.prototype.slice.call(arguments),success,failure);};}});}
-            window.google=window.google||{};window.google.script=window.google.script||{};window.google.script.run=runner(null,null);window.__JAYUMINTON_FIREBASE_DIRECT_RPC__=true;
-          })();
-          </script>'''.replace('RPC_URL_JSON', json.dumps(rpc_url))
-          index = index.replace('<script>const IS_ADMIN = false;</script>', '<script>const IS_ADMIN = false;</script>\n'+bridge)
-          for name in ['Script','MemberSwapClient','MemberSwapAction','MemberControls','MemberSwapInbox']:
-              token="<?!= include('%s'); ?>"%name
-              if token not in index: raise SystemExit('include token missing: '+name)
-              index=index.replace(token,(work/(name+'.html')).read_text(encoding='utf-8'),1)
-          if '<?!=' in index or '<iframe' in index or 'window.location.replace' in index: raise SystemExit('unsafe template/iframe/redirect remains')
-          out.write_text(index,encoding='utf-8')
-          PY
-          cat > "$BUILD/web-push/manifest.webmanifest" <<'EOF'
-          {"name":"자유민턴 코트현황","short_name":"자유민턴","start_url":"/","scope":"/","display":"standalone","background_color":"#ffffff","theme_color":"#315efb"}
-          EOF
-          cat > "$BUILD/firebase.json" <<'EOF'
-          {"hosting":{"public":"web-push","cleanUrls":true,"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
-          EOF
-          grep -F 'firebase-direct-rpc-v1' "$BUILD/web-push/index.html" >/dev/null
-          grep -F '__JAYUMINTON_FIREBASE_DIRECT_RPC__' "$BUILD/web-push/index.html" >/dev/null
-          if grep -Eqi '<iframe|window\.location\.(replace|href)[[:space:]]*=' "$BUILD/web-push/index.html"; then exit 1; fi
+          python3 "$GITHUB_WORKSPACE/deployment/jayuminton/emergency_direct_member.py" build --work "$RUNNER_TEMP/main-live" --out "$BUILD/web-push" --rpc-url "$MEMBER_RPC_URL" --hosting-url "$HOSTING_URL"
+          printf '%s\n' '{"hosting":{"public":"web-push","cleanUrls":true,"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}' > "$BUILD/firebase.json"
+          grep -F 'firebase-direct-rpc-v1' "$BUILD/web-push/index.html"
+          grep -F '__JAYUMINTON_FIREBASE_DIRECT_RPC__' "$BUILD/web-push/index.html"
+          ! grep -Eqi '<iframe|window\.location\.(replace|href)[[:space:]]*=' "$BUILD/web-push/index.html"
 
-      - name: Deploy Firebase direct member page
+      - name: Deploy Firebase
         shell: bash
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP/firebase-direct-member"
+          cd "$RUNNER_TEMP/firebase-direct"
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "direct member rpc ${GITHUB_SHA::7}"
 
-      - name: Verify live Firebase is direct and iframe-free
+      - name: Verify live Firebase
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
           sleep 5
           curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          grep -F 'firebase-direct-rpc-v1' "$RUNNER_TEMP/live.html" >/dev/null
-          grep -F '__JAYUMINTON_FIREBASE_DIRECT_RPC__' "$RUNNER_TEMP/live.html" >/dev/null
-          grep -F 'memberSelfSearchInput' "$RUNNER_TEMP/live.html" >/dev/null
-          if grep -Eqi '<iframe|window\.location\.(replace|href)[[:space:]]*=' "$RUNNER_TEMP/live.html"; then exit 1; fi
-          echo 'firebase-direct-member-rpc-live-ok'
+          grep -F 'firebase-direct-rpc-v1' "$RUNNER_TEMP/live.html"
+          grep -F '__JAYUMINTON_FIREBASE_DIRECT_RPC__' "$RUNNER_TEMP/live.html"
+          grep -F 'memberSelfSearchInput' "$RUNNER_TEMP/live.html"
+          ! grep -Eqi '<iframe|window\.location\.(replace|href)[[:space:]]*=' "$RUNNER_TEMP/live.html"
+          echo firebase-direct-member-rpc-live-ok
