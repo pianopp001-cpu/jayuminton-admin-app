@@ -1,0 +1,99 @@
+name: Preview admin web via Cloudflare RPC
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-admin-cloudflare-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+      PREVIEW_CHANNEL: admin-cloudflare
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install tools
+        run: npm install --global @google/clasp@latest firebase-tools@latest
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Resolve config
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "PREVIEW_DEPLOYMENT_ID=$(jq -r '.previewDeploymentId // empty' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$CONFIG")" >> "$GITHUB_ENV"
+      - name: Require isolated Apps Script preview deployment
+        run: |
+          test -n "$MAIN_SCRIPT_ID"
+          test -n "$PREVIEW_DEPLOYMENT_ID"
+          test -n "$FIREBASE_PROJECT_ID"
+          test "$PREVIEW_DEPLOYMENT_ID" != null
+      - name: Patch isolated backend and restore HEAD afterwards
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKUP="$RUNNER_TEMP/head-backup"; WORK="$RUNNER_TEMP/admin-backend"
+          mkdir -p "$BACKUP" "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
+          (cd "$BACKUP" && clasp pull)
+          cp -a "$BACKUP"/. "$WORK"/
+          python3 deployment/jayuminton/admin_cloudflare_rpc.py patch-backend --work "$WORK"
+          grep -F 'adminCloudflareRpc_' "$WORK/Code.js"
+          restore_head(){ (cd "$BACKUP" && clasp push --force); }
+          trap restore_head EXIT
+          (cd "$WORK" && clasp push --force)
+          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin cloudflare preview $GITHUB_RUN_ID")
+          restore_head
+          trap - EXIT
+      - name: Build iframe-free admin frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"
+          python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$CLOUDFLARE_RPC_URL"
+          grep -F 'jayuminton-admin-cloudflare-rpc' "$ROOT/public/index.html"
+          grep -F "$CLOUDFLARE_RPC_URL" "$ROOT/public/index.html"
+          ! grep -F 'script.google.com/macros/s/' "$ROOT/public/index.html"
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+      - name: Deploy admin preview channel only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/admin-web"
+          firebase hosting:channel:deploy "$PREVIEW_CHANNEL" --project "$FIREBASE_PROJECT_ID" --expires 1d --config firebase.json --non-interactive --json | tee "$RUNNER_TEMP/admin-channel.json"
+          URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/admin-channel.json" | head -1)"
+          test -n "$URL"
+          echo "ADMIN_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
+      - name: Verify deployed admin preview
+        shell: bash
+        run: |
+          sleep 5
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-live.html"
+          grep -F 'jayuminton-admin-cloudflare-rpc' "$RUNNER_TEMP/admin-live.html"
+          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/admin-live.html"
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-live.html"
+          echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
+          echo 'MEMBER_PRODUCTION_NOT_UPDATED'
+          echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
