@@ -91,6 +91,17 @@ jobs:
           grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc.js"
           grep -F '"ok":true' "$RUNNER_TEMP/rpc.js"
 
+      - name: Verify member password RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          CALLBACK="jmLoginProbe$GITHUB_RUN_ID"
+          PAYLOAD="$(printf '%s' '["__definitely_wrong_probe_password__"]' | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+          curl --fail --location --retry 4 --max-time 60 "$MEMBER_RPC_URL?rpc=verifyMemberPassword&callback=$CALLBACK&payload=$PAYLOAD&nonce=login_$GITHUB_RUN_ID" -o "$RUNNER_TEMP/login-rpc.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/login-rpc.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/login-rpc.js"
+          grep -F '"result":{"ok":false' "$RUNNER_TEMP/login-rpc.js"
+
       - name: Build direct Firebase page
         shell: bash
         run: |
@@ -99,8 +110,10 @@ jobs:
           mkdir -p "$BUILD/web-push"
           python3 "$GITHUB_WORKSPACE/deployment/jayuminton/emergency_direct_member.py" build --work "$RUNNER_TEMP/main-live" --out "$BUILD/web-push" --rpc-url "$MEMBER_RPC_URL" --hosting-url "$HOSTING_URL"
           printf '%s\n' '{"hosting":{"public":"web-push","cleanUrls":true,"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}' > "$BUILD/firebase.json"
-          grep -F 'firebase-direct-rpc-v1' "$BUILD/web-push/index.html"
+          grep -F 'firebase-direct-rpc-v2' "$BUILD/web-push/index.html"
           grep -F '__JAYUMINTON_FIREBASE_DIRECT_RPC__' "$BUILD/web-push/index.html"
+          grep -F 'memberLoginButton' "$BUILD/web-push/index.html"
+          grep -F 'memberFirebaseLoginClick_' "$BUILD/web-push/index.html"
           ! grep -Eqi '<iframe' "$BUILD/web-push/index.html"
           ! grep -F 'firebase-direct-member-handoff' "$BUILD/web-push/index.html"
 
@@ -118,9 +131,11 @@ jobs:
           BASE="${HOSTING_URL%/}"
           sleep 5
           curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          grep -F 'firebase-direct-rpc-v1' "$RUNNER_TEMP/live.html"
+          grep -F 'firebase-direct-rpc-v2' "$RUNNER_TEMP/live.html"
           grep -F '__JAYUMINTON_FIREBASE_DIRECT_RPC__' "$RUNNER_TEMP/live.html"
           grep -F 'memberSelfSearchInput' "$RUNNER_TEMP/live.html"
+          grep -F 'memberLoginButton' "$RUNNER_TEMP/live.html"
+          grep -F 'memberFirebaseLoginClick_' "$RUNNER_TEMP/live.html"
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/live.html"
           ! grep -F 'firebase-direct-member-handoff' "$RUNNER_TEMP/live.html"
-          echo firebase-direct-member-rpc-live-ok
+          echo firebase-direct-member-rpc-login-live-ok
