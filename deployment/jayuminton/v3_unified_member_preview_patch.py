@@ -31,20 +31,18 @@ script = work / 'Script.html'
 s = script.read_text(encoding='utf-8')
 addon = r'''
 
-/* JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1
-   Same member interaction for installed Android WebView and normal web:
-   - self card selected border
-   - swap target selected border
-   - empty destination selected border
-   - self -> empty or empty -> self performs one-tap-per-card move
+/* JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2
+   Registered self is the implicit source for every move/swap.
+   - empty destination: one tap -> highlight destination -> save immediately
+   - occupied member: one tap -> existing swap confirmation flow
+   - no extra self-card tap required
 */
 (function installUnifiedMemberPickPreview(){
   if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN) return;
-  if (window.__JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1__) return;
-  window.__JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1__ = true;
+  if (window.__JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2__) return;
+  window.__JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2__ = true;
 
   var pendingDestination = null;
-  var pendingDestinationElement = null;
 
   function selfId(){
     try { return String(typeof storedSelfMemberId === 'function' ? (storedSelfMemberId() || '') : ''); }
@@ -56,46 +54,6 @@ addon = r'''
       el.classList.remove('member-anywhere-destination-selected');
     });
     pendingDestination = null;
-    pendingDestinationElement = null;
-  }
-
-  function paintMemberRoles(ids){
-    document.querySelectorAll('.member-anywhere-self-selected,.member-anywhere-target-selected').forEach(function(el){
-      el.classList.remove('member-anywhere-self-selected','member-anywhere-target-selected');
-    });
-    var me = selfId();
-    (ids || []).forEach(function(id){
-      document.querySelectorAll('[data-member-id="'+String(id)+'"]').forEach(function(el){
-        if (me && String(id) === me) el.classList.add('member-anywhere-self-selected');
-        else el.classList.add('member-anywhere-target-selected');
-      });
-    });
-  }
-
-  function currentSelectedIds(){
-    try {
-      if (window.memberAnywhereSelection && typeof window.memberAnywhereSelection.current === 'function') {
-        return window.memberAnywhereSelection.current().map(String);
-      }
-    } catch (e) {}
-    return [];
-  }
-
-  function moveIfReady(){
-    if (!pendingDestination) return false;
-    var me = selfId();
-    if (!me) return false;
-    var ids = currentSelectedIds();
-    if (ids.indexOf(me) < 0) return false;
-    var destination = pendingDestination;
-    clearDestination();
-    try {
-      if (typeof window.memberAnywhereMoveSelf === 'function') {
-        window.memberAnywhereMoveSelf(destination);
-        return true;
-      }
-    } catch (e) {}
-    return false;
   }
 
   function destinationFromCard(card){
@@ -120,34 +78,35 @@ addon = r'''
     event.preventDefault();
     event.stopImmediatePropagation();
 
+    if (!selfId()) {
+      if (window.memberAnywhereModal && typeof window.memberAnywhereModal.show === 'function') {
+        window.memberAnywhereModal.show('본인 설정 필요','먼저 본인 이름을 설정해 주세요.');
+      }
+      return;
+    }
+
     clearDestination();
     pendingDestination = destination;
-    pendingDestinationElement = card;
     card.classList.add('member-anywhere-destination-selected');
 
-    moveIfReady();
+    try {
+      if (typeof window.memberAnywhereMoveSelf === 'function') {
+        window.memberAnywhereMoveSelf(destination);
+      }
+    } catch (e) {
+      clearDestination();
+    }
   }, true);
 
   document.addEventListener('memberAnywhereSelectionChanged', function(event){
     var ids = event && event.detail && Array.isArray(event.detail.ids) ? event.detail.ids.map(String) : [];
-    paintMemberRoles(ids);
-    if (!ids.length) {
-      clearDestination();
-      return;
-    }
-    if (ids.length > 1) {
-      /* Person-to-person swap takes precedence over a previously picked empty slot. */
-      clearDestination();
-      return;
-    }
-    moveIfReady();
+    if (ids.length > 1) clearDestination();
   });
 
   var style = document.createElement('style');
   style.id = 'jayuminton-unified-member-pick-preview-style';
   style.textContent = [
-    '.member-self-star{position:static!important;inset:auto!important;transform:none!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;vertical-align:middle!important;min-width:22px!important;height:22px!important;padding:0 6px!important;margin:0 5px 2px 0!important;border-radius:999px!important;font-size:11px!important;line-height:22px!important;pointer-events:none!important;z-index:auto!important}',
-    '.member-anywhere-selected,.member-anywhere-self-selected,.member-anywhere-target-selected{outline:4px solid #111!important;outline-offset:-4px!important;box-shadow:0 0 0 4px rgba(255,215,0,.95),0 5px 14px rgba(0,0,0,.24)!important;transform:scale(.97)!important}',
+    '.member-self-star{display:none!important}',
     '.member-anywhere-destination-selected{outline:4px solid #111!important;outline-offset:-4px!important;box-shadow:0 0 0 4px rgba(255,215,0,.95),0 5px 14px rgba(0,0,0,.24)!important;transform:scale(.97)!important}',
     '#memberApp .member-info-detail,#memberApp .member-info-detail *{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;max-width:100%!important;overflow-wrap:anywhere!important;word-break:keep-all!important}',
     '#memberApp .person.member-info-card{height:auto!important;min-height:52px!important;overflow:visible!important}'
@@ -156,18 +115,26 @@ addon = r'''
 })();
 '''
 
-if 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1' not in s:
-    pos = s.rfind('</script>')
-    if pos < 0:
-        raise SystemExit('Script.html closing script tag missing')
-    s = s[:pos] + addon + '\n' + s[pos:]
+# Replace the previous preview-only addon if present; otherwise append this one.
+for marker in ('JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2'):
+    if marker in s:
+        start = s.find('/* ' + marker)
+        if start >= 0:
+            end = s.find('\n})();\n', start)
+            if end >= 0:
+                end += len('\n})();\n')
+                s = s[:start] + s[end:]
+                break
+pos = s.rfind('</script>')
+if pos < 0:
+    raise SystemExit('Script.html closing script tag missing')
+s = s[:pos] + addon + '\n' + s[pos:]
 script.write_text(s, encoding='utf-8')
 
-# Sanity checks: fail the preview workflow instead of silently shipping a partial test build.
 checks = {
     code: ['grade.length > 40', 'slice(0, 40)'],
     controls: ['네, 저예요', '코트배정대기'],
-    script: ['JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1', 'member-anywhere-destination-selected', 'member-anywhere-target-selected']
+    script: ['JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2', 'member-anywhere-destination-selected', "window.memberAnywhereMoveSelf(destination)", '.member-self-star{display:none!important}']
 }
 for path, needles in checks.items():
     text = path.read_text(encoding='utf-8')
