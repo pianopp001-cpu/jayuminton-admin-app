@@ -63,8 +63,8 @@ jobs:
           p.write_text(s,encoding='utf-8')
           PY
           grep -F "$MEMBER_URL" "$BUILD/web-push/config-v204.js"
-          # Decode repository-owned icon and reuse it for all required icon paths to avoid SPA rewrite corruption.
-          tr -d '\r\n' < deployment/jayuminton/exact-v1637-icons/icon-198.png.b64 | base64 -d > "$BUILD/web-push/icon-198.png"
+          # Emergency placeholder icon; restore visual assets after service recovery.
+          printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl7mAAAAABJRU5ErkJggg==' | base64 -d > "$BUILD/web-push/icon-198.png"
           cp "$BUILD/web-push/icon-198.png" "$BUILD/web-push/icon-512.png"
           cp "$BUILD/web-push/icon-198.png" "$BUILD/web-push/apple-touch-icon-180.png"
           cp "$BUILD/web-push/icon-198.png" "$BUILD/web-push/badge-96.png"
