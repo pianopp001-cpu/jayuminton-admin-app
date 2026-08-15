@@ -8,21 +8,22 @@ if len(sys.argv) != 2:
 work = Path(sys.argv[1])
 script = work / 'Script.html'
 s = script.read_text(encoding='utf-8')
-marker = 'JAYUMINTON_MEMBER_BADGES_V4'
+marker = 'JAYUMINTON_MEMBER_BADGES_V5'
 if marker in s:
     raise SystemExit('member badges patch already present')
 
 addon = r'''
 
-/* JAYUMINTON_MEMBER_BADGES_V4
-   - self: tiny yellow filled star with red outline + neutral "나" on the same line
+/* JAYUMINTON_MEMBER_BADGES_V5
+   - self: tiny yellow filled star with red outline + neutral "나" on one line
+   - no white bubble/background around the self marker
    - NEW: only when backend member.isNew === true (explicit admin checkbox)
    - markers overlap only the card border area and never cover the member name
 */
 (function installMemberBadges(){
   if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN) return;
-  if (window.__JAYUMINTON_MEMBER_BADGES_V4__) return;
-  window.__JAYUMINTON_MEMBER_BADGES_V4__ = true;
+  if (window.__JAYUMINTON_MEMBER_BADGES_V5__) return;
+  window.__JAYUMINTON_MEMBER_BADGES_V5__ = true;
 
   function decorateNew(){
     document.querySelectorAll('#memberApp [data-member-id]').forEach(function(card){
@@ -49,8 +50,8 @@ addon = r'''
   style.id = 'jayuminton-member-badges-style';
   style.textContent = [
     '#memberApp .person[data-member-id],#memberApp .member[data-member-id]{position:relative!important;overflow:visible!important}',
-    '#memberApp .member-self-star{position:absolute!important;top:-7px!important;right:-2px!important;left:auto!important;bottom:auto!important;display:inline-flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;gap:2px!important;width:auto!important;min-width:0!important;height:14px!important;min-height:14px!important;padding:0 3px 0 1px!important;margin:0!important;border:0!important;border-radius:7px!important;background:rgba(255,255,255,.94)!important;box-shadow:0 1px 2px rgba(15,23,42,.12)!important;color:#374151!important;font-size:8px!important;font-weight:900!important;line-height:14px!important;letter-spacing:-.35px!important;white-space:nowrap!important;overflow:visible!important;pointer-events:none!important;z-index:12!important;text-shadow:none!important}',
-    '#memberApp .member-self-star::before{content:"★"!important;display:inline-block!important;color:#ffd84d!important;font-size:10px!important;font-weight:900!important;line-height:14px!important;text-shadow:-.6px 0 #d62828,.6px 0 #d62828,0 -.6px #d62828,0 .6px #d62828,-.45px -.45px #d62828,.45px -.45px #d62828,-.45px .45px #d62828,.45px .45px #d62828!important}',
+    '#memberApp .member-self-star{position:absolute!important;top:-7px!important;right:0!important;left:auto!important;bottom:auto!important;display:inline-flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;justify-content:flex-start!important;gap:2px!important;width:max-content!important;min-width:max-content!important;max-width:none!important;height:13px!important;min-height:13px!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:#374151!important;font-size:8px!important;font-weight:900!important;line-height:13px!important;letter-spacing:-.3px!important;white-space:nowrap!important;word-break:keep-all!important;overflow:visible!important;pointer-events:none!important;z-index:12!important;text-shadow:0 1px 0 rgba(255,255,255,.9)!important}',
+    '#memberApp .member-self-star::before{content:"★"!important;display:inline-block!important;flex:0 0 auto!important;color:#ffd84d!important;font-size:10px!important;font-weight:900!important;line-height:13px!important;text-shadow:-.7px 0 #d62828,.7px 0 #d62828,0 -.7px #d62828,0 .7px #d62828,-.5px -.5px #d62828,.5px -.5px #d62828,-.5px .5px #d62828,.5px .5px #d62828!important}',
     '#memberApp .member-self-star b,#memberApp .member-self-star small{display:none!important}',
     '#memberApp .member-new-badge{position:absolute!important;top:-5px!important;left:4px!important;display:inline-block!important;padding:0 2px!important;border:0!important;border-radius:3px!important;background:#f5f3ff!important;color:#7c3aed!important;font-size:5.5px!important;font-weight:900!important;line-height:9px!important;height:9px!important;white-space:nowrap!important;pointer-events:none!important;z-index:10!important;box-shadow:none!important}',
     '#memberApp .person[data-member-id]>.name,#memberApp .person[data-member-id] .name{position:relative!important;z-index:1!important}'
@@ -66,7 +67,7 @@ addon = r'''
 '''
 
 # Strip earlier badge addons if the source already carries one.
-for old in ('JAYUMINTON_MEMBER_BADGES_V1','JAYUMINTON_MEMBER_BADGES_V2','JAYUMINTON_MEMBER_BADGES_V3','JAYUMINTON_MEMBER_BADGES_V4'):
+for old in ('JAYUMINTON_MEMBER_BADGES_V1','JAYUMINTON_MEMBER_BADGES_V2','JAYUMINTON_MEMBER_BADGES_V3','JAYUMINTON_MEMBER_BADGES_V4','JAYUMINTON_MEMBER_BADGES_V5'):
     if old in s:
         start=s.find('/* '+old)
         if start>=0:
@@ -81,7 +82,7 @@ s = s[:pos] + addon + '\n' + s[pos:]
 script.write_text(s, encoding='utf-8')
 
 text = script.read_text(encoding='utf-8')
-for needle in [marker, 'member.isNew===true', 'content:"★"!important', 'color:#ffd84d!important', '#d62828', "badge.textContent='NEW'", 'font-size:5.5px!important']:
+for needle in [marker, 'member.isNew===true', 'content:"★"!important', 'color:#ffd84d!important', '#d62828', 'background:transparent!important', 'flex-wrap:nowrap!important', 'width:max-content!important', "badge.textContent='NEW'", 'font-size:5.5px!important']:
     if needle not in text:
         raise SystemExit(f'missing member badges patch {needle!r}')
 if 'localDay(' in text and 'member.createdAt' in text:
