@@ -1,0 +1,146 @@
+name: Deploy admin render hotpath v1
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-admin-render-hotpath-v1
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Pull live and apply fail-safe hotpath patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/main-live"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Script.html')
+          s=p.read_text(encoding='utf-8')
+          old='''async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId) {
+  const previousState = JSON.parse(JSON.stringify(STATE));
+  try {
+    applyMoveOrSwapLocally(
+      memberId,
+      targetType,
+      targetIndex,
+      targetMemberId || ''
+    );
+    renderState();
+    const state = await server('moveOrSwapMember', [
+      ADMIN_PIN_VALUE,
+      memberId,
+      targetType,
+      String(targetIndex),
+      targetMemberId || ''
+    ]);
+    renderState(state);
+    setUndoState(previousState);
+  } catch (error) {
+    STATE = previousState;
+    renderState();
+    alert(error.message || error);
+  }
+}'''
+          new='''function adminPlacementSignature_(state) {
+  state = state || {};
+  const courts = state.courts || {};
+  const waits = state.waitGroups || [];
+  return JSON.stringify({
+    courts: [1,2,3,4].map(function(no) {
+      return (courts[no] || courts[String(no)] || []).map(String);
+    }),
+    waitGroups: [0,1,2,3,4].map(function(i) {
+      return (waits[i] || []).map(String);
+    })
+  });
+}
+
+async function quickMoveOrSwap(memberId, targetType, targetIndex, targetMemberId) {
+  const previousState = JSON.parse(JSON.stringify(STATE));
+  try {
+    applyMoveOrSwapLocally(
+      memberId,
+      targetType,
+      targetIndex,
+      targetMemberId || ''
+    );
+    renderState();
+    const optimisticSignature = adminPlacementSignature_(STATE);
+    const state = await server('moveOrSwapMember', [
+      ADMIN_PIN_VALUE,
+      memberId,
+      targetType,
+      String(targetIndex),
+      targetMemberId || ''
+    ]);
+    const normalized = normalizeStateMemberProfiles(state);
+    if (adminPlacementSignature_(normalized) !== optimisticSignature) {
+      renderState(normalized);
+    } else {
+      STATE = normalized;
+    }
+    setUndoState(previousState);
+  } catch (error) {
+    STATE = previousState;
+    renderState();
+    alert(error.message || error);
+  }
+}'''
+          if 'function adminPlacementSignature_' in s:
+              raise SystemExit('hotpath patch already present; refusing duplicate patch')
+          if s.count(old) != 1:
+              raise SystemExit('quickMoveOrSwap exact baseline mismatch; refusing deployment')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          grep -F 'function adminPlacementSignature_' Script.html >/dev/null
+          grep -F "adminPlacementSignature_(normalized) !== optimisticSignature" Script.html >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_BRIDGE_READY' Script.html >/dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('Script.html').read_text(encoding='utf-8')
+          a=s.find('<script>'); b=s.rfind('</script>')
+          if a < 0 or b <= a: raise SystemExit('Script.html script wrapper missing')
+          Path('/tmp/Script.js').write_text(s[a+8:b],encoding='utf-8')
+          PY
+          node --check /tmp/Script.js
+      - name: Push and update existing MAIN deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/main-live"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "admin render hotpath v1 $GITHUB_RUN_ID"
