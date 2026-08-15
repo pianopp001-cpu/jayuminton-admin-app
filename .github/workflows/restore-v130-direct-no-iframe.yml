@@ -1,4 +1,4 @@
-name: Restore v130 same-origin member
+name: Restore v130 top-level form member login
 on:
   push:
     branches: [main]
@@ -9,12 +9,12 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: jayuminton-v130-same-origin
+  group: jayuminton-v130-top-level-login
   cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
@@ -45,7 +45,7 @@ jobs:
           echo "FIREBASE_PROJECT_ID=$(jq -r '.firebaseProjectId' "$C")" >> "$GITHUB_ENV"
           echo "HOSTING_URL=$(jq -r '.hostingUrl' "$C")" >> "$GITHUB_ENV"
           curl --fail --location --retry 4 https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/deployment/jayuminton/v130_direct_member.py -o "$RUNNER_TEMP/v130_direct_member.py"
-      - name: Patch exact v130 Apps Script backend
+      - name: Patch and deploy exact v130 Apps Script backend
         shell: bash
         run: |
           set -euo pipefail
@@ -54,98 +54,73 @@ jobs:
           cp source-snapshot/current-main/* "$WORK/"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           python3 "$RUNNER_TEMP/v130_direct_member.py" patch --work "$WORK"
+          grep -F 'function doPost(e)' "$WORK/Code.js" >/dev/null
           cd "$WORK"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v130 same origin $GITHUB_RUN_ID"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "v130 top level login $GITHUB_RUN_ID"
           echo "RPC_URL=https://script.google.com/macros/s/$MAIN_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
           sleep 7
-      - name: Verify Apps Script backend
+      - name: Verify top-level POST endpoint
         shell: bash
         run: |
           set -euo pipefail
-          CB="jmProbe$GITHUB_RUN_ID"
-          curl --fail --location --retry 5 --max-time 60 "$RPC_URL?rpc=getMemberPasswordVersion&callback=$CB&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/version.js"
-          grep -F "$CB(" "$RUNNER_TEMP/version.js" >/dev/null
-          grep -F '"ok":true' "$RUNNER_TEMP/version.js" >/dev/null
-      - name: Build same-origin Hosting and Function
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'memberPassword=__wrong_probe_password__' \
+            --data-urlencode 'returnUrl=https://jayuminton-push.firebaseapp.com/' \
+            "$RPC_URL" -o "$RUNNER_TEMP/post.html"
+          grep -F 'jayuminton-push.firebaseapp.com' "$RUNNER_TEMP/post.html" >/dev/null
+          grep -F 'loginError=1' "$RUNNER_TEMP/post.html" >/dev/null
+      - name: Build Firebase login gate
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="$RUNNER_TEMP/v130-same-origin"
-          mkdir -p "$ROOT/public" "$ROOT/functions"
-          python3 "$RUNNER_TEMP/v130_direct_member.py" build --work "$RUNNER_TEMP/v130-backend" --out "$ROOT/public" --hosting-url "$HOSTING_URL"
-          grep -F '/api/member' "$ROOT/public/index.html" >/dev/null
-          grep -F '__JAYUMINTON_SAME_ORIGIN_RPC__' "$ROOT/public/index.html" >/dev/null
-          ! grep -F 'script.google.com/macros' "$ROOT/public/index.html"
+          ROOT="$RUNNER_TEMP/v130-top-login"
+          mkdir -p "$ROOT/public"
+          python3 "$RUNNER_TEMP/v130_direct_member.py" build \
+            --work "$RUNNER_TEMP/v130-backend" \
+            --out "$ROOT/public" \
+            --rpc-url "$RPC_URL" \
+            --hosting-url "$HOSTING_URL"
+          grep -F 'jayuminton-v130-top-level-login' "$ROOT/public/index.html" >/dev/null
+          grep -F 'method="post"' "$ROOT/public/index.html" >/dev/null
+          grep -F "$MAIN_DEPLOYMENT_ID" "$ROOT/public/index.html" >/dev/null
+          ! grep -F '/api/member' "$ROOT/public/index.html"
           ! grep -Eqi '<iframe' "$ROOT/public/index.html"
-          cat > "$ROOT/functions/package.json" <<'JSON'
-          {"name":"jayuminton-member-proxy","private":true,"main":"index.js","engines":{"node":"20"},"dependencies":{"firebase-functions":"^6.0.1"}}
-          JSON
-          cat > "$ROOT/functions/index.js" <<'JS'
-          const {onRequest}=require('firebase-functions/v2/https');
-          const DEPLOYMENT_ID='__DEPLOYMENT_ID__';
-          const allowed=new Set(['getPublicState','verifyMemberPassword','resumeMemberSession','getMemberPasswordVersion']);
-          exports.memberProxy=onRequest({region:'asia-northeast3',timeoutSeconds:45,memory:'256MiB'},async(req,res)=>{
-            res.set('Cache-Control','no-store');
-            if(req.method!=='POST')return res.status(405).json({ok:false,error:'method not allowed'});
-            const rpc=String(req.body&&req.body.rpc||'');
-            const args=req.body&&Array.isArray(req.body.args)?req.body.args:[];
-            if(!allowed.has(rpc))return res.status(400).json({ok:false,error:'허용되지 않은 서버 함수입니다.'});
-            const payload=Buffer.from(JSON.stringify(args),'utf8').toString('base64url');
-            const callback='jmProxy'+Date.now()+Math.floor(Math.random()*1000000);
-            const url='https://script.google.com/macros/s/'+DEPLOYMENT_ID+'/exec?rpc='+encodeURIComponent(rpc)+'&callback='+encodeURIComponent(callback)+'&payload='+encodeURIComponent(payload)+'&nonce='+Date.now();
-            try{
-              const upstream=await fetch(url,{redirect:'follow',signal:AbortSignal.timeout(35000)});
-              const text=await upstream.text();
-              const prefix=callback+'(';
-              if(!upstream.ok||!text.startsWith(prefix)||!text.endsWith(');'))throw new Error('invalid upstream response');
-              const packet=JSON.parse(text.slice(prefix.length,-2));
-              return res.status(packet&&packet.ok===true?200:502).json(packet||{ok:false,error:'empty response'});
-            }catch(error){return res.status(502).json({ok:false,error:String(error&&error.message||error||'proxy error')});}
-          });
-          JS
-          sed -i "s/__DEPLOYMENT_ID__/$MAIN_DEPLOYMENT_ID/g" "$ROOT/functions/index.js"
           cat > "$ROOT/firebase.json" <<'JSON'
-          {"functions":{"source":"functions"},"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"/api/member","function":{"functionId":"memberProxy","region":"asia-northeast3","pinTag":true}},{"source":"**","destination":"/index.html"}]}}
+          {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
-      - name: Deploy Function and Hosting
+      - name: Deploy Firebase login gate
         shell: bash
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP/v130-same-origin"
-          npm --prefix functions install --omit=dev
-          firebase deploy --only functions:memberProxy,hosting --project "$FIREBASE_PROJECT_ID" --config firebase.json --non-interactive --message "v130 same origin $GITHUB_RUN_ID"
-      - name: Verify same-origin API and Android login click
+          cd "$RUNNER_TEMP/v130-top-login"
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config firebase.json --non-interactive --message "v130 top level login $GITHUB_RUN_ID"
+      - name: Android top-level login round-trip verify
         shell: bash
         run: |
           set -euo pipefail
-          BASE="${HOSTING_URL%/}"
-          curl --fail --retry 5 --max-time 60 -H 'Content-Type: application/json' -d '{"rpc":"getMemberPasswordVersion","args":[]}' "$BASE/api/member" -o "$RUNNER_TEMP/api.json"
-          grep -F '"ok":true' "$RUNNER_TEMP/api.json" >/dev/null
           mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
           npm init -y >/dev/null 2>&1
           npm i playwright@1.54.2 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
           cat > verify.mjs <<'JS'
           import {chromium} from 'playwright';
-          const bases=[process.env.HOSTING_URL.replace(/\/$/,''),process.env.HOSTING_URL.replace(/\.web\.app\/$/,'.firebaseapp.com')];
+          const base='https://jayuminton-push.firebaseapp.com';
           const browser=await chromium.launch({headless:true});
-          for(const base of bases){
-            const page=await browser.newPage({viewport:{width:412,height:915},userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S928N) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36'});
-            const requests=[]; page.on('request',r=>requests.push(r.url()));
-            await page.goto(base+'/?sameorigin='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
-            await page.waitForFunction(()=>document.getElementById('memberLoginBox')&&!document.getElementById('memberLoginBox').classList.contains('hidden'),null,{timeout:30000});
-            await page.locator('#memberPasswordInput').fill('__wrong_probe_password__');
-            const dialog=new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error('no login dialog')),40000);page.once('dialog',async d=>{clearTimeout(t);const m=d.message();await d.accept();resolve(m);});});
-            await page.locator('#memberLoginBox button.primary').click();
-            const msg=await dialog;
-            if(!msg.includes('멤버 비밀번호가 틀렸습니다.'))throw new Error(base+' bad result '+msg);
-            if(requests.some(u=>u.includes('script.google.com')))throw new Error(base+' browser contacted Apps Script directly');
-            if(!requests.some(u=>u.includes('/api/member')))throw new Error(base+' same-origin API not used');
-            console.log(JSON.stringify({base,msg,sameOrigin:true}));
-            await page.close();
-          }
+          const page=await browser.newPage({viewport:{width:412,height:915},userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S928N) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36'});
+          const requests=[]; page.on('request',r=>requests.push({url:r.url(),type:r.resourceType(),method:r.method()}));
+          await page.goto(base+'/?toplogin='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
+          await page.locator('#memberPasswordInput').fill('__wrong_probe_password__');
+          await page.locator('#memberLoginButton').click();
+          await page.waitForURL(/jayuminton-push\.firebaseapp\.com\/\?loginError=1/,{timeout:60000});
+          await page.waitForFunction(()=>getComputedStyle(document.getElementById('loginError')).display!=='none',null,{timeout:15000});
+          const post=requests.find(r=>r.method==='POST'&&r.url.includes('script.google.com/macros/s/'));
+          if(!post)throw new Error('top-level Apps Script POST missing');
+          const forbidden=requests.filter(r=>r.type==='script'&&r.url.includes('script.google.com'));
+          if(forbidden.length)throw new Error('Apps Script loaded as script subresource');
+          console.log(JSON.stringify({finalUrl:page.url(),topLevelPost:true,scriptSubresource:false}));
           await browser.close();
           JS
-          HOSTING_URL="$HOSTING_URL" node verify.mjs
-          echo V130_SAME_ORIGIN_ANDROID_OK
+          node verify.mjs
+          echo V130_TOP_LEVEL_LOGIN_ANDROID_OK
