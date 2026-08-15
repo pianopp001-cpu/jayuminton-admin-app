@@ -1,0 +1,183 @@
+name: Preview exact v130 member on Firebase direct frontend
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-v130-member-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      V130_COMMIT: e88774455545529ab27e02d0587085a46351345b
+      PREVIEW_CHANNEL: v130-member-direct
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deployment tools
+        run: npm install --global @google/clasp@latest firebase-tools@latest
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
+          test -n "$MAIN_SCRIPT_ID"; test "$MAIN_SCRIPT_ID" != null
+          test -n "$FIREBASE_PROJECT_ID"; test "$FIREBASE_PROJECT_ID" != null
+          {
+            echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare exact v130 and create isolated preview deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKUP="$RUNNER_TEMP/current-head-backup"
+          WORK="$RUNNER_TEMP/v130-preview-backend"
+          mkdir -p "$BACKUP" "$WORK"
+
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
+          (cd "$BACKUP" && clasp pull)
+
+          for file in Admin.html appsscript.json Code.js Index.html Script.html Style.html; do
+            git show "$V130_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
+          done
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+
+          python3 deployment/jayuminton/v130_firebase_member_preview.py patch-backend --work "$WORK"
+          grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
+          grep -F '"access": "ANYONE_ANONYMOUS"' "$WORK/appsscript.json" >/dev/null
+          grep -F '"executeAs": "USER_DEPLOYING"' "$WORK/appsscript.json" >/dev/null
+
+          restore_head() {
+            echo 'Restoring Apps Script project HEAD without touching existing deployments...'
+            (cd "$BACKUP" && clasp push --force)
+          }
+          trap restore_head EXIT
+
+          cd "$WORK"
+          clasp push --force
+          DEPLOY_LOG="$RUNNER_TEMP/preview-deploy.log"
+          clasp create-deployment --description "v130 firebase member preview $GITHUB_RUN_ID" | tee "$DEPLOY_LOG"
+          PREVIEW_DEPLOYMENT_ID="$(grep -Eo 'AKfy[A-Za-z0-9_-]+' "$DEPLOY_LOG" | tail -1)"
+          test -n "$PREVIEW_DEPLOYMENT_ID"
+          PREVIEW_RPC_URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
+          {
+            echo "PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID"
+            echo "PREVIEW_RPC_URL=$PREVIEW_RPC_URL"
+          } >> "$GITHUB_ENV"
+
+          restore_head
+          trap - EXIT
+
+      - name: Verify isolated member RPC allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 6
+          CALLBACK="jmPreview$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "$PREVIEW_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/rpc-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc-state.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/rpc-state.js"
+
+          BLOCKED="jmBlocked$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "$PREVIEW_RPC_URL?rpc=resetAllOperationData&callback=$BLOCKED&payload=W10&nonce=blocked_$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/rpc-blocked.js"
+          grep -F '허용되지 않은 서버 함수입니다.' "$RUNNER_TEMP/rpc-blocked.js"
+
+      - name: Build iframe-free exact v130 member frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/v130-preview-backend"
+          PUBLIC="$RUNNER_TEMP/v130-member-preview/public"
+          python3 deployment/jayuminton/v130_firebase_member_preview.py \
+            build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$PREVIEW_RPC_URL"
+          grep -F 'jayuminton-v130-firebase-member-preview' "$PUBLIC/index.html"
+          grep -F 'memberLoginBox' "$PUBLIC/index.html"
+          grep -F 'memberApp' "$PUBLIC/index.html"
+          ! grep -Eqi '<iframe' "$PUBLIC/index.html"
+          ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html" || grep -F "$PREVIEW_RPC_URL" "$PUBLIC/index.html"
+
+          cat > "$RUNNER_TEMP/v130-member-preview/firebase.json" <<'JSON'
+          {
+            "hosting": {
+              "public": "public",
+              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+              "headers": [
+                {"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}
+              ],
+              "rewrites": [{"source":"**","destination":"/index.html"}]
+            }
+          }
+          JSON
+
+      - name: Deploy Firebase preview channel only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/v130-member-preview"
+          firebase hosting:channel:deploy "$PREVIEW_CHANNEL" \
+            --project "$FIREBASE_PROJECT_ID" \
+            --expires 1d \
+            --config firebase.json \
+            --non-interactive \
+            --json | tee "$RUNNER_TEMP/channel.json"
+
+          PREVIEW_URL="$(grep -Eo 'https://[^" ]+\.web\.app' "$RUNNER_TEMP/channel.json" | head -1)"
+          test -n "$PREVIEW_URL"
+          echo "FIREBASE_PREVIEW_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+          echo "Firebase preview URL: $PREVIEW_URL"
+
+      - name: Verify preview page is iframe-free and member UI is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$FIREBASE_PREVIEW_URL/?verify=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/live-preview.html"
+          grep -F 'jayuminton-v130-firebase-member-preview' "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberLoginBox' "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberApp' "$RUNNER_TEMP/live-preview.html"
+          ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-preview.html"
+          echo "V130_MEMBER_FIREBASE_PREVIEW_READY=$FIREBASE_PREVIEW_URL"
+
+      - name: Print manual Android test target
+        shell: bash
+        run: |
+          echo "OPEN_THIS_ON_ANDROID=$FIREBASE_PREVIEW_URL"
+          echo "LIVE_PRODUCTION_WAS_NOT_DEPLOYED_BY_THIS_WORKFLOW"
+          echo "EXISTING_MAIN_AND_ADMIN_DEPLOYMENT_IDS_WERE_NOT_UPDATED"
