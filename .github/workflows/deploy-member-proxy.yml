@@ -1,18 +1,17 @@
-name: Deploy Firebase member proxy
+name: Restore Firebase member web hosting
 on:
   push:
     branches: [main]
     paths:
-      - functions/**
       - deployment/jayuminton/web-push-overrides/**
       - .github/workflows/deploy-member-proxy.yml
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  deploy:
+  deploy-hosting:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
@@ -26,39 +25,35 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@latest
-      - name: Resolve config and install function
+      - name: Resolve Firebase Hosting config
         shell: bash
         run: |
           set -euo pipefail
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
           PROJECT="$(jq -r '.firebaseProjectId' "$RUNNER_TEMP/deploy.json")"
-          DEPLOYMENT="$(jq -r '.mainDeploymentId' "$RUNNER_TEMP/deploy.json")"
           HOSTING_URL="$(jq -r '.hostingUrl' "$RUNNER_TEMP/deploy.json")"
           echo "FIREBASE_PROJECT_ID=$PROJECT" >> "$GITHUB_ENV"
-          echo "MEMBER_RPC_URL=https://script.google.com/macros/s/$DEPLOYMENT/exec" >> "$GITHUB_ENV"
           echo "HOSTING_URL=$HOSTING_URL" >> "$GITHUB_ENV"
-          cd functions && npm install
-      - name: Write Firebase config
+      - name: Write Hosting-only Firebase config
         shell: bash
         run: |
           set -euo pipefail
+          test -f deployment/jayuminton/web-push-overrides/index.html
           cat > firebase.json <<'JSON'
-          {"functions":{"source":"functions","runtime":"nodejs22"},"hosting":{"public":"deployment/jayuminton/web-push-overrides","rewrites":[{"source":"/api/member-rpc","function":{"functionId":"memberRpc","region":"asia-northeast3"}},{"source":"**","destination":"/index.html"}]}}
+          {"hosting":{"public":"deployment/jayuminton/web-push-overrides","rewrites":[{"source":"/api/member-rpc","function":{"functionId":"memberRpc","region":"asia-northeast3"}},{"source":"**","destination":"/index.html"}]}}
           JSON
-      - name: Deploy member function and restore Hosting
+      - name: Deploy Hosting only
         shell: bash
         run: |
           set -euo pipefail
-          firebase deploy --only functions:memberRpc,hosting --project "$FIREBASE_PROJECT_ID" --non-interactive
-        env:
-          MEMBER_RPC_URL: ${{ env.MEMBER_RPC_URL }}
-      - name: Verify member web address
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive
+      - name: Verify restored member web
         shell: bash
         run: |
           set -euo pipefail
           BASE="${HOSTING_URL%/}"
-          test -n "$BASE"
           code="$(curl -L -sS --max-time 60 -o "$RUNNER_TEMP/member.html" -w '%{http_code}' "$BASE/?restore=$GITHUB_RUN_ID")"
+          echo "member_web_url=$BASE/"
           echo "member_web_http=$code"
           echo "member_web_bytes=$(wc -c < "$RUNNER_TEMP/member.html")"
           test "$code" = "200"
