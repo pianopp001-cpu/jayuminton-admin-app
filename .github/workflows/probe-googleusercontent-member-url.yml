@@ -1,0 +1,69 @@
+name: Probe direct googleusercontent member URL
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/probe-googleusercontent-member-url.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Resolve and test final Apps Script URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC='https://script.google.com/macros/s/AKfycbwVrOLZypNahfSE6IPyyQmxvd4YJ1cetcpaHNJDVh2RQ2dxpH7nQSLT-CLfNPFCwbQDJA/exec?mode=user&app=user&source=pwa'
+          HDR="$RUNNER_TEMP/headers.txt"
+          BODY="$RUNNER_TEMP/final.html"
+          curl -sS -D "$HDR" -o /dev/null --max-time 30 "$SRC"
+          FINAL="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$HDR")"
+          test -n "$FINAL"
+          HOST="$(python3 - "$FINAL" <<'PY'
+          import sys
+          from urllib.parse import urlparse
+          print(urlparse(sys.argv[1]).hostname or '')
+          PY
+          )"
+          CODE="$(curl -L -sS --max-time 60 -o "$BODY" -w '%{http_code}' "$FINAL" || true)"
+          DRIVE=no
+          APP=no
+          if grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$BODY" 2>/dev/null; then DRIVE=yes; fi
+          if grep -Eqi 'memberSelfSearchInput|MemberControls|자유민턴|코트배정|대기1|court-grid|waitGroups' "$BODY" 2>/dev/null; then APP=yes; fi
+          BYTES="$(wc -c < "$BODY" 2>/dev/null || echo 0)"
+          mkdir -p deployment/status
+          {
+            echo "source_url=$SRC"
+            echo "final_host=$HOST"
+            echo "final_http=$CODE"
+            echo "final_drive_error=$DRIVE"
+            echo "final_has_app_marker=$APP"
+            echo "final_bytes=$BYTES"
+            printf 'final_url=%s\n' "$FINAL"
+          } > deployment/status/googleusercontent-member-probe.txt
+          cat deployment/status/googleusercontent-member-probe.txt
+          test "$HOST" = 'script.googleusercontent.com'
+          test "$CODE" = '200'
+          test "$DRIVE" = 'no'
+          test "$APP" = 'yes'
+      - name: Publish result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f deployment/status/googleusercontent-member-probe.txt || exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/googleusercontent-member-probe.txt
+          git commit -m 'record: googleusercontent member probe' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
