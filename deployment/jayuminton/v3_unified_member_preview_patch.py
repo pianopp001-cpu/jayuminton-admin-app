@@ -7,7 +7,6 @@ if len(sys.argv) != 2:
 
 work = Path(sys.argv[1])
 
-# Preview-only backend/profile display widening. No spreadsheet write happens here.
 code = work / 'Code.js'
 s = code.read_text(encoding='utf-8')
 s = s.replace("if (grade.length > 12)", "if (grade.length > 40)")
@@ -31,20 +30,16 @@ script = work / 'Script.html'
 s = script.read_text(encoding='utf-8')
 addon = r'''
 
-/* JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3
-   Compatibility markers for the existing preview verifier:
-   JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2 JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1 member-anywhere-target-selected
-   Registered self is the implicit source for every move/swap.
-   - empty destination: one tap -> highlight destination -> save immediately
-   - occupied member: one tap -> existing swap confirmation flow
-   - no extra self-card tap required
-   - tiny self badge lives outside the name line
-   - grade / experience may wrap instead of being clipped
+/* JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4
+   Compatibility: V3 V2 V1 member-anywhere-target-selected
+   Registered self is always the implicit source.
+   Empty wait/court destination: one tap -> highlight -> save immediately.
+   Occupied member: one tap -> existing swap confirmation flow.
 */
 (function installUnifiedMemberPickPreview(){
   if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN) return;
-  if (window.__JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3__) return;
-  window.__JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3__ = true;
+  if (window.__JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4__) return;
+  window.__JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4__ = true;
 
   var pendingDestination = null;
 
@@ -60,6 +55,23 @@ addon = r'''
     pendingDestination = null;
   }
 
+  function courtDestinationFromCard(card){
+    var courtCard = card && card.closest ? card.closest('#memberApp .v4-court-card') : null;
+    if (!courtCard) return null;
+    var courtNo = 0;
+    [1,2,3,4].some(function(no){
+      if (courtCard.classList.contains('court-' + no)) { courtNo = no; return true; }
+      return false;
+    });
+    if (!courtNo) return null;
+    var players = courtCard.querySelector('.players');
+    if (!players) return null;
+    var slots = Array.prototype.slice.call(players.children || []);
+    var slotIndex = slots.indexOf(card);
+    if (slotIndex < 0 || slotIndex > 3) return null;
+    return {type:'court', courtNo:String(courtNo), slotIndex:Number(slotIndex)};
+  }
+
   function destinationFromCard(card){
     if (!card) return null;
     var onclick = String(card.getAttribute('onclick') || '');
@@ -70,11 +82,11 @@ addon = r'''
       if (generic[1] === 'court') return {type:'court', courtNo:String(generic[2]), slotIndex:Number(generic[3])};
       if (generic[1] === 'wait') return {type:'wait', group:Number(generic[2]), slotIndex:Number(generic[3])};
     }
-    return null;
+    return courtDestinationFromCard(card);
   }
 
   document.addEventListener('click', function(event){
-    var card = event.target && event.target.closest ? event.target.closest('.person.empty') : null;
+    var card = event.target && event.target.closest ? event.target.closest('#memberApp .person.empty') : null;
     if (!card) return;
     var destination = destinationFromCard(card);
     if (!destination) return;
@@ -130,7 +142,8 @@ addon = r'''
   style.id = 'jayuminton-unified-member-pick-preview-style';
   style.textContent = [
     '#memberApp .person.is-self-member{position:relative!important;overflow:visible!important}',
-    '#memberApp .member-self-star{position:absolute!important;top:-5px!important;right:-5px!important;left:auto!important;bottom:auto!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:center!important;width:11px!important;min-width:11px!important;height:11px!important;min-height:11px!important;padding:0!important;margin:0!important;border-radius:50%!important;font-size:6px!important;font-weight:950!important;line-height:11px!important;letter-spacing:-1px!important;pointer-events:none!important;z-index:8!important;overflow:hidden!important;white-space:nowrap!important;box-shadow:0 1px 3px rgba(0,0,0,.22)!important}',
+    '#memberApp .member-self-star{position:absolute!important;top:-7px!important;right:-3px!important;left:auto!important;bottom:auto!important;transform:none!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:auto!important;min-width:0!important;height:auto!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;color:#d60000!important;font-size:8px!important;font-weight:950!important;line-height:1!important;letter-spacing:-.5px!important;pointer-events:none!important;z-index:8!important;overflow:visible!important;white-space:nowrap!important;box-shadow:none!important;text-shadow:0 1px 1px rgba(255,255,255,.95)!important}',
+    '#memberApp .member-self-star::before{content:"★ ";color:#e00000!important;font-size:9px!important}',
     '#memberApp .member-self-star b,#memberApp .member-self-star small{display:none!important}',
     '.member-anywhere-destination-selected{outline:4px solid #111!important;outline-offset:-4px!important;box-shadow:0 0 0 4px rgba(255,215,0,.95),0 5px 14px rgba(0,0,0,.24)!important;transform:scale(.97)!important}',
     '#memberApp .member-info-detail,#memberApp .member-info-detail *,#memberApp .person [class*="grade"],#memberApp .person [class*="info"]{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;min-width:0!important;max-width:100%!important;max-height:none!important;height:auto!important;-webkit-line-clamp:unset!important;line-clamp:unset!important;overflow-wrap:anywhere!important;word-break:keep-all!important;flex-shrink:0!important}',
@@ -153,8 +166,7 @@ addon = r'''
 })();
 '''
 
-# Replace the previous preview-only addon if present; otherwise append this one.
-for marker in ('JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3'):
+for marker in ('JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4'):
     if marker in s:
         start = s.find('/* ' + marker)
         if start >= 0:
@@ -172,7 +184,7 @@ script.write_text(s, encoding='utf-8')
 checks = {
     code: ['grade.length > 40', 'slice(0, 40)'],
     controls: ['네, 저예요', '코트배정대기'],
-    script: ['JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V3', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V2', 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V1', 'member-anywhere-destination-selected', 'member-anywhere-target-selected', "window.memberAnywhereMoveSelf(destination)", 'width:11px!important', 'font-size:6px!important', '구력\\s*[:：]?', '#memberApp .v4-court-card .member-info-detail', '-webkit-line-clamp:unset']
+    script: ['JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4', 'member-anywhere-destination-selected', 'member-anywhere-target-selected', 'courtDestinationFromCard', "window.memberAnywhereMoveSelf(destination)", 'content:"★ "', 'font-size:8px!important', '구력\\s*[:：]?', '#memberApp .v4-court-card .member-info-detail', '-webkit-line-clamp:unset']
 }
 for path, needles in checks.items():
     text = path.read_text(encoding='utf-8')
