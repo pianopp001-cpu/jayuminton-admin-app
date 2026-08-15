@@ -8,21 +8,21 @@ if len(sys.argv) != 2:
 work = Path(sys.argv[1])
 script = work / 'Script.html'
 s = script.read_text(encoding='utf-8')
-marker = 'JAYUMINTON_MEMBER_BADGES_V6'
+marker = 'JAYUMINTON_MEMBER_BADGES_V5'
 if marker in s:
     raise SystemExit('member badges patch already present')
 
 addon = r'''
 
-/* JAYUMINTON_MEMBER_BADGES_V6
+/* JAYUMINTON_MEMBER_BADGES_V5
    - self: bright yellow star with red outline + coral "나" pill, one line
    - no white bubble; marker sits just above/right of card border and never covers the name
    - NEW: only when backend member.isNew === true (explicit admin checkbox)
 */
 (function installMemberBadges(){
   if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN) return;
-  if (window.__JAYUMINTON_MEMBER_BADGES_V6__) return;
-  window.__JAYUMINTON_MEMBER_BADGES_V6__ = true;
+  if (window.__JAYUMINTON_MEMBER_BADGES_V5__) return;
+  window.__JAYUMINTON_MEMBER_BADGES_V5__ = true;
 
   function decorateNew(){
     document.querySelectorAll('#memberApp [data-member-id]').forEach(function(card){
@@ -67,7 +67,7 @@ addon = r'''
 })();
 '''
 
-for old in ('JAYUMINTON_MEMBER_BADGES_V1','JAYUMINTON_MEMBER_BADGES_V2','JAYUMINTON_MEMBER_BADGES_V3','JAYUMINTON_MEMBER_BADGES_V4','JAYUMINTON_MEMBER_BADGES_V5','JAYUMINTON_MEMBER_BADGES_V6'):
+for old in ('JAYUMINTON_MEMBER_BADGES_V1','JAYUMINTON_MEMBER_BADGES_V2','JAYUMINTON_MEMBER_BADGES_V3','JAYUMINTON_MEMBER_BADGES_V4','JAYUMINTON_MEMBER_BADGES_V5'):
     if old in s:
         start=s.find('/* '+old)
         if start>=0:
