@@ -1,0 +1,101 @@
+name: Inspect WebApp access config (read only)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - name: Resolve script + deployment ids
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          echo "SCRIPT_ID=$(jq -r '.mainScriptId' "$C")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")" >> "$GITHUB_ENV"
+          echo "ADMIN_DEPLOYMENT_ID=AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q" >> "$GITHUB_ENV"
+
+      - name: Get a fresh Google OAuth access token from clasp credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$RUNNER_TEMP/clasprc.json"
+
+          python3 - <<'PY'
+          import json, os
+          p = os.environ['RUNNER_TEMP'] + '/clasprc.json'
+          with open(p) as f:
+              d = json.load(f)
+
+          # clasp has used two on-disk shapes across versions.
+          if 'tokens' in d:
+              t = d['tokens'].get('default', next(iter(d['tokens'].values())))
+          elif 'token' in d:
+              t = dict(d['token'])
+              oauth = d.get('oauth2ClientSettings', {})
+              t.setdefault('client_id', oauth.get('clientId'))
+              t.setdefault('client_secret', oauth.get('clientSecret'))
+          else:
+              raise SystemExit('unrecognized clasprc.json shape (no "tokens" or "token" key)')
+
+          out = {
+              'client_id': t.get('client_id') or t.get('clientId'),
+              'client_secret': t.get('client_secret') or t.get('clientSecret'),
+              'refresh_token': t.get('refresh_token') or t.get('refreshToken'),
+          }
+          missing = [k for k, v in out.items() if not v]
+          if missing:
+              raise SystemExit('missing fields in clasprc.json: ' + ','.join(missing))
+
+          with open(os.environ['RUNNER_TEMP'] + '/oauth_fields.json', 'w') as f:
+              json.dump(out, f)
+          PY
+
+          CID=$(jq -r '.client_id' "$RUNNER_TEMP/oauth_fields.json")
+          CSECRET=$(jq -r '.client_secret' "$RUNNER_TEMP/oauth_fields.json")
+          RTOKEN=$(jq -r '.refresh_token' "$RUNNER_TEMP/oauth_fields.json")
+
+          curl -sS -X POST https://oauth2.googleapis.com/token \
+            --data-urlencode "client_id=$CID" \
+            --data-urlencode "client_secret=$CSECRET" \
+            --data-urlencode "refresh_token=$RTOKEN" \
+            --data-urlencode "grant_type=refresh_token" \
+            -o "$RUNNER_TEMP/refresh_response.json"
+
+          ACCESS_TOKEN=$(jq -r '.access_token // empty' "$RUNNER_TEMP/refresh_response.json")
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "Token refresh failed (not printing response body to avoid leaking client secret)."
+            jq -r 'keys[]' "$RUNNER_TEMP/refresh_response.json" || true
+            exit 1
+          fi
+          echo "::add-mask::$ACCESS_TOKEN"
+          echo "GOOGLE_ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/clasprc.json" "$RUNNER_TEMP/oauth_fields.json" "$RUNNER_TEMP/refresh_response.json"
+
+      - name: Fetch and print only access/executeAs for MAIN and ADMIN deployments
+        shell: bash
+        run: |
+          set -euo pipefail
+          for LABEL_ID in "MAIN $MAIN_DEPLOYMENT_ID" "ADMIN $ADMIN_DEPLOYMENT_ID"; do
+            set -- $LABEL_ID
+            LABEL="$1"
+            ID="$2"
+            echo "=== $LABEL ($ID) ==="
+            curl -sS -H "Authorization: Bearer $GOOGLE_ACCESS_TOKEN" \
+              "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments/$ID" \
+              -o "$RUNNER_TEMP/dep_$LABEL.json"
+            jq '{
+                  entryPointType: .entryPoints[0].entryPointType,
+                  access: .entryPoints[0].webApp.entryPointConfig.access,
+                  executeAs: .entryPoints[0].webApp.entryPointConfig.executeAs
+                }' "$RUNNER_TEMP/dep_$LABEL.json"
+          done
