@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - functions/**
+      - deployment/jayuminton/web-push-overrides/**
       - .github/workflows/deploy-member-proxy.yml
   workflow_dispatch:
 permissions:
@@ -23,6 +24,8 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
       - name: Resolve config and install function
         shell: bash
         run: |
@@ -30,26 +33,37 @@ jobs:
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
           PROJECT="$(jq -r '.firebaseProjectId' "$RUNNER_TEMP/deploy.json")"
           DEPLOYMENT="$(jq -r '.mainDeploymentId' "$RUNNER_TEMP/deploy.json")"
+          HOSTING_URL="$(jq -r '.hostingUrl' "$RUNNER_TEMP/deploy.json")"
           echo "FIREBASE_PROJECT_ID=$PROJECT" >> "$GITHUB_ENV"
           echo "MEMBER_RPC_URL=https://script.google.com/macros/s/$DEPLOYMENT/exec" >> "$GITHUB_ENV"
+          echo "HOSTING_URL=$HOSTING_URL" >> "$GITHUB_ENV"
           cd functions && npm install
-      - name: Probe Cloud Functions API
+      - name: Write Firebase config
         shell: bash
         run: |
           set -euo pipefail
-          gcloud functions list --gen2 --regions=asia-northeast3 --project "$FIREBASE_PROJECT_ID" --format='value(name)' || true
-      - name: Deploy function directly
+          cat > firebase.json <<'JSON'
+          {"functions":{"source":"functions","runtime":"nodejs22"},"hosting":{"public":"deployment/jayuminton/web-push-overrides","rewrites":[{"source":"/api/member-rpc","function":{"functionId":"memberRpc","region":"asia-northeast3"}},{"source":"**","destination":"/index.html"}]}}
+          JSON
+      - name: Deploy member function and restore Hosting
         shell: bash
         run: |
           set -euo pipefail
-          gcloud functions deploy memberRpc \
-            --gen2 \
-            --runtime=nodejs22 \
-            --region=asia-northeast3 \
-            --source=functions \
-            --entry-point=memberRpc \
-            --trigger-http \
-            --allow-unauthenticated \
-            --set-env-vars="MEMBER_RPC_URL=$MEMBER_RPC_URL" \
-            --project="$FIREBASE_PROJECT_ID" \
-            --quiet
+          firebase deploy --only functions:memberRpc,hosting --project "$FIREBASE_PROJECT_ID" --non-interactive
+        env:
+          MEMBER_RPC_URL: ${{ env.MEMBER_RPC_URL }}
+      - name: Verify member web address
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${HOSTING_URL%/}"
+          test -n "$BASE"
+          code="$(curl -L -sS --max-time 60 -o "$RUNNER_TEMP/member.html" -w '%{http_code}' "$BASE/?restore=$GITHUB_RUN_ID")"
+          echo "member_web_http=$code"
+          echo "member_web_bytes=$(wc -c < "$RUNNER_TEMP/member.html")"
+          test "$code" = "200"
+          grep -Eqi '<html|<!doctype html' "$RUNNER_TEMP/member.html"
+          if grep -Eqi 'Google Drive|파일을 열 수|unable to open' "$RUNNER_TEMP/member.html"; then
+            echo 'Drive fallback detected in member web response' >&2
+            exit 1
+          fi
