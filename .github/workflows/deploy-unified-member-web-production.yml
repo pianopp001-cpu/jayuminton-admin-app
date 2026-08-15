@@ -82,10 +82,11 @@ jobs:
           grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$WORK/Script.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$WORK/Script.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V2' "$WORK/Script.html" >/dev/null
-          grep -F 'content:"⭐"!important' "$WORK/Script.html" >/dev/null
-          grep -F '#memberApp .member-new-badge{display:none!important}' "$WORK/Script.html" >/dev/null
-          ! grep -F 'member.createdAt' "$WORK/Script.html"
+          grep -F 'JAYUMINTON_MEMBER_BADGES_V4' "$WORK/Script.html" >/dev/null
+          grep -F 'content:"★"!important' "$WORK/Script.html" >/dev/null
+          grep -F 'color:#ffd84d!important' "$WORK/Script.html" >/dev/null
+          grep -F '#d62828' "$WORK/Script.html" >/dev/null
+          grep -F 'flex-direction:row!important' "$WORK/Script.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$WORK/Script.html" >/dev/null
           grep -F '네, 저예요' "$WORK/MemberControls.html" >/dev/null
           grep -F '코트배정대기' "$WORK/MemberControls.html" >/dev/null
@@ -133,10 +134,11 @@ jobs:
           grep -F 'showIncoming_' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$PUBLIC/index.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$PUBLIC/index.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V2' "$PUBLIC/index.html" >/dev/null
-          grep -F 'content:"⭐"!important' "$PUBLIC/index.html" >/dev/null
-          grep -F '#memberApp .member-new-badge{display:none!important}' "$PUBLIC/index.html" >/dev/null
-          ! grep -F 'member.createdAt' "$PUBLIC/index.html"
+          grep -F 'JAYUMINTON_MEMBER_BADGES_V4' "$PUBLIC/index.html" >/dev/null
+          grep -F 'content:"★"!important' "$PUBLIC/index.html" >/dev/null
+          grep -F 'color:#ffd84d!important' "$PUBLIC/index.html" >/dev/null
+          grep -F '#d62828' "$PUBLIC/index.html" >/dev/null
+          grep -F 'flex-direction:row!important' "$PUBLIC/index.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$PUBLIC/index.html" >/dev/null
           grep -F '#memberApp .v4-court-card .member-info-detail' "$PUBLIC/index.html" >/dev/null
           grep -F 'cleanMemberLabels' "$PUBLIC/index.html" >/dev/null
@@ -180,10 +182,11 @@ jobs:
             -o "$RUNNER_TEMP/live-production.html"
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V2' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'content:"⭐"!important' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F '#memberApp .member-new-badge{display:none!important}' "$RUNNER_TEMP/live-production.html" >/dev/null
-          ! grep -F 'member.createdAt' "$RUNNER_TEMP/live-production.html"
+          grep -F 'JAYUMINTON_MEMBER_BADGES_V4' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'content:"★"!important' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'color:#ffd84d!important' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F '#d62828' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'flex-direction:row!important' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'member-anywhere-destination-selected' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F '#memberApp .v4-court-card .member-info-detail' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'cleanMemberLabels' "$RUNNER_TEMP/live-production.html" >/dev/null
