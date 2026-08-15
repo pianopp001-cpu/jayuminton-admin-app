@@ -18,7 +18,10 @@ jobs:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PREVIEW_CHANNEL: admin-cloudflare
+      ADMIN_WORKER_NAME: jayuminton-admin-rpc
 
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +29,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install tools
-        run: npm install --global @google/clasp@latest firebase-tools@latest
+        run: npm install --global @google/clasp@latest firebase-tools@latest wrangler@latest
       - name: Authenticate Firebase
         uses: google-github-actions/auth@v2
         with:
@@ -41,16 +44,14 @@ jobs:
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
           PREVIEW_DEPLOYMENT_ID="$(jq -r '.adminPreviewDeploymentId // .previewDeploymentId // empty' "$CONFIG")"
-          if [ -z "$PREVIEW_DEPLOYMENT_ID" ]; then
-            PREVIEW_DEPLOYMENT_ID='AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ'
-          fi
+          if [ -z "$PREVIEW_DEPLOYMENT_ID" ]; then PREVIEW_DEPLOYMENT_ID='AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ'; fi
+          for v in "$MAIN_SCRIPT_ID" "$FIREBASE_PROJECT_ID" "$PREVIEW_DEPLOYMENT_ID" "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ACCOUNT_ID"; do test -n "$v"; done
           echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
           echo "PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID" >> "$GITHUB_ENV"
           echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
       - name: Require isolated Apps Script preview deployment
         run: |
           set -euo pipefail
-          test -n "$MAIN_SCRIPT_ID"; test -n "$PREVIEW_DEPLOYMENT_ID"; test -n "$FIREBASE_PROJECT_ID"
           test "$PREVIEW_DEPLOYMENT_ID" != "$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId')"
       - name: Patch isolated backend and restore HEAD afterwards
         shell: bash
@@ -65,27 +66,87 @@ jobs:
           restore_head(){ (cd "$BACKUP" && clasp push --force); }
           trap restore_head EXIT
           (cd "$WORK" && clasp push --force)
-          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin firebase proxy preview $GITHUB_RUN_ID")
+          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin cloudflare worker preview $GITHUB_RUN_ID")
           restore_head; trap - EXIT
-      - name: Deploy isolated admin Firebase function
+      - name: Deploy dedicated admin Cloudflare Worker
         shell: bash
         run: |
           set -euo pipefail
-          ADMIN_URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
-          printf 'ADMIN_RPC_URL=%s\n' "$ADMIN_URL" > functions/.env
-          cat > "$RUNNER_TEMP/functions-firebase.json" <<'JSON'
-          {"functions":{"source":"functions"}}
-          JSON
-          firebase deploy --only functions:adminRpc --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/functions-firebase.json" --non-interactive
+          ROOT="$RUNNER_TEMP/admin-worker"; mkdir -p "$ROOT"
+          cat > "$ROOT/worker.js" <<'JS'
+          export default {
+            async fetch(request, env) {
+              const cors = {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET,OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Cache-Control': 'no-store'
+              };
+              if (request.method === 'OPTIONS') return new Response(null, {status:204, headers:cors});
+              if (request.method !== 'GET') return new Response('method_not_allowed', {status:405, headers:cors});
+              const incoming = new URL(request.url);
+              const rpc = incoming.searchParams.get('rpc') || '';
+              const callback = incoming.searchParams.get('callback') || '';
+              const payload = incoming.searchParams.get('payload') || 'W10';
+              const nonce = incoming.searchParams.get('nonce') || Date.now().toString();
+              if (!/^[A-Za-z_$][\w$]*$/.test(rpc) || !/^[A-Za-z_$][\w$]*$/.test(callback)) {
+                return new Response('invalid_request', {status:400, headers:cors});
+              }
+              const upstream = new URL(env.ADMIN_APPS_SCRIPT_URL);
+              upstream.searchParams.set('adminRpc','1');
+              upstream.searchParams.set('rpc',rpc);
+              upstream.searchParams.set('callback',callback);
+              upstream.searchParams.set('payload',payload);
+              upstream.searchParams.set('nonce',nonce);
+              try {
+                const r = await fetch(upstream.toString(), {redirect:'follow', headers:{'Cache-Control':'no-cache'}});
+                const text = await r.text();
+                if (!r.ok || !text.startsWith(callback + '(')) {
+                  return new Response(callback + '(' + JSON.stringify({ok:false,error:'upstream_failed',status:r.status}) + ')', {status:502, headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});
+                }
+                return new Response(text, {status:200, headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});
+              } catch (e) {
+                return new Response(callback + '(' + JSON.stringify({ok:false,error:'proxy_exception'}) + ')', {status:502, headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});
+              }
+            }
+          };
+          JS
+          cat > "$ROOT/wrangler.toml" <<EOF
+          name = "$ADMIN_WORKER_NAME"
+          main = "worker.js"
+          compatibility_date = "2026-08-16"
+          workers_dev = true
+
+          [vars]
+          ADMIN_APPS_SCRIPT_URL = "https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
+          EOF
+          cd "$ROOT"
+          wrangler deploy --config wrangler.toml | tee "$RUNNER_TEMP/wrangler-deploy.txt"
+          WORKER_URL="$(grep -Eo 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/wrangler-deploy.txt" | tail -1)"
+          test -n "$WORKER_URL"
+          echo "ADMIN_WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
+          echo "ADMIN_WORKER_URL=$WORKER_URL"
+      - name: Verify dedicated admin Worker login transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          CALLBACK="jmAdminWorkerProbe$GITHUB_RUN_ID"
+          LOGIN_PAYLOAD="$(printf '[\"__transport_probe_invalid_pin__\"]' | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+          curl --fail --retry 5 --max-time 60 "$ADMIN_WORKER_URL/?rpc=createAdminSession&callback=$CALLBACK&payload=$LOGIN_PAYLOAD&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-worker-login.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/admin-worker-login.js"
+          grep -F '"ok":' "$RUNNER_TEMP/admin-worker-login.js"
       - name: Build iframe-free admin frontend
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"
-          python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "/admin-rpc"
+          python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$ADMIN_WORKER_URL/"
           grep -F 'jayuminton-admin-cloudflare-rpc' "$ROOT/public/index.html"
+          grep -F "$ADMIN_WORKER_URL/" "$ROOT/public/index.html"
+          ! grep -F 'shy-morning-f0e4.pianopp001.workers.dev' "$ROOT/public/index.html"
           cat > "$ROOT/firebase.json" <<'JSON'
-          {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"/admin-rpc","function":{"functionId":"adminRpc","region":"asia-northeast3"}},{"source":"**","destination":"/index.html"}]}}
+          {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
       - name: Deploy admin preview channel only
         shell: bash
@@ -95,20 +156,16 @@ jobs:
           firebase hosting:channel:deploy "$PREVIEW_CHANNEL" --project "$FIREBASE_PROJECT_ID" --expires 1d --config firebase.json --non-interactive --json | tee "$RUNNER_TEMP/admin-channel.json"
           URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/admin-channel.json" | head -1)"
           test -n "$URL"; echo "ADMIN_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
-      - name: Verify browser-shaped admin RPC
+      - name: Verify browser-shaped admin RPC and preview
         shell: bash
         run: |
           set -euo pipefail
-          sleep 8
-          CALLBACK="jmBrowserProbe$GITHUB_RUN_ID"
-          LOGIN_PAYLOAD="$(printf '[\"__transport_probe_invalid_pin__\"]' | base64 -w0 | tr '+/' '-_' | tr -d '=')"
-          curl --fail --retry 5 --max-time 60 \
-            "$ADMIN_PREVIEW_URL/admin-rpc?rpc=createAdminSession&callback=$CALLBACK&payload=$LOGIN_PAYLOAD&nonce=$GITHUB_RUN_ID" \
-            -o "$RUNNER_TEMP/browser-login.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/browser-login.js"
-          grep -F '"ok":' "$RUNNER_TEMP/browser-login.js"
+          sleep 5
           curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-live.html"
           grep -F 'jayuminton-admin-cloudflare-rpc' "$RUNNER_TEMP/admin-live.html"
+          grep -F "$ADMIN_WORKER_URL/" "$RUNNER_TEMP/admin-live.html"
           echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
+          echo "ADMIN_WORKER_URL=$ADMIN_WORKER_URL"
+          echo 'MEMBER_CLOUDFLARE_WORKER_NOT_UPDATED'
           echo 'MEMBER_PRODUCTION_NOT_UPDATED'
           echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
