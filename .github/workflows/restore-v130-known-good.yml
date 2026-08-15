@@ -72,3 +72,5 @@ jobs:
           grep -F 'visible_page=yes' deployment/status/v130-white-screen-hotfix.txt
           grep -F 'direct_iframe_failsafe=yes' deployment/status/v130-white-screen-hotfix.txt
           echo 'V130_BROWSER_VERIFIED_RESTORE_OK'
+
+      # recovery rerun marker: 2026-08-15 full reconstruction after incomplete hosting-only deploy
