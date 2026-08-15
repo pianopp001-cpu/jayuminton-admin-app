@@ -21,6 +21,7 @@ jobs:
       PREVIEW_CHANNEL: v130-member-proxy
       PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
       FUNCTION_NAME: v130MemberRpcPreview
+      FUNCTION_CODEBASE: v130memberpreview
       FUNCTION_REGION: us-central1
 
     steps:
@@ -160,14 +161,14 @@ jobs:
           {
             "functions": [{
               "source": "functions",
-              "codebase": "v130memberpreview",
+              "codebase": "$FUNCTION_CODEBASE",
               "runtime": "nodejs22"
             }]
           }
           JSON
           cd "$ROOT"
           firebase deploy \
-            --only "functions:$FUNCTION_NAME" \
+            --only "functions:$FUNCTION_CODEBASE:$FUNCTION_NAME" \
             --project "$FIREBASE_PROJECT_ID" \
             --config firebase.functions.json \
             --non-interactive
@@ -253,3 +254,4 @@ jobs:
           echo "LIVE_PRODUCTION_HOSTING_WAS_NOT_DEPLOYED"
           echo "MAIN_AND_ADMIN_APPS_SCRIPT_DEPLOYMENTS_WERE_NOT_UPDATED"
           echo "APPS_SCRIPT_HEAD_WAS_NOT_PUSHED"
+          echo "NOTE_FUNCTION_PERSISTS_UNTIL_EXPLICITLY_DELETED=$FUNCTION_NAME"
