@@ -76,45 +76,21 @@ jobs:
           cat > "$ROOT/worker.js" <<'JS'
           export default {
             async fetch(request, env) {
-              const cors = {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET,OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-                'Cache-Control': 'no-store'
-              };
-              if (request.method === 'OPTIONS') return new Response(null, {status:204, headers:cors});
-              if (request.method !== 'GET') return new Response('method_not_allowed', {status:405, headers:cors});
-              const incoming = new URL(request.url);
-              const rpc = incoming.searchParams.get('rpc') || '';
-              const callback = incoming.searchParams.get('callback') || '';
-              const payload = incoming.searchParams.get('payload') || 'W10';
-              const nonce = incoming.searchParams.get('nonce') || Date.now().toString();
-              if (!/^[A-Za-z_$][\w$]*$/.test(rpc) || !/^[A-Za-z_$][\w$]*$/.test(callback)) {
-                return new Response('invalid_request', {status:400, headers:cors});
-              }
-              const upstream = new URL(env.ADMIN_APPS_SCRIPT_URL);
-              upstream.searchParams.set('adminRpc','1');
-              upstream.searchParams.set('rpc',rpc);
-              upstream.searchParams.set('callback',callback);
-              upstream.searchParams.set('payload',payload);
-              upstream.searchParams.set('nonce',nonce);
-              try {
-                const r = await fetch(upstream.toString(), {redirect:'follow', headers:{'Cache-Control':'no-cache'}});
-                const text = await r.text();
-                if (!r.ok || !text.startsWith(callback + '(')) {
-                  return new Response(callback + '(' + JSON.stringify({ok:false,error:'upstream_failed',status:r.status}) + ')', {status:502, headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});
-                }
-                return new Response(text, {status:200, headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});
-              } catch (e) {
-                return new Response(callback + '(' + JSON.stringify({ok:false,error:'proxy_exception'}) + ')', {status:502, headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});
-              }
+              const cors = {'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Cache-Control':'no-store'};
+              if (request.method === 'OPTIONS') return new Response(null,{status:204,headers:cors});
+              if (request.method !== 'GET') return new Response('method_not_allowed',{status:405,headers:cors});
+              const incoming=new URL(request.url); const rpc=incoming.searchParams.get('rpc')||''; const callback=incoming.searchParams.get('callback')||''; const payload=incoming.searchParams.get('payload')||'W10'; const nonce=incoming.searchParams.get('nonce')||Date.now().toString();
+              if (!/^[A-Za-z_$][\w$]*$/.test(rpc)||!/^[A-Za-z_$][\w$]*$/.test(callback)) return new Response('invalid_request',{status:400,headers:cors});
+              const upstream=new URL(env.ADMIN_APPS_SCRIPT_URL); upstream.searchParams.set('adminRpc','1'); upstream.searchParams.set('rpc',rpc); upstream.searchParams.set('callback',callback); upstream.searchParams.set('payload',payload); upstream.searchParams.set('nonce',nonce);
+              try { const r=await fetch(upstream.toString(),{redirect:'follow',headers:{'Cache-Control':'no-cache'}}); const text=await r.text(); if(!r.ok||!text.startsWith(callback+'(')) return new Response(callback+'('+JSON.stringify({ok:false,error:'upstream_failed',status:r.status})+')',{status:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}}); return new Response(text,{status:200,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}}); }
+              catch(e){ return new Response(callback+'('+JSON.stringify({ok:false,error:'proxy_exception'})+')',{status:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}}); }
             }
           };
           JS
           cat > "$ROOT/wrangler.toml" <<EOF
           name = "$ADMIN_WORKER_NAME"
           main = "worker.js"
-          compatibility_date = "2026-08-16"
+          compatibility_date = "2026-08-15"
           workers_dev = true
 
           [vars]
