@@ -24,7 +24,6 @@ if 'id="newIsNew"' not in a:
     if needle not in a:
         raise SystemExit('newExperience marker missing')
     a = a.replace(needle, repl, 1)
-# Long-press bar already has required buttons; add full name label.
 if 'id="quickMoveName"' not in a:
     needle = '<div id="quickMoveBar" class="quick-move-bar hidden" aria-label="길게 누른 멤버 관리">'
     repl = needle + '\n    <strong id="quickMoveName" class="quick-move-full-name">선택 회원</strong>'
@@ -33,7 +32,7 @@ if 'id="quickMoveName"' not in a:
     a = a.replace(needle, repl, 1)
 admin.write_text(a, encoding='utf-8')
 
-# 2) Backend: explicit NEW flag stored in Settings map; no date inference.
+# 2) Backend: explicit NEW flag in Settings map; never infer from createdAt.
 c = code.read_text(encoding='utf-8')
 helper = r'''
 
@@ -66,8 +65,9 @@ function addMemberV2(pin, name, gender, grade, experience, isNew) {
   return withDocumentLock_('멤버 등록', function() {
     const result = addMemberUnlocked_(pin, name, gender, grade, experience);
     if (result && result.member) {
-      setMemberNewFlag_(result.member.id, isNew === true || String(isNew) === 'true');
-      result.member.isNew = isNew === true || String(isNew) === 'true';
+      const enabled = isNew === true || String(isNew) === 'true';
+      setMemberNewFlag_(result.member.id, enabled);
+      result.member.isNew = enabled;
     }
     return result;
   });
@@ -83,29 +83,25 @@ function updateMemberNewFlag(pin, memberId, isNew) {
 '''
 if 'JAYUMINTON_ADMIN_NEW_FLAG_V2' not in c:
     c += helper
-# Decorate public states exactly where members are read/returned.
 pat = "function getPublicState() {\n  ensureSetup_();\n\n  const members = readMembers_();"
-if 'decorateMemberNewFlags_(members);' not in c[c.find('function getPublicState()'):c.find('function makeState_')]:
+segment = c[c.find('function getPublicState()'):c.find('function makeState_')]
+if 'decorateMemberNewFlags_(members);' not in segment:
     if pat not in c:
         raise SystemExit('getPublicState marker missing')
     c = c.replace(pat, pat + "\n  decorateMemberNewFlags_(members);", 1)
 pat2 = "function makeState_(members, courts, waitGroups, courtStartedAt) {\n  return {"
 if pat2 in c and 'function makeState_(members, courts, waitGroups, courtStartedAt) {\n  decorateMemberNewFlags_(members);' not in c:
     c = c.replace(pat2, "function makeState_(members, courts, waitGroups, courtStartedAt) {\n  decorateMemberNewFlags_(members);\n  return {", 1)
-# Allow finishing partially occupied courts (1~4 players). Empty court is harmless no-op.
+# Partial court finish: keep existing players, increment only those players, and cycle normally.
 c = c.replace("  if (finished.length !== GROUP_SIZE) {\n    throw new Error(\n      '4명이 모두 배정된 코트만 경기 종료할 수 있습니다.'\n    );\n  }", "  /* Partial courts may be ended too. Existing players are cycled; an empty court is a no-op. */")
 code.write_text(c, encoding='utf-8')
 
-# 3) Script: admin card details, explicit NEW registration, full name on long press, strong saving overlay.
+# 3) Script: no missing placeholders, explicit NEW registration, full long-press name, strong saving UI.
 s = script.read_text(encoding='utf-8')
-# Hide missing placeholders in admin cards and do not force '구력' label.
 old = """  if (!grade && !experience) {\n    return '<span class=\"member-info-detail is-missing\">급수·구력 미입력</span>';\n  }\n\n  const gradeText = grade || '급수 미입력';\n  const experienceText = experience ? '구력 ' + experience : '구력 미입력';\n\n  return '<span class=\"member-info-detail' +\n    ((!grade || !experience) ? ' is-missing' : '') + '\">' +\n    escapeMemberInfo(gradeText) + ' · ' + escapeMemberInfo(experienceText) +\n    '</span>';"""
 new = """  const adminParts = [];\n  if (grade) adminParts.push(escapeMemberInfo(grade));\n  if (experience) adminParts.push(escapeMemberInfo(experience));\n  if (!adminParts.length) return '';\n  return '<span class=\"member-info-detail\">' + adminParts.join(' · ') + '</span>';"""
 if old in s:
     s = s.replace(old, new, 1)
-# Admin court/wait compact names: flagged NEW members show full name incl parentheses.
-s = s.replace("compactMemberName(member.name) +", "(member.isNew ? escapeMemberInfo(member.name) : compactMemberName(member.name)) +")
-# Ensure mutation recognition.
 s = s.replace("'addMember','setMemberStatus'", "'addMember','addMemberV2','updateMemberNewFlag','setMemberStatus'")
 addon = r'''
 
@@ -113,18 +109,39 @@ addon = r'''
 (function installAdminOpsV2(){
   if (typeof IS_ADMIN !== 'undefined' && !IS_ADMIN) return;
 
+  function decorateAdminNewCards(){
+    document.querySelectorAll('#adminApp [data-member-id]').forEach(function(card){
+      var id=String(card.getAttribute('data-member-id')||'');
+      if(!id)return;
+      var member=null;
+      try{member=typeof memberById==='function'?memberById(id):null;}catch(e){}
+      var nameEl=card.querySelector('.name');
+      if(!nameEl)return;
+      var existing=nameEl.querySelector('.member-new-inline');
+      if(member&&member.isNew===true){
+        nameEl.textContent=String(member.name||'');
+        var badge=document.createElement('span');
+        badge.className='member-new-inline';
+        badge.textContent='NEW';
+        nameEl.appendChild(badge);
+      }else if(existing){
+        existing.remove();
+      }
+    });
+  }
+
   window.adminRefreshNow = function(){
     if (typeof showAdminSaving_ === 'function') showAdminSaving_('현황 새로고침 중...');
-    server('getPublicState',[]).then(function(state){
+    return server('getPublicState',[]).then(function(state){
       STATE = normalizeStateMemberProfiles(state);
       SELECTED.clear();
       renderState();
+      decorateAdminNewCards();
     }).catch(function(error){
       alert(String((error && error.message) || error || '새로고침에 실패했습니다.'));
     }).finally(function(){ if (typeof hideAdminSaving_ === 'function') hideAdminSaving_(); });
   };
 
-  var originalAddMember = window.addMember;
   window.addMember = async function(){
     if (ADD_MEMBER_IN_FLIGHT) return;
     var nameInput=document.getElementById('newName');
@@ -149,6 +166,7 @@ addon = r'''
         var idx=STATE.members.findIndex(function(x){return String(x.id)===String(member.id);});
         if(idx>=0)STATE.members[idx]=member;else STATE.members.push(member);
         renderState();
+        decorateAdminNewCards();
       }else{
         await adminRefreshNow();
       }
@@ -173,6 +191,15 @@ addon = r'''
       else { if (typeof hideAdminSaving_==='function') hideAdminSaving_(); }
     };
   }
+
+  var oldRenderState=window.renderState;
+  if(typeof oldRenderState==='function'){
+    window.renderState=function(state){
+      var result=oldRenderState(state);
+      setTimeout(decorateAdminNewCards,0);
+      return result;
+    };
+  }
 })();
 '''
 if 'JAYUMINTON_ADMIN_OPS_V2' not in s:
@@ -181,7 +208,7 @@ if 'JAYUMINTON_ADMIN_OPS_V2' not in s:
     s=s[:pos]+addon+'\n'+s[pos:]
 script.write_text(s, encoding='utf-8')
 
-# 4) CSS: small aligned refresh, readable saving overlay, tiny NEW after name without covering it.
+# 4) CSS: compact header pair, large saving overlay, tiny inline NEW after full name.
 css = style.read_text(encoding='utf-8')
 patch = r'''
 
@@ -198,19 +225,19 @@ patch = r'''
 .admin-saving-card strong{font-size:22px!important;line-height:1.15!important;font-weight:950!important}
 .admin-saving-card small{font-size:12px!important;color:#64748b!important}
 .admin-saving-spinner{width:42px!important;height:42px!important;border-width:5px!important}
-#adminApp .member-new-inline{display:inline-block!important;margin-left:4px!important;padding:1px 3px!important;border-radius:4px!important;background:#f5f3ff!important;color:#7c3aed!important;font-size:6px!important;font-weight:900!important;line-height:1.2!important;vertical-align:middle!important;white-space:nowrap!important}
+#adminApp .member-new-inline{display:inline-block!important;margin-left:3px!important;padding:0 2px!important;border-radius:3px!important;background:#f5f3ff!important;color:#7c3aed!important;font-size:6px!important;font-weight:900!important;line-height:9px!important;height:9px!important;vertical-align:middle!important;white-space:nowrap!important;box-shadow:none!important}
+#adminApp .name:has(.member-new-inline){overflow:visible!important;text-overflow:clip!important;white-space:normal!important}
 @media(max-width:620px){.header-undo-button,.header-refresh-button{font-size:9px!important;padding:0 6px!important;height:32px!important;min-height:32px!important}}
 '''
 if 'JAYUMINTON_ADMIN_OPS_V2' not in css:
     css = css.rstrip() + patch
 style.write_text(css, encoding='utf-8')
 
-# Validate markers.
 checks = {
   admin:['headerRefreshButton','newIsNew','quickMoveName'],
   code:['JAYUMINTON_ADMIN_NEW_FLAG_V2','addMemberV2','decorateMemberNewFlags_','Partial courts may be ended too'],
-  script:['JAYUMINTON_ADMIN_OPS_V2','회원 저장 중...','member.isNew ? escapeMemberInfo(member.name)'],
-  style:['JAYUMINTON_ADMIN_OPS_V2','.header-refresh-button','.admin-saving-card strong']
+  script:['JAYUMINTON_ADMIN_OPS_V2','회원 저장 중...','decorateAdminNewCards',"badge.textContent='NEW'"],
+  style:['JAYUMINTON_ADMIN_OPS_V2','.header-refresh-button','.admin-saving-card strong','.member-new-inline']
 }
 for p, needles in checks.items():
     text=p.read_text(encoding='utf-8')
