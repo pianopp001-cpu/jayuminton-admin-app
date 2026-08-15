@@ -1,0 +1,178 @@
+name: Preview v3 member controls via Cloudflare Worker
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-v3-member-cloudflare-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      V3_COMMIT: 71313ea74326333ead54d2fb73f2814198a39ae4
+      PREVIEW_CHANNEL: v3-member-cloudflare
+      PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
+      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deployment tools
+        run: npm install --global @google/clasp@latest firebase-tools@latest
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
+          test -n "$MAIN_SCRIPT_ID"; test "$MAIN_SCRIPT_ID" != null
+          test -n "$FIREBASE_PROJECT_ID"; test "$FIREBASE_PROJECT_ID" != null
+          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Prepare v3 backend and refresh isolated preview deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKUP="$RUNNER_TEMP/current-head-backup"
+          WORK="$RUNNER_TEMP/v3-preview-backend"
+          mkdir -p "$BACKUP" "$WORK"
+
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
+          (cd "$BACKUP" && clasp pull)
+
+          for file in Admin.html appsscript.json Code.js Index.html Script.html Style.html MemberAnywhereSwap.js MemberSwapClient.html MemberSwapAction.html MemberControls.html MemberSwapInbox.html; do
+            git show "$V3_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
+          done
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+
+          python3 deployment/jayuminton/v3_cloudflare_member_preview.py patch-backend --work "$WORK"
+          grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
+          grep -F 'memberRequestAnywhereSwap' "$WORK/Code.js" >/dev/null
+          grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
+
+          restore_head() {
+            echo 'Restoring Apps Script project HEAD without updating production deployments...'
+            (cd "$BACKUP" && clasp push --force)
+          }
+          trap restore_head EXIT
+
+          (cd "$WORK" && clasp push --force)
+          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "v3 member Cloudflare preview $GITHUB_RUN_ID")
+
+          restore_head
+          trap - EXIT
+
+      - name: Verify isolated v3 RPC directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 6
+          URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
+          CALLBACK="jmV3State$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "$URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/v3-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/v3-state.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/v3-state.js"
+
+      - name: Build iframe-free v3 frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/v3-preview-backend"
+          ROOT="$RUNNER_TEMP/v3-member-cloudflare"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+
+          python3 deployment/jayuminton/v3_cloudflare_member_preview.py \
+            build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$CLOUDFLARE_RPC_URL"
+
+          grep -F 'jayuminton-v3-cloudflare-member-preview' "$PUBLIC/index.html"
+          grep -F 'showSelfConfirm' "$PUBLIC/index.html"
+          grep -F 'memberAnywhereRequestSelected_' "$PUBLIC/index.html"
+          grep -F 'showIncoming_' "$PUBLIC/index.html"
+          grep -F 'jayuminton-v3-preview-wrap-fix' "$PUBLIC/index.html"
+          ! grep -Eqi '<iframe' "$PUBLIC/index.html"
+          ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
+
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {
+            "hosting": {
+              "public": "public",
+              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+              "headers": [
+                {"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}
+              ],
+              "rewrites": [{"source":"**","destination":"/index.html"}]
+            }
+          }
+          JSON
+
+      - name: Deploy Firebase preview channel only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/v3-member-cloudflare"
+          cd "$ROOT"
+          firebase hosting:channel:deploy "$PREVIEW_CHANNEL" \
+            --project "$FIREBASE_PROJECT_ID" \
+            --expires 1d \
+            --config firebase.json \
+            --non-interactive \
+            --json | tee "$RUNNER_TEMP/channel.json"
+          PREVIEW_URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/channel.json" | head -1)"
+          test -n "$PREVIEW_URL"
+          echo "FIREBASE_PREVIEW_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+          echo "Firebase v3 preview URL: $PREVIEW_URL"
+
+      - name: Verify deployed v3 preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$FIREBASE_PREVIEW_URL/?verify=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/live-v3.html"
+          grep -F 'showSelfConfirm' "$RUNNER_TEMP/live-v3.html"
+          grep -F 'memberAnywhereRequestSelected_' "$RUNNER_TEMP/live-v3.html"
+          grep -F 'showIncoming_' "$RUNNER_TEMP/live-v3.html"
+          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live-v3.html"
+          ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-v3.html"
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live-v3.html"
+
+      - name: Print Android test target
+        shell: bash
+        run: |
+          echo "OPEN_THIS_ON_ANDROID=$FIREBASE_PREVIEW_URL"
+          echo "V3_SWAP_UI_INCLUDED"
+          echo "GRADE_EXPERIENCE_WRAP_FIX_INCLUDED"
+          echo "PRODUCTION_HOSTING_NOT_DEPLOYED"
+          echo "MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED"
