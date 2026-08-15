@@ -17,7 +17,9 @@ replacements = (
     ('VERSION="1.3.0"', 'VERSION="1.3.2"'),
     ('VERSION_CODE="130"', 'VERSION_CODE="132"'),
     ('versionCode 130', 'versionCode 132'),
+    ("versionCode='130'", "versionCode='132'"),
     ("versionName '1.3.0'", "versionName '1.3.2'"),
+    ("versionName='1.3.0'", "versionName='1.3.2'"),
     ('USER_APP_VERSION = "1.3.0"', 'USER_APP_VERSION = "1.3.2"'),
     ('JayumintonUserNative/1.3.0', 'JayumintonUserNative/1.3.2'),
     ('JayumintonNativeAndroid/1.3.0', 'JayumintonNativeAndroid/1.3.2'),
@@ -83,7 +85,9 @@ for required in (
     'VERSION="1.3.2"',
     'VERSION_CODE="132"',
     'versionCode 132',
+    "versionCode='132'",
     "versionName '1.3.2'",
+    "versionName='1.3.2'",
     'USER_APP_VERSION = "1.3.2"',
     'JayumintonUserNative/1.3.2',
     'NativeUserApp',
@@ -104,6 +108,8 @@ for required in (
 for forbidden in (
     'VERSION="1.3.0"',
     'VERSION_CODE="130"',
+    "versionCode='130'",
+    "versionName='1.3.0'",
     'script.google.com/macros/s/${MAIN_DEPLOYMENT_ID}/exec?mode=user',
     'grep -F "jayuminton-push.web.app" "$RUNNER_TEMP/classes.txt"',
 ):
