@@ -23,10 +23,10 @@ jobs:
         run: |
           set -euo pipefail
           SRC='https://script.google.com/macros/s/AKfycbwVrOLZypNahfSE6IPyyQmxvd4YJ1cetcpaHNJDVh2RQ2dxpH7nQSLT-CLfNPFCwbQDJA/exec?mode=user&app=user&source=pwa'
-          HDR="$RUNNER_TEMP/headers.txt"
           BODY="$RUNNER_TEMP/final.html"
-          curl -sS -D "$HDR" -o /dev/null --max-time 30 "$SRC"
-          FINAL="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$HDR")"
+          META="$(curl -L -sS --max-time 60 -o "$BODY" -w '%{http_code}|%{url_effective}' "$SRC" || true)"
+          CODE="${META%%|*}"
+          FINAL="${META#*|}"
           test -n "$FINAL"
           HOST="$(python3 - "$FINAL" <<'PY'
           import sys
@@ -34,7 +34,6 @@ jobs:
           print(urlparse(sys.argv[1]).hostname or '')
           PY
           )"
-          CODE="$(curl -L -sS --max-time 60 -o "$BODY" -w '%{http_code}' "$FINAL" || true)"
           DRIVE=no
           APP=no
           if grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$BODY" 2>/dev/null; then DRIVE=yes; fi
