@@ -1,12 +1,11 @@
 (() => {
   'use strict';
 
-  const HOTFIX_VERSION = 'v209.1';
+  const HOTFIX_VERSION = 'v209.2';
 
-  // The original v199 administrator app still uses this Apps Script deployment.
-  // The same deployment serves the member court screen with mode=user/app=user.
+  // Use the freshly recovered and live-verified member Apps Script deployment.
   const STABLE_MEMBER_PAGE_URL =
-    'https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec';
+    'https://script.google.com/macros/s/AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w/exec';
 
   const standalone =
     window.matchMedia('(display-mode: standalone)').matches ||
