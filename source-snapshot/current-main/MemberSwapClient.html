@@ -1,11 +1,15 @@
 <script>
 function memberAnywhereSession_(){return {memberId:String(storedSelfMemberId()||''),token:String(MEMBER_SESSION_VALUE||localStorage.getItem(MEMBER_SESSION_KEY)||'')};}
 function memberAnywhereReadySession_(){var auth=memberAnywhereSession_();return auth.memberId&&auth.token?auth:null;}
-function memberAnywhereRequestServer_(targetId){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return server('memberRequestAnywhereSwap',[auth.token,auth.memberId,String(targetId||'')]);}
+var memberAnywhereSavingDepth_=0;
+function memberAnywhereEnsureSaving_(){var root=document.getElementById('memberAnywhereSaving');if(root)return root;root=document.createElement('div');root.id='memberAnywhereSaving';root.className='member-anywhere-saving hidden';root.innerHTML='<div class="member-anywhere-saving-card"><div class="member-anywhere-spinner"></div><strong>저장 중...</strong><span>잠시만 기다려 주세요</span></div>';document.body.appendChild(root);return root;}
+function memberAnywhereSetSaving_(on){memberAnywhereSavingDepth_=on?memberAnywhereSavingDepth_+1:Math.max(0,memberAnywhereSavingDepth_-1);var active=memberAnywhereSavingDepth_>0;memberAnywhereEnsureSaving_().classList.toggle('hidden',!active);document.documentElement.classList.toggle('member-anywhere-busy',active);}
+function memberAnywhereSavingPromise_(promise){memberAnywhereSetSaving_(true);return Promise.resolve(promise).then(function(result){memberAnywhereSetSaving_(false);return result;},function(error){memberAnywhereSetSaving_(false);throw error;});}
+function memberAnywhereRequestServer_(targetId){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return memberAnywhereSavingPromise_(server('memberRequestAnywhereSwap',[auth.token,auth.memberId,String(targetId||'')]));}
 function memberAnywherePendingServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve(null);return server('memberGetAnywhereSwapRequest',[auth.token,auth.memberId]);}
 function memberAnywhereOutgoingServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve(null);return server('memberGetAnywhereOutgoingSwap',[auth.token,auth.memberId]);}
-function memberAnywhereAcceptServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return server('memberAcceptAnywhereSwap',[auth.token,auth.memberId]);}
-function memberAnywhereRejectServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return server('memberRejectAnywhereSwap',[auth.token,auth.memberId]);}
+function memberAnywhereAcceptServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return memberAnywhereSavingPromise_(server('memberAcceptAnywhereSwap',[auth.token,auth.memberId]));}
+function memberAnywhereRejectServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return memberAnywhereSavingPromise_(server('memberRejectAnywhereSwap',[auth.token,auth.memberId]));}
 function memberAnywhereMoveSelfServer_(destination){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return server('memberMoveSelf',[auth.token,auth.memberId,destination||{}]);}
 function memberAnywhereReturnSelfToWaitServer_(){var auth=memberAnywhereReadySession_();if(!auth)return Promise.resolve({ok:false,message:'내 이름과 로그인 상태를 먼저 확인해 주세요.'});return server('memberReturnSelfToWait',[auth.token,auth.memberId]);}
 </script>
