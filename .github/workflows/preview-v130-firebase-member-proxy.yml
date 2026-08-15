@@ -1,0 +1,255 @@
+name: Preview exact v130 member through Firebase server proxy
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-v130-member-proxy-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      V130_COMMIT: e88774455545529ab27e02d0587085a46351345b
+      PREVIEW_CHANNEL: v130-member-proxy
+      PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
+      FUNCTION_NAME: v130MemberRpcPreview
+      FUNCTION_REGION: us-central1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Firebase tools
+        run: npm install --global firebase-tools@latest
+
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Resolve configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
+          test -n "$FIREBASE_PROJECT_ID"; test "$FIREBASE_PROJECT_ID" != null
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+          echo "UPSTREAM_RPC_URL=https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+
+      - name: Verify existing isolated Apps Script preview RPC only
+        shell: bash
+        run: |
+          set -euo pipefail
+          CALLBACK="jmProxyPreflight$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "$UPSTREAM_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/upstream.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/upstream.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/upstream.js"
+
+      - name: Build isolated Firebase Function proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/v130-member-proxy"
+          FUNC="$ROOT/functions"
+          mkdir -p "$FUNC"
+
+          cat > "$FUNC/package.json" <<'JSON'
+          {
+            "name": "jayuminton-v130-member-proxy-preview",
+            "private": true,
+            "engines": {"node": "22"},
+            "main": "index.js",
+            "dependencies": {"firebase-functions": "^6.4.0"}
+          }
+          JSON
+
+          cat > "$FUNC/index.js" <<'JS'
+          const { onRequest } = require('firebase-functions/v2/https');
+
+          const UPSTREAM = 'https://script.google.com/macros/s/AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ/exec';
+          const ALLOWED = new Set([
+            'getPublicState',
+            'getMemberPasswordVersion',
+            'verifyMemberPassword',
+            'resumeMemberSession'
+          ]);
+
+          exports.v130MemberRpcPreview = onRequest({
+            region: 'us-central1',
+            cors: false,
+            timeoutSeconds: 30,
+            memory: '256MiB',
+            invoker: 'public'
+          }, async (req, res) => {
+            try {
+              if (req.method !== 'GET') {
+                res.status(405).type('text/plain').send('Method Not Allowed');
+                return;
+              }
+              const rpc = String(req.query.rpc || '');
+              const callback = String(req.query.callback || '');
+              const payload = String(req.query.payload || '');
+              const nonce = String(req.query.nonce || '');
+              if (!ALLOWED.has(rpc)) {
+                res.status(403).type('application/javascript; charset=utf-8')
+                  .send(`${callback || 'callback'}(${JSON.stringify({ok:false,error:'허용되지 않은 서버 함수입니다.'})});`);
+                return;
+              }
+              if (!/^[A-Za-z_$][A-Za-z0-9_$]{0,80}$/.test(callback)) {
+                res.status(400).type('text/plain').send('Bad callback');
+                return;
+              }
+              if (payload.length > 12000 || nonce.length > 200) {
+                res.status(400).type('text/plain').send('Bad request');
+                return;
+              }
+              const url = new URL(UPSTREAM);
+              url.searchParams.set('rpc', rpc);
+              url.searchParams.set('callback', callback);
+              url.searchParams.set('payload', payload);
+              url.searchParams.set('nonce', nonce || String(Date.now()));
+              const upstream = await fetch(url, {
+                redirect: 'follow',
+                headers: {'Cache-Control': 'no-cache, no-store'}
+              });
+              const body = await upstream.text();
+              if (!upstream.ok || !body.includes(callback + '(')) {
+                console.error('Unexpected upstream response', upstream.status, body.slice(0, 300));
+                res.status(502).type('application/javascript; charset=utf-8')
+                  .send(`${callback}(${JSON.stringify({ok:false,error:'백엔드 연결에 실패했습니다.'})});`);
+                return;
+              }
+              res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+              res.status(200).type('application/javascript; charset=utf-8').send(body);
+            } catch (error) {
+              console.error(error);
+              const callback = String(req.query.callback || 'callback');
+              res.status(500).type('application/javascript; charset=utf-8')
+                .send(`${callback}(${JSON.stringify({ok:false,error:'프록시 서버 오류'})});`);
+            }
+          });
+          JS
+
+          (cd "$FUNC" && npm install --omit=dev)
+
+      - name: Deploy isolated preview proxy function only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/v130-member-proxy"
+          cat > "$ROOT/firebase.functions.json" <<JSON
+          {
+            "functions": [{
+              "source": "functions",
+              "codebase": "v130memberpreview",
+              "runtime": "nodejs22"
+            }]
+          }
+          JSON
+          cd "$ROOT"
+          firebase deploy \
+            --only "functions:$FUNCTION_NAME" \
+            --project "$FIREBASE_PROJECT_ID" \
+            --config firebase.functions.json \
+            --non-interactive
+
+      - name: Build iframe-free exact v130 member frontend using same-origin proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/v130-member-proxy"
+          WORK="$ROOT/v130"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$WORK" "$PUBLIC"
+          for file in Admin.html appsscript.json Code.js Index.html Script.html Style.html; do
+            git show "$V130_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
+          done
+          python3 deployment/jayuminton/v130_firebase_member_preview.py \
+            build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "/rpc"
+          grep -F 'memberPreviewLoginButton' "$PUBLIC/index.html"
+          grep -F 'memberPreviewLoginStatus' "$PUBLIC/index.html"
+          ! grep -Eqi '<iframe' "$PUBLIC/index.html"
+          ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
+          grep -F 'var endpoint="/rpc"' "$PUBLIC/index.html"
+
+          cat > "$ROOT/firebase.json" <<JSON
+          {
+            "hosting": {
+              "public": "public",
+              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+              "headers": [
+                {"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}
+              ],
+              "rewrites": [
+                {"source":"/rpc","function":{"functionId":"$FUNCTION_NAME","region":"$FUNCTION_REGION"}},
+                {"source":"**","destination":"/index.html"}
+              ]
+            }
+          }
+          JSON
+
+      - name: Deploy Firebase preview channel only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/v130-member-proxy"
+          cd "$ROOT"
+          firebase hosting:channel:deploy "$PREVIEW_CHANNEL" \
+            --project "$FIREBASE_PROJECT_ID" \
+            --expires 1d \
+            --config firebase.json \
+            --non-interactive \
+            --json | tee "$RUNNER_TEMP/channel.json"
+          PREVIEW_URL="$(grep -Eo 'https://[^" ]+\.web\.app' "$RUNNER_TEMP/channel.json" | head -1)"
+          test -n "$PREVIEW_URL"
+          echo "FIREBASE_PREVIEW_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+          echo "Firebase proxy preview URL: $PREVIEW_URL"
+
+      - name: Verify browser-facing preview never references script.google.com
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$FIREBASE_PREVIEW_URL/?verify=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/live-preview.html"
+          grep -F 'memberPreviewLoginButton' "$RUNNER_TEMP/live-preview.html"
+          grep -F 'var endpoint="/rpc"' "$RUNNER_TEMP/live-preview.html"
+          ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-preview.html"
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live-preview.html"
+
+          CALLBACK="jmProxyLive$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 \
+            "$FIREBASE_PREVIEW_URL/rpc?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/proxied-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/proxied-state.js"
+          grep -F '"ok":true' "$RUNNER_TEMP/proxied-state.js"
+
+      - name: Print Android test target
+        shell: bash
+        run: |
+          echo "OPEN_THIS_ON_ANDROID=$FIREBASE_PREVIEW_URL"
+          echo "ANDROID_BROWSER_NEVER_CALLS_SCRIPT_GOOGLE_COM_DIRECTLY"
+          echo "LIVE_PRODUCTION_HOSTING_WAS_NOT_DEPLOYED"
+          echo "MAIN_AND_ADMIN_APPS_SCRIPT_DEPLOYMENTS_WERE_NOT_UPDATED"
+          echo "APPS_SCRIPT_HEAD_WAS_NOT_PUSHED"
