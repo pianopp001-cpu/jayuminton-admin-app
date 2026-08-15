@@ -95,6 +95,52 @@ BRIDGE = r'''<script>
   window.google.script=window.google.script||{};
   window.google.script.run=runner(null,null);
   window.__JAYUMINTON_V130_FIREBASE_MEMBER_PREVIEW__=true;
+
+  var loginBusy=false;
+  function loginStatus(text,isError){
+    var el=document.getElementById('memberPreviewLoginStatus');
+    if(!el)return;
+    el.textContent=String(text||'');
+    el.style.color=isError?'#b42318':'#667085';
+  }
+  window.memberFirebasePreviewLogin_=function(event){
+    if(event){try{event.preventDefault();event.stopPropagation();}catch(e){}}
+    if(loginBusy)return false;
+    var input=document.getElementById('memberPasswordInput');
+    var button=document.getElementById('memberPreviewLoginButton');
+    if(!input)return false;
+    var password=String(input.value||'').trim();
+    if(!password){loginStatus('멤버 비밀번호를 입력하세요.',true);try{input.focus();}catch(e){}return false;}
+    loginBusy=true;
+    if(button){button.disabled=true;button.textContent='확인 중…';}
+    loginStatus('비밀번호를 확인하고 있습니다.',false);
+    Promise.resolve().then(function(){
+      if(typeof window.memberLogin!=='function')throw new Error('로그인 기능을 불러오지 못했습니다.');
+      return window.memberLogin();
+    }).then(function(){
+      loginStatus('',false);
+    }).catch(function(error){
+      loginStatus(String(error&&error.message||error||'서버 연결 오류'),true);
+    }).finally(function(){
+      loginBusy=false;
+      if(button){button.disabled=false;button.textContent='확인';}
+    });
+    return false;
+  };
+  function bindLogin(){
+    var button=document.getElementById('memberPreviewLoginButton');
+    var input=document.getElementById('memberPasswordInput');
+    if(button&&!button.__jmBound){
+      button.__jmBound=true;
+      button.addEventListener('click',window.memberFirebasePreviewLogin_,false);
+    }
+    if(input&&!input.__jmBound){
+      input.__jmBound=true;
+      input.addEventListener('keydown',function(event){if(event.key==='Enter')window.memberFirebasePreviewLogin_(event);},false);
+    }
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bindLogin,{once:true});
+  else setTimeout(bindLogin,0);
 })();
 </script>'''
 
@@ -129,6 +175,29 @@ def build_frontend(work: Path, out: Path, rpc_url: str):
         "window.JAYUMINTON_PUSH_RETURN = <?!= pushReturn || '{\"connected\":false,\"memberId\":\"\",\"memberName\":\"\"}' ?>;",
         "window.JAYUMINTON_PUSH_RETURN = {connected:false,memberId:'',memberName:''};"
     )
+    old_button = '''<button
+      class="primary"
+      onclick="memberLogin()"
+    >
+      확인
+    </button>'''
+    new_button = '''<button
+      id="memberPreviewLoginButton"
+      class="primary"
+      type="button"
+      onclick="return memberFirebasePreviewLogin_(event)"
+    >
+      확인
+    </button>'''
+    if old_button not in index:
+        raise SystemExit('member login button marker missing')
+    index = index.replace(old_button, new_button, 1)
+    login_box_end = '  </div>\n</div>\n\n<div id="memberApp" class="hidden">'
+    status_markup = '  </div>\n  <div id="memberPreviewLoginStatus" role="status" aria-live="polite" style="margin-top:10px;font-size:13px;font-weight:700"></div>\n</div>\n\n<div id="memberApp" class="hidden">'
+    if login_box_end not in index:
+        raise SystemExit('member login status marker missing')
+    index = index.replace(login_box_end, status_markup, 1)
+
     marker = '<script>\nconst IS_ADMIN = false;\n</script>'
     if marker not in index:
         raise SystemExit('IS_ADMIN marker missing')
