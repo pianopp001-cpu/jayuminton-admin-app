@@ -1,6 +1,6 @@
 <script>
 (function(){
-  var shownRequestKey='';var activeRequestKey='';var responsePending=false;
+  var shownRequestKey='';var activeRequestKey='';var responsePending=false;var pollGeneration_=0;
   function requesterName_(request){var id=String(request&&request.requesterId||'');var member=(STATE.members||[]).find(function(item){return item&&String(item.id)===id;});return member?String(member.name||'회원'):'회원';}
   function requestKey_(request){return String(request&&request.requesterId||'')+':'+String(request&&request.createdAt||'');}
   function requestChanged_(result){return !!(result&&!result.ok&&String(result.message||'').indexOf('자리교환 요청이 변경됐어요.')===0);}
@@ -42,7 +42,7 @@
     accept.onclick=function(){setPending_(true);memberAnywhereAcceptServer_(request).then(function(result){if(requestChanged_(result)){showLatestRequestAfterChange_(root);return;}responsePending=false;activeRequestKey='';shownRequestKey='';root.show(result&&result.ok?'교환 완료':'교환 실패',result&&result.message||'자리교환을 처리하지 못했어요.');if(result&&(result.ok||result.state))applyAcceptedServerState_(result,request);if(typeof refreshMemberState==='function')refreshMemberState();}).catch(function(error){setPending_(false);root.show('처리 실패',String(error&&error.message||error||'자리교환 요청을 처리하지 못했어요.'));});};
     actions.appendChild(reject);actions.appendChild(accept);
   }
-  function poll_(){var auth=typeof memberAnywhereSession_==='function'?memberAnywhereSession_():null;if(!auth||!auth.memberId||!auth.token||responsePending)return;memberAnywherePendingServer_().then(function(request){if(request){showIncoming_(request);return;}if(activeRequestKey)clearIncoming_();}).catch(function(){});}
+  function poll_(){var auth=typeof memberAnywhereSession_==='function'?memberAnywhereSession_():null;var generation=++pollGeneration_;if(!auth||!auth.memberId||!auth.token){if(activeRequestKey)clearIncoming_();return;}if(responsePending)return;var expectedMemberId=String(auth.memberId);var expectedToken=String(auth.token);memberAnywherePendingServer_().then(function(request){var current=typeof memberAnywhereSession_==='function'?memberAnywhereSession_():null;if(generation!==pollGeneration_||!current||String(current.memberId||'')!==expectedMemberId||String(current.token||'')!==expectedToken)return;if(request){showIncoming_(request);return;}if(activeRequestKey)clearIncoming_();}).catch(function(){});}
   window.memberAnywherePollSwapInbox=poll_;setInterval(poll_,3000);setTimeout(poll_,800);
 })();
 
