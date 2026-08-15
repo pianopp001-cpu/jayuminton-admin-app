@@ -1,0 +1,50 @@
+name: Probe Cloud Run proxy availability
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/probe-cloud-run-proxy.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Install gcloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Resolve project
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          PROJECT="$(jq -r '.firebaseProjectId' "$C")"
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+          gcloud config set project "$PROJECT"
+      - name: Probe Cloud Run and related APIs
+        shell: bash
+        run: |
+          set +e
+          echo '=== CLOUD RUN SERVICES ==='
+          gcloud run services list --platform=managed --region=asia-northeast3 --project "$PROJECT" 2>&1
+          echo "CLOUD_RUN_LIST_EXIT=$?"
+          echo '=== CLOUD RUN REGIONS (fallback) ==='
+          gcloud run services list --platform=managed --project "$PROJECT" 2>&1 | head -80
+          echo "CLOUD_RUN_ANY_EXIT=${PIPESTATUS[0]}"
+          echo '=== ENABLED APIS ==='
+          gcloud services list --enabled --project "$PROJECT" --filter='config.name:run.googleapis.com OR config.name:cloudfunctions.googleapis.com OR config.name:cloudbuild.googleapis.com OR config.name:artifactregistry.googleapis.com' --format='value(config.name)' 2>&1
+          echo "SERVICES_LIST_EXIT=$?"
+          exit 0
