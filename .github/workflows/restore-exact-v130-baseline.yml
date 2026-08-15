@@ -1,0 +1,26 @@
+name: Restore exact v130 baseline
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact known-good v130 baseline
+        uses: actions/checkout@v4
+        with:
+          ref: ec2be2bad3810b9406cc968355bfcaf76cdea66c
+          fetch-depth: 1
+
+      - name: Run the known-good v130 restore workflow from that commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Exact known-good baseline checked out: $(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "ec2be2bad3810b9406cc968355bfcaf76cdea66c"
+          echo "Baseline restored in workspace without mixing later workaround code."
+          echo "Use the original restore-v130-known-good workflow from this exact commit for deployment."
