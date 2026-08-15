@@ -1,0 +1,47 @@
+name: Diagnose member iframe now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-member-iframe-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect live Firebase and member frame
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://jayuminton-push.web.app'
+          MEMBER='https://script.google.com/macros/s/AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w/exec'
+          mkdir -p deployment/status
+          curl -sSL -D /tmp/member.headers "$MEMBER?mode=user&app=user&diag=$GITHUB_RUN_ID" -o /tmp/member.html
+          curl -sSL "$BASE/setup-v208.js?diag=$GITHUB_RUN_ID" -o /tmp/setup.js
+          curl -sSL "$BASE/config-v203.js?diag=$GITHUB_RUN_ID" -o /tmp/config.js
+          curl -sSL "$BASE/runtime-fix-v209.js?diag=$GITHUB_RUN_ID" -o /tmp/runtime.js
+          {
+            echo '=== MEMBER HEADERS ==='
+            grep -Ei '^(HTTP/|x-frame-options:|content-security-policy:|location:|content-type:)' /tmp/member.headers || true
+            echo '=== MEMBER FINAL SIZE ==='
+            wc -c /tmp/member.html
+            echo '=== SETUP courtFrame/memberPageUrl snippets ==='
+            grep -nE 'courtFrame|memberPageUrl|src[[:space:]]*=|mode=user|app=user' /tmp/setup.js | head -80 || true
+            echo '=== CONFIG snippets ==='
+            grep -nE 'memberPageUrl|script.google|mode=user|app=user' /tmp/config.js | head -80 || true
+            echo '=== RUNTIME snippets ==='
+            grep -nE 'memberPageUrl|script.google|mode=user|app=user' /tmp/runtime.js | head -80 || true
+            echo '=== MEMBER HTML markers ==='
+            grep -oE '<title>[^<]*|memberAnywhere|자유민턴|Google Drive|drive.google' /tmp/member.html | head -30 || true
+          } > deployment/status/member-iframe-diagnostic.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/member-iframe-diagnostic.txt
+          git commit -m 'diagnose: record live member iframe response' || exit 0
+          git push
