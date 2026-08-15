@@ -21,7 +21,7 @@ jobs:
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      MEMBER_URL: https://script.google.com/macros/s/AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w/exec
+      MEMBER_URL: https://script.google.com/macros/s/AKfycbwVrOLZypNahfSE6IPyyQmxvd4YJ1cetcpaHNJDVh2RQ2dxpH7nQSLT-CLfNPFCwbQDJA/exec
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
