@@ -2,18 +2,20 @@
 
 const { onRequest } = require('firebase-functions/v2/https');
 
-const APPS_SCRIPT_URL = process.env.MEMBER_RPC_URL || '';
+const MEMBER_APPS_SCRIPT_URL = process.env.MEMBER_RPC_URL || '';
+const ADMIN_APPS_SCRIPT_URL = process.env.ADMIN_RPC_URL || '';
 
-exports.memberRpc = onRequest({ region: 'asia-northeast3', timeoutSeconds: 60 }, async (req, res) => {
+async function proxyRpc(req, res, upstreamUrl, adminMode) {
   res.set('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ok:false,error:'method_not_allowed'});
-  if (!APPS_SCRIPT_URL) return res.status(500).json({ok:false,error:'proxy_not_configured'});
+  if (!upstreamUrl) return res.status(500).json({ok:false,error:'proxy_not_configured'});
   const rpc = String(req.body?.rpc || '');
   const args = Array.isArray(req.body?.args) ? req.body.args : [];
   if (!/^[A-Za-z_$][\w$]*$/.test(rpc)) return res.status(400).json({ok:false,error:'invalid_rpc'});
   const payload = Buffer.from(JSON.stringify(args), 'utf8').toString('base64url');
-  const callback = 'jmProxy';
-  const u = new URL(APPS_SCRIPT_URL);
+  const callback = adminMode ? 'jmAdminProxy' : 'jmProxy';
+  const u = new URL(upstreamUrl);
+  if (adminMode) u.searchParams.set('adminRpc', '1');
   u.searchParams.set('rpc', rpc);
   u.searchParams.set('callback', callback);
   u.searchParams.set('payload', payload);
@@ -29,4 +31,12 @@ exports.memberRpc = onRequest({ region: 'asia-northeast3', timeoutSeconds: 60 },
   } catch (e) {
     return res.status(502).json({ok:false,error:'proxy_exception',message:String(e && e.message || e)});
   }
+}
+
+exports.memberRpc = onRequest({ region: 'asia-northeast3', timeoutSeconds: 60 }, async (req, res) => {
+  return proxyRpc(req, res, MEMBER_APPS_SCRIPT_URL, false);
+});
+
+exports.adminRpc = onRequest({ region: 'asia-northeast3', timeoutSeconds: 60 }, async (req, res) => {
+  return proxyRpc(req, res, ADMIN_APPS_SCRIPT_URL, true);
 });
