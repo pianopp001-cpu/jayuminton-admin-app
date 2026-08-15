@@ -1,0 +1,62 @@
+name: Recover Firebase member frame now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-firebase-member-frame-now.yml'
+      - 'deployment/jayuminton/web-push-overrides/**'
+      - 'deployment/jayuminton/firebase.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recover-firebase-member-frame-now
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Rebuild current Hosting with recovery overrides
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
+          HOSTING_URL="$(jq -r '.hostingUrl' "$CONFIG")"
+          test -n "$FIREBASE_PROJECT_ID"
+          test -n "$HOSTING_URL"
+          BUILD="$RUNNER_TEMP/firebase-recovery"
+          mkdir -p "$BUILD/web-push"
+          cp deployment/jayuminton/firebase.json "$BUILD/firebase.json"
+          BASE="${HOSTING_URL%/}"
+          for asset in index.html manifest.webmanifest setup-v208.css setup-v208.js config-v203.js firebase-messaging-sw.js icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png runtime-fix-v209.js; do
+            if curl --fail --location --retry 3 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/$asset?recovery=$GITHUB_RUN_ID" --output "$BUILD/web-push/$asset"; then
+              test -s "$BUILD/web-push/$asset"
+            fi
+          done
+          rsync -a --exclude='.gitkeep' deployment/jayuminton/web-push-overrides/ "$BUILD/web-push/"
+          grep -F 'AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w' "$BUILD/web-push/runtime-fix-v209.js"
+          cd "$BUILD"
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive --message "member frame recovery ${GITHUB_SHA::7}"
+          sleep 5
+          curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/runtime-fix-v209.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-runtime.js"
+          grep -F 'AKfycbzYRVItaMK0WOFfo0sCnxmuKR8p3mZHwYYTXos4jeLUmIzR-S211NtfQCcdzNtTJz138w' "$RUNNER_TEMP/live-runtime.js"
+          curl --fail --location --retry 4 --max-time 60 -H 'Cache-Control: no-cache' "$BASE/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-index.html"
+          grep -F 'runtime-fix-v209.js' "$RUNNER_TEMP/live-index.html"
