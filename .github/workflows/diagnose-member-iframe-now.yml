@@ -45,3 +45,4 @@ jobs:
           git add deployment/status/member-iframe-diagnostic.txt
           git commit -m 'diagnose: record live member iframe response' || exit 0
           git push
+          # trigger registered workflow
