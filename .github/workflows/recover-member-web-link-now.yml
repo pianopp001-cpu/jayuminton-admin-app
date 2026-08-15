@@ -1,0 +1,95 @@
+name: Recover member web link now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-member-web-link-now.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+
+      - name: Create fresh web deployment and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          OLD_ID="$(jq -r '.mainDeploymentId' "$C")"
+          WORK="$RUNNER_TEMP/main"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          test -s appsscript.json
+          grep -F '"access": "ANYONE_ANONYMOUS"' appsscript.json >/dev/null
+          grep -F '"executeAs": "USER_DEPLOYING"' appsscript.json >/dev/null
+
+          OLD_URL="https://script.google.com/macros/s/$OLD_ID/exec"
+          old_code=$(curl -L -sS --max-time 60 -o "$RUNNER_TEMP/old.html" -w '%{http_code}' "$OLD_URL?mode=user&app=user&probe=$GITHUB_RUN_ID" || true)
+          old_drive=no
+          if grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$RUNNER_TEMP/old.html" 2>/dev/null; then old_drive=yes; fi
+
+          OUT="$(clasp create-deployment --description "member web recovery $GITHUB_RUN_ID")"
+          printf '%s\n' "$OUT"
+          NEW_ID="$(printf '%s\n' "$OUT" | sed -nE 's/^Deployed ([^ ]+) @.*/\1/p' | tail -1)"
+          test -n "$NEW_ID"
+          NEW_URL="https://script.google.com/macros/s/$NEW_ID/exec"
+          sleep 5
+          new_code=$(curl -L -sS --retry 4 --retry-delay 3 --max-time 90 -o "$RUNNER_TEMP/new.html" -w '%{http_code}' "$NEW_URL?mode=user&app=user&probe=$GITHUB_RUN_ID" || true)
+          new_drive=no
+          if grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$RUNNER_TEMP/new.html" 2>/dev/null; then new_drive=yes; fi
+          new_bytes=$(wc -c < "$RUNNER_TEMP/new.html" 2>/dev/null || echo 0)
+          new_has_app=no
+          if grep -Eqi 'memberSelfSearchInput|MemberControls|자유민턴|court|대기' "$RUNNER_TEMP/new.html" 2>/dev/null; then new_has_app=yes; fi
+
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p deployment/status
+          cat > deployment/status/member-web-recovery-now.txt <<EOF
+          status=$([ "$new_code" = 200 ] && [ "$new_drive" = no ] && echo success || echo failure)
+          old_url=$OLD_URL
+          old_http=$old_code
+          old_drive_error=$old_drive
+          new_url=$NEW_URL
+          new_deployment_id=$NEW_ID
+          new_http=$new_code
+          new_drive_error=$new_drive
+          new_bytes=$new_bytes
+          new_has_app_marker=$new_has_app
+          checked_at=$(date -u +%FT%TZ)
+          EOF
+          cat deployment/status/member-web-recovery-now.txt
+          test "$new_code" = 200
+          test "$new_drive" = no
+
+      - name: Publish recovery result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f deployment/status/member-web-recovery-now.txt || exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/member-web-recovery-now.txt
+          git commit -m 'record: fresh member web deployment result' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
