@@ -1,0 +1,55 @@
+name: List Apps Script deployments now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/list-apps-script-deployments-now.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: List deployments
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          MAIN_ID="$(jq -r '.mainDeploymentId' "$C")"
+          PUSH_ID="$(jq -r '.pushDeploymentId // empty' "$C")"
+          WORK="$RUNNER_TEMP/main"; mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp deployments > "$RUNNER_TEMP/deployments.txt"
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo "main_deployment_id=$MAIN_ID"
+            echo "push_deployment_id=$PUSH_ID"
+            cat "$RUNNER_TEMP/deployments.txt"
+          } > deployment/status/apps-script-deployments-now.txt
+      - name: Publish list
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/apps-script-deployments-now.txt
+          git commit -m 'diagnose: list Apps Script deployments' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
