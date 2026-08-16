@@ -39,21 +39,21 @@ jobs:
       - name: Require isolated deployment
         run: |
           MAIN_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId // empty')"; MEMBER_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.previewDeploymentId // empty')"; test "$PREVIEW_DEPLOYMENT_ID" != "$MAIN_ID"; test "$PREVIEW_DEPLOYMENT_ID" != "$MEMBER_ID"
-      - name: Patch isolated backend v10
+      - name: Patch isolated backend v11
         shell: bash
         run: |
           set -euo pipefail
           BACKUP="$RUNNER_TEMP/head-backup"; WORK="$RUNNER_TEMP/admin-backend"; mkdir -p "$BACKUP" "$WORK"; printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"; (cd "$BACKUP" && clasp pull); cp -a "$BACKUP"/. "$WORK"/
           python3 deployment/jayuminton/admin_cloudflare_rpc.py patch-backend --work "$WORK"; python3 deployment/jayuminton/admin_five_minute_preview_patch.py "$WORK/Code.js"
           grep -F 'updateMemberProfile: true' "$WORK/Code.js"; grep -F 'adminPreviewCreditFiveMinuteGame_' "$WORK/Code.js"; grep -F "if (occupied && !startedAt[key]) startedAt[key] = new Date().toISOString();" "$WORK/Code.js"
-          restore_head(){ (cd "$BACKUP" && clasp push --force); }; trap restore_head EXIT; (cd "$WORK" && clasp push --force); (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin v10 preview $GITHUB_RUN_ID"); restore_head; trap - EXIT
+          restore_head(){ (cd "$BACKUP" && clasp push --force); }; trap restore_head EXIT; (cd "$WORK" && clasp push --force); (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin v11 preview $GITHUB_RUN_ID"); restore_head; trap - EXIT
       - name: Deploy admin Worker
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/admin-worker"; mkdir -p "$ROOT"
           cat > "$ROOT/worker.js" <<'JS'
-          export default {async fetch(request,env){const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Cache-Control':'no-store'};if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});const u=new URL(request.url),rpc=u.searchParams.get('rpc')||'',callback=u.searchParams.get('callback')||'',payload=u.searchParams.get('payload')||'W10',nonce=u.searchParams.get('nonce')||Date.now().toString();if(!/^[A-Za-z_$][\w$]*$/.test(rpc)||!/^[A-Za-z_$][\w$]*$/.test(callback))return new Response('invalid_request',{status:400,headers:cors});const upstream=new URL(env.ADMIN_APPS_SCRIPT_URL);upstream.searchParams.set('adminRpc','1');upstream.searchParams.set('rpc',rpc);upstream.searchParams.set('callback',callback);upstream.searchParams.set('payload',payload);upstream.searchParams.set('nonce',nonce);try{const r=await fetch(upstream.toString(),{redirect:'follow',headers:{'Cache-Control':'no-cache'}}),text=await r.text();return new Response(text,{status:r.ok?200:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});}catch(e){return new Response(callback+'('+JSON.stringify({ok:false,error:'proxy_exception'})+')',{status:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});}}};
+          export default {async fetch(request,env){const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Cache-Control':'no-store'};if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});const u=new URL(request.url),rpc=u.searchParams.get('rpc')||'',callback=u.searchParams.get('callback')||'',payload=u.searchParams.get('payload')||'W11',nonce=u.searchParams.get('nonce')||Date.now().toString();if(!/^[A-Za-z_$][\w$]*$/.test(rpc)||!/^[A-Za-z_$][\w$]*$/.test(callback))return new Response('invalid_request',{status:400,headers:cors});const upstream=new URL(env.ADMIN_APPS_SCRIPT_URL);upstream.searchParams.set('adminRpc','1');upstream.searchParams.set('rpc',rpc);upstream.searchParams.set('callback',callback);upstream.searchParams.set('payload',payload);upstream.searchParams.set('nonce',nonce);try{const r=await fetch(upstream.toString(),{redirect:'follow',headers:{'Cache-Control':'no-cache'}}),text=await r.text();return new Response(text,{status:r.ok?200:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});}catch(e){return new Response(callback+'('+JSON.stringify({ok:false,error:'proxy_exception'})+')',{status:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});}}};
           JS
           cat > "$ROOT/wrangler.toml" <<EOF
           name = "$ADMIN_WORKER_NAME"
@@ -64,12 +64,12 @@ jobs:
           ADMIN_APPS_SCRIPT_URL = "https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
           EOF
           cd "$ROOT"; wrangler deploy --config wrangler.toml | tee "$RUNNER_TEMP/wrangler.txt"; WORKER_URL="$(grep -Eo 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/wrangler.txt" | tail -1)"; test -n "$WORKER_URL"; echo "ADMIN_WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
-      - name: Build admin frontend v10
+      - name: Build admin frontend v11
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"; python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$ADMIN_WORKER_URL/"; python3 deployment/jayuminton/admin_behavior_preview_patch.py "$ROOT/public/index.html"
-          for x in jayuminton-admin-behavior-preview-v10 adminForceRefresh adminBottomControls adminBottomRefresh installGroupedSelection fullNewNames 'STATE.courts[no].length > 0'; do grep -F "$x" "$ROOT/public/index.html"; done
+          for x in jayuminton-admin-behavior-preview-v11 adminForceRefresh adminBottomControls adminBottomRefresh installGroupedSelection fullNewNames 'STATE.courts[no].length > 0' 'navigator.vibrate([250,120,250,120,450])'; do grep -F "$x" "$ROOT/public/index.html"; done
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
@@ -77,7 +77,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail; cd "$RUNNER_TEMP/admin-web"; firebase hosting:channel:deploy "$PREVIEW_CHANNEL" --project "$FIREBASE_PROJECT_ID" --expires 1d --config firebase.json --non-interactive --json | tee "$RUNNER_TEMP/channel.json"; URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/channel.json" | head -1)"; test -n "$URL"; echo "ADMIN_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
-      - name: Verify live v10
+      - name: Verify live v11
         shell: bash
         run: |
-          set -euo pipefail; sleep 5; curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"; for x in jayuminton-admin-behavior-preview-v10 adminForceRefresh adminBottomRefresh installGroupedSelection fullNewNames; do grep -F "$x" "$RUNNER_TEMP/live.html"; done; echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"; echo 'V10_PARTIAL_COURT_TIMER_AND_RPC_PATCHED'; echo 'MEMBER_PRODUCTION_NOT_UPDATED'; echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
+          set -euo pipefail; sleep 5; curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"; for x in jayuminton-admin-behavior-preview-v11 adminForceRefresh adminBottomRefresh installGroupedSelection fullNewNames 'navigator.vibrate([250,120,250,120,450])'; do grep -F "$x" "$RUNNER_TEMP/live.html"; done; echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"; echo 'V11_COURT_FINISH_VOICE_AND_VIBRATION_PATCHED'; echo 'MEMBER_PRODUCTION_NOT_UPDATED'; echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
