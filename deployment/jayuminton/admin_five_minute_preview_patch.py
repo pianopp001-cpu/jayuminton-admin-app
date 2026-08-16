@@ -30,6 +30,7 @@ old_mark = """function markCourtStartedIfFull_(courts, startedAt, courtNo) {
 new_mark = """function markCourtStartedIfFull_(courts, startedAt, courtNo) {
   const key = String(courtNo);
   const occupied = (courts[key] || []).length > 0;
+  if (occupied && !startedAt[key]) startedAt[key] = new Date().toISOString();
   if (!occupied) startedAt[key] = '';
 }"""
 if old_mark not in s:
@@ -50,29 +51,21 @@ helpers = r'''
 function adminPreviewFiveMinuteMarkerKey_(courtNo, startedAt) {
   return 'ADMIN_PREVIEW_5MIN_COUNTED_' + String(courtNo) + '_' + String(startedAt || '');
 }
-
 function adminPreviewCreditFiveMinuteGame_(courtNo, participantIds, startedAt, members) {
-  participantIds = normalizeIds_(participantIds);
-  startedAt = String(startedAt || '');
+  participantIds = normalizeIds_(participantIds); startedAt = String(startedAt || '');
   if (!participantIds.length || !startedAt) return false;
   const startedMs = new Date(startedAt).getTime();
   if (!isFinite(startedMs) || Date.now() - startedMs < 5 * 60 * 1000) return false;
   const key = adminPreviewFiveMinuteMarkerKey_(courtNo, startedAt);
   if (getSetting_(key) === '1') return false;
-  members.forEach(function(member) {
-    if (participantIds.indexOf(member.id) >= 0) member.games = (Number(member.games) || 0) + 1;
-  });
-  setSetting_(key, '1');
-  return true;
+  members.forEach(function(member) { if (participantIds.indexOf(member.id) >= 0) member.games = (Number(member.games) || 0) + 1; });
+  setSetting_(key, '1'); return true;
 }
 
 '''
-if anchor not in s:
-    raise SystemExit('readWaitGroups anchor missing')
+if anchor not in s: raise SystemExit('readWaitGroups anchor missing')
 s = s.replace(anchor, helpers + anchor, 1)
 
-# Actual pulled finishCourt already permits 1-4 players and makes an empty court a no-op.
-# Replace only the unconditional game increment with the existing STARTED_AT based rule.
 old_actual = """  const members = readMembers_();
 
   members.forEach(function(member) {
@@ -87,23 +80,11 @@ new_actual = """  const members = readMembers_();
   adminPreviewCreditFiveMinuteGame_(courtNo, finished, previewStartedAt, members);
 
   members.forEach(function(member) {
-    if (finished.indexOf(member.id) >= 0) {
-      member.status = 'active';
-    }
+    if (finished.indexOf(member.id) >= 0) member.status = 'active';
   });"""
-if old_actual not in s:
-    raise SystemExit('actual partial-court finish count block missing')
+if old_actual not in s: raise SystemExit('actual partial-court finish count block missing')
 s = s.replace(old_actual, new_actual, 1)
 
-required = [
-  'adminPreviewCreditFiveMinuteGame_',
-  'Date.now() - startedMs < 5 * 60 * 1000',
-  'const started = actualCount > 0',
-  "const previewStartedAt = String(startedAt[courtNo] || '');",
-  'if (finished.length === 0)'
-]
-for x in required:
-    if x not in s:
-        raise SystemExit('missing patched marker: ' + x)
-
+for x in ['adminPreviewCreditFiveMinuteGame_','Date.now() - startedMs < 5 * 60 * 1000','const started = actualCount > 0',"if (occupied && !startedAt[key]) startedAt[key] = new Date().toISOString();","const previewStartedAt = String(startedAt[courtNo] || '');",'if (finished.length === 0)']:
+    if x not in s: raise SystemExit('missing patched marker: ' + x)
 p.write_text(s, encoding='utf-8')
