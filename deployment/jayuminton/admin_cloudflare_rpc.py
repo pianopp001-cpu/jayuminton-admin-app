@@ -4,7 +4,7 @@ from pathlib import Path
 
 ALLOWED = [
     'createAdminSession','resumeAdminSession','getCurrentMemberPassword','getPublicState','getSystemStatus',
-    'addMember','setMemberStatus','updateMember','deleteMember','deleteMembers','changeMemberPassword',
+    'addMember','setMemberStatus','updateMember','updateMemberProfile','deleteMember','deleteMembers','changeMemberPassword',
     'assignMembersToCourt','assignMembersToWaitGroup','assignWaitGroupToCourt',
     'autoFillCourt','autoFillWaitGroup','moveOrSwapMember','finishCourt',
     'swapCourts','swapWaitGroups','undoLastAction','decreaseSelectedGameCounts','resetSelectedGameCounts',
