@@ -48,6 +48,11 @@ jobs:
           grep -F 'outgoing.targetId' "$SRC/MemberSwapAction.html" >/dev/null
           grep -F 'partnerCurrent===memberAnywhereOutgoingBaseline_' "$SRC/MemberSwapAction.html" >/dev/null
 
+          # A request can expire between resolving the outgoing target and re-reading its cache entry.
+          # The second read must be null-safe and must only clear the same outgoing pointer it resolved.
+          grep -F "var request=memberAnywhereReadSwapRequest_(targetId);if(!request||String(request.requesterId)!==memberId||String(request.targetId)!==String(targetId))" "$SRC/MemberAnywhereSwap.js" >/dev/null
+          grep -F "if(String(outgoingTarget||'')===String(targetId))CacheService.getDocumentCache().remove(memberAnywhereOutgoingCacheKey_(memberId))" "$SRC/MemberAnywhereSwap.js" >/dev/null
+
           # Request actions must stay bound to the request identity shown on screen.
           grep -F 'expectedTargetId,expectedCreatedAt' "$SRC/MemberAnywhereSwap.js" >/dev/null
           grep -F 'expectedRequesterId,expectedCreatedAt' "$SRC/MemberAnywhereSwap.js" >/dev/null
