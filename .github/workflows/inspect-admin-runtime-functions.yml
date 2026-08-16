@@ -1,0 +1,52 @@
+name: Inspect admin runtime functions read only
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Pull source read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainScriptId // empty')"
+          test -n "$SCRIPT_ID"
+          WORK="$RUNNER_TEMP/admin-source"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          echo '===== SOURCE FILES ====='
+          find . -maxdepth 2 -type f -printf '%P\n' | sort
+      - name: Locate court move count finish notification logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/admin-source"
+          cd "$WORK"
+          echo '===== FUNCTION DEFINITIONS ====='
+          grep -RniE --include='*.gs' --include='*.js' --include='*.html' 'function[[:space:]]+[A-Za-z0-9_$]+|const[[:space:]]+[A-Za-z0-9_$]+[[:space:]]*=[[:space:]]*\(' . | grep -Ei 'court|game|wait|move|swap|finish|end|assign|member|notify|vibr|session' | head -n 250 || true
+          echo '===== GAME COUNT REFERENCES ====='
+          grep -RniE --include='*.gs' --include='*.js' --include='*.html' 'game.?count|games|게임수|게임횟수|play.?count|match.?count' . | head -n 250 || true
+          echo '===== COURT MOVE REFERENCES ====='
+          grep -RniE --include='*.gs' --include='*.js' --include='*.html' 'court|코트|move|swap|이동|교환|assign|배정' . | head -n 350 || true
+          echo '===== FINISH NOTIFY REFERENCES ====='
+          grep -RniE --include='*.gs' --include='*.js' --include='*.html' 'finish|경기종료|종료|speechSynthesis|vibrat|진동|대기.?1|waiting.?1|notify' . | head -n 350 || true
+          echo 'READ_ONLY_INSPECTION_COMPLETE'
+          echo 'NO_PUSH_NO_DEPLOYMENT_NO_SOURCE_CHANGE'
