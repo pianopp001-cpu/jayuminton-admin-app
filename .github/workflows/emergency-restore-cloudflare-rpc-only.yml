@@ -1,0 +1,62 @@
+name: Emergency restore Cloudflare RPC only
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      V3_COMMIT: 1c3aa7a4f77a280805cf43570b3a7f1695998711
+      PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
+      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Restore isolated Cloudflare RPC backend only
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          test -n "$MAIN_SCRIPT_ID"; test "$MAIN_SCRIPT_ID" != null
+          BACKUP="$RUNNER_TEMP/current-head-backup"; WORK="$RUNNER_TEMP/cloudflare-rpc"
+          mkdir -p "$BACKUP" "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
+          (cd "$BACKUP" && clasp pull)
+          for file in Admin.html appsscript.json Code.js Index.html Script.html Style.html MemberAnywhereSwap.js MemberSwapClient.html MemberSwapAction.html MemberControls.html MemberSwapInbox.html; do
+            git show "$V3_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
+          done
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          python3 deployment/jayuminton/v3_unified_member_preview_patch.py "$WORK"
+          python3 deployment/jayuminton/v3_cloudflare_member_preview.py patch-backend --work "$WORK"
+          grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
+          restore_head(){ (cd "$BACKUP" && clasp push --force); }
+          trap restore_head EXIT
+          (cd "$WORK" && clasp push --force)
+          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "EMERGENCY Cloudflare RPC restore $GITHUB_RUN_ID")
+          restore_head; trap - EXIT
+      - name: Verify Apps Script RPC and Cloudflare Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 7
+          CALLBACK="jmEmergency$GITHUB_RUN_ID"
+          URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
+          curl --fail --location --retry 5 --retry-delay 2 --max-time 60 "$URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/direct.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/direct.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/direct.js" >/dev/null
+          curl --fail --location --retry 5 --retry-delay 2 --max-time 60 "$CLOUDFLARE_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/cf.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/cf.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/cf.js" >/dev/null
+          echo CLOUDFLARE_RPC_RECOVERY_OK
