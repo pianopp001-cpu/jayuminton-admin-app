@@ -1,0 +1,76 @@
+name: Verify member anywhere contract
+
+on:
+  push:
+    branches:
+      - member-anywhere-controls-v3
+    paths:
+      - 'source-snapshot/current-main/MemberAnywhereSwap.js'
+      - 'source-snapshot/current-main/MemberSwapClient.html'
+      - 'source-snapshot/current-main/MemberSwapAction.html'
+      - 'source-snapshot/current-main/MemberControls.html'
+      - 'source-snapshot/current-main/MemberSwapInbox.html'
+      - 'source-snapshot/current-main/Index.html'
+      - '.github/workflows/verify-member-anywhere-contract.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify member anywhere integration contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC='source-snapshot/current-main'
+
+          # The member page must load every layer used by the anywhere-swap flow.
+          grep -F "include('MemberSwapClient')" "$SRC/Index.html" >/dev/null
+          grep -F "include('MemberSwapAction')" "$SRC/Index.html" >/dev/null
+          grep -F "include('MemberControls')" "$SRC/Index.html" >/dev/null
+          grep -F "include('MemberSwapInbox')" "$SRC/Index.html" >/dev/null
+
+          # Outgoing completion verification depends on the server returning targetId.
+          grep -F 'function memberGetAnywhereOutgoingSwap(' "$SRC/MemberAnywhereSwap.js" >/dev/null
+          grep -F 'targetId:String(targetId)' "$SRC/MemberAnywhereSwap.js" >/dev/null
+          grep -F 'outgoing.targetId' "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F 'partnerCurrent===memberAnywhereOutgoingBaseline_' "$SRC/MemberSwapAction.html" >/dev/null
+
+          # Request actions must stay bound to the request identity shown on screen.
+          grep -F 'expectedTargetId,expectedCreatedAt' "$SRC/MemberAnywhereSwap.js" >/dev/null
+          grep -F 'expectedRequesterId,expectedCreatedAt' "$SRC/MemberAnywhereSwap.js" >/dev/null
+          grep -F 'memberAnywhereCancelOutgoingServer_(expectedTargetId,expectedCreatedAt)' "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F 'memberAnywhereAcceptServer_(request)' "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F 'memberAnywhereRejectServer_(request)' "$SRC/MemberSwapInbox.html" >/dev/null
+
+          node --check "$SRC/MemberAnywhereSwap.js"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path('source-snapshot/current-main')
+          for name in ['MemberSwapClient.html','MemberSwapAction.html','MemberControls.html','MemberSwapInbox.html']:
+              text = (src / name).read_text(encoding='utf-8')
+              start = text.find('<script>')
+              end = text.rfind('</script>')
+              if start < 0 or end <= start:
+                  raise SystemExit(f'{name}: script block missing')
+              (Path('/tmp') / f'{name}.js').write_text(text[start + 8:end], encoding='utf-8')
+          PY
+
+          for file in /tmp/Member*.html.js; do
+            node --check "$file"
+          done
+
+          echo 'MEMBER_ANYWHERE_CONTRACT_OK'
