@@ -1,14 +1,10 @@
-name: Recover member web link by pruning v1-v15
+name: Recover member web link emergency
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/recover-member-web-link-clean-v1-v15.yml'
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   recover:
@@ -19,13 +15,11 @@ jobs:
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --global @google/clasp@latest
-      - name: Prune only versions 1-15, preserve configured main, create and verify fresh deployment
+      - name: Free deployment slots, preserve configured production IDs, create member recovery deployment
         shell: bash
         run: |
           set -euo pipefail
@@ -33,68 +27,48 @@ jobs:
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
-          MAIN_ID="$(jq -r '.mainDeploymentId' "$C")"
+          MAIN_ID="$(jq -r '.mainDeploymentId // empty' "$C")"
+          MEMBER_ID="$(jq -r '.previewDeploymentId // empty' "$C")"
+          ADMIN_ID="$(jq -r '.adminPreviewDeploymentId // empty' "$C")"
           test -n "$SCRIPT_ID"; test "$SCRIPT_ID" != null
-          test -n "$MAIN_ID"; test "$MAIN_ID" != null
-          WORK="$RUNNER_TEMP/main"
-          mkdir -p "$WORK"
+          WORK="$RUNNER_TEMP/main"; mkdir -p "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
-          cd "$WORK"
-          clasp pull >/dev/null
-          before="$(clasp deployments)"
-          printf '%s\n' "$before" > "$RUNNER_TEMP/deployments-before.txt"
+          cd "$WORK"; clasp pull >/dev/null
+          before="$(clasp deployments)"; printf '%s\n' "$before"
 
-          mapfile -t OLD_IDS < <(printf '%s\n' "$before" | sed -nE 's/^- ([^ ]+) @([0-9]+)( .*)?$/\1 \2/p' | awk -v main="$MAIN_ID" '$2>=1 && $2<=15 && $1!=main {print $1}')
-          deleted=0
-          for id in "${OLD_IDS[@]}"; do
+          # Keep configured live/preview IDs. Delete enough other versioned deployments
+          # to get safely below the Apps Script 20-deployment ceiling.
+          mapfile -t IDS < <(printf '%s\n' "$before" | sed -nE 's/^- ([^ ]+) @([0-9]+)( .*)?$/\1 \2/p' | sort -k2,2n | awk '{print $1}')
+          total=${#IDS[@]}; deleted=0
+          for id in "${IDS[@]}"; do
+            [ "$total" -le 16 ] && break
+            if [ -n "$MAIN_ID" ] && [ "$id" = "$MAIN_ID" ]; then continue; fi
+            if [ -n "$MEMBER_ID" ] && [ "$id" = "$MEMBER_ID" ]; then continue; fi
+            if [ -n "$ADMIN_ID" ] && [ "$id" = "$ADMIN_ID" ]; then continue; fi
+            echo "Deleting stale deployment $id"
             clasp delete-deployment "$id"
-            deleted=$((deleted+1))
+            deleted=$((deleted+1)); total=$((total-1))
           done
 
-          after_prune="$(clasp deployments)"
-          printf '%s\n' "$after_prune" > "$RUNNER_TEMP/deployments-after-prune.txt"
-          printf '%s\n' "$after_prune" | grep -F "$MAIN_ID" >/dev/null
+          after="$(clasp deployments)"; printf '%s\n' "$after"
+          [ -z "$MAIN_ID" ] || printf '%s\n' "$after" | grep -F "$MAIN_ID" >/dev/null
+          [ -z "$MEMBER_ID" ] || printf '%s\n' "$after" | grep -F "$MEMBER_ID" >/dev/null
+          [ -z "$ADMIN_ID" ] || printf '%s\n' "$after" | grep -F "$ADMIN_ID" >/dev/null
 
-          OUT="$(clasp create-deployment --description "member web recovery after v1-v15 prune $GITHUB_RUN_ID")"
+          OUT="$(clasp create-deployment --description "EMERGENCY member web recovery $GITHUB_RUN_ID")"
           printf '%s\n' "$OUT"
           NEW_ID="$(printf '%s\n' "$OUT" | sed -nE 's/^Deployed ([^ ]+) @.*/\1/p' | tail -1)"
           test -n "$NEW_ID"
           NEW_URL="https://script.google.com/macros/s/$NEW_ID/exec"
-          sleep 5
-          code=$(curl -L -sS --retry 4 --retry-delay 3 --max-time 90 -o "$RUNNER_TEMP/new.html" -w '%{http_code}' "$NEW_URL?mode=user&app=user&probe=$GITHUB_RUN_ID" || true)
-          drive=no
-          if grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$RUNNER_TEMP/new.html" 2>/dev/null; then drive=yes; fi
-          app=no
-          if grep -Eqi 'memberSelfSearchInput|MemberControls|자유민턴|court|대기' "$RUNNER_TEMP/new.html" 2>/dev/null; then app=yes; fi
-          bytes=$(wc -c < "$RUNNER_TEMP/new.html" 2>/dev/null || echo 0)
-
-          cd "$GITHUB_WORKSPACE"
-          mkdir -p deployment/status
-          cat > deployment/status/member-web-recovery-clean-v1-v15.txt <<EOF
-          status=$([ "$code" = 200 ] && [ "$drive" = no ] && [ "$app" = yes ] && echo success || echo failure)
-          configured_main_preserved=$MAIN_ID
-          deleted_old_versions=$deleted
-          new_deployment_id=$NEW_ID
-          new_url=$NEW_URL
-          new_http=$code
-          new_drive_error=$drive
-          new_has_app_marker=$app
-          new_bytes=$bytes
-          checked_at=$(date -u +%FT%TZ)
-          EOF
-          cat deployment/status/member-web-recovery-clean-v1-v15.txt
+          sleep 7
+          code=$(curl -L -sS --retry 5 --retry-delay 3 --max-time 90 -o "$RUNNER_TEMP/new.html" -w '%{http_code}' "$NEW_URL?mode=user&app=user&probe=$GITHUB_RUN_ID" || true)
+          drive=no; grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$RUNNER_TEMP/new.html" 2>/dev/null && drive=yes || true
+          app=no; grep -Eqi 'memberSelfSearchInput|MemberControls|자유민턴|court|대기' "$RUNNER_TEMP/new.html" 2>/dev/null && app=yes || true
+          echo "DELETED_STALE_DEPLOYMENTS=$deleted"
+          echo "MEMBER_RECOVERY_DEPLOYMENT_ID=$NEW_ID"
+          echo "MEMBER_RECOVERY_URL=$NEW_URL"
+          echo "HTTP=$code DRIVE_ERROR=$drive APP_MARKER=$app"
           test "$code" = 200
           test "$drive" = no
           test "$app" = yes
-      - name: Publish recovery result
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f deployment/status/member-web-recovery-clean-v1-v15.txt || exit 0
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/member-web-recovery-clean-v1-v15.txt
-          git commit -m 'record: member web recovery after pruning v1-v15' || exit 0
-          git pull --rebase origin main || true
-          git push origin main
+          echo 'MEMBER_RECOVERY_SERVER_READY'
