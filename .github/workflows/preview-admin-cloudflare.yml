@@ -48,15 +48,19 @@ jobs:
           MEMBER_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.previewDeploymentId // empty')"
           test "$PREVIEW_DEPLOYMENT_ID" != "$MAIN_ID"
           test "$PREVIEW_DEPLOYMENT_ID" != "$MEMBER_ID"
-      - name: Patch isolated backend and restore HEAD afterwards
+      - name: Patch isolated backend with five-minute rules and restore HEAD afterwards
         shell: bash
         run: |
           set -euo pipefail
           BACKUP="$RUNNER_TEMP/head-backup"; WORK="$RUNNER_TEMP/admin-backend"; mkdir -p "$BACKUP" "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"; (cd "$BACKUP" && clasp pull); cp -a "$BACKUP"/. "$WORK"/
           python3 deployment/jayuminton/admin_cloudflare_rpc.py patch-backend --work "$WORK"
+          python3 deployment/jayuminton/admin_five_minute_preview_patch.py "$WORK/Code.js"
+          grep -F 'adminPreviewCreditFiveMinuteGame_' "$WORK/Code.js"
+          grep -F 'Date.now() - startedMs < 5 * 60 * 1000' "$WORK/Code.js"
+          grep -F 'const started = actualCount > 0' "$WORK/Code.js"
           restore_head(){ (cd "$BACKUP" && clasp push --force); }; trap restore_head EXIT
-          (cd "$WORK" && clasp push --force); (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin cloudflare worker preview $GITHUB_RUN_ID"); restore_head; trap - EXIT
+          (cd "$WORK" && clasp push --force); (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin cloudflare five-minute preview $GITHUB_RUN_ID"); restore_head; trap - EXIT
       - name: Deploy dedicated admin Cloudflare Worker
         shell: bash
         run: |
@@ -116,5 +120,6 @@ jobs:
           JS
           node smoke.cjs
           echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
+          echo 'FIVE_MINUTE_GAME_COUNT_PREVIEW_PATCHED'
           echo 'MEMBER_PRODUCTION_NOT_UPDATED'
           echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
