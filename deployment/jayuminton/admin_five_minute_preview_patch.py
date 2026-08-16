@@ -36,12 +36,14 @@ if old_mark not in s:
     raise SystemExit('markCourtStartedIfFull marker missing')
 s = s.replace(old_mark, new_mark, 1)
 
-# Removing one player during a live game must not erase the existing court timer.
-s = s.replace("""  startedAt[courtNo] = '';
+old_remove = """  startedAt[courtNo] = '';
   writeCourts_(courts, startedAt);
-  updateMemberStatuses_([id], 'active');""", """  if (!(courts[courtNo] || []).length) startedAt[courtNo] = '';
+  updateMemberStatuses_([id], 'active');"""
+new_remove = """  if (!(courts[courtNo] || []).length) startedAt[courtNo] = '';
   writeCourts_(courts, startedAt);
-  updateMemberStatuses_([id], 'active');""", 1)
+  updateMemberStatuses_([id], 'active');"""
+if old_remove in s:
+    s = s.replace(old_remove, new_remove, 1)
 
 anchor = "function readWaitGroups_() {"
 helpers = r'''
@@ -69,13 +71,9 @@ if anchor not in s:
     raise SystemExit('readWaitGroups anchor missing')
 s = s.replace(anchor, helpers + anchor, 1)
 
-old_finish_guard = """  if (finished.length !== GROUP_SIZE) {
-    throw new Error(
-      '4명이 모두 배정된 코트만 경기 종료할 수 있습니다.'
-    );
-  }
-
-  const members = readMembers_();
+# Actual pulled finishCourt already permits 1-4 players and makes an empty court a no-op.
+# Replace only the unconditional game increment with the existing STARTED_AT based rule.
+old_actual = """  const members = readMembers_();
 
   members.forEach(function(member) {
     if (finished.indexOf(member.id) >= 0) {
@@ -84,11 +82,7 @@ old_finish_guard = """  if (finished.length !== GROUP_SIZE) {
       member.status = 'active';
     }
   });"""
-new_finish_guard = """  if (!finished.length) {
-    throw new Error('빈 코트는 경기 종료할 수 없습니다.');
-  }
-
-  const members = readMembers_();
+new_actual = """  const members = readMembers_();
   const previewStartedAt = String(startedAt[courtNo] || '');
   adminPreviewCreditFiveMinuteGame_(courtNo, finished, previewStartedAt, members);
 
@@ -97,16 +91,16 @@ new_finish_guard = """  if (!finished.length) {
       member.status = 'active';
     }
   });"""
-if old_finish_guard not in s:
-    raise SystemExit('actual finishCourt guard/count block missing')
-s = s.replace(old_finish_guard, new_finish_guard, 1)
+if old_actual not in s:
+    raise SystemExit('actual partial-court finish count block missing')
+s = s.replace(old_actual, new_actual, 1)
 
 required = [
   'adminPreviewCreditFiveMinuteGame_',
   'Date.now() - startedMs < 5 * 60 * 1000',
   'const started = actualCount > 0',
-  "if (!finished.length)",
-  "if (!(courts[courtNo] || []).length) startedAt[courtNo] = '';"
+  "const previewStartedAt = String(startedAt[courtNo] || '');",
+  'if (finished.length === 0)'
 ]
 for x in required:
     if x not in s:
