@@ -53,19 +53,6 @@ jobs:
           set -euo pipefail
           BACKUP="$RUNNER_TEMP/head-backup"; WORK="$RUNNER_TEMP/admin-backend"; mkdir -p "$BACKUP" "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"; (cd "$BACKUP" && clasp pull); cp -a "$BACKUP"/. "$WORK"/
-          echo '===== ACTUAL PULLED finishCourtUnlocked_ ====='
-          python3 - "$WORK/Code.js" <<'PY'
-          from pathlib import Path
-          import sys
-          s=Path(sys.argv[1]).read_text(encoding='utf-8')
-          start=s.find('function finishCourtUnlocked_(')
-          if start < 0:
-              print('finishCourtUnlocked_ NOT FOUND'); raise SystemExit(1)
-          end=s.find('\nfunction ', start+10)
-          if end < 0: end=len(s)
-          print(s[start:end])
-          PY
-          echo '===== END ACTUAL finishCourtUnlocked_ ====='
           python3 deployment/jayuminton/admin_cloudflare_rpc.py patch-backend --work "$WORK"
           python3 deployment/jayuminton/admin_five_minute_preview_patch.py "$WORK/Code.js"
           grep -F 'adminPreviewCreditFiveMinuteGame_' "$WORK/Code.js"; grep -F 'Date.now() - startedMs < 5 * 60 * 1000' "$WORK/Code.js"; grep -F 'const started = actualCount > 0' "$WORK/Code.js"
@@ -93,10 +80,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail; sleep 5; CALLBACK="jmAdminWorkerProbe$GITHUB_RUN_ID"; LOGIN_PAYLOAD="$(printf '[\"__transport_probe_invalid_pin__\"]' | base64 -w0 | tr '+/' '-_' | tr -d '=')"; curl --fail --retry 5 --max-time 60 "$ADMIN_WORKER_URL/?rpc=createAdminSession&callback=$CALLBACK&payload=$LOGIN_PAYLOAD&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-worker-login.js"; grep -F "$CALLBACK(" "$RUNNER_TEMP/admin-worker-login.js"
-      - name: Build admin frontend v6
+      - name: Build admin frontend v7
         shell: bash
         run: |
-          set -euo pipefail; WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"; python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$ADMIN_WORKER_URL/"; python3 deployment/jayuminton/admin_behavior_preview_patch.py "$ROOT/public/index.html"; for x in jayuminton-admin-cloudflare-rpc jayuminton-admin-behavior-preview-v6 adminBottomControls adminBottomRefresh jm-multi-selected adminCloudflareLoginButton adminPinInput standaloneLogin hideAppUntilAuthenticated; do grep -F "$x" "$ROOT/public/index.html"; done; grep -F '자동배정' "$ROOT/public/index.html"
+          set -euo pipefail; WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"; python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$ADMIN_WORKER_URL/"; python3 deployment/jayuminton/admin_behavior_preview_patch.py "$ROOT/public/index.html"
+          for x in jayuminton-admin-cloudflare-rpc jayuminton-admin-behavior-preview-v7 adminBottomControls adminBottomRefresh adminBottomAutoAssign jm-multi-selected adminCloudflareLoginButton adminPinInput standaloneLogin hideAppUntilAuthenticated; do grep -F "$x" "$ROOT/public/index.html"; done
+          grep -F '>실행취소</button>' "$ROOT/public/index.html"; grep -F '>새로고침</button>' "$ROOT/public/index.html"; grep -F '>자동배정</button>' "$ROOT/public/index.html"
+          if grep -F '위치 자동배정' "$ROOT/public/index.html"; then echo 'old auto label remains' >&2; exit 1; fi
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
@@ -104,15 +94,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail; cd "$RUNNER_TEMP/admin-web"; firebase hosting:channel:deploy "$PREVIEW_CHANNEL" --project "$FIREBASE_PROJECT_ID" --expires 1d --config firebase.json --non-interactive --json | tee "$RUNNER_TEMP/admin-channel.json"; URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/admin-channel.json" | head -1)"; test -n "$URL"; echo "ADMIN_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
-      - name: Verify live HTML v6
+      - name: Verify live HTML v7
         shell: bash
         run: |
-          set -euo pipefail; sleep 5; curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-live.html"; for x in jayuminton-admin-cloudflare-rpc jayuminton-admin-behavior-preview-v6 adminBottomControls adminCloudflareLoginButton adminPinInput standaloneLogin hideAppUntilAuthenticated adminBottomRefresh jm-multi-selected; do grep -F "$x" "$RUNNER_TEMP/admin-live.html"; done; grep -F "$ADMIN_WORKER_URL/" "$RUNNER_TEMP/admin-live.html"
-      - name: Real browser smoke test - PIN must be visible and editable
+          set -euo pipefail; sleep 5; curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-live.html"; for x in jayuminton-admin-cloudflare-rpc jayuminton-admin-behavior-preview-v7 adminBottomControls adminBottomRefresh adminBottomAutoAssign adminCloudflareLoginButton adminPinInput; do grep -F "$x" "$RUNNER_TEMP/admin-live.html"; done; grep -F "$ADMIN_WORKER_URL/" "$RUNNER_TEMP/admin-live.html"
+      - name: Real browser smoke test - exact bottom controls
         shell: bash
         run: |
           set -euo pipefail; cd "$RUNNER_TEMP"; npm init -y >/dev/null 2>&1; npm install playwright@1.55.0 >/dev/null; npx playwright install chromium >/dev/null
           cat > smoke.cjs <<'JS'
-          const { chromium } = require('playwright');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();const errors=[];p.on('pageerror',e=>errors.push(String(e)));await p.goto(process.env.ADMIN_PREVIEW_URL+'/?browser='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});const input=p.locator('#adminPinInput');const button=p.locator('#adminCloudflareLoginButton');const app=p.locator('#adminApp');await input.waitFor({state:'visible',timeout:15000});if(!(await input.isEditable()))throw new Error('PIN input is not editable');if(await app.isVisible())throw new Error('admin app visible before authentication');await input.fill('1234');if((await input.inputValue())!=='1234')throw new Error('PIN input cannot retain text');await button.waitFor({state:'visible',timeout:5000});console.log('PIN_VISIBLE_EDITABLE_AND_APP_HIDDEN_OK');console.log('PAGE_ERRORS='+JSON.stringify(errors));await b.close();})().catch(e=>{console.error(e);process.exit(1);});
+          const { chromium } = require('playwright');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();const errors=[];p.on('pageerror',e=>errors.push(String(e)));await p.goto(process.env.ADMIN_PREVIEW_URL+'/?browser='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});const input=p.locator('#adminPinInput'),button=p.locator('#adminCloudflareLoginButton'),app=p.locator('#adminApp');await input.waitFor({state:'visible',timeout:15000});if(!(await input.isEditable()))throw new Error('PIN input is not editable');if(await app.isVisible())throw new Error('admin app visible before authentication');await input.fill('1234');if((await input.inputValue())!=='1234')throw new Error('PIN input cannot retain text');await button.waitFor({state:'visible',timeout:5000});const row=p.locator('#adminBottomControls');const texts=await row.locator('button').allTextContents();if(JSON.stringify(texts.map(x=>x.trim()))!==JSON.stringify(['실행취소','새로고침','자동배정']))throw new Error('bottom controls wrong: '+JSON.stringify(texts));if(await row.locator('button').count()!==3)throw new Error('bottom controls count is not 3');console.log('EXACT_BOTTOM_CONTROLS_OK='+JSON.stringify(texts));console.log('PIN_VISIBLE_EDITABLE_AND_APP_HIDDEN_OK');console.log('PAGE_ERRORS='+JSON.stringify(errors));await b.close();})().catch(e=>{console.error(e);process.exit(1);});
           JS
           node smoke.cjs; echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"; echo 'FIVE_MINUTE_GAME_COUNT_PREVIEW_PATCHED'; echo 'MEMBER_PRODUCTION_NOT_UPDATED'; echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
