@@ -1,0 +1,71 @@
+name: Free obsolete slot and create isolated admin deployment
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  replace-obsolete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Resolve and guard configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainScriptId // empty')"
+          MAIN_DEPLOYMENT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId // empty')"
+          test -n "$MAIN_SCRIPT_ID"
+          test -n "$MAIN_DEPLOYMENT_ID"
+          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+      - name: Verify exact obsolete deployment and delete only it
+        shell: bash
+        run: |
+          set -euo pipefail
+          OBSOLETE='AKfycby_bqJuMGOvA1EF4pJLAcUtetZ0Ib30awXW-iacHqm6h5DhIPOnig1Ws8t_eMAhKFV-Aw'
+          test "$OBSOLETE" != "$MAIN_DEPLOYMENT_ID"
+          WORK="$RUNNER_TEMP/admin-slot"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          BEFORE="$(clasp deployments)"
+          printf '%s\n' "$BEFORE"
+          LINE="$(printf '%s\n' "$BEFORE" | grep -F -- "- $OBSOLETE " || true)"
+          test -n "$LINE"
+          printf '%s\n' "$LINE" | grep -F '@16'
+          # Guard: this workflow is intentionally pinned to the exact old @16 deployment seen in read-only inventory.
+          clasp undeploy "$OBSOLETE"
+          AFTER="$(clasp deployments)"
+          if printf '%s\n' "$AFTER" | grep -Fq "$OBSOLETE"; then
+            echo 'Obsolete deployment still present after undeploy.' >&2
+            exit 1
+          fi
+          echo 'OBSOLETE_AT16_REMOVED'
+      - name: Create isolated admin deployment immediately
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/admin-slot"
+          cd "$WORK"
+          clasp pull
+          OUT="$(clasp create-deployment --description "isolated admin preview $GITHUB_RUN_ID")"
+          printf '%s\n' "$OUT"
+          ID="$(printf '%s\n' "$OUT" | grep -Eo 'AKfy[a-zA-Z0-9_-]+' | tail -1)"
+          test -n "$ID"
+          test "$ID" != "$MAIN_DEPLOYMENT_ID"
+          echo "ADMIN_PREVIEW_DEPLOYMENT_ID=$ID"
+          echo "::notice title=ADMIN_PREVIEW_DEPLOYMENT_ID::$ID"
+          echo 'USER_MAIN_NOT_UPDATED'
