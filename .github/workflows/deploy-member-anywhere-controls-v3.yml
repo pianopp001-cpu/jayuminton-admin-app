@@ -235,6 +235,24 @@ jobs:
           grep -F 'function redoLastAction()' Script.html >/dev/null
           grep -F 'handleMemberCourtEmptyTap' Script.html >/dev/null
           grep -F '한 번 터치하면 이 대기자리로 이동합니다' Script.html >/dev/null
+
+          # Keep the same member-anywhere contract checks inside the actual deploy gate.
+          # This prevents a manual deploy from shipping a branch state that failed or skipped the standalone verifier.
+          grep -F "include('MemberSwapAction')" Index.html >/dev/null
+          grep -F "include('MemberControls')" Index.html >/dev/null
+          grep -F "include('MemberSwapInbox')" Index.html >/dev/null
+          grep -F 'function memberGetAnywhereOutgoingSwap(' MemberAnywhereSwap.js >/dev/null
+          grep -F 'targetId:String(targetId)' MemberAnywhereSwap.js >/dev/null
+          grep -F 'outgoing.targetId' MemberSwapAction.html >/dev/null
+          grep -F 'partnerCurrent===memberAnywhereOutgoingBaseline_' MemberSwapAction.html >/dev/null
+          grep -F 'expectedTargetId,expectedCreatedAt' MemberAnywhereSwap.js >/dev/null
+          grep -F 'expectedRequesterId,expectedCreatedAt' MemberAnywhereSwap.js >/dev/null
+          grep -F 'memberAnywhereCancelOutgoingServer_(expectedTargetId,expectedCreatedAt)' MemberSwapAction.html >/dev/null
+          grep -F 'memberAnywhereAcceptServer_(request)' MemberSwapInbox.html >/dev/null
+          grep -F 'memberAnywhereRejectServer_(request)' MemberSwapInbox.html >/dev/null
+          grep -F "STATE=typeof normalizeStateMemberProfiles==='function'?normalizeStateMemberProfiles(result.state):result.state" MemberSwapInbox.html >/dev/null
+          grep -F "var targetId=String(request.targetId||'')" MemberSwapInbox.html >/dev/null
+
           node --check MemberAnywhereSwap.js
           node --check Code.js
           python3 - <<'PY'
