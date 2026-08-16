@@ -55,6 +55,14 @@ jobs:
           grep -F 'memberAnywhereAcceptServer_(request)' "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F 'memberAnywhereRejectServer_(request)' "$SRC/MemberSwapInbox.html" >/dev/null
 
+          # Stale async responses must not cross member/login session boundaries.
+          grep -F 'function memberAnywhereSameSession_(expected)' "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "var expectedAuth=typeof memberAnywhereReadySession_==='function'?memberAnywhereReadySession_():null" "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F 'if(expectedAuth&&!memberAnywhereSameSession_(expectedAuth))' "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F 'function displayedSessionStillCurrent_()' "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F 'if(!displayedSessionStillCurrent_())' "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F "String(current.token||'')===displayedToken" "$SRC/MemberSwapInbox.html" >/dev/null
+
           # Accepted swap state must use the same member-profile normalization path as normal state refreshes.
           grep -F "STATE=typeof normalizeStateMemberProfiles==='function'?normalizeStateMemberProfiles(result.state):result.state" "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F "var targetId=String(request.targetId||'')" "$SRC/MemberSwapInbox.html" >/dev/null
