@@ -1,0 +1,42 @@
+name: Diagnose main member runtime
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Inspect deployed user runtime without changing production
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"; printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"; printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"; MAIN_ID="$(jq -r '.mainDeploymentId' "$C")"
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"; printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"; clasp pull >/dev/null
+          echo '=== DEPLOYMENTS ==='; clasp deployments
+          echo '=== USER FUNCTIONS REFERENCED BY HTML ==='
+          grep -rhoE 'google\.script\.run([^;]|;[^\n])*' Index.html Script.html 2>/dev/null | head -80 || true
+          echo '=== LIKELY LOGIN/STATE FUNCTIONS IN CODE ==='
+          grep -nE 'function (getPublicState|getSystemStatus|.*[Ll]ogin|.*[Mm]ember.*[Ss]earch|.*[Pp]assword|.*[Aa]uth)' Code.js | head -100 || true
+          URL="https://script.google.com/macros/s/$MAIN_ID/exec"
+          echo '=== LIVE PAGE ==='
+          curl -L -sS --retry 4 --max-time 60 "$URL?mode=user&app=user&diag=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          wc -c "$RUNNER_TEMP/live.html"
+          grep -Eo 'google\.script\.run[^<]{0,500}' "$RUNNER_TEMP/live.html" | head -40 || true
+          echo '=== EXEC API PROBES ==='
+          for fn in getSystemStatus getPublicState; do
+            set +e
+            OUT="$(clasp run "$fn" 2>&1)"; RC=$?; set -e
+            echo "$fn RC=$RC"; printf '%s\n' "$OUT" | head -30
+          done
+          echo 'DIAGNOSTIC_COMPLETE_NO_PRODUCTION_CHANGE'
