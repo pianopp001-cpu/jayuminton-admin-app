@@ -1,0 +1,55 @@
+name: Create isolated admin Apps Script deployment
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Resolve Apps Script project
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$CONFIG")"
+          test -n "$MAIN_SCRIPT_ID"
+          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
+      - name: Create dedicated admin deployment without changing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/admin-deployment"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          clasp pull
+          OUT="$(clasp create-deployment --description "dedicated admin preview $GITHUB_RUN_ID")"
+          printf '%s\n' "$OUT"
+          DEPLOYMENT_ID="$(printf '%s\n' "$OUT" | grep -Eo 'AKfy[a-zA-Z0-9_-]+' | tail -1)"
+          if [ -z "$DEPLOYMENT_ID" ]; then
+            echo 'Could not parse deployment ID.' >&2
+            exit 1
+          fi
+          MAIN_DEPLOYMENT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId // empty')"
+          SHARED_PREVIEW_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.previewDeploymentId // empty')"
+          test "$DEPLOYMENT_ID" != "$MAIN_DEPLOYMENT_ID"
+          test "$DEPLOYMENT_ID" != "$SHARED_PREVIEW_ID"
+          echo "ADMIN_PREVIEW_DEPLOYMENT_ID=$DEPLOYMENT_ID"
+          echo "NEXT_STEP: add this exact value to JAYUMINTON_DEPLOY_CONFIG_JSON as adminPreviewDeploymentId"
+          echo "::notice title=ADMIN_PREVIEW_DEPLOYMENT_ID::$DEPLOYMENT_ID"
