@@ -55,6 +55,10 @@ jobs:
           grep -F 'memberAnywhereAcceptServer_(request)' "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F 'memberAnywhereRejectServer_(request)' "$SRC/MemberSwapInbox.html" >/dev/null
 
+          # Accepted swap state must use the same member-profile normalization path as normal state refreshes.
+          grep -F "STATE=typeof normalizeStateMemberProfiles==='function'?normalizeStateMemberProfiles(result.state):result.state" "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F "var targetId=String(request.targetId||'')" "$SRC/MemberSwapInbox.html" >/dev/null
+
           node --check "$SRC/MemberAnywhereSwap.js"
 
           python3 - <<'PY'
