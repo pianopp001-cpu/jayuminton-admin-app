@@ -6,9 +6,9 @@
   function requestChanged_(result){return !!(result&&!result.ok&&String(result.message||'').indexOf('자리교환 요청이 변경됐어요.')===0);}
   function clearIncoming_(){var shouldClose=incomingPromptVisible_(activeRequestKey);shownRequestKey='';activeRequestKey='';responsePending=false;if(shouldClose&&window.memberAnywhereModal)window.memberAnywhereModal.close();}
   function applyAcceptedSwapLocally_(request){
-    if(!request||!request.requesterId||typeof applyMoveOrSwapLocally!=='function')return;
-    var selfId=String(storedSelfMemberId()||'');if(!selfId)return;
-    try{applyMoveOrSwapLocally(String(request.requesterId),'','',selfId);if(typeof renderState==='function')renderState();}catch(error){}
+    if(!request||!request.requesterId||!request.targetId||typeof applyMoveOrSwapLocally!=='function')return;
+    var targetId=String(request.targetId||'');if(!targetId)return;
+    try{applyMoveOrSwapLocally(String(request.requesterId),'','',targetId);if(typeof renderState==='function')renderState();}catch(error){}
   }
   function applyAcceptedServerState_(result,request){
     if(result&&result.state){STATE=result.state;if(typeof renderState==='function')renderState();return true;}
