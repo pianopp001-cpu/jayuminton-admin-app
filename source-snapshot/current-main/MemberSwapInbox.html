@@ -29,7 +29,7 @@
     var labels=Array.prototype.map.call(actions.querySelectorAll('button'),function(button){return String(button.textContent||'');});
     return !(labels.indexOf('거절')>=0&&labels.indexOf('수락')>=0);
   }
-  function showLatestRequestAfterChange_(root){responsePending=false;activeRequestKey='';shownRequestKey='';if(root&&typeof root.close==='function')root.close();setTimeout(poll_,0);}
+  function showLatestRequestAfterChange_(root){var shouldClose=incomingPromptVisible_(activeRequestKey);responsePending=false;activeRequestKey='';shownRequestKey='';if(shouldClose&&root&&typeof root.close==='function')root.close();setTimeout(poll_,0);}
   function showIncoming_(request){
     var key=requestKey_(request);if(!key||responsePending||incomingPromptVisible_(key)||anotherMemberModalVisible_())return;var displayedAuth=typeof memberAnywhereSession_==='function'?memberAnywhereSession_():null;if(!displayedAuth||String(displayedAuth.memberId||'')!==String(request&&request.targetId||'')||!displayedAuth.token)return;var displayedMemberId=String(displayedAuth.memberId||'');var displayedToken=String(displayedAuth.token||'');shownRequestKey=key;activeRequestKey=key;
     var root=window.memberAnywhereModal&&window.memberAnywhereModal;if(!root){shownRequestKey='';activeRequestKey='';return;}
