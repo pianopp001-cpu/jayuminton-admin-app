@@ -112,13 +112,11 @@ jobs:
           s = s.replace("let LAST_UNDO_STATE = null;", "let LAST_UNDO_STATE = null;\nlet LAST_REDO_STATE = null;", 1)
           s = s.replace("reject(error);", "const raw=String((error&&error.message)||error||'오류가 발생했습니다.');\n        reject(new Error(raw.replace(/^.*?script\\.google\\.com[^:]*:\\s*(?:Error:\\s*)?/i,'').replace(/^Error:\\s*/i,'')));", 1)
 
-          # Member: every empty court slot is a one-tap destination.
           old_court_empty = """                return memberCard(null, false, false);"""
           new_court_empty = """                return '<div class=\"person empty member-court-empty\" onclick=\"handleMemberCourtEmptyTap(' + courtNo + ',' + slotIndex + ',event)\" title=\"한 번 터치하면 이 코트로 이동합니다\"><span class=\"empty-slot-label\">비어 있음</span></div>';"""
           if old_court_empty not in s: raise SystemExit('member court empty marker missing')
           s = s.replace(old_court_empty, new_court_empty, 1)
 
-          # Member: wait empty slot moves immediately on one tap, with instant visual feedback.
           wait_start = "function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){"
           wait_end = "function memberWaitEmptySlotCard(groupIndex,slotIndex){"
           a = s.find(wait_start); b = s.find(wait_end, a)
@@ -213,7 +211,6 @@ jobs:
 
           admin = Path('Admin.html')
           s = admin.read_text(encoding='utf-8')
-          # Keep redo in the desktop header, but put refresh exactly in the mobile bottom bar.
           needle = '''    <button\n      id="undoButton"\n      class="ghost-button undo-button header-undo-button"\n      onclick="undoLastAction()"\n      disabled\n    >\n      ↶ 실행 취소\n    </button>'''
           replacement = needle + '''\n\n    <button id="redoButton" class="ghost-button undo-button header-undo-button" onclick="redoLastAction()" disabled>↷ 다시 실행</button>'''
           if 'id="redoButton"' not in s:
@@ -229,6 +226,8 @@ jobs:
 
           grep -F "include('MemberSwapClient')" Index.html >/dev/null
           grep -F 'memberReturnSelfToWait' MemberAnywhereSwap.js >/dev/null
+          grep -F 'function memberCancelAnywhereSwap(' MemberAnywhereSwap.js >/dev/null
+          grep -F 'function memberAcceptAnywhereSwap(sessionToken,memberId,expectedRequesterId,expectedCreatedAt)' MemberAnywhereSwap.js >/dev/null
           grep -F 'function pickAutoFillIds_' Code.js >/dev/null
           grep -F 'id="redoButton"' Admin.html >/dev/null
           grep -F 'id="mobileRefreshButton"' Admin.html >/dev/null
@@ -236,6 +235,7 @@ jobs:
           grep -F 'function redoLastAction()' Script.html >/dev/null
           grep -F 'handleMemberCourtEmptyTap' Script.html >/dev/null
           grep -F '한 번 터치하면 이 대기자리로 이동합니다' Script.html >/dev/null
+          node --check MemberAnywhereSwap.js
           node --check Code.js
           python3 - <<'PY'
           from pathlib import Path
