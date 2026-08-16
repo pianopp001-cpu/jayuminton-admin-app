@@ -1,0 +1,37 @@
+name: Emergency redeploy main member server
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Redeploy configured main deployment and verify member page
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"; printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"; printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"; MAIN_ID="$(jq -r '.mainDeploymentId' "$C")"
+          test -n "$SCRIPT_ID"; test "$SCRIPT_ID" != null; test -n "$MAIN_ID"; test "$MAIN_ID" != null
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"; printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"; clasp pull
+          grep -E 'function doGet|doGet[[:space:]]*=' Code.js >/dev/null
+          echo "Redeploying protected main deployment"
+          clasp create-deployment --deploymentId "$MAIN_ID" --description "EMERGENCY MAIN MEMBER RECOVERY $GITHUB_RUN_ID"
+          URL="https://script.google.com/macros/s/$MAIN_ID/exec"; sleep 8
+          code=$(curl -L -sS --retry 6 --retry-delay 3 --max-time 90 -o "$RUNNER_TEMP/live.html" -w '%{http_code}' "$URL?mode=user&app=user&probe=$GITHUB_RUN_ID" || true)
+          echo "HTTP=$code"
+          test "$code" = 200
+          ! grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$RUNNER_TEMP/live.html"
+          grep -Eqi 'memberSelfSearchInput|MemberControls|자유민턴|court|대기' "$RUNNER_TEMP/live.html"
+          echo "MAIN_MEMBER_SERVER_REDEPLOYED"
+          echo "MAIN_MEMBER_URL=$URL"
