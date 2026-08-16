@@ -1,0 +1,36 @@
+name: Verify deploy config read only
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+    steps:
+      - name: Validate JSON and required fields only
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          jq -e . "$CONFIG" >/dev/null
+          for key in mainScriptId mainDeploymentId previewDeploymentId adminPreviewDeploymentId firebaseProjectId hostingUrl; do
+            value="$(jq -r --arg k "$key" '.[$k] // empty' "$CONFIG")"
+            if [ -z "$value" ]; then echo "MISSING_FIELD=$key" >&2; exit 1; fi
+            echo "OK_FIELD=$key"
+          done
+          MAIN="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          PREVIEW="$(jq -r '.previewDeploymentId' "$CONFIG")"
+          ADMIN="$(jq -r '.adminPreviewDeploymentId' "$CONFIG")"
+          test "$ADMIN" != "$MAIN"
+          test "$ADMIN" != "$PREVIEW"
+          test "$ADMIN" = 'AKfycby6iRP1UdjZfjLimid2nWszFq5XdaoMYpQO3z-lNiGhcGWJ5wabqSZQp7wQsdAPMKRy1g'
+          echo 'CONFIG_JSON_VALID'
+          echo 'ADMIN_DEPLOYMENT_IS_ISOLATED'
+          echo 'READ_ONLY_NO_DEPLOYMENT_PERFORMED'
