@@ -11,7 +11,7 @@
     try{applyMoveOrSwapLocally(String(request.requesterId),'','',targetId);if(typeof renderState==='function')renderState();}catch(error){}
   }
   function applyAcceptedServerState_(result,request){
-    if(result&&result.state){STATE=result.state;if(typeof renderState==='function')renderState();return true;}
+    if(result&&result.state){STATE=typeof normalizeStateMemberProfiles==='function'?normalizeStateMemberProfiles(result.state):result.state;if(typeof renderState==='function')renderState();return true;}
     applyAcceptedSwapLocally_(request);return false;
   }
   function incomingPromptVisible_(key){
