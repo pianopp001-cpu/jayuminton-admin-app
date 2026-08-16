@@ -59,6 +59,12 @@ jobs:
           grep -F "STATE=typeof normalizeStateMemberProfiles==='function'?normalizeStateMemberProfiles(result.state):result.state" "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F "var targetId=String(request.targetId||'')" "$SRC/MemberSwapInbox.html" >/dev/null
 
+          # Closing the outgoing pending modal must keep it dismissed while the same request is alive.
+          # A new outgoing request must clear that suppression so its pending state can be shown normally.
+          grep -F "if(memberAnywhereSuppressForegroundOnce_)return false;" "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "memberAnywhereSuppressForegroundOnce_=true;root.close();" "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "memberAnywhereSuppressForegroundOnce_=false;memberAnywhereOutgoingMemberId_=" "$SRC/MemberSwapAction.html" >/dev/null
+
           node --check "$SRC/MemberAnywhereSwap.js"
 
           python3 - <<'PY'
