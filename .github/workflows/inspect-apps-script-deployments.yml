@@ -1,0 +1,54 @@
+name: Inspect Apps Script deployments read only
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Resolve config
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainScriptId // empty')"
+          MAIN_DEPLOYMENT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId // empty')"
+          PREVIEW_DEPLOYMENT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.previewDeploymentId // empty')"
+          ADMIN_PREVIEW_DEPLOYMENT_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.adminPreviewDeploymentId // empty')"
+          test -n "$MAIN_SCRIPT_ID"
+          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          echo "PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          echo "ADMIN_PREVIEW_DEPLOYMENT_ID=$ADMIN_PREVIEW_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+      - name: List deployments without modifying anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/deployments"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          echo '===== PROTECTED CONFIGURED DEPLOYMENTS ====='
+          echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
+          echo "PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID"
+          echo "ADMIN_PREVIEW_DEPLOYMENT_ID=$ADMIN_PREVIEW_DEPLOYMENT_ID"
+          echo '===== CURRENT APPS SCRIPT DEPLOYMENTS ====='
+          clasp deployments | tee "$RUNNER_TEMP/deployments.txt"
+          echo '===== COUNT ====='
+          grep -c '^-' "$RUNNER_TEMP/deployments.txt" || true
+          echo 'READ_ONLY_INSPECTION_COMPLETE'
+          echo 'NO_DEPLOYMENT_WAS_DELETED_OR_UPDATED'
