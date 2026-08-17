@@ -87,6 +87,16 @@ jobs:
           grep -F 'if(!displayedSessionStillCurrent_())' "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F "String(current.token||'')===displayedToken" "$SRC/MemberSwapInbox.html" >/dev/null
 
+          # If a request response belongs to an old member/login session, its still-mounted
+          # confirmation prompt must be restored/closed instead of remaining stuck on "요청 중...".
+          # The cleanup is scoped to the original connected button and the swap-request prompt,
+          # so a newer modal created after the session change is not touched.
+          grep -F 'function memberAnywhereDiscardStaleRequestPrompt_(button)' "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F 'if(!button||!button.isConnected)return;' "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "if(!title||title.textContent!=='자리교환 요청')return;" "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "button.disabled=false;button.textContent='교환요청';" "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F 'memberAnywhereDiscardStaleRequestPrompt_(button);setTimeout(memberAnywhereResumeOutgoingSync_,0);return;' "$SRC/MemberSwapAction.html" >/dev/null
+
           # A stale incoming swap response must never close a different member-action modal.
           # Only the exact incoming request prompt may be closed before polling the latest request.
           grep -F "function showLatestRequestAfterChange_(root){var shouldClose=incomingPromptVisible_(activeRequestKey);" "$SRC/MemberSwapInbox.html" >/dev/null
