@@ -1,0 +1,55 @@
+name: Verify member anywhere deploy safety parity
+
+on:
+  push:
+    branches:
+      - member-anywhere-controls-v3
+    paths:
+      - 'source-snapshot/current-main/MemberAnywhereSwap.js'
+      - 'source-snapshot/current-main/MemberSwapClient.html'
+      - 'source-snapshot/current-main/MemberSwapAction.html'
+      - 'source-snapshot/current-main/MemberSwapInbox.html'
+      - '.github/workflows/deploy-member-anywhere-controls-v3.yml'
+      - '.github/workflows/verify-member-anywhere-contract.yml'
+      - '.github/workflows/verify-member-anywhere-deploy-safety-parity.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify-deploy-safety-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+
+      - name: Verify production deploy keeps current swap safety gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPLOY='.github/workflows/deploy-member-anywhere-controls-v3.yml'
+
+          # Swap RPCs must stay on the canonical member-session source in manual production deploys.
+          grep -F "grep -F 'function memberAnywhereSession_()' MemberSwapClient.html" "$DEPLOY" >/dev/null
+          grep -F "currentMemberSessionToken()===''" "$DEPLOY" >/dev/null && exit 1 || true
+          grep -F "typeof currentMemberSessionToken==='function'?String(currentMemberSessionToken()||'')" "$DEPLOY" >/dev/null
+
+          # Late async responses must remain isolated to the member/login session that started them.
+          grep -F "grep -F 'function memberAnywhereSameSession_(expected)' MemberSwapAction.html" "$DEPLOY" >/dev/null
+          grep -F "grep -F 'function displayedSessionStillCurrent_()' MemberSwapInbox.html" "$DEPLOY" >/dev/null
+          grep -F "String(current.token||'')===displayedToken" "$DEPLOY" >/dev/null
+
+          # Request-change/expiry races must re-poll, and stale responses must not close unrelated modals.
+          grep -F "message.indexOf('자리교환 요청이 변경')===0||message==='교환 요청이 없거나 만료됐어요.'" "$DEPLOY" >/dev/null
+          grep -F "if(requestChanged_(result)){showLatestRequestAfterChange_(root);return;}" "$DEPLOY" >/dev/null
+          grep -F "if(shouldClose&&root&&typeof root.close==='function')root.close();" "$DEPLOY" >/dev/null
+
+          # A response from an old session must clean only its still-mounted swap request prompt.
+          grep -F "grep -F 'function memberAnywhereDiscardStaleRequestPrompt_(button)' MemberSwapAction.html" "$DEPLOY" >/dev/null
+          grep -F "if(!button||!button.isConnected)return;" "$DEPLOY" >/dev/null
+          grep -F "button.disabled=false;button.textContent='교환요청';" "$DEPLOY" >/dev/null
+
+          echo 'MEMBER_ANYWHERE_DEPLOY_SAFETY_PARITY_OK'
