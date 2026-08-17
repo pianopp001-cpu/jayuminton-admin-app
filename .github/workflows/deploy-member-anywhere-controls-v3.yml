@@ -241,6 +241,8 @@ jobs:
           grep -F "include('MemberSwapAction')" Index.html >/dev/null
           grep -F "include('MemberControls')" Index.html >/dev/null
           grep -F "include('MemberSwapInbox')" Index.html >/dev/null
+          grep -F 'function memberAnywhereSession_()' MemberSwapClient.html >/dev/null
+          grep -F "typeof currentMemberSessionToken==='function'?String(currentMemberSessionToken()||'')" MemberSwapClient.html >/dev/null
           grep -F 'function memberGetAnywhereOutgoingSwap(' MemberAnywhereSwap.js >/dev/null
           grep -F 'targetId:String(targetId)' MemberAnywhereSwap.js >/dev/null
           grep -F 'outgoing.targetId' MemberSwapAction.html >/dev/null
