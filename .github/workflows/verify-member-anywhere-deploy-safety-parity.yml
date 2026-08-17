@@ -8,6 +8,7 @@ on:
       - 'source-snapshot/current-main/MemberAnywhereSwap.js'
       - 'source-snapshot/current-main/MemberSwapClient.html'
       - 'source-snapshot/current-main/MemberSwapAction.html'
+      - 'source-snapshot/current-main/MemberControls.html'
       - 'source-snapshot/current-main/MemberSwapInbox.html'
       - '.github/workflows/deploy-member-anywhere-controls-v3.yml'
       - '.github/workflows/verify-member-anywhere-contract.yml'
