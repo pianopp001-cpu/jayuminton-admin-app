@@ -53,6 +53,11 @@ jobs:
           grep -F "var request=memberAnywhereReadSwapRequest_(targetId);if(!request||String(request.requesterId)!==memberId||String(request.targetId)!==String(targetId))" "$SRC/MemberAnywhereSwap.js" >/dev/null
           grep -F "if(String(outgoingTarget||'')===String(targetId))CacheService.getDocumentCache().remove(memberAnywhereOutgoingCacheKey_(memberId))" "$SRC/MemberAnywhereSwap.js" >/dev/null
 
+          # The shared active-outgoing resolver has the same race: stale cleanup must re-read the
+          # outgoing pointer and remove it only if it still points at the target originally resolved.
+          grep -F "function memberAnywhereReadActiveOutgoingTarget_(memberId)" "$SRC/MemberAnywhereSwap.js" >/dev/null
+          grep -F "var outgoingTarget=memberAnywhereReadOutgoingTarget_(memberId);if(String(outgoingTarget||'')===String(targetId))CacheService.getDocumentCache().remove(memberAnywhereOutgoingCacheKey_(memberId));return '';" "$SRC/MemberAnywhereSwap.js" >/dev/null
+
           # Request actions must stay bound to the request identity shown on screen.
           grep -F 'expectedTargetId,expectedCreatedAt' "$SRC/MemberAnywhereSwap.js" >/dev/null
           grep -F 'expectedRequesterId,expectedCreatedAt' "$SRC/MemberAnywhereSwap.js" >/dev/null
