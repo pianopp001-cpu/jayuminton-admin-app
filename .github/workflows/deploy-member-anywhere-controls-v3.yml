@@ -255,6 +255,19 @@ jobs:
           grep -F "STATE=typeof normalizeStateMemberProfiles==='function'?normalizeStateMemberProfiles(result.state):result.state" MemberSwapInbox.html >/dev/null
           grep -F "var targetId=String(request.targetId||'')" MemberSwapInbox.html >/dev/null
 
+          # Keep stale-response/session guards in the actual production deploy gate too.
+          # The standalone verifier can be skipped by a manual deploy, so these runtime contracts must be checked here.
+          grep -F 'function memberAnywhereSameSession_(expected)' MemberSwapAction.html >/dev/null
+          grep -F "var expectedAuth=typeof memberAnywhereReadySession_==='function'?memberAnywhereReadySession_():null" MemberSwapAction.html >/dev/null
+          grep -F 'if(expectedAuth&&!memberAnywhereSameSession_(expectedAuth))' MemberSwapAction.html >/dev/null
+          grep -F 'function displayedSessionStillCurrent_()' MemberSwapInbox.html >/dev/null
+          grep -F "String(current.token||'')===displayedToken" MemberSwapInbox.html >/dev/null
+          grep -F "message.indexOf('자리교환 요청이 변경')===0||message==='교환 요청이 없거나 만료됐어요.'" MemberSwapInbox.html >/dev/null
+          grep -F "if(requestChanged_(result)){showLatestRequestAfterChange_(root);return;}" MemberSwapInbox.html >/dev/null
+          grep -F "function showLatestRequestAfterChange_(root){var shouldClose=incomingPromptVisible_(activeRequestKey);" MemberSwapInbox.html >/dev/null
+          grep -F "if(shouldClose&&root&&typeof root.close==='function')root.close();" MemberSwapInbox.html >/dev/null
+          grep -F "var outgoingTarget=memberAnywhereReadOutgoingTarget_(memberId);if(String(outgoingTarget||'')===String(targetId))CacheService.getDocumentCache().remove(memberAnywhereOutgoingCacheKey_(memberId));return '';" MemberAnywhereSwap.js >/dev/null
+
           node --check MemberAnywhereSwap.js
           node --check Code.js
           python3 - <<'PY'
