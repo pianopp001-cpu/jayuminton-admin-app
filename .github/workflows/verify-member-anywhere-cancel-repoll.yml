@@ -1,0 +1,61 @@
+name: Verify member anywhere cancel repoll
+
+on:
+  push:
+    branches:
+      - member-anywhere-controls-v3
+    paths:
+      - 'source-snapshot/current-main/MemberAnywhereSwap.js'
+      - 'source-snapshot/current-main/MemberSwapClient.html'
+      - 'source-snapshot/current-main/MemberSwapAction.html'
+      - '.github/workflows/verify-member-anywhere-cancel-repoll.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify stale outgoing cancel re-polls current request
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC='source-snapshot/current-main'
+
+          # Cancel must remain bound to the request currently shown to the sender.
+          grep -F 'memberAnywhereCancelOutgoingServer_(expectedTargetId,expectedCreatedAt)' "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F 'function memberCancelAnywhereSwap(sessionToken,memberId,expectedTargetId,expectedCreatedAt)' "$SRC/MemberAnywhereSwap.js" >/dev/null
+
+          # If that displayed request was already completed, replaced, or cleared while the
+          # cancel RPC was in flight, do not strand the user on a stale "취소 실패" modal.
+          # Close only the outgoing prompt state, clear its session binding, then immediately
+          # query the server again so a newer request or completed swap is adopted correctly.
+          grep -F 'function memberAnywhereCancelResultChanged_(result)' "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "message.indexOf('자리교환 요청이 변경')===0" "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "message.indexOf('자리교환 요청 상태가 변경')===0" "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "message.indexOf('취소할 자리교환 요청이 없거나 이미 처리')===0" "$SRC/MemberSwapAction.html" >/dev/null
+          grep -F "if(memberAnywhereCancelResultChanged_(result)){root.close();memberAnywhereOutgoingPromptMemberId_='';memberAnywhereOutgoingPromptToken_='';memberAnywhereSuppressForegroundOnce_=false;setTimeout(memberAnywhereCheckOutgoing_,0);return;}" "$SRC/MemberSwapAction.html" >/dev/null
+
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('source-snapshot/current-main/MemberSwapAction.html').read_text(encoding='utf-8')
+          start = text.find('<script>')
+          end = text.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('MemberSwapAction.html script block missing')
+          Path('/tmp/member-swap-action.js').write_text(text[start + 8:end], encoding='utf-8')
+          PY
+          node --check /tmp/member-swap-action.js
+
+          echo 'MEMBER_ANYWHERE_CANCEL_REPOLL_OK'
