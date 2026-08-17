@@ -63,6 +63,9 @@ jobs:
           # Rejection must only report success when the exact displayed request was actually cleared.
           grep -F "if(!memberAnywhereClearSwapRequest_(memberId,request))return {ok:false,message:'자리교환 요청이 변경되었거나 이미 만료됐어요. 새 요청을 확인해 주세요.'};" "$SRC/MemberAnywhereSwap.js" >/dev/null
           grep -F "return {ok:true,message:'자리 교환 요청을 거절했어요.'};" "$SRC/MemberAnywhereSwap.js" >/dev/null
+          # Any request-change/expiry race returned by rejection must re-poll instead of leaving a stale failure modal.
+          grep -F "function requestChanged_(result){return !!(result&&!result.ok&&String(result.message||'').indexOf('자리교환 요청이 변경')===0);}" "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F "if(requestChanged_(result)){showLatestRequestAfterChange_(root);return;}" "$SRC/MemberSwapInbox.html" >/dev/null
 
           # Stale async responses must not cross member/login session boundaries.
           grep -F 'function memberAnywhereSameSession_(expected)' "$SRC/MemberSwapAction.html" >/dev/null
