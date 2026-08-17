@@ -44,6 +44,11 @@ jobs:
           grep -F "include('MemberControls')" "$SRC/Index.html" >/dev/null
           grep -F "include('MemberSwapInbox')" "$SRC/Index.html" >/dev/null
 
+          # Swap RPCs must use the same canonical member-session token source as the rest of the member app.
+          # Keep the legacy direct read only as a fallback for older embedded contexts.
+          grep -F 'function memberAnywhereSession_()' "$SRC/MemberSwapClient.html" >/dev/null
+          grep -F "typeof currentMemberSessionToken==='function'?String(currentMemberSessionToken()||'')" "$SRC/MemberSwapClient.html" >/dev/null
+
           # Outgoing completion verification depends on the server returning targetId.
           grep -F 'function memberGetAnywhereOutgoingSwap(' "$SRC/MemberAnywhereSwap.js" >/dev/null
           grep -F 'targetId:String(targetId)' "$SRC/MemberAnywhereSwap.js" >/dev/null
