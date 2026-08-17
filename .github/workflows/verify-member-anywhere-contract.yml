@@ -11,6 +11,7 @@ on:
       - 'source-snapshot/current-main/MemberControls.html'
       - 'source-snapshot/current-main/MemberSwapInbox.html'
       - 'source-snapshot/current-main/Index.html'
+      - '.github/workflows/deploy-member-anywhere-controls-v3.yml'
       - '.github/workflows/verify-member-anywhere-contract.yml'
   workflow_dispatch: {}
 
@@ -35,6 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           SRC='source-snapshot/current-main'
+          DEPLOY='.github/workflows/deploy-member-anywhere-controls-v3.yml'
 
           # The member page must load every layer used by the anywhere-swap flow.
           grep -F "include('MemberSwapClient')" "$SRC/Index.html" >/dev/null
@@ -94,6 +96,15 @@ jobs:
           grep -F "if(memberAnywhereSuppressForegroundOnce_)return false;" "$SRC/MemberSwapAction.html" >/dev/null
           grep -F "memberAnywhereSuppressForegroundOnce_=true;root.close();" "$SRC/MemberSwapAction.html" >/dev/null
           grep -F "memberAnywhereSuppressForegroundOnce_=false;memberAnywhereOutgoingMemberId_=" "$SRC/MemberSwapAction.html" >/dev/null
+
+          # The manual production deploy has its own gate. Keep it from silently drifting behind
+          # the standalone verifier: it must at least gate the core identity and two-sided completion contracts.
+          grep -F "include('MemberSwapAction')" "$DEPLOY" >/dev/null
+          grep -F "include('MemberSwapInbox')" "$DEPLOY" >/dev/null
+          grep -F "grep -F 'targetId:String(targetId)' MemberAnywhereSwap.js" "$DEPLOY" >/dev/null
+          grep -F "grep -F 'partnerCurrent===memberAnywhereOutgoingBaseline_' MemberSwapAction.html" "$DEPLOY" >/dev/null
+          grep -F "grep -F 'expectedTargetId,expectedCreatedAt' MemberAnywhereSwap.js" "$DEPLOY" >/dev/null
+          grep -F "grep -F 'expectedRequesterId,expectedCreatedAt' MemberAnywhereSwap.js" "$DEPLOY" >/dev/null
 
           node --check "$SRC/MemberAnywhereSwap.js"
 
