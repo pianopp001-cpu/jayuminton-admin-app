@@ -5,20 +5,20 @@ import sys
 root=Path(sys.argv[1]) if len(sys.argv)>1 else Path('source-snapshot/current-main')
 p=root/'Script.html'; s=p.read_text(encoding='utf-8')
 
+def rep(a,b,label):
+ global s
+ if a not in s: raise SystemExit(label+' anchor not found')
+ s=s.replace(a,b,1)
+
 anchor='let SELECTED = new Set();'
-if anchor not in s: raise SystemExit('selection anchor not found')
-s=s.replace(anchor,anchor+r'''
+rep(anchor,anchor+r'''
 
 function adminVNextSelectedIds_() { return Array.from(SELECTED || []); }
 function adminVNextToggleSelection_(memberId) {
   memberId=String(memberId||''); if(!memberId)return;
   if(SELECTED.has(memberId)) SELECTED.delete(memberId); else SELECTED.add(memberId);
-  if(typeof renderAdmin==='function') renderAdmin();
-}
-function adminVNextSelectSameLocation_(memberId, locationIds) {
-  memberId=String(memberId||''); locationIds=(locationIds||[]).map(String);
-  if(locationIds.indexOf(memberId)<0)return false;
-  adminVNextToggleSelection_(memberId); return true;
+  QUICK_PICK=null;
+  if(typeof renderState==='function') renderState();
 }
 function adminVNextSelectionLabel_(){ return SELECTED.size+'명 선택'; }
 function increaseSelectedGames() {
@@ -45,14 +45,10 @@ function runSequentialAdminVNext_(ids,builder) {
   }
   next(null);
 }
-function adminVNextMemberDisplayName_(member){
-  const name=String(member&&member.name||'');
-  return member&&member.isNew ? name : name;
-}
 function adminVNextMemberMeta_(member){
   const parts=[];
   if(member&&member.grade) parts.push(String(member.grade));
-  if(member&&member.experience) parts.push(String(member.experience));
+  if(member&&member.experience) parts.push('구력 '+String(member.experience).replace(/^구력\s*/i,''));
   parts.push('게임 '+String(Math.max(0,Number(member&&member.games)||0))+'회');
   if(member&&member.publicMemo) parts.push(String(member.publicMemo));
   return parts.join(' · ');
@@ -64,10 +60,10 @@ function adminVNextMemberBadges_(member){
   if(member&&member.bundleId) badges.push('🔗 묶음');
   return badges;
 }
-''',1)
+''','selection')
 
 marker='let EDIT_MEMBER_ID = null;'
-s=s.replace(marker,marker+r'''
+rep(marker,marker+r'''
 function adminVNextMemberExtraPayload_(){
   const memo=document.getElementById('newPublicMemo');
   const isNew=document.getElementById('newIsNew');
@@ -81,7 +77,64 @@ function adminVNextFillMemberExtras_(member){
   if(sponsor)sponsor.checked=!!(member&&member.isSponsor);
 }
 function adminVNextClearMemberExtras_(){ adminVNextFillMemberExtras_(null); }
-''',1)
+''','edit marker')
+
+# New members keep full stored name anywhere compactMemberName is used.
+rep("""function compactMemberName(name) {
+  const baseName =
+    String(name || '')
+      .split('(')[0]
+      .trim();
+
+  return Array.from(baseName || String(name || '').trim())
+    .slice(0, 2)
+    .join('');
+}""","""function compactMemberName(name, member) {
+  const fullName=String(name || '').trim();
+  if(member && member.isNew) return fullName;
+  const baseName=fullName.split('(')[0].trim();
+  return Array.from(baseName || fullName).slice(0,2).join('');
+}""",'compact name')
+
+# Admin cards: no missing placeholders; games always visible; optional badges/memo.
+start="""  if (!grade && !experience) {
+    return '<span class=\"member-info-detail is-missing\">급수·구력 미입력</span>';
+  }
+
+  const gradeText = grade || '급수 미입력';
+  const experienceText = experience ? '구력 ' + experience : '구력 미입력';
+
+  return '<span class=\"member-info-detail' +
+    ((!grade || !experience) ? ' is-missing' : '') + '\">' +
+    escapeMemberInfo(gradeText) + ' · ' + escapeMemberInfo(experienceText) +
+    '</span>';"""
+replacement="""  const parts=[];
+  if (grade) parts.push(escapeMemberInfo(grade));
+  if (experience) parts.push(escapeMemberInfo('구력 ' + experience));
+  parts.push(escapeMemberInfo('게임 ' + String(Math.max(0, Number(member.games) || 0)) + '회'));
+  if (member.publicMemo) parts.push(escapeMemberInfo(String(member.publicMemo)));
+  const badges=adminVNextMemberBadges_(member).map(escapeMemberInfo);
+  return '<span class=\"member-info-detail\">' +
+    (badges.length ? badges.join(' · ') + ' · ' : '') + parts.join(' · ') + '</span>';"""
+rep(start,replacement,'member detail')
+
+# Avoid duplicate game label: admin detail already always contains it.
+s=s.replace("showGames\n      ? '<span class=\"meta\">' +", "showGames && !IS_ADMIN\n      ? '<span class=\"meta\">' +",1)
+
+oldcourt="""  quickPickMember('court', courtNo, memberId, event);
+}"""
+newcourt="""  // Same court taps accumulate selection; second tap never auto-swaps.
+  QUICK_PICK = null;
+  adminVNextToggleSelection_(memberId);
+}"""
+rep(oldcourt,newcourt,'court tap')
+oldwait="""  quickPickMember('wait', groupIndex, memberId, event);
+}"""
+newwait="""  // Same wait-group taps accumulate selection; move happens only on an explicit target/action.
+  QUICK_PICK = null;
+  adminVNextToggleSelection_(memberId);
+}"""
+rep(oldwait,newwait,'wait tap')
 
 p.write_text(s,encoding='utf-8')
-print('admin vNext client behavior patch prepared')
+print('admin vNext client multi-select patch prepared')
