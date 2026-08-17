@@ -60,6 +60,10 @@ jobs:
           grep -F 'memberAnywhereAcceptServer_(request)' "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F 'memberAnywhereRejectServer_(request)' "$SRC/MemberSwapInbox.html" >/dev/null
 
+          # Rejection must only report success when the exact displayed request was actually cleared.
+          grep -F "if(!memberAnywhereClearSwapRequest_(memberId,request))return {ok:false,message:'자리교환 요청이 변경되었거나 이미 만료됐어요. 새 요청을 확인해 주세요.'};" "$SRC/MemberAnywhereSwap.js" >/dev/null
+          grep -F "return {ok:true,message:'자리 교환 요청을 거절했어요.'};" "$SRC/MemberAnywhereSwap.js" >/dev/null
+
           # Stale async responses must not cross member/login session boundaries.
           grep -F 'function memberAnywhereSameSession_(expected)' "$SRC/MemberSwapAction.html" >/dev/null
           grep -F "var expectedAuth=typeof memberAnywhereReadySession_==='function'?memberAnywhereReadySession_():null" "$SRC/MemberSwapAction.html" >/dev/null
