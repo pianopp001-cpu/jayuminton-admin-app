@@ -1,5 +1,5 @@
 <script>
-function memberAnywhereSession_(){return {memberId:String(storedSelfMemberId()||''),token:String(MEMBER_SESSION_VALUE||localStorage.getItem(MEMBER_SESSION_KEY)||'')};}
+function memberAnywhereSession_(){var memberId=String(storedSelfMemberId()||'');var token='';try{token=typeof currentMemberSessionToken==='function'?String(currentMemberSessionToken()||''):String(MEMBER_SESSION_VALUE||localStorage.getItem(MEMBER_SESSION_KEY)||'');}catch(error){token='';}return {memberId:memberId,token:token};}
 function memberAnywhereReadySession_(){var auth=memberAnywhereSession_();return auth.memberId&&auth.token?auth:null;}
 var memberAnywhereSavingDepth_=0;
 function memberAnywhereEnsureSaving_(){var root=document.getElementById('memberAnywhereSaving');if(root)return root;root=document.createElement('div');root.id='memberAnywhereSaving';root.className='member-anywhere-saving hidden';root.innerHTML='<div class="member-anywhere-saving-card"><div class="member-anywhere-spinner"></div><strong>저장 중...</strong><span>잠시만 기다려 주세요</span></div>';document.body.appendChild(root);return root;}
