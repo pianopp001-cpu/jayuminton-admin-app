@@ -12,6 +12,7 @@ on:
       - 'source-snapshot/current-main/MemberSwapInbox.html'
       - '.github/workflows/deploy-member-anywhere-controls-v3.yml'
       - '.github/workflows/verify-member-anywhere-contract.yml'
+      - '.github/workflows/verify-member-anywhere-cancel-repoll.yml'
       - '.github/workflows/verify-member-anywhere-deploy-safety-parity.yml'
   workflow_dispatch: {}
 
@@ -32,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY='.github/workflows/deploy-member-anywhere-controls-v3.yml'
+          CANCEL_VERIFY='.github/workflows/verify-member-anywhere-cancel-repoll.yml'
 
           # Swap RPCs must stay on the canonical member-session source in manual production deploys.
           grep -F "grep -F 'function memberAnywhereSession_()' MemberSwapClient.html" "$DEPLOY" >/dev/null
@@ -52,5 +54,13 @@ jobs:
           grep -F "grep -F 'function memberAnywhereDiscardStaleRequestPrompt_(button)' MemberSwapAction.html" "$DEPLOY" >/dev/null
           grep -F "if(!button||!button.isConnected)return;" "$DEPLOY" >/dev/null
           grep -F "button.disabled=false;button.textContent='교환요청';" "$DEPLOY" >/dev/null
+
+          # The dedicated stale-cancel verifier is part of deploy-safety parity too.
+          # If its request-binding or immediate re-poll checks are weakened, parity must fail.
+          test -f "$CANCEL_VERIFY"
+          grep -F "memberAnywhereCancelOutgoingServer_(expectedTargetId,expectedCreatedAt)" "$CANCEL_VERIFY" >/dev/null
+          grep -F "function memberCancelAnywhereSwap(sessionToken,memberId,expectedTargetId,expectedCreatedAt)" "$CANCEL_VERIFY" >/dev/null
+          grep -F "function memberAnywhereCancelResultChanged_(result)" "$CANCEL_VERIFY" >/dev/null
+          grep -F "setTimeout(memberAnywhereCheckOutgoing_,0)" "$CANCEL_VERIFY" >/dev/null
 
           echo 'MEMBER_ANYWHERE_DEPLOY_SAFETY_PARITY_OK'
