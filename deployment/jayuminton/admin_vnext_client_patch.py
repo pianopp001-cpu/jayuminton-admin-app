@@ -10,6 +10,17 @@ if anchor not in s: raise SystemExit('selection anchor not found')
 s=s.replace(anchor,anchor+r'''
 
 function adminVNextSelectedIds_() { return Array.from(SELECTED || []); }
+function adminVNextToggleSelection_(memberId) {
+  memberId=String(memberId||''); if(!memberId)return;
+  if(SELECTED.has(memberId)) SELECTED.delete(memberId); else SELECTED.add(memberId);
+  if(typeof renderAdmin==='function') renderAdmin();
+}
+function adminVNextSelectSameLocation_(memberId, locationIds) {
+  memberId=String(memberId||''); locationIds=(locationIds||[]).map(String);
+  if(locationIds.indexOf(memberId)<0)return false;
+  adminVNextToggleSelection_(memberId); return true;
+}
+function adminVNextSelectionLabel_(){ return SELECTED.size+'명 선택'; }
 function increaseSelectedGames() {
   const ids=adminVNextSelectedIds_();
   if(!ids.length){ alert('게임횟수를 올릴 멤버를 선택하세요.'); return; }
@@ -34,9 +45,27 @@ function runSequentialAdminVNext_(ids,builder) {
   }
   next(null);
 }
+function adminVNextMemberDisplayName_(member){
+  const name=String(member&&member.name||'');
+  return member&&member.isNew ? name : name;
+}
+function adminVNextMemberMeta_(member){
+  const parts=[];
+  if(member&&member.grade) parts.push(String(member.grade));
+  if(member&&member.experience) parts.push(String(member.experience));
+  parts.push('게임 '+String(Math.max(0,Number(member&&member.games)||0))+'회');
+  if(member&&member.publicMemo) parts.push(String(member.publicMemo));
+  return parts.join(' · ');
+}
+function adminVNextMemberBadges_(member){
+  const badges=[];
+  if(member&&member.isNew) badges.push('신규');
+  if(member&&member.isSponsor) badges.push('🎁 찬조');
+  if(member&&member.bundleId) badges.push('🔗 묶음');
+  return badges;
+}
 ''',1)
 
-# Extend add/edit payload at DOM level without altering user frontend. Existing addMember/applyMemberEdit can consume these after backend payload wiring.
 marker='let EDIT_MEMBER_ID = null;'
 s=s.replace(marker,marker+r'''
 function adminVNextMemberExtraPayload_(){
