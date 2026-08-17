@@ -3,7 +3,7 @@
   var shownRequestKey='';var activeRequestKey='';var responsePending=false;var pollGeneration_=0;var pollPendingGeneration_=0;var pollPendingMemberId_='';var pollPendingToken_='';
   function requesterName_(request){var id=String(request&&request.requesterId||'');var member=(STATE.members||[]).find(function(item){return item&&String(item.id)===id;});return member?String(member.name||'회원'):'회원';}
   function requestKey_(request){return String(request&&request.requesterId||'')+':'+String(request&&request.createdAt||'');}
-  function requestChanged_(result){var message=String(result&&result.message||'');return !!(result&&!result.ok&&(message.indexOf('자리교환 요청이 변경')===0||message==='교환 요청이 없거나 만료됐어요.'||message==='자리 상태가 변경되어 교환할 수 없어요.'));}
+  function requestChanged_(result){var message=String(result&&result.message||'');return !!(result&&!result.ok&&(message.indexOf('자리교환 요청이 변경')===0||message==='교환 요청이 없거나 만료됐어요.'||message==='자리 상태가 변경되어 교환할 수 없어요.'||message==='이미 같은 상태라 자리교환이 필요하지 않아요.'));}
   function clearIncoming_(){var shouldClose=incomingPromptVisible_(activeRequestKey);shownRequestKey='';activeRequestKey='';responsePending=false;if(shouldClose&&window.memberAnywhereModal)window.memberAnywhereModal.close();}
   function applyAcceptedSwapLocally_(request){
     if(!request||!request.requesterId||!request.targetId||typeof applyMoveOrSwapLocally!=='function')return;
