@@ -68,6 +68,11 @@ jobs:
           grep -F 'if(!displayedSessionStillCurrent_())' "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F "String(current.token||'')===displayedToken" "$SRC/MemberSwapInbox.html" >/dev/null
 
+          # A stale incoming swap response must never close a different member-action modal.
+          # Only the exact incoming request prompt may be closed before polling the latest request.
+          grep -F "function showLatestRequestAfterChange_(root){var shouldClose=incomingPromptVisible_(activeRequestKey);" "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F "if(shouldClose&&root&&typeof root.close==='function')root.close();" "$SRC/MemberSwapInbox.html" >/dev/null
+
           # Accepted swap state must use the same member-profile normalization path as normal state refreshes.
           grep -F "STATE=typeof normalizeStateMemberProfiles==='function'?normalizeStateMemberProfiles(result.state):result.state" "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F "var targetId=String(request.targetId||'')" "$SRC/MemberSwapInbox.html" >/dev/null
