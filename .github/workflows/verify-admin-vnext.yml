@@ -30,6 +30,23 @@ jobs:
       - name: Verify transition notifications
         run: python3 deployment/jayuminton/admin_vnext_notification_contract_test.py /tmp/admin-vnext-source/Code.js
 
+      - name: Verify generated JavaScript syntax
+        run: |
+          node --check /tmp/admin-vnext-source/Code.js
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('/tmp/admin-vnext-source/Script.html').read_text(encoding='utf-8')
+          start = source.find('<script>')
+          end = source.rfind('</script>')
+          if start < 0 or end < 0:
+              raise SystemExit('Script.html wrapper missing')
+          Path('/tmp/admin-vnext-script-check.js').write_text(
+              source[start + len('<script>'):end],
+              encoding='utf-8'
+          )
+          PY
+          node --check /tmp/admin-vnext-script-check.js
+
       - name: Verify protected user files unchanged
         run: |
           sha256sum /tmp/admin-vnext-source/Index.html /tmp/admin-vnext-source/Style.html > /tmp/protected-after.sha256
