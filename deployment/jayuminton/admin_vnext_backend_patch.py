@@ -53,16 +53,124 @@ function clearBundle(pin,ids){return withDocumentLock_('고정 묶음 해제',fu
 '''
 rep(anchor, insert+anchor, 'lock')
 
-# Read/write storage: adapt common 8-column row mapping patterns without changing old columns.
 s = s.replace("sheet.getRange(2, 1, lastRow - 1, 8)", "sheet.getRange(2, 1, lastRow - 1, 12)")
 s = s.replace("sheet.getRange(2, 1, rows.length, 8)", "sheet.getRange(2, 1, rows.length, 12)")
-# Member object mapping, anchored on experience property where present.
 s = s.replace("experience: String(row[7] || '')", "experience: String(row[7] || ''),\n      isNew: String(row[8] || '') === '1',\n      publicMemo: String(row[9] || ''),\n      isSponsor: String(row[10] || '') === '1',\n      bundleId: String(row[11] || '')")
-# Member serialization row, anchored on experience final cell where present.
 s = s.replace("member.experience || ''\n    ];", "member.experience || '',\n      member.isNew ? '1' : '',\n      member.publicMemo || '',\n      member.isSponsor ? '1' : '',\n      member.bundleId || ''\n    ];")
-
-# Extend normalized member payloads wherever grade/experience are copied together.
 s = s.replace("experience: String(member.experience || '')", "experience: String(member.experience || ''),\n      isNew: Boolean(member.isNew),\n      publicMemo: String(member.publicMemo || ''),\n      isSponsor: Boolean(member.isSponsor),\n      bundleId: String(member.bundleId || '')")
 
+# Direct/manual court entry: increment only the entrants after placement is finalized.
+rep("""  markCourtStartedIfFull_(refreshedCourts, startedAt, courtNo);
+  writeCourts_(refreshedCourts, startedAt);
+  updateMemberStatuses_(ids, 'playing');
+  touch_();
+
+  return getPublicState();""","""  if ((refreshedCourts[courtNo] || []).length > 0 && !startedAt[courtNo]) {
+    startedAt[courtNo] = new Date().toISOString();
+  }
+  const members = readMembers_();
+  incrementGamesForCourtEntrants_(members, ids);
+  recordCourtEntryPairs_(courtNo, ids, refreshedCourts[courtNo] || []);
+  writeCourts_(refreshedCourts, startedAt);
+  members.forEach(function(member) { if (ids.indexOf(member.id) >= 0) member.status = 'playing'; });
+  writeMembers_(members);
+  touch_();
+
+  return getPublicState();""", 'direct court entry')
+
+# A wait group may contain 1-4 people and can enter an empty court as a whole.
+rep("""  if (group.length !== GROUP_SIZE) {
+    throw new Error(
+      '4명이 모두 채워진 대기조만 코트에 배정할 수 있습니다.'
+    );
+  }""","""  if (!group.length) {
+    throw new Error('비어 있는 대기조는 코트에 배정할 수 없습니다.');
+  }""", 'partial wait to court')
+rep("""  startedAt[courtNo] = new Date().toISOString();
+  writeCourts_(courts, startedAt);
+  writeWaitGroups_(waitGroups);
+  updateMemberStatuses_(group, 'playing');
+  touch_();""","""  startedAt[courtNo] = new Date().toISOString();
+  const members = readMembers_();
+  incrementGamesForCourtEntrants_(members, group);
+  recordCourtEntryPairs_(courtNo, group, courts[courtNo] || []);
+  members.forEach(function(member) { if (group.indexOf(member.id) >= 0) member.status = 'playing'; });
+  writeCourts_(courts, startedAt);
+  writeWaitGroups_(waitGroups);
+  writeMembers_(members);
+  touch_();""", 'wait court count')
+
+# Finish any occupied court. No game increment here; count already happened on entry.
+rep("""  if (finished.length !== GROUP_SIZE) {
+    throw new Error(
+      '4명이 모두 배정된 코트만 경기 종료할 수 있습니다.'
+    );
+  }
+
+  const members = readMembers_();
+
+  members.forEach(function(member) {
+    if (finished.indexOf(member.id) >= 0) {
+      member.games =
+        (Number(member.games) || 0) + 1;
+      member.status = 'active';
+    }
+  });
+
+  const waitOne = waitGroups[0] || [];
+
+  if (waitOne.length === GROUP_SIZE) {
+    courts[courtNo] = waitOne.slice();
+    startedAt[courtNo] = new Date().toISOString();
+
+    members.forEach(function(member) {
+      if (waitOne.indexOf(member.id) >= 0) {
+        member.status = 'playing';
+      }
+    });
+
+    const shifted = [
+      (waitGroups[1] || []).slice(),
+      (waitGroups[2] || []).slice(),
+      (waitGroups[3] || []).slice(),
+      (waitGroups[4] || []).slice(),
+      []
+    ];
+
+    writeWaitGroups_(shifted);
+  } else {
+    courts[courtNo] = [];
+    startedAt[courtNo] = '';
+  }""","""  if (!finished.length) {
+    throw new Error('비어 있는 코트는 경기 종료할 수 없습니다.');
+  }
+
+  const members = readMembers_();
+  members.forEach(function(member) {
+    if (finished.indexOf(member.id) >= 0) member.status = 'active';
+  });
+
+  const waitOne = (waitGroups[0] || []).slice();
+  if (waitOne.length > 0) {
+    courts[courtNo] = waitOne.slice();
+    startedAt[courtNo] = new Date().toISOString();
+    incrementGamesForCourtEntrants_(members, waitOne);
+    recordCourtEntryPairs_(courtNo, waitOne, waitOne);
+    members.forEach(function(member) { if (waitOne.indexOf(member.id) >= 0) member.status = 'playing'; });
+
+    // Always shift the queue after wait1 enters, even when wait1 has fewer than four people.
+    const shifted = [
+      (waitGroups[1] || []).slice(),
+      (waitGroups[2] || []).slice(),
+      (waitGroups[3] || []).slice(),
+      (waitGroups[4] || []).slice(),
+      []
+    ];
+    writeWaitGroups_(shifted);
+  } else {
+    courts[courtNo] = [];
+    startedAt[courtNo] = '';
+  }""", 'finish partial court')
+
 p.write_text(s, encoding='utf-8')
-print('admin vNext backend storage foundation patched')
+print('admin vNext backend storage/court-entry patch prepared')
