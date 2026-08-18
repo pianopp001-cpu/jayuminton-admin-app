@@ -133,6 +133,14 @@ jobs:
           grep -F "STATE=typeof normalizeStateMemberProfiles==='function'?normalizeStateMemberProfiles(result.state):result.state" "$SRC/MemberSwapInbox.html" >/dev/null
           grep -F "var targetId=String(request.targetId||'')" "$SRC/MemberSwapInbox.html" >/dev/null
 
+          # The optimistic accepted-swap fallback is safe only while both members are still at the
+          # exact locations captured in the server request snapshot. If either side moved meanwhile,
+          # skip the local mutation and wait for the authoritative state refresh.
+          grep -F "var snapshot=request.snapshot||{};var from=snapshot.from||{};var to=snapshot.to||{};" "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F "if(!from.locationKey||!to.locationKey||typeof memberAnywhereStateLocationKey_!=='function')return;" "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F "memberAnywhereStateLocationKey_(STATE,String(request.requesterId))!==String(from.locationKey)" "$SRC/MemberSwapInbox.html" >/dev/null
+          grep -F "memberAnywhereStateLocationKey_(STATE,targetId)!==String(to.locationKey)" "$SRC/MemberSwapInbox.html" >/dev/null
+
           # Closing the outgoing pending modal must keep it dismissed while the same request is alive.
           # A new outgoing request must clear that suppression so its pending state can be shown normally.
           grep -F "if(memberAnywhereSuppressForegroundOnce_)return false;" "$SRC/MemberSwapAction.html" >/dev/null
