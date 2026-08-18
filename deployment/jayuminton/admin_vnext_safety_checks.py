@@ -11,20 +11,23 @@ for p in files:
         if token in text: errors.append(f'{p.name}: forbidden user/app/deploy token: {token}')
 
 apply=(root/'apply_admin_vnext_patches.py').read_text(encoding='utf-8')
-expected=['admin_vnext_backend_patch.py','admin_vnext_assignment_guard_patch.py','admin_vnext_member_fields_patch.py','admin_vnext_ui_patch.py','admin_vnext_script_patch.py','admin_vnext_multiselect_patch.py','admin_vnext_partial_court_ui_patch.py']
+expected=['admin_vnext_backend_patch.py','admin_vnext_assignment_guard_patch.py','admin_vnext_recent_play_stat_patch.py','admin_vnext_member_fields_patch.py','admin_vnext_ui_patch.py','admin_vnext_script_patch.py','admin_vnext_multiselect_patch.py','admin_vnext_partial_court_ui_patch.py','admin_vnext_recent_play_ui_patch.py']
 for name in expected:
     if name not in apply: errors.append('apply chain missing '+name)
 
 backend=(root/'admin_vnext_backend_patch.py').read_text(encoding='utf-8')
 for needle in ["incrementGamesForCourtEntrants_(members, entrants)","if (!finished.length) throw new Error('비어 있는 코트는 경기 종료할 수 없습니다.')","if (waitOne.length > 0)"]:
     if needle not in backend: errors.append('backend invariant missing '+needle)
+recent=(root/'admin_vnext_recent_play_stat_patch.py').read_text(encoding='utf-8')
+for needle in ['function readLastPlayedAtMap_()', 'lastPlayedAt:']:
+    if needle not in recent: errors.append('recent statistic missing '+needle)
 
-# Every browser-side patch must target only Admin.html or Script.html.
 admin_targets={
  'admin_vnext_ui_patch.py':"root/'Admin.html'",
  'admin_vnext_script_patch.py':"root/'Script.html'",
  'admin_vnext_multiselect_patch.py':"root/'Script.html'",
  'admin_vnext_partial_court_ui_patch.py':"root/'Script.html'",
+ 'admin_vnext_recent_play_ui_patch.py':"root/'Script.html'",
 }
 for name,target in admin_targets.items():
     text=(root/name).read_text(encoding='utf-8')
