@@ -13,7 +13,7 @@ function memberAnywhereSwapRequest_(requesterId,targetId){return {requesterId:St
 function memberAnywherePutSwapRequest_(targetId,request){var cache=CacheService.getDocumentCache();cache.put(memberAnywhereSwapCacheKey_(targetId),JSON.stringify(request),300);cache.put(memberAnywhereOutgoingCacheKey_(request.requesterId),String(targetId),300);}
 function memberAnywhereReadSwapRaw_(memberId){return CacheService.getDocumentCache().get(memberAnywhereSwapCacheKey_(memberId));}
 function memberAnywhereReadOutgoingTarget_(memberId){return CacheService.getDocumentCache().get(memberAnywhereOutgoingCacheKey_(memberId));}
-function memberAnywhereReadSwapRequest_(memberId){var raw=memberAnywhereReadSwapRaw_(memberId);if(!raw)return null;try{return JSON.parse(raw);}catch(error){CacheService.getDocumentCache().remove(memberAnywhereSwapCacheKey_(memberId));return null;}}
+function memberAnywhereReadSwapRequest_(memberId){var raw=memberAnywhereReadSwapRaw_(memberId);if(!raw)return null;try{return JSON.parse(raw);}catch(error){return null;}}
 function memberAnywhereSnapshotStillValid_(snapshot){if(!snapshot||!snapshot.from||!snapshot.to)return false;return memberAnywhereSnapshot_(snapshot.from.memberId).locationKey===snapshot.from.locationKey&&memberAnywhereSnapshot_(snapshot.to.memberId).locationKey===snapshot.to.locationKey;}
 function memberAnywhereRequestStillValid_(request){return !!(request&&request.requesterId&&request.targetId&&memberAnywhereSnapshotStillValid_(request.snapshot));}
 function memberAnywhereSameRequest_(first,second){return !!(first&&second&&String(first.requesterId||'')===String(second.requesterId||'')&&String(first.targetId||'')===String(second.targetId||'')&&Number(first.createdAt||0)===Number(second.createdAt||0));}
