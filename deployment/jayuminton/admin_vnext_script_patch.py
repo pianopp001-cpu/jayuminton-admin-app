@@ -27,16 +27,47 @@ new="""      ADMIN_PIN_VALUE,
         isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
       }
     ]);"""
-if old not in s: raise SystemExit('add metadata call anchor not found')
-s=s.replace(old,new,1)
+if old in s:
+ s=s.replace(old,new,1)
+else:
+ direct_old="""        .addMember(
+          ADMIN_PIN_VALUE,
+          name,
+          gender,
+          grade,
+          experience
+        );"""
+ direct_new="""        .addMember(
+          ADMIN_PIN_VALUE,
+          name,
+          gender,
+          grade,
+          experience,
+          {
+            isNew: !!(document.getElementById('newIsNew') && document.getElementById('newIsNew').checked),
+            publicMemo: String(document.getElementById('newPublicMemo') && document.getElementById('newPublicMemo').value || '').trim(),
+            isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
+          }
+        );"""
+ if direct_old not in s: raise SystemExit('add metadata call anchor not found')
+ s=s.replace(direct_old,direct_new,1)
 
-anchor="""    document.getElementById('newExperience').value = '';"""
-if anchor in s:
- s=s.replace(anchor,anchor+"\n    const newMemo=document.getElementById('newPublicMemo'); if(newMemo) newMemo.value='';\n    const newFlag=document.getElementById('newIsNew'); if(newFlag) newFlag.checked=false;\n    const sponsorFlag=document.getElementById('newIsSponsor'); if(sponsorFlag) sponsorFlag.checked=false;",1)
+# Clear metadata inputs after either add or update completes.
+for anchor in [
+ "    document.getElementById('newExperience').value = '';",
+ "    experienceInput.value = '';"
+]:
+ if anchor in s:
+  s=s.replace(anchor,anchor+"\n    const newMemo=document.getElementById('newPublicMemo'); if(newMemo) newMemo.value='';\n    const newFlag=document.getElementById('newIsNew'); if(newFlag) newFlag.checked=false;\n    const sponsorFlag=document.getElementById('newIsSponsor'); if(sponsorFlag) sponsorFlag.checked=false;",1)
 
-edit_anchor="""  document.getElementById('newExperience').value = member.experience || '';"""
-if edit_anchor in s:
- s=s.replace(edit_anchor,edit_anchor+"\n  const memo=document.getElementById('newPublicMemo'); if(memo) memo.value=member.publicMemo||'';\n  const isNew=document.getElementById('newIsNew'); if(isNew) isNew.checked=!!member.isNew;\n  const sponsor=document.getElementById('newIsSponsor'); if(sponsor) sponsor.checked=!!member.isSponsor;",1)
+# Populate metadata inputs when the existing long-press edit flow opens.
+for edit_anchor in [
+ "  document.getElementById('newExperience').value = member.experience || '';",
+ "  experience.value = String(member.experience || '');"
+]:
+ if edit_anchor in s:
+  s=s.replace(edit_anchor,edit_anchor+"\n  const memo=document.getElementById('newPublicMemo'); if(memo) memo.value=member.publicMemo||'';\n  const isNew=document.getElementById('newIsNew'); if(isNew) isNew.checked=!!member.isNew;\n  const sponsor=document.getElementById('newIsSponsor'); if(sponsor) sponsor.checked=!!member.isSponsor;",1)
+  break
 
 update_old="""      ADMIN_PIN_VALUE,
       EDIT_MEMBER_ID,
@@ -57,7 +88,20 @@ update_new="""      ADMIN_PIN_VALUE,
         isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
       }
     ]);"""
-if update_old in s: s=s.replace(update_old,update_new,1)
+if update_old in s:
+ s=s.replace(update_old,update_new,1)
+else:
+ direct_update_old="server('updateMemberProfile', [ADMIN_PIN_VALUE, targetId, name, gender, grade, experience])"
+ direct_update_new="""server('updateMemberProfile', [
+    ADMIN_PIN_VALUE, targetId, name, gender, grade, experience,
+    {
+      isNew: !!(document.getElementById('newIsNew') && document.getElementById('newIsNew').checked),
+      publicMemo: String(document.getElementById('newPublicMemo') && document.getElementById('newPublicMemo').value || '').trim(),
+      isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
+    }
+  ])"""
+ if direct_update_old not in s: raise SystemExit('update metadata call anchor not found')
+ s=s.replace(direct_update_old,direct_update_new,1)
 
 insert='''
 function increaseSelectedGames() {
