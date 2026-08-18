@@ -62,6 +62,13 @@ jobs:
           grep -F "message==='이미 같은 상태라 자리교환이 필요하지 않아요.'" "$CONTRACT_VERIFY" >/dev/null
           grep -F "if(requestChanged_(result)){showLatestRequestAfterChange_(root);return;}" "$CONTRACT_VERIFY" >/dev/null
 
+          # Accepted-swap local fallback must stay snapshot-bound. If either member moved after the
+          # request snapshot was captured, the verifier must keep rejecting the optimistic local mutation.
+          grep -F "var snapshot=request.snapshot||{};var from=snapshot.from||{};var to=snapshot.to||{};" "$CONTRACT_VERIFY" >/dev/null
+          grep -F "if(!from.locationKey||!to.locationKey||typeof memberAnywhereStateLocationKey_!=='function')return;" "$CONTRACT_VERIFY" >/dev/null
+          grep -F "memberAnywhereStateLocationKey_(STATE,String(request.requesterId))!==String(from.locationKey)" "$CONTRACT_VERIFY" >/dev/null
+          grep -F "memberAnywhereStateLocationKey_(STATE,targetId)!==String(to.locationKey)" "$CONTRACT_VERIFY" >/dev/null
+
           # A response from an old session must clean only its still-mounted swap request prompt.
           grep -F "grep -F 'function memberAnywhereDiscardStaleRequestPrompt_(button)' MemberSwapAction.html" "$DEPLOY" >/dev/null
           grep -F "if(!button||!button.isConnected)return;" "$DEPLOY" >/dev/null
