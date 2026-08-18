@@ -34,6 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY='.github/workflows/deploy-member-anywhere-controls-v3.yml'
+          CONTRACT_VERIFY='.github/workflows/verify-member-anywhere-contract.yml'
           CANCEL_VERIFY='.github/workflows/verify-member-anywhere-cancel-repoll.yml'
           READ_VERIFY='.github/workflows/verify-member-anywhere-read-helper-purity.yml'
 
@@ -51,6 +52,13 @@ jobs:
           grep -F "message.indexOf('자리교환 요청이 변경')===0||message==='교환 요청이 없거나 만료됐어요.'" "$DEPLOY" >/dev/null
           grep -F "if(requestChanged_(result)){showLatestRequestAfterChange_(root);return;}" "$DEPLOY" >/dev/null
           grep -F "if(shouldClose&&root&&typeof root.close==='function')root.close();" "$DEPLOY" >/dev/null
+
+          # Keep the standalone contract verifier's stale-accept coverage wired into deploy parity too.
+          # If either server race response stops re-polling, parity must fail even before a manual deploy.
+          test -f "$CONTRACT_VERIFY"
+          grep -F "message==='자리 상태가 변경되어 교환할 수 없어요.'" "$CONTRACT_VERIFY" >/dev/null
+          grep -F "message==='이미 같은 상태라 자리교환이 필요하지 않아요.'" "$CONTRACT_VERIFY" >/dev/null
+          grep -F "if(requestChanged_(result)){showLatestRequestAfterChange_(root);return;}" "$CONTRACT_VERIFY" >/dev/null
 
           # A response from an old session must clean only its still-mounted swap request prompt.
           grep -F "grep -F 'function memberAnywhereDiscardStaleRequestPrompt_(button)' MemberSwapAction.html" "$DEPLOY" >/dev/null
