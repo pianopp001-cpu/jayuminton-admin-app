@@ -8,6 +8,9 @@
   function applyAcceptedSwapLocally_(request){
     if(!request||!request.requesterId||!request.targetId||typeof applyMoveOrSwapLocally!=='function')return;
     var targetId=String(request.targetId||'');if(!targetId)return;
+    var snapshot=request.snapshot||{};var from=snapshot.from||{};var to=snapshot.to||{};
+    if(!from.locationKey||!to.locationKey||typeof memberAnywhereStateLocationKey_!=='function')return;
+    if(memberAnywhereStateLocationKey_(STATE,String(request.requesterId))!==String(from.locationKey)||memberAnywhereStateLocationKey_(STATE,targetId)!==String(to.locationKey))return;
     try{applyMoveOrSwapLocally(String(request.requesterId),'','',targetId);if(typeof renderState==='function')renderState();}catch(error){}
   }
   function applyAcceptedServerState_(result,request){
