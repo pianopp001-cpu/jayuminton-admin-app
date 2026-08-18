@@ -1,0 +1,69 @@
+name: Verify member anywhere request tracking
+
+on:
+  push:
+    branches:
+      - member-anywhere-controls-v3
+    paths:
+      - 'source-snapshot/current-main/MemberAnywhereSwap.js'
+      - 'source-snapshot/current-main/MemberSwapAction.html'
+      - '.github/workflows/verify-member-anywhere-request-tracking.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify outgoing request tracking contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC='source-snapshot/current-main'
+          SERVER="$SRC/MemberAnywhereSwap.js"
+          ACTION="$SRC/MemberSwapAction.html"
+
+          # A newly-created request must return the immutable request timestamp and both
+          # location baselines. The client uses these values to distinguish completion
+          # from cancellation/expiry without guessing from the current UI state.
+          grep -F "createdAt:Number(request.createdAt||0)" "$SERVER" >/dev/null
+          grep -F "requesterLocationKey:String(request.snapshot.from.locationKey||'')" "$SERVER" >/dev/null
+          grep -F "targetLocationKey:String(request.snapshot.to.locationKey||'')" "$SERVER" >/dev/null
+
+          # The selected partner id is a client-owned fact on the initial response and
+          # must be attached before the outgoing tracker starts.
+          grep -F "if(result&&result.ok)result.targetId=String(partner.id||'')" "$ACTION" >/dev/null
+
+          # Initial tracking must consume all four values: requester baseline, request
+          # identity, target location, and target member id.
+          grep -F "memberAnywhereStartOutgoingSync_(result.requesterLocationKey,result.createdAt,result.targetLocationKey,result.targetId)" "$ACTION" >/dev/null
+
+          # Resume/polling must expose the same server-side identity and baselines so a
+          # reload can reconstruct exactly the same tracking state.
+          grep -F "targetId:String(targetId),createdAt:Number(request.createdAt||0),requesterLocationKey:String(from.locationKey||''),targetLocationKey:String(to.locationKey||'')" "$SERVER" >/dev/null
+          grep -F "memberAnywhereStartOutgoingSync_(outgoing.requesterLocationKey,outgoing.createdAt,outgoing.targetLocationKey,outgoing.targetId)" "$ACTION" >/dev/null
+
+          node --check "$SERVER"
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('source-snapshot/current-main/MemberSwapAction.html').read_text(encoding='utf-8')
+          start = text.find('<script>')
+          end = text.rfind('</script>')
+          if start < 0 or end <= start:
+              raise SystemExit('MemberSwapAction.html script block missing')
+          Path('/tmp/MemberSwapAction.js').write_text(text[start + 8:end], encoding='utf-8')
+          PY
+          node --check /tmp/MemberSwapAction.js
+
+          echo 'MEMBER_ANYWHERE_REQUEST_TRACKING_OK'
