@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wire admin-vNext controls to backend APIs. Admin Script only; no user Index edits."""
+"""Wire admin-vNext controls and card rendering. Admin Script only; no user Index edits."""
 from pathlib import Path
 import sys
 root=Path(sys.argv[1]) if len(sys.argv)>1 else Path('source-snapshot/current-main')
@@ -10,8 +10,6 @@ def rep(a,b,label):
  if a not in s: raise SystemExit(label+' anchor not found')
  s=s.replace(a,b,1)
 
-# Existing addMember UI calls the server with the legacy five fields. Extend that
-# call with a sixth optional metadata object while preserving compatibility.
 old="""      ADMIN_PIN_VALUE,
       name,
       gender,
@@ -29,22 +27,17 @@ new="""      ADMIN_PIN_VALUE,
         isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
       }
     ]);"""
-if old not in s:
-    raise SystemExit('add/update metadata call anchor not found')
-# Replace first occurrence only: addMember path. Edit path is handled by function-specific anchor below.
+if old not in s: raise SystemExit('add metadata call anchor not found')
 s=s.replace(old,new,1)
 
-# Clear metadata controls after successful registration if the legacy clear block exists.
 anchor="""    document.getElementById('newExperience').value = '';"""
 if anchor in s:
-    s=s.replace(anchor, anchor+"\n    const newMemo=document.getElementById('newPublicMemo'); if(newMemo) newMemo.value='';\n    const newFlag=document.getElementById('newIsNew'); if(newFlag) newFlag.checked=false;\n    const sponsorFlag=document.getElementById('newIsSponsor'); if(sponsorFlag) sponsorFlag.checked=false;",1)
+ s=s.replace(anchor,anchor+"\n    const newMemo=document.getElementById('newPublicMemo'); if(newMemo) newMemo.value='';\n    const newFlag=document.getElementById('newIsNew'); if(newFlag) newFlag.checked=false;\n    const sponsorFlag=document.getElementById('newIsSponsor'); if(sponsorFlag) sponsorFlag.checked=false;",1)
 
-# When edit starts, populate the three vNext fields from the selected member.
 edit_anchor="""  document.getElementById('newExperience').value = member.experience || '';"""
 if edit_anchor in s:
-    s=s.replace(edit_anchor, edit_anchor+"\n  const memo=document.getElementById('newPublicMemo'); if(memo) memo.value=member.publicMemo||'';\n  const isNew=document.getElementById('newIsNew'); if(isNew) isNew.checked=!!member.isNew;\n  const sponsor=document.getElementById('newIsSponsor'); if(sponsor) sponsor.checked=!!member.isSponsor;",1)
+ s=s.replace(edit_anchor,edit_anchor+"\n  const memo=document.getElementById('newPublicMemo'); if(memo) memo.value=member.publicMemo||'';\n  const isNew=document.getElementById('newIsNew'); if(isNew) isNew.checked=!!member.isNew;\n  const sponsor=document.getElementById('newIsSponsor'); if(sponsor) sponsor.checked=!!member.isSponsor;",1)
 
-# Extend updateMemberProfile call if present.
 update_old="""      ADMIN_PIN_VALUE,
       EDIT_MEMBER_ID,
       name,
@@ -64,38 +57,52 @@ update_new="""      ADMIN_PIN_VALUE,
         isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
       }
     ]);"""
-if update_old in s:
-    s=s.replace(update_old,update_new,1)
+if update_old in s: s=s.replace(update_old,update_new,1)
 
-# Add concrete handlers used by the new Admin.html buttons.
 insert='''
 function increaseSelectedGames() {
   const ids = Array.from(SELECTED);
   if (!ids.length) { alert('게임횟수를 올릴 멤버를 선택하세요.'); return; }
-  Promise.all(ids.map(function(id) {
-    return server('adjustMemberGames', [ADMIN_PIN_VALUE, id, 1]);
-  })).then(function(states) {
-    SELECTED.clear();
-    if (states.length) renderState(states[states.length - 1]);
-  }).catch(function(error) { alert(error.message || error); });
+  Promise.all(ids.map(function(id) { return server('adjustMemberGames', [ADMIN_PIN_VALUE, id, 1]); }))
+    .then(function(states) { SELECTED.clear(); if (states.length) renderState(states[states.length-1]); })
+    .catch(function(error) { alert(error.message || error); });
 }
-
 function setSelectedBundle() {
-  const ids = Array.from(SELECTED);
-  if (ids.length < 2) { alert('묶음으로 지정할 멤버를 2명 이상 선택하세요.'); return; }
-  runAction('setBundle', [ADMIN_PIN_VALUE, ids]);
+  const ids=Array.from(SELECTED); if(ids.length<2){alert('묶음으로 지정할 멤버를 2명 이상 선택하세요.');return;}
+  runAction('setBundle',[ADMIN_PIN_VALUE,ids]);
 }
-
 function clearSelectedBundle() {
-  const ids = Array.from(SELECTED);
-  if (!ids.length) { alert('묶음을 해제할 멤버를 선택하세요.'); return; }
-  runAction('clearBundle', [ADMIN_PIN_VALUE, ids]);
+  const ids=Array.from(SELECTED); if(!ids.length){alert('묶음을 해제할 멤버를 선택하세요.');return;}
+  runAction('clearBundle',[ADMIN_PIN_VALUE,ids]);
+}
+'''
+marker='function decreaseSelectedGames() {'
+if marker not in s: raise SystemExit('decrease marker not found')
+s=s.replace(marker,insert+'\n'+marker,1)
+
+# Admin card policy: 신규는 괄호까지 포함한 저장된 이름 전체를 표시한다.
+# 비신규는 기존 compactMemberName 동작을 유지한다.
+s=s.replace("compactMemberName(member.name)", "(member.isNew ? escapeMemberInfo(member.name) : compactMemberName(member.name))")
+
+# Add visible badges/details without inventing '미입력' text. Blank grade/experience remain absent.
+card_marker="""function memberInfoDetailHtml(member, contextLabel) {"""
+if card_marker not in s: raise SystemExit('memberInfoDetailHtml marker not found')
+helper='''function adminVnextMemberBadges(member) {
+  if (!member) return '';
+  let html = '';
+  if (member.isNew) html += '<span class="member-vnext-badge new-badge">신규</span>';
+  if (member.isSponsor) html += '<span class="member-vnext-badge sponsor-badge">🎁 찬조</span>';
+  if (member.publicMemo) html += '<span class="member-vnext-memo">' + escapeMemberInfo(member.publicMemo) + '</span>';
+  return html;
 }
 
 '''
-marker='function decreaseSelectedGames() {'
-if marker not in s: raise SystemExit('decreaseSelectedGames marker not found')
-s=s.replace(marker,insert+marker,1)
+s=s.replace(card_marker,helper+card_marker,1)
+
+# Append badges to every detail block through the function's final return when identifiable.
+# Safer fallback: inject badges next to game count in standard cards and quick roster.
+s=s.replace("memberInfoDetailHtml(member) +", "memberInfoDetailHtml(member) + adminVnextMemberBadges(member) +")
+s=s.replace("memberInfoDetailHtml(member, '코트배정 대기') +", "memberInfoDetailHtml(member, '코트배정 대기') + adminVnextMemberBadges(member) +")
 
 p.write_text(s,encoding='utf-8')
-print('admin vNext Script API wiring patch prepared')
+print('admin vNext Script API + card rendering patch prepared')
