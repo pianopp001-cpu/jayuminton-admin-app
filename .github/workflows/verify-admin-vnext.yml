@@ -1,0 +1,41 @@
+name: Verify admin vNext
+
+on:
+  push:
+    branches:
+      - admin-vnext-10-features
+    paths:
+      - 'deployment/jayuminton/admin_vnext_*.py'
+      - 'deployment/jayuminton/apply_admin_vnext_patches.py'
+      - '.github/workflows/verify-admin-vnext.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy protected source snapshot
+        run: |
+          cp -R source-snapshot/current-main /tmp/admin-vnext-source
+          sha256sum /tmp/admin-vnext-source/Index.html /tmp/admin-vnext-source/Style.html > /tmp/protected-before.sha256
+
+      - name: Apply admin-only patches
+        run: python3 deployment/jayuminton/apply_admin_vnext_patches.py /tmp/admin-vnext-source
+
+      - name: Verify transition notifications
+        run: python3 deployment/jayuminton/admin_vnext_notification_contract_test.py /tmp/admin-vnext-source/Code.js
+
+      - name: Verify protected user files unchanged
+        run: |
+          sha256sum /tmp/admin-vnext-source/Index.html /tmp/admin-vnext-source/Style.html > /tmp/protected-after.sha256
+          diff -u /tmp/protected-before.sha256 /tmp/protected-after.sha256
+
+      - name: Verify no deployment side effects
+        run: |
+          test ! -e /tmp/admin-vnext-source/.clasp.json
+          echo "Verification only; no user web/app deployment performed."
