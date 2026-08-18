@@ -276,6 +276,31 @@ jobs:
           grep -F "button.disabled=false;button.textContent='교환요청';" MemberSwapAction.html >/dev/null
           grep -F 'memberAnywhereDiscardStaleRequestPrompt_(button);setTimeout(memberAnywhereResumeOutgoingSync_,0);return;' MemberSwapAction.html >/dev/null
 
+          # Polling endpoints are read paths. Keep their helper chain side-effect free in the production gate,
+          # not only in the standalone verifier, so a manual deploy cannot reintroduce cache mutation races.
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('MemberAnywhereSwap.js').read_text(encoding='utf-8')
+          def body(name):
+              marker='function '+name+'('
+              start=text.find(marker)
+              if start < 0: raise SystemExit(name+': function missing')
+              next_start=text.find('\nfunction ', start+len(marker))
+              return text[start:] if next_start < 0 else text[start:next_start]
+          reader=body('memberAnywhereReadSwapRequest_')
+          if 'memberAnywhereReadSwapRaw_' not in reader or 'JSON.parse(raw)' not in reader:
+              raise SystemExit('swap request reader contract missing')
+          if '.remove(' in reader or 'memberAnywhereClearSwapRequest_' in reader:
+              raise SystemExit('swap request reader must remain side-effect free')
+          for name in ('memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap'):
+              current=body(name)
+              if '.remove(' in current or 'memberAnywhereClearSwapRequest_' in current:
+                  raise SystemExit(name+': polling path must remain side-effect free')
+          outgoing=body('memberGetAnywhereOutgoingSwap')
+          if 'memberAnywherePeekActiveOutgoingTarget_' not in outgoing or 'memberAnywhereReadActiveOutgoingTarget_' in outgoing:
+              raise SystemExit('outgoing polling must use the read-only peek resolver')
+          PY
+
           node --check MemberAnywhereSwap.js
           node --check Code.js
           python3 - <<'PY'
