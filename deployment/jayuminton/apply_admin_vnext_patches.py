@@ -11,13 +11,18 @@ import sys
 HERE = Path(__file__).resolve().parent
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path('source-snapshot/current-main').resolve()
 CODE = ROOT / 'Code.js'
+ADMIN = ROOT / 'Admin.html'
+SCRIPT = ROOT / 'Script.html'
 
-if not CODE.exists():
-    raise SystemExit(f'Code.js not found: {CODE}')
+for target in (CODE, ADMIN, SCRIPT):
+    if not target.exists():
+        raise SystemExit(f'required source not found: {target}')
 
 patches = [
     HERE / 'admin_vnext_backend_patch.py',
     HERE / 'admin_vnext_member_fields_patch.py',
+    HERE / 'admin_vnext_ui_patch.py',
+    HERE / 'admin_vnext_script_patch.py',
 ]
 
 for patch in patches:
@@ -26,8 +31,10 @@ for patch in patches:
     print(f'[admin-vNext] applying {patch.name}')
     subprocess.run([sys.executable, str(patch), str(ROOT)], check=True)
 
-text = CODE.read_text(encoding='utf-8')
-required = [
+code = CODE.read_text(encoding='utf-8')
+admin = ADMIN.read_text(encoding='utf-8')
+script = SCRIPT.read_text(encoding='utf-8')
+required_code = [
     "const SHEET_PAIR_HISTORY = 'PairHistory';",
     "'IS_NEW', 'PUBLIC_MEMO', 'IS_SPONSOR', 'BUNDLE_ID'",
     'function adjustMemberGames(pin,id,delta)',
@@ -37,8 +44,12 @@ required = [
     'function updateMemberProfile(pin, memberId, name, gender, grade, experience, extra)',
     "publicMemo: String(member.publicMemo || '').slice(0, 40)",
 ]
-missing = [needle for needle in required if needle not in text]
+required_admin = ['id="newIsNew"', 'id="newIsSponsor"', 'id="newPublicMemo"', '게임횟수 +1', '묶음 지정', '>자동배정</button>']
+required_script = ['function increaseSelectedGames()', 'function setSelectedBundle()', 'function clearSelectedBundle()', "server('adjustMemberGames'", "runAction('setBundle'", "runAction('clearBundle'"]
+missing = ([f'Code:{x}' for x in required_code if x not in code] +
+           [f'Admin:{x}' for x in required_admin if x not in admin] +
+           [f'Script:{x}' for x in required_script if x not in script])
 if missing:
     raise SystemExit('admin-vNext verification failed; missing: ' + ' | '.join(missing))
 
-print('[admin-vNext] patch chain verified successfully')
+print('[admin-vNext] backend + member fields + admin UI + Script wiring verified successfully')
