@@ -128,20 +128,35 @@ rep(
 )
 
 # Undo must restore all vNext member metadata; otherwise one undo would silently
-# erase new/sponsor/memo/bundle information.
-rep(
-"""          grade: String(member.grade || '').slice(0, 12),
-          experience: String(member.experience || '').slice(0, 20)
-        };""",
-"""          grade: String(member.grade || '').slice(0, 12),
+# erase new/sponsor/memo/bundle information. The backend migration may already
+# have injected these fields, so normalize the bounded undo object instead of
+# relying on the legacy eight-column text anchor.
+undo_start = s.find('const members = state.members.map(function(member) {')
+undo_end = s.find('}).filter(function(member) {', undo_start)
+if undo_start < 0 or undo_end < 0:
+    raise SystemExit('undo member mapping not found')
+undo_chunk = s[undo_start:undo_end]
+grade_start = undo_chunk.find("          grade: String(member.grade || '')")
+object_end = undo_chunk.find('        };', grade_start)
+if grade_start < 0 or object_end < 0:
+    raise SystemExit('undo member metadata bounds not found')
+canonical = """          grade: String(member.grade || '').slice(0, 12),
           experience: String(member.experience || '').slice(0, 20),
           isNew: Boolean(member.isNew),
           publicMemo: String(member.publicMemo || '').slice(0, 40),
           isSponsor: Boolean(member.isSponsor),
           bundleId: String(member.bundleId || '')
-        };""",
-'undo member metadata'
-)
+"""
+undo_chunk = undo_chunk[:grade_start] + canonical + undo_chunk[object_end:]
+s = s[:undo_start] + undo_chunk + s[undo_end:]
+
+normalized_undo = s[undo_start:s.find('}).filter(function(member) {', undo_start)]
+for required in [
+    "publicMemo: String(member.publicMemo || '').slice(0, 40)",
+    "bundleId: String(member.bundleId || '')"
+]:
+    if required not in normalized_undo:
+        raise SystemExit('undo member metadata normalization missing: ' + required)
 
 p.write_text(s, encoding='utf-8')
 print('admin vNext member metadata persistence patch prepared')
