@@ -54,7 +54,7 @@ rep('''  <div class="mobile-quick-bar">
       onclick="undoLastAction()"
       disabled
     >↶ 실행 취소</button>
-    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">위치 자동배정</button>
+    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">자동배정</button>
   </div>''','''  <div class="mobile-quick-bar admin-vnext-bottom-bar">
     <span id="mobileSelectedCount">0명 선택</span>
     <button id="mobileUndoButton" class="ghost-button undo-button mobile-undo-button" onclick="undoLastAction()" disabled>↶ 실행 취소</button>
