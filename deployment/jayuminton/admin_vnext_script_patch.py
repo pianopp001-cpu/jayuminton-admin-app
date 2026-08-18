@@ -129,7 +129,9 @@ s=s.replace(marker,insert+'\n'+marker,1)
 s=s.replace("compactMemberName(member.name)", "(member.isNew ? escapeMemberInfo(member.name) : compactMemberName(member.name))")
 
 # Add visible badges/details without inventing '미입력' text. Blank grade/experience remain absent.
-card_marker="""function memberInfoDetailHtml(member, contextLabel) {"""
+card_marker = "function memberInfoDetailHtml(member, contextLabel) {"
+if card_marker not in s:
+ card_marker = "function memberInfoDetailHtml(member, locationOverride) {"
 if card_marker not in s: raise SystemExit('memberInfoDetailHtml marker not found')
 helper='''function adminVnextMemberBadges(member) {
   if (!member) return '';
