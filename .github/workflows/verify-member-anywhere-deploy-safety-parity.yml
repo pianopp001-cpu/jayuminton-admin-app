@@ -74,4 +74,11 @@ jobs:
           grep -F "if 'memberAnywherePeekActiveOutgoingTarget_' not in outgoing:" "$READ_VERIFY" >/dev/null
           grep -F "if 'memberAnywhereReadActiveOutgoingTarget_' in outgoing:" "$READ_VERIFY" >/dev/null
 
+          # The actual manual production deploy must enforce the same read-purity gate, not merely rely on the standalone verifier.
+          grep -F "text = Path('MemberAnywhereSwap.js').read_text(encoding='utf-8')" "$DEPLOY" >/dev/null
+          grep -F "reader=body('memberAnywhereReadSwapRequest_')" "$DEPLOY" >/dev/null
+          grep -F "if '.remove(' in reader or 'memberAnywhereClearSwapRequest_' in reader:" "$DEPLOY" >/dev/null
+          grep -F "for name in ('memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap'):" "$DEPLOY" >/dev/null
+          grep -F "if 'memberAnywherePeekActiveOutgoingTarget_' not in outgoing or 'memberAnywhereReadActiveOutgoingTarget_' in outgoing:" "$DEPLOY" >/dev/null
+
           echo 'MEMBER_ANYWHERE_DEPLOY_SAFETY_PARITY_OK'
