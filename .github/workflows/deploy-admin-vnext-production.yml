@@ -1,0 +1,111 @@
+name: Deploy admin vNext production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-admin-vnext-production.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-vnext-production
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve production deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Pull live, back up, patch, and verify
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          LIVE="$RUNNER_TEMP/admin-vnext-live"
+          BACKUP="$RUNNER_TEMP/admin-vnext-live-before"
+          mkdir -p "$LIVE" "$BACKUP"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$LIVE/.clasp.json"
+          (cd "$LIVE" && clasp pull)
+          cp -R "$LIVE"/. "$BACKUP"/
+          sha256sum "$LIVE/Index.html" "$LIVE/Style.html" > "$RUNNER_TEMP/protected-before.sha256"
+
+          python3 deployment/jayuminton/apply_admin_vnext_patches.py "$LIVE"
+          python3 deployment/jayuminton/admin_vnext_notification_contract_test.py "$LIVE/Code.js"
+          python3 deployment/jayuminton/admin_vnext_push_compatibility_check.py "$LIVE/Code.js"
+
+          sha256sum "$LIVE/Index.html" "$LIVE/Style.html" > "$RUNNER_TEMP/protected-after.sha256"
+          diff -u "$RUNNER_TEMP/protected-before.sha256" "$RUNNER_TEMP/protected-after.sha256"
+          node --check "$LIVE/Code.js"
+          python3 - "$LIVE/Script.html" "$RUNNER_TEMP/admin-vnext-script.js" <<'PY'
+          from pathlib import Path
+          import sys
+          source=Path(sys.argv[1]).read_text(encoding='utf-8')
+          start=source.find('<script>'); end=source.rfind('</script>')
+          if start < 0 or end <= start: raise SystemExit('Script.html wrapper missing')
+          Path(sys.argv[2]).write_text(source[start+8:end],encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/admin-vnext-script.js"
+
+          changed="$(diff -qr "$BACKUP" "$LIVE" | sed -n 's|^Files .*\/\([^/]*\) and .* differ$|\1|p' | sort -u)"
+          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(Admin\.html|Code\.js|Script\.html)$' || true)"
+          test -z "$unexpected"
+          printf '%s\n' "$changed" > "$RUNNER_TEMP/changed-files.txt"
+      - name: Preserve pre-deployment live backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-vnext-live-before-${{ github.run_id }}
+          path: ${{ runner.temp }}/admin-vnext-live-before
+          retention-days: 30
+          include-hidden-files: true
+      - name: Deploy existing production web app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNNER_TEMP/admin-vnext-live"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "admin vNext production ${GITHUB_SHA::7}"
+          clasp deployments | grep -F "$MAIN_DEPLOYMENT_ID" >/dev/null
+      - name: Record production status
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo 'status=success'
+            echo "commit=$GITHUB_SHA"
+            echo 'deployment=existing-main'
+            echo 'protected_user_files_unchanged=yes'
+            echo 'member_apk_aab_changed=no'
+            echo 'notification_contract_verified=yes'
+            echo 'production_push_compatibility=yes'
+            echo "deployed_at=$(date -u +%FT%TZ)"
+          } > deployment/status/admin-vnext-production-live.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/admin-vnext-production-live.txt
+          git commit -m 'Record live admin vNext production deployment'
+          git pull --rebase origin main
+          git push origin main
