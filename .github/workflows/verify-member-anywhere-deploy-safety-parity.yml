@@ -14,6 +14,7 @@ on:
       - '.github/workflows/verify-member-anywhere-contract.yml'
       - '.github/workflows/verify-member-anywhere-cancel-repoll.yml'
       - '.github/workflows/verify-member-anywhere-read-helper-purity.yml'
+      - '.github/workflows/verify-member-anywhere-request-tracking.yml'
       - '.github/workflows/verify-member-anywhere-deploy-safety-parity.yml'
   workflow_dispatch: {}
 
@@ -37,6 +38,7 @@ jobs:
           CONTRACT_VERIFY='.github/workflows/verify-member-anywhere-contract.yml'
           CANCEL_VERIFY='.github/workflows/verify-member-anywhere-cancel-repoll.yml'
           READ_VERIFY='.github/workflows/verify-member-anywhere-read-helper-purity.yml'
+          TRACK_VERIFY='.github/workflows/verify-member-anywhere-request-tracking.yml'
 
           # Swap RPCs must stay on the canonical member-session source in manual production deploys.
           grep -F "grep -F 'function memberAnywhereSession_()' MemberSwapClient.html" "$DEPLOY" >/dev/null
@@ -81,6 +83,17 @@ jobs:
           grep -F "for name in ('memberGetAnywhereSwapRequest', 'memberGetAnywhereOutgoingSwap'):" "$READ_VERIFY" >/dev/null
           grep -F "if 'memberAnywherePeekActiveOutgoingTarget_' not in outgoing:" "$READ_VERIFY" >/dev/null
           grep -F "if 'memberAnywhereReadActiveOutgoingTarget_' in outgoing:" "$READ_VERIFY" >/dev/null
+
+          # Request tracking must remain reconstructable after reload: immutable request time,
+          # both location baselines, and the selected partner id are all required.
+          # Keep the dedicated verifier in parity so these checks cannot silently weaken or stop running.
+          test -f "$TRACK_VERIFY"
+          grep -F "createdAt:Number(request.createdAt||0)" "$TRACK_VERIFY" >/dev/null
+          grep -F "requesterLocationKey:String(request.snapshot.from.locationKey||'')" "$TRACK_VERIFY" >/dev/null
+          grep -F "targetLocationKey:String(request.snapshot.to.locationKey||'')" "$TRACK_VERIFY" >/dev/null
+          grep -F "if(result&&result.ok)result.targetId=String(partner.id||'')" "$TRACK_VERIFY" >/dev/null
+          grep -F "memberAnywhereStartOutgoingSync_(result.requesterLocationKey,result.createdAt,result.targetLocationKey,result.targetId)" "$TRACK_VERIFY" >/dev/null
+          grep -F "memberAnywhereStartOutgoingSync_(outgoing.requesterLocationKey,outgoing.createdAt,outgoing.targetLocationKey,outgoing.targetId)" "$TRACK_VERIFY" >/dev/null
 
           # The actual manual production deploy must enforce the same read-purity gate, not merely rely on the standalone verifier.
           grep -F "text = Path('MemberAnywhereSwap.js').read_text(encoding='utf-8')" "$DEPLOY" >/dev/null
