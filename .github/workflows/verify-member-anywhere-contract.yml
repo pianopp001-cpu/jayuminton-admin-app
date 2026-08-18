@@ -55,6 +55,30 @@ jobs:
           grep -F 'outgoing.targetId' "$SRC/MemberSwapAction.html" >/dev/null
           grep -F 'partnerCurrent===memberAnywhereOutgoingBaseline_' "$SRC/MemberSwapAction.html" >/dev/null
 
+          # Polling endpoints are read-only. They may observe an expired/stale request, but must not
+          # switch back to the mutating active-outgoing resolver or directly clear swap state.
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('source-snapshot/current-main/MemberAnywhereSwap.js').read_text(encoding='utf-8')
+
+          def function_body(name):
+              marker = 'function ' + name + '('
+              start = text.find(marker)
+              if start < 0:
+                  raise SystemExit(f'{name}: function missing')
+              next_start = text.find('\nfunction ', start + len(marker))
+              return text[start:] if next_start < 0 else text[start:next_start]
+
+          incoming = function_body('memberGetAnywhereSwapRequest')
+          outgoing = function_body('memberGetAnywhereOutgoingSwap')
+          if 'memberAnywhereClearSwapRequest_' in incoming or 'memberAnywhereClearSwapRequest_' in outgoing:
+              raise SystemExit('polling endpoint must not clear swap state')
+          if 'memberAnywhereReadActiveOutgoingTarget_' in outgoing:
+              raise SystemExit('outgoing polling must not use mutating active resolver')
+          if 'memberAnywherePeekActiveOutgoingTarget_' not in outgoing:
+              raise SystemExit('outgoing polling must use read-only peek resolver')
+          PY
+
           # A request can expire between resolving the outgoing target and re-reading its cache entry.
           # The second read must be null-safe and must only clear the same outgoing pointer it resolved.
           grep -F "var request=memberAnywhereReadSwapRequest_(targetId);if(!request||String(request.requesterId)!==memberId||String(request.targetId)!==String(targetId))" "$SRC/MemberAnywhereSwap.js" >/dev/null
