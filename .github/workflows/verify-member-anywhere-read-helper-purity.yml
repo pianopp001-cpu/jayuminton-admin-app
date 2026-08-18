@@ -1,0 +1,71 @@
+name: Verify member anywhere read helper purity
+
+on:
+  push:
+    branches:
+      - member-anywhere-controls-v3
+    paths:
+      - 'source-snapshot/current-main/MemberAnywhereSwap.js'
+      - '.github/workflows/verify-member-anywhere-read-helper-purity.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: member-anywhere-controls-v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify swap read helper stays side-effect free
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='source-snapshot/current-main/MemberAnywhereSwap.js'
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('source-snapshot/current-main/MemberAnywhereSwap.js')
+          text = path.read_text(encoding='utf-8')
+
+          def function_body(name):
+              marker = 'function ' + name + '('
+              start = text.find(marker)
+              if start < 0:
+                  raise SystemExit(f'{name}: function missing')
+              next_start = text.find('\nfunction ', start + len(marker))
+              return text[start:] if next_start < 0 else text[start:next_start]
+
+          reader = function_body('memberAnywhereReadSwapRequest_')
+          if 'memberAnywhereReadSwapRaw_' not in reader:
+              raise SystemExit('swap request reader must read through memberAnywhereReadSwapRaw_')
+          if 'JSON.parse(raw)' not in reader:
+              raise SystemExit('swap request reader must parse cached JSON')
+          if 'catch(error){return null;}' not in reader.replace(' ', ''):
+              raise SystemExit('malformed swap JSON must return null')
+          if '.remove(' in reader or 'memberAnywhereClearSwapRequest_' in reader:
+              raise SystemExit('swap request reader must not mutate cache/state')
+
+          for name in ('memberGetAnywhereSwapRequest', 'memberGetAnywhereOutgoingSwap'):
+              body = function_body(name)
+              if 'memberAnywhereClearSwapRequest_' in body or '.remove(' in body:
+                  raise SystemExit(f'{name}: polling path must remain side-effect free')
+
+          outgoing = function_body('memberGetAnywhereOutgoingSwap')
+          if 'memberAnywherePeekActiveOutgoingTarget_' not in outgoing:
+              raise SystemExit('outgoing polling must use read-only peek resolver')
+          if 'memberAnywhereReadActiveOutgoingTarget_' in outgoing:
+              raise SystemExit('outgoing polling must not use mutating active resolver')
+          PY
+
+          node --check "$FILE"
+          echo 'MEMBER_ANYWHERE_READ_HELPER_PURITY_OK'
