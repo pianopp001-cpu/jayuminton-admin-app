@@ -1,0 +1,3 @@
+admin_url=file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.0
+apk_web_build=2000-bundled-cloudflare-full
+frontend=bundled-android-asset
