@@ -17,11 +17,13 @@
 
 ## 현재 관리자 Cloudflare 경로
 
+- 현재 관리자 프런트엔드: `https://jayuminton-push--admin-cloudflare-dnhyj6hu.web.app/`
 - 관리자 Worker RPC: `https://jayuminton-admin-rpc.pianopp001.workers.dev/`
 - 관리자 Worker 이름: `jayuminton-admin-rpc`
 - 관리자 프런트 빌드/배포 Workflow: `.github/workflows/preview-admin-cloudflare.yml`
 - 관리자 프런트 빌더: `deployment/jayuminton/admin_cloudflare_rpc.py`
 - Apps Script deployment는 관리자 전용 RPC 백엔드일 뿐 관리자 웹주소가 아니다.
+- 현재 관리자 프런트엔드는 `admin-cloudflare` 독립 채널이며 사용자 production Hosting과 다른 배포 대상이다.
 
 ## 사용자 경로와의 분리
 
