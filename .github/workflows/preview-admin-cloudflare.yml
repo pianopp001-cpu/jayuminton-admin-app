@@ -1,3 +1,4 @@
+# force deploy: remove voice-test UI and normalize 신규 badge
 name: Deploy separate admin web via Cloudflare RPC
 on:
   push:
@@ -98,6 +99,8 @@ jobs:
           python3 deployment/jayuminton/admin_cloudflare_final_contract.py "$ROOT/public/index.html"
           for x in jayuminton-admin-finish-alert-v16 'NativeVoice.speak' 'NativeVoice.vibrate' '__JAYUMINTON_ADMIN_FINISH_ALERT_V16__' 'emptyCourtAllowed:true' 'NEW <small>신규</small>' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$ROOT/public/index.html"; done
           if grep -F 'adminVoiceTestButton' "$ROOT/public/index.html" >/dev/null; then exit 1; fi
+          grep -F '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__' "$ROOT/public/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_NEW_BADGE_KO__' "$ROOT/public/index.html" >/dev/null
           python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert 'grid-template-columns:repeat(3,minmax(0,1fr))' in h; assert 'header-refresh-button' in h and 'display:none!important' in h; assert '.admin-save-notice.is-visible' in h; assert '.admin-pair-statistics-open #adminApp .admin-vnext-bottom-bar' in h" "$ROOT/public/index.html"
           python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h" "$ROOT/public/index.html"
           cat > "$ROOT/firebase.json" <<'JSON'
@@ -115,6 +118,8 @@ jobs:
           curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
           for x in jayuminton-admin-finish-alert-v16 'NativeVoice.speak' 'NativeVoice.vibrate' '__JAYUMINTON_ADMIN_FINISH_ALERT_V16__' 'emptyCourtAllowed:true' 'NEW <small>신규</small>' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$RUNNER_TEMP/live.html"; done
           if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/live.html" >/dev/null; then exit 1; fi
+          grep -F '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_NEW_BADGE_KO__' "$RUNNER_TEMP/live.html" >/dev/null
           python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h" "$RUNNER_TEMP/live.html"
           echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
           echo 'ADMIN_CLOUDFLARE_VNEXT_READY'
