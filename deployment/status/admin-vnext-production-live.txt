@@ -1,10 +1,11 @@
 status=success
-commit=b67c0b1c2a998f9fb4232bdcc5c07c1e55fd332d
+commit=33cbb4c8ed264f9e0177a504a1923d58779e1b44
 deployment=existing-main
-protected_user_files_unchanged=yes
+protected_user_structure_unchanged=yes
+approved_user_style_delta=compact-sponsor-badge-only
 member_apk_aab_changed=no
 notification_contract_verified=yes
 production_push_compatibility=yes
 push_relay_deployed=yes
 relay_credentials_synchronized=yes
-deployed_at=2026-08-19T10:52:57Z
+deployed_at=2026-08-19T13:48:56Z
