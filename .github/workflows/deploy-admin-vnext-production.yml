@@ -1,4 +1,5 @@
 name: Deploy admin vNext production
+# Production deployment explicitly approved on 2026-08-19.
 
 on:
   push:
