@@ -17,9 +17,12 @@ required_workflow = [
     'MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED',
 ]
 required_badge = [
-    "badge.textContent='NEW'",
-    "sponsor.textContent='🎁'",
+    "badge.textContent='NEW 신규'",
+    "sponsor.textContent='🎁 찬조'",
     "sponsor.setAttribute('aria-label','찬조 회원')",
+    'member-status-list',
+    'flex-direction:column!important',
+    'height:auto!important',
 ]
 required_guardrails = [
     '항상 Cloudflare Worker RPC를 사용하는 Firebase Hosting',
