@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Admin-only compact partner history. Re-applying is safe."""
+"""Remove noisy recent/partner statistics from admin member cards."""
 from pathlib import Path
 import re
 import sys
@@ -43,19 +43,17 @@ s = s.replace('adminVnextRecentPlayed(member) + ', '')
 s = re.sub(r'<style id="adminVnextRecentPlayedStyle">[\s\S]*?</style>\s*', '', s)
 
 helper='''function adminVnextRecentPlayed(member) {
-  if (!member || !member.partnerSummary) return '';
-  return '<span class="member-vnext-recent">' + escapeMemberInfo(member.partnerSummary) + '</span>';
+  return '';
 }
 
 '''
 s=s.replace(marker,helper+marker,1)
-s=s.replace("memberInfoDetailHtml(member) + adminVnextMemberBadges(member) +", "memberInfoDetailHtml(member) + adminVnextMemberBadges(member) + adminVnextRecentPlayed(member) +")
-s=s.replace("memberInfoDetailHtml(member, '코트배정 대기') + adminVnextMemberBadges(member) +", "memberInfoDetailHtml(member, '코트배정 대기') + adminVnextMemberBadges(member) + adminVnextRecentPlayed(member) +")
-style='''\n<style id="adminVnextRecentPlayedStyle">.member-vnext-recent{display:block;max-width:100%;font-size:10px;line-height:1.2;opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}</style>\n'''
+s=s.replace('adminVnextRecentPlayed(member) + ', '')
+style='''\n<style id="adminVnextRecentPlayedStyle">.member-vnext-recent{display:none!important}</style>\n'''
 script_end = s.rfind('</script>')
 if script_end < 0: raise SystemExit('script end anchor not found')
 s = s[:script_end + len('</script>')] + style + s[script_end + len('</script>'):]
 if s.count('function adminVnextRecentPlayed(member)') != 1 or s.count('id="adminVnextRecentPlayedStyle"') != 1:
     raise SystemExit('compact partner UI must be unique')
 p.write_text(s,encoding='utf-8')
-print('admin vNext compact partner UI patch prepared')
+print('admin vNext card statistics cleanup prepared')
