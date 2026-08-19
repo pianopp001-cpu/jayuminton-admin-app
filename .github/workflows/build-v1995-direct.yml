@@ -1,5 +1,6 @@
 name: Build Jayuminton admin v199.8 PIN-fixed full APK
 run-name: Jayuminton admin v199.8 PIN-fixed full APK
+# Full rebuild trigger after the Android WebView PIN-focus fix is on main.
 
 on:
   workflow_dispatch: {}
