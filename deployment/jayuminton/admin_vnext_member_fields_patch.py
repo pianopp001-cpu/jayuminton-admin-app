@@ -82,6 +82,38 @@ canonical_values = """.setValues([[
 block = block[:values_start] + canonical_values + block[values_end + 4:]
 s = s[:a] + block + s[b:]
 
+# Every operation that rewrites the member sheet (status, game count, court
+# assignment, bundle changes) must retain the four metadata columns.  The old
+# writer cleared 12 columns but wrote only the first 8, silently erasing NEW,
+# memo, sponsor and bundle flags on the next action.
+a, b = bounds(s, 'writeMembers_(', 'readCourts_(')
+writer = '''function writeMembers_(members) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_MEMBERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, 12).clearContent();
+  if (!members.length) return;
+  const rows = members.map(function(member) {
+    return [
+      member.id,
+      member.name,
+      member.gender,
+      Number(member.games) || 0,
+      member.status || 'active',
+      member.createdAt || '',
+      member.grade || '',
+      member.experience || '',
+      member.isNew ? '1' : '',
+      member.publicMemo || '',
+      member.isSponsor ? '1' : '',
+      member.bundleId || ''
+    ];
+  });
+  sheet.getRange(2, 1, rows.length, 12).setValues(rows);
+}
+
+'''
+s = s[:a] + writer + s[b:]
+
 # Registration keeps legacy boolean isNew callers compatible while accepting
 # the admin-vNext metadata object.
 a, b = bounds(s, 'addMemberUnlocked_(', 'setMemberStatusUnlocked_(')
@@ -243,7 +275,9 @@ required = [
     'function addMemberUnlocked_(pin, name, gender, grade, experience, extra)',
     'function updateMemberProfile(pin, memberId, name, gender, grade, experience, extra)',
     "publicMemo: String(member.publicMemo || '').slice(0, 40)",
-    "bundleId: String(member.bundleId || '')"
+    "bundleId: String(member.bundleId || '')",
+    'sheet.getRange(2, 1, rows.length, 12).setValues(rows);',
+    "member.isSponsor ? '1' : ''"
 ]
 missing = [item for item in required if item not in s]
 if missing:
