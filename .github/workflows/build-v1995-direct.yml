@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-v1996-final-apk
+  group: jayuminton-v2000-bundled-apk
   cancel-in-progress: true
 
 jobs:
