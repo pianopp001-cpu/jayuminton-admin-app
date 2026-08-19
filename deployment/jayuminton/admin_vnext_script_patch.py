@@ -103,22 +103,28 @@ if patched is None:
     raise SystemExit('addMember call not found')
 s = patched
 
-# Clear metadata inputs after either add or update completes.
-for anchor in [
- "    document.getElementById('newExperience').value = '';",
- "    experienceInput.value = '';"
-]:
- if anchor in s:
-  s=s.replace(anchor,anchor+"\n    const newMemo=document.getElementById('newPublicMemo'); if(newMemo) newMemo.value='';\n    const newFlag=document.getElementById('newIsNew'); if(newFlag) newFlag.checked=false;\n    const sponsorFlag=document.getElementById('newIsSponsor'); if(sponsorFlag) sponsorFlag.checked=false;",1)
+# Clear metadata inputs only when the current admin script has not already
+# implemented the same reset variables.
+if "const newMemo=document.getElementById('newPublicMemo')" not in s:
+ for anchor in [
+  "    document.getElementById('newExperience').value = '';",
+  "    experienceInput.value = '';"
+ ]:
+  if anchor in s:
+   s=s.replace(anchor,anchor+"\n    const newMemo=document.getElementById('newPublicMemo'); if(newMemo) newMemo.value='';\n    const newFlag=document.getElementById('newIsNew'); if(newFlag) newFlag.checked=false;\n    const sponsorFlag=document.getElementById('newIsSponsor'); if(sponsorFlag) sponsorFlag.checked=false;",1)
+   break
 
-# Populate metadata inputs when the existing long-press edit flow opens.
-for edit_anchor in [
- "  document.getElementById('newExperience').value = member.experience || '';",
- "  experience.value = String(member.experience || '');"
-]:
- if edit_anchor in s:
-  s=s.replace(edit_anchor,edit_anchor+"\n  const memo=document.getElementById('newPublicMemo'); if(memo) memo.value=member.publicMemo||'';\n  const isNew=document.getElementById('newIsNew'); if(isNew) isNew.checked=!!member.isNew;\n  const sponsor=document.getElementById('newIsSponsor'); if(sponsor) sponsor.checked=!!member.isSponsor;",1)
-  break
+# Populate metadata inputs only when the existing edit flow does not already
+# declare these variables. This avoids duplicate const declarations.
+edit_metadata_marker = "const memo=document.getElementById('newPublicMemo')"
+if edit_metadata_marker not in s:
+ for edit_anchor in [
+  "  document.getElementById('newExperience').value = member.experience || '';",
+  "  experience.value = String(member.experience || '');"
+ ]:
+  if edit_anchor in s:
+   s=s.replace(edit_anchor,edit_anchor+"\n  const memo=document.getElementById('newPublicMemo'); if(memo) memo.value=member.publicMemo||'';\n  const isNew=document.getElementById('newIsNew'); if(isNew) isNew.checked=!!member.isNew;\n  const sponsor=document.getElementById('newIsSponsor'); if(sponsor) sponsor.checked=!!member.isSponsor;",1)
+   break
 
 patched = patch_server_args(s, 'updateMemberProfile', 6)
 if patched is None:
