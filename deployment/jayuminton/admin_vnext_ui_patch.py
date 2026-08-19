@@ -84,7 +84,6 @@ s = s[:bar_start] + bar + s[bar_end:]
 
 style = """
 <style id="adminVnextBottomBarStyle">
-  @media (max-width:640px){.v4-quick-roster{grid-template-columns:repeat(3,minmax(0,1fr))!important}.v4-quick-card{min-width:0!important}.v4-quick-card .member-name{white-space:normal!important;overflow-wrap:anywhere;text-align:center}}
   .admin-vnext-bottom-bar{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:stretch}
   .admin-vnext-bottom-bar #mobileSelectedCount{grid-column:1/-1;font-size:12px;line-height:14px;min-height:14px}
   .admin-vnext-bottom-bar button{width:100%!important;min-width:0!important;min-height:46px!important;margin:0!important;padding:8px 4px!important;font-size:14px!important;font-weight:800!important;white-space:nowrap;display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;overflow:hidden!important}
