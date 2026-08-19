@@ -37,14 +37,56 @@ jobs:
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          jq -e '.mainScriptId and .mainDeploymentId and .pushScriptId and .pushDeploymentId and .pushUrl' "$CONFIG" >/dev/null
-          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
-          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
-          echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$CONFIG")" >> "$GITHUB_ENV"
-          echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
-          echo "PUSH_URL=$(jq -r '.pushUrl' "$CONFIG")" >> "$GITHUB_ENV"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId // empty' "$CONFIG")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId // empty' "$CONFIG")"
+          if [ -z "$PUSH_DEPLOYMENT_ID" ]; then
+            PUSH_DEPLOYMENT_ID="$(sed -n 's/^push_deployment_id=//p' deployment/status/apps-script-deployments-now.txt | head -1)"
+          fi
+          test -n "$PUSH_DEPLOYMENT_ID"
+          PUSH_URL="$(jq -r '.pushUrl // empty' "$CONFIG")"
+          if [ -z "$PUSH_URL" ]; then
+            PUSH_URL="https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec"
+          fi
+          {
+            echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
+            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
+            echo "PUSH_SCRIPT_ID=$PUSH_SCRIPT_ID"
+            echo "PUSH_DEPLOYMENT_ID=$PUSH_DEPLOYMENT_ID"
+            echo "PUSH_URL=$PUSH_URL"
+          } >> "$GITHUB_ENV"
       - name: Install clasp
         run: npm install --global @google/clasp@latest
+      - name: Discover existing push Apps Script project
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [ -n "$PUSH_SCRIPT_ID" ]; then
+            exit 0
+          fi
+          PROJECTS="$(clasp list)"
+          CANDIDATES="$(
+            printf '%s\n' "$PROJECTS" |
+              sed -n -e 's#.*script.google.com/d/\([^/ ]*\)/edit.*#\1#p' \
+                     -e 's#.*script.google.com/home/projects/\([^/ ]*\)/edit.*#\1#p' |
+              sort -u
+          )"
+          test -n "$CANDIDATES"
+          FOUND=""
+          while IFS= read -r candidate; do
+            [ -n "$candidate" ] || continue
+            CHECK="$RUNNER_TEMP/push-project-$candidate"
+            mkdir -p "$CHECK"
+            printf '{"scriptId":"%s","rootDir":"."}\n' "$candidate" > "$CHECK/.clasp.json"
+            if (cd "$CHECK" && clasp deployments 2>/dev/null) | grep -F "$PUSH_DEPLOYMENT_ID" >/dev/null; then
+              FOUND="$candidate"
+              break
+            fi
+          done <<< "$CANDIDATES"
+          test -n "$FOUND"
+          echo "PUSH_SCRIPT_ID=$FOUND" >> "$GITHUB_ENV"
       - name: Pull live, back up, patch, and verify
         shell: bash
         run: |
