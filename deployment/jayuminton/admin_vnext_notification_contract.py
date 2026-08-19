@@ -57,49 +57,45 @@ function readAdminVnextEvents_() {
 if 'const ADMIN_VNEXT_EVENTS = Object.freeze({' not in source:
     source = source.replace(anchor, anchor + insert, 1)
 
-public_anchor = """    maxMembers: MAX_MEMBERS
-  };
-}
+def add_events_to_state_function_(text, function_name, next_function_name):
+    start_marker = 'function ' + function_name
+    end_marker = '\nfunction ' + next_function_name
+    start = text.find(start_marker)
+    end = text.find(end_marker, start + len(start_marker))
+    if start < 0 or end < 0:
+        raise SystemExit(function_name + ' boundary missing')
+    block = text[start:end]
+    if 'adminVnextEvents: readAdminVnextEvents_()' in block:
+        return text
+    marker = 'maxMembers: MAX_MEMBERS'
+    marker_at = block.rfind(marker)
+    if marker_at < 0:
+        raise SystemExit(function_name + ' maxMembers anchor missing')
+    absolute = start + marker_at
+    return (
+        text[:absolute]
+        + 'maxMembers: MAX_MEMBERS,\n    adminVnextEvents: readAdminVnextEvents_()'
+        + text[absolute + len(marker):]
+    )
 
-function makeState_(members, courts, waitGroups, courtStartedAt) {"""
-public_replacement = """    maxMembers: MAX_MEMBERS,
-    adminVnextEvents: readAdminVnextEvents_()
-  };
-}
+source = add_events_to_state_function_(
+    source, 'getPublicState()', 'makeState_('
+)
+source = add_events_to_state_function_(
+    source, 'makeState_(', 'smartAssignSelected('
+)
 
-function makeState_(members, courts, waitGroups, courtStartedAt) {"""
-if public_anchor not in source:
-    raise SystemExit('public-state anchor missing')
-source = source.replace(public_anchor, public_replacement, 1)
-
-make_anchor = """    updatedAt: new Date().toISOString(),
-    maxMembers: MAX_MEMBERS
-  };
-}
-
-function smartAssignSelected"""
-make_replacement = """    updatedAt: new Date().toISOString(),
-    maxMembers: MAX_MEMBERS,
-    adminVnextEvents: readAdminVnextEvents_()
-  };
-}
-
-function smartAssignSelected"""
-if make_anchor not in source:
-    raise SystemExit('make-state anchor missing')
-source = source.replace(make_anchor, make_replacement, 1)
-
-finish_anchor = """  writeCourts_(courts, startedAt);
-  writeMembers_(members);
-  touch_();
-
-  return getPublicState();
-}
-
-function removeFromCourtUnlocked_"""
-finish_replacement = """  writeCourts_(courts, startedAt);
-  writeMembers_(members);
-  const transitionEvents = [
+finish_start = source.find('function finishCourtUnlocked_(')
+finish_end = source.find('\nfunction removeFromCourtUnlocked_(', finish_start)
+if finish_start < 0 or finish_end < 0:
+    raise SystemExit('finish-court function boundary missing')
+finish_block = source[finish_start:finish_end]
+if 'buildAdminVnextEvent_(ADMIN_VNEXT_EVENTS.COURT_FINISHED' not in finish_block:
+    touch_anchor = '  touch_();'
+    touch_at = finish_block.rfind(touch_anchor)
+    if touch_at < 0:
+        raise SystemExit('finish-court touch anchor missing')
+    transition_insert = """  const transitionEvents = [
     buildAdminVnextEvent_(ADMIN_VNEXT_EVENTS.COURT_FINISHED, finished, courtNo)
   ];
   if (waitOne.length) {
@@ -114,15 +110,9 @@ finish_replacement = """  writeCourts_(courts, startedAt);
     );
   }
   publishAdminVnextEvents_(transitionEvents);
-  touch_();
-
-  return getPublicState();
-}
-
-function removeFromCourtUnlocked_"""
-if finish_anchor not in source:
-    raise SystemExit('finish-court event anchor missing')
-source = source.replace(finish_anchor, finish_replacement, 1)
+"""
+    absolute = finish_start + touch_at
+    source = source[:absolute] + transition_insert + source[absolute:]
 
 required = [
     "WAIT_ONE_PROMOTED: 'WAIT_ONE_PROMOTED'",
