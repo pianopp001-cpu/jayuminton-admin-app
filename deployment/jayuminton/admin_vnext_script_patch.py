@@ -223,8 +223,32 @@ name_helper='''function adminVnextCardName(member) {
 }
 
 '''
-if 'function adminVnextCardName(member)' not in s:
- s=s.replace(card_marker,name_helper+card_marker,1)
+# Always replace the previously deployed helper body; merely checking for its
+# existence left the old "full name for everyone" behavior in production.
+name_start = s.find('function adminVnextCardName(member)')
+if name_start >= 0:
+ name_brace = s.find('{', name_start)
+ name_end = matching_end(s, name_brace, '{', '}')
+ if name_end < 0: raise SystemExit('admin card name helper boundary missing')
+ s = s[:name_start] + s[name_end + 1:].lstrip('\n')
+s=s.replace(card_marker,name_helper+card_marker,1)
+
+# Lightweight edit response: merge only the saved member instead of waiting
+# for and rendering a complete state snapshot.
+edit_start = s.find('async function applyMemberEdit()')
+edit_end = s.find('\nasync function addMember()', edit_start)
+if edit_start < 0 or edit_end < 0: raise SystemExit('member edit flow boundary missing')
+edit_block = s[edit_start:edit_end]
+edit_block = edit_block.replace('.then(function(state) {', '.then(function(result) {', 1)
+edit_block = edit_block.replace('      renderState(state);', '''      if (result && result.member) {
+        const savedMember = normalizeMemberProfile(result.member);
+        const savedIndex = STATE.members.findIndex(function(item) { return String(item.id) === String(savedMember.id); });
+        if (savedIndex >= 0) STATE.members[savedIndex] = savedMember;
+        renderState();
+      } else {
+        renderState(result);
+      }''', 1)
+s = s[:edit_start] + edit_block + s[edit_end:]
 
 helper='''function adminVnextMemberBadges(member) {
   if (!member) return '';
