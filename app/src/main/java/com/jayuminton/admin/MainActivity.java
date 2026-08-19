@@ -13,6 +13,7 @@ import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
 import android.view.View;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -67,6 +68,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         }
 
         setContentView(R.layout.activity_main);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
         recoverAudioIfNeeded();
         tts = new TextToSpeech(this, this);
@@ -76,6 +78,9 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     private void configureWebView() {
         webView = findViewById(R.id.webView);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.requestFocus(View.FOCUS_DOWN);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -126,7 +131,8 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                         "window.__JAYUMINTON_NATIVE_APP__=true;" +
                         "window.__JAYUMINTON_APK_WEB_BUILD__='" + APK_WEB_BUILD + "';" +
                         "document.documentElement.setAttribute('data-native-app','1');" +
-                        "document.documentElement.setAttribute('data-apk-web-build','" + APK_WEB_BUILD + "');",
+                        "document.documentElement.setAttribute('data-apk-web-build','" + APK_WEB_BUILD + "');" +
+                        "(function(){var i=document.getElementById('adminPinInput');if(i){i.disabled=false;i.readOnly=false;i.style.pointerEvents='auto';}})();",
                         null
                 );
             }
