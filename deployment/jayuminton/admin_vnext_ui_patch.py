@@ -134,6 +134,11 @@ admin_sizer = '''
       }
     });
   }
+  function syncAdminPairStatisticsLayer() {
+    var modal = document.getElementById('pairStatisticsModal');
+    var open = !!modal && !modal.classList.contains('hidden');
+    document.body.classList.toggle('admin-pair-statistics-open', open);
+  }
   function installAdminCourtMultiFill() {
     if (window.ADMIN_COURT_MULTI_FILL_READY) return;
     if (typeof EMPTY_SLOT_TARGETS === 'undefined' || typeof server !== 'function') return;
@@ -251,6 +256,7 @@ admin_sizer = '''
     });
     renderAdminPickedFullName();
     compactAdminPairStatistics();
+    syncAdminPairStatisticsLayer();
     installAdminCourtMultiFill();
   }
   function showAdminSaveNotice(text, persistent) {
@@ -387,7 +393,9 @@ style = """
   .admin-vnext-bottom-bar .mobile-undo-button,.admin-vnext-bottom-bar .mobile-refresh-button{background:#475569!important;color:#fff!important;border-color:#475569!important}
   .admin-vnext-bottom-bar .mobile-undo-button:disabled{opacity:.78!important;color:#fff!important}
   .admin-vnext-bottom-bar .mobile-refresh-button{font-size:14px!important}
-  .pair-statistics-modal{width:min(920px,calc(100vw - 16px));max-height:92vh;overflow:auto;box-sizing:border-box}
+  #pairStatisticsModal{z-index:100150!important;padding:8px 8px calc(env(safe-area-inset-bottom,0px) + 8px)!important;box-sizing:border-box!important}
+  .admin-pair-statistics-open .admin-vnext-bottom-bar{display:none!important}
+  .pair-statistics-modal{position:relative;z-index:100151!important;width:min(920px,calc(100vw - 16px));max-height:calc(100dvh - env(safe-area-inset-bottom,0px) - 16px);overflow:auto;box-sizing:border-box}
   .pair-statistics-modal>input{width:100%;margin:4px 0 12px;box-sizing:border-box}
   .pair-statistics-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:calc(92vh - 170px);overflow:auto;overscroll-behavior:contain;padding:0 2px 24px;align-content:start;box-sizing:border-box}
   .pair-statistics-row{min-width:0;border:1px solid #dbe3ef;border-radius:10px;padding:7px;background:#fff}
@@ -431,7 +439,7 @@ required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
 required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
-required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'function installAdminCourtMultiFill()', 'commitSelectedEmptyTargets()', "server('smartAssignSelected'", "'assignMembersToCourt'", 'pair-statistics-more', 'function showAdminSaveNotice(text, persistent)', 'function hideAdminSaveNotice()', 'admin-save-notice']
+required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'function syncAdminPairStatisticsLayer()', 'admin-pair-statistics-open', 'function installAdminCourtMultiFill()', 'commitSelectedEmptyTargets()', "server('smartAssignSelected'", "'assignMembersToCourt'", 'pair-statistics-more', 'function showAdminSaveNotice(text, persistent)', 'function hideAdminSaveNotice()', 'admin-save-notice']
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
