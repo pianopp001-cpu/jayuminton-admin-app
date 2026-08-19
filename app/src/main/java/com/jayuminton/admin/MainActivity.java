@@ -418,3 +418,5 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         public void openPwa() {
             runOnUiThread(() -> openMemberPwaInBrowser(MEMBER_PWA_URL));
         }
+    }
+}
