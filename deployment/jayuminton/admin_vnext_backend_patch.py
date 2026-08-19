@@ -21,9 +21,19 @@ def rep_or_preserve_modern(old, new, label):
     ):
         raise SystemExit(label + ' anchor not found')
 
-s = s.replace("const SHEET_LOGS = 'ActionLogs';", "const SHEET_LOGS = 'ActionLogs';\nconst SHEET_PAIR_HISTORY = 'PairHistory';", 1)
+if "const SHEET_PAIR_HISTORY = 'PairHistory';" not in s:
+    rep(
+        "const SHEET_LOGS = 'ActionLogs';",
+        "const SHEET_LOGS = 'ActionLogs';\nconst SHEET_PAIR_HISTORY = 'PairHistory';",
+        'pair history constant'
+    )
 s = s.replace("const setupKey = 'JAYUMINTON_SETUP_V11_' + ss.getId();", "const setupKey = 'JAYUMINTON_SETUP_ADMIN_VNEXT_1_' + ss.getId();", 1)
-s = s.replace("  ensureLogsSheet_(ss);\n  migrateLegacyDataIfNeeded_(ss);", "  ensureLogsSheet_(ss);\n  ensurePairHistorySheet_(ss);\n  migrateLegacyDataIfNeeded_(ss);", 1)
+if 'ensurePairHistorySheet_(ss);' not in s:
+    rep(
+        "  ensureLogsSheet_(ss);\n  migrateLegacyDataIfNeeded_(ss);",
+        "  ensureLogsSheet_(ss);\n  ensurePairHistorySheet_(ss);\n  migrateLegacyDataIfNeeded_(ss);",
+        'pair history setup call'
+    )
 members_header_8 = """  sheet.getRange(1, 1, 1, 8).setValues([[
     'ID',
     'NAME',
@@ -121,7 +131,7 @@ function adjustMemberGames(pin,id,delta){return withDocumentLock_('게임횟수 
 function setBundle(pin,ids){return withDocumentLock_('고정 묶음 지정',function(){auth_(pin);ids=normalizeIds_(ids);if(ids.length!==2)throw new Error('고정 묶음은 정확히 2명을 선택하세요.');const bundleId=Utilities.getUuid();const members=readMembers_();members.forEach(function(m){if(ids.indexOf(m.id)>=0)m.bundleId=bundleId;});writeMembers_(members);touch_();return getPublicState();});}
 function clearBundle(pin,ids){return withDocumentLock_('고정 묶음 해제',function(){auth_(pin);ids=normalizeIds_(ids);const members=readMembers_(),bundleIds={};members.forEach(function(m){if(ids.indexOf(m.id)>=0&&m.bundleId)bundleIds[m.bundleId]=true;});members.forEach(function(m){if(bundleIds[m.bundleId])m.bundleId='';});writeMembers_(members);touch_();return getPublicState();});}
 '''
-rep(anchor, insert+anchor, 'lock')
+if 'function ensurePairHistorySheet_(ss)' not in s:\n    rep(anchor, insert + anchor, 'lock')
 
 s = s.replace("sheet.getRange(2, 1, lastRow - 1, 8)", "sheet.getRange(2, 1, lastRow - 1, 12)")
 s = s.replace("sheet.getRange(2, 1, lastRow - 1, 9)", "sheet.getRange(2, 1, lastRow - 1, 12)")
