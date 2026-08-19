@@ -108,7 +108,8 @@ admin_sizer = '''
       var chips = Array.prototype.filter.call(group.querySelectorAll('.pair-statistics-chip'), function(chip) {
         return !chip.classList.contains('pair-statistics-more');
       });
-      chips.forEach(function(chip, index) { chip.hidden = index >= 2; });
+      var expanded = group.getAttribute('data-expanded') === '1';
+      chips.forEach(function(chip, index) { chip.hidden = !expanded && index >= 2; });
       var hiddenCount = Math.max(0, chips.length - 2);
       var more = group.querySelector('.pair-statistics-more');
       if (!hiddenCount) {
@@ -120,7 +121,17 @@ admin_sizer = '''
         more.className = 'pair-statistics-chip pair-statistics-more';
         group.appendChild(more);
       }
-      more.textContent = '+' + hiddenCount + '명';
+      more.textContent = expanded ? '접기' : '+' + hiddenCount + '명';
+      if (more.getAttribute('data-toggle-ready') !== '1') {
+        more.setAttribute('data-toggle-ready', '1');
+        more.setAttribute('role', 'button');
+        more.addEventListener('click', function(event) {
+          event.preventDefault();
+          event.stopPropagation();
+          group.setAttribute('data-expanded', group.getAttribute('data-expanded') === '1' ? '0' : '1');
+          compactAdminPairStatistics();
+        });
+      }
     });
   }
   function installAdminCourtMultiFill() {
@@ -201,6 +212,19 @@ admin_sizer = '''
     compactAdminPairStatistics();
     installAdminCourtMultiFill();
   }
+  function showAdminSaveNotice(text) {
+    var notice = document.getElementById('adminSaveNotice');
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'adminSaveNotice';
+      notice.className = 'admin-save-notice';
+      document.body.appendChild(notice);
+    }
+    notice.innerHTML = '<strong>' + escapeAdminName(text || '화면 반영 완료') + '</strong><small>서버 저장을 확인하고 있습니다</small>';
+    notice.classList.add('is-visible');
+    window.clearTimeout(notice._hideTimer);
+    notice._hideTimer = window.setTimeout(function() { notice.classList.remove('is-visible'); }, 1800);
+  }
   function scheduleAdminNewCardRender() {
     if (adminCardRenderScheduled) return;
     adminCardRenderScheduled = true;
@@ -253,6 +277,8 @@ admin_sizer = '''
   document.addEventListener('click', function(event) {
     var card = event.target && event.target.closest ? event.target.closest('.is-new-member') : null;
     if (card) showAdminNewNameBubble(card);
+    var saveButton = event.target && event.target.closest ? event.target.closest('#addMemberButton,#updateMemberButton,#applyMemberEditButton') : null;
+    if (saveButton) showAdminSaveNotice(saveButton.id === 'addMemberButton' ? '회원 카드 즉시 반영' : '회원 정보 즉시 반영');
     window.setTimeout(scheduleAdminNewCardRender, 0);
   }, true);
   document.addEventListener('pointerup', function() { window.setTimeout(scheduleAdminNewCardRender, 0); }, true);
@@ -307,9 +333,9 @@ style = """
   .admin-vnext-bottom-bar .mobile-undo-button,.admin-vnext-bottom-bar .mobile-refresh-button{background:#475569!important;color:#fff!important;border-color:#475569!important}
   .admin-vnext-bottom-bar .mobile-undo-button:disabled{opacity:.78!important;color:#fff!important}
   .admin-vnext-bottom-bar .mobile-refresh-button{font-size:14px!important}
-  .pair-statistics-modal{width:min(920px,calc(100vw - 16px));max-height:92vh;overflow:hidden}
+  .pair-statistics-modal{width:min(920px,calc(100vw - 16px));max-height:92vh;overflow:auto;box-sizing:border-box}
   .pair-statistics-modal>input{width:100%;margin:4px 0 12px;box-sizing:border-box}
-  .pair-statistics-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:68vh;overflow:auto;overscroll-behavior:contain;padding-right:2px}
+  .pair-statistics-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:calc(92vh - 170px);overflow:auto;overscroll-behavior:contain;padding:0 2px 24px;align-content:start;box-sizing:border-box}
   .pair-statistics-row{min-width:0;border:1px solid #dbe3ef;border-radius:10px;padding:7px;background:#fff}
   .pair-statistics-head{display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:5px}
   .pair-statistics-name{font-size:14px;font-weight:900;overflow-wrap:anywhere}
@@ -320,6 +346,9 @@ style = """
   .pair-statistics-empty{padding:24px;text-align:center;color:#64748b}
   .admin-new-name-bubble{position:fixed;z-index:99999;box-sizing:border-box;padding:10px 12px;border-radius:12px;background:#172033;color:#fff;font-size:15px;font-weight:900;line-height:1.35;text-align:center;overflow-wrap:anywhere;box-shadow:0 8px 24px rgba(15,23,42,.28);opacity:0;visibility:hidden;transform:translateY(5px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
   .admin-new-name-bubble.is-visible{opacity:1;visibility:visible;transform:translateY(0)}
+  .admin-save-notice{position:fixed;z-index:100000;left:50%;top:22%;width:min(360px,calc(100vw - 32px));box-sizing:border-box;padding:22px 18px;border-radius:18px;background:rgba(23,32,51,.96);color:#fff;text-align:center;box-shadow:0 16px 45px rgba(15,23,42,.35);opacity:0;visibility:hidden;transform:translate(-50%,-8px) scale(.97);transition:.15s ease;pointer-events:none}
+  .admin-save-notice.is-visible{opacity:1;visibility:visible;transform:translate(-50%,0) scale(1)}
+  .admin-save-notice strong{display:block;font-size:22px;line-height:1.25}.admin-save-notice small{display:block;margin-top:8px;font-size:13px;opacity:.82}
   .quick-move-full-name{max-width:42vw;padding:4px 7px;border-radius:8px;background:#fff;color:#172033;font-size:12px;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-align:center}
   .member-vnext-full-name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important;text-align:center}
   .member-vnext-full-name small{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;margin-top:7px;font-size:.8em!important;line-height:1.25!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important}
@@ -348,7 +377,7 @@ required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
 required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
-required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'function installAdminCourtMultiFill()', "server('smartAssignSelected'", 'pair-statistics-more']
+required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'function installAdminCourtMultiFill()', "server('smartAssignSelected'", 'pair-statistics-more', 'function showAdminSaveNotice(text)', 'admin-save-notice']
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
