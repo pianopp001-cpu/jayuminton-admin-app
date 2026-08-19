@@ -128,29 +128,16 @@ jobs:
           if grep -F 'intent://' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null; then exit 1; fi
           if grep -F 'drive.google.com' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null; then exit 1; fi
 
-      - name: Verify latest requested server state
+      - name: Verify Cloudflare admin vNext target
         shell: bash
         run: |
           set -euo pipefail
-          grep -F 'onclick="applyMemberEdit()">수정</button>' source-snapshot/current-main/Admin.html >/dev/null
-          if grep -F '수정 저장' source-snapshot/current-main/Admin.html >/dev/null; then exit 1; fi
-          grep -F 'id="adminPushAppButton"' source-snapshot/current-main/Admin.html >/dev/null
-          grep -F 'async function applyMemberEdit()' source-snapshot/current-main/Script.html >/dev/null
-          if grep -E '(async[[:space:]]+){2,}function' source-snapshot/current-main/Script.html >/dev/null; then exit 1; fi
-          grep -F "if (!IS_ADMIN) return '';" source-snapshot/current-main/Script.html >/dev/null
-          grep -F "if (type === 'wait1_ready') return 2;" source-snapshot/current-main/Script.html >/dev/null
-          grep -F "if (type === 'court_assignment') return 4;" source-snapshot/current-main/Script.html >/dev/null
-          grep -F 'index * 1700' source-snapshot/current-main/Script.html >/dev/null
-          grep -F 'members[index].name = name;' source-snapshot/current-main/Code.js >/dev/null
-          python3 - <<'PY'
-          from pathlib import Path
-          t = Path('source-snapshot/current-main/Script.html').read_text(encoding='utf-8')
-          a, b = t.find('<script>'), t.rfind('</script>')
-          if a < 0 or b <= a:
-              raise SystemExit('Script wrapper missing')
-          Path('/tmp/jayuminton-server-check.js').write_text(t[a + len('<script>'):b], encoding='utf-8')
-          PY
-          node --check /tmp/jayuminton-server-check.js
+          URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?apkVerify=${{ github.run_id }}'
+          curl --fail --location --retry 5 "$URL" -o "$RUNNER_TEMP/admin-cloudflare.html"
+          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 admin-vnext-bottom-bar commitSelectedEmptyTargets 'fullAdminNameHtml(member.name)' compactAdminPairStatistics; do
+            grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null
+          done
+          if grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
 
       - name: Restore release signing key
         shell: bash
