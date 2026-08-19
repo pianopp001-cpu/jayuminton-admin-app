@@ -9,4 +9,38 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:overScrollMode="never" />
+
+    <LinearLayout
+        android:id="@+id/adminLoadPanel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FFFFFFFF"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="28dp">
+
+        <ProgressBar
+            android:id="@+id/adminLoadProgress"
+            android:layout_width="48dp"
+            android:layout_height="48dp" />
+
+        <TextView
+            android:id="@+id/adminLoadMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:text="관리자 화면을 불러오는 중입니다."
+            android:textColor="#FF172033"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/adminRetryButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="다시 연결"
+            android:visibility="gone" />
+    </LinearLayout>
 </FrameLayout>
