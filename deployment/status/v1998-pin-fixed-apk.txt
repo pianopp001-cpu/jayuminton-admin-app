@@ -1,0 +1,10 @@
+workflow=Build Jayuminton admin v199.8 PIN-fixed full APK
+run_id=32277825779
+status=success
+head_sha=a1320c90e1203866dafaca38f9450ad98aaad4e8
+version=199.8
+package=com.jayuminton.admin
+output=releases/jayuminton-admin-v199.8-pin-fixed-full.apk
+dog_icon_sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
+dog_art=chatgpt-file-library-source
+updated_at=2026-08-19T16:49:44Z
