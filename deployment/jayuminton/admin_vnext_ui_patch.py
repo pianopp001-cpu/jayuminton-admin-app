@@ -1,69 +1,80 @@
 #!/usr/bin/env python3
-"""Patch admin-only UI. Does not modify Index/user frontend."""
+"""Patch admin-only UI by stable element IDs; never edits user Index."""
 from pathlib import Path
+import re
 import sys
-root=Path(sys.argv[1]) if len(sys.argv)>1 else Path('source-snapshot/current-main')
-p=root/'Admin.html'; s=p.read_text(encoding='utf-8')
 
-def rep(a,b,label):
- global s
- if a not in s: raise SystemExit(label+' anchor not found')
- s=s.replace(a,b,1)
+root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('source-snapshot/current-main')
+p = root / 'Admin.html'
+s = p.read_text(encoding='utf-8')
 
-rep('''      <input
-        id="newExperience"
-        maxlength="20"
-        placeholder="구력(선택, 예: 3년)"
-      >
-
-      <button''','''      <input
-        id="newExperience"
-        maxlength="20"
-        placeholder="구력(선택, 예: 3년)"
-      >
-
+# Add metadata controls immediately after the existing experience input,
+# regardless of whitespace or placeholder wording.
+if 'id="newPublicMemo"' not in s or 'id="newIsNew"' not in s or 'id="newIsSponsor"' not in s:
+    pos = s.find('id="newExperience"')
+    if pos < 0:
+        raise SystemExit('newExperience element missing')
+    end = s.find('>', pos)
+    if end < 0:
+        raise SystemExit('newExperience element boundary missing')
+    fields = """
       <input id="newPublicMemo" maxlength="40" placeholder="메모(선택, 생일·특이사항 등)">
       <label class="member-flag-check"><input id="newIsNew" type="checkbox"> 신규</label>
       <label class="member-flag-check"><input id="newIsSponsor" type="checkbox"> 🎁 찬조</label>
+"""
+    s = s[:end + 1] + fields + s[end + 1:]
 
-      <button''','member fields')
+# Insert actions relative to their stable onclick handlers, not formatted blocks.
+def insert_before_button(text, onclick, html, marker):
+    if marker in text:
+        return text
+    match = re.search(
+        r'<button\\b[^>]*onclick=["\\\']' + re.escape(onclick) + r'["\\\'][^>]*>',
+        text
+    )
+    if not match:
+        raise SystemExit(marker + ' button anchor missing')
+    return text[:match.start()] + html + '\n      ' + text[match.start():]
 
-s=s.replace('<button onclick="decreaseSelectedGames()">게임횟수 -1</button>', '<button onclick="decreaseSelectedGames()">게임횟수 -1</button>\n      <button onclick="increaseSelectedGames()">게임횟수 +1</button>')
-s=s.replace('''        <button onclick="decreaseSelectedGames()">
-          게임횟수 -1
-        </button>''','''        <button onclick="decreaseSelectedGames()">
-          게임횟수 -1
-        </button>
-        <button onclick="increaseSelectedGames()">
-          게임횟수 +1
-        </button>''')
-rep('''      <button onclick="setSelectedStatus('away')">귀가</button>
-      <button onclick="decreaseSelectedGames()">게임횟수 -1</button>''','''      <button onclick="setSelectedStatus('away')">귀가</button>
-      <button onclick="setSelectedBundle()">🔗 묶음 지정</button>
-      <button onclick="clearSelectedBundle()">묶음 해제</button>
-      <button onclick="decreaseSelectedGames()">게임횟수 -1</button>''','bundle buttons')
+s = insert_before_button(
+    s,
+    'decreaseSelectedGames()',
+    '<button onclick="increaseSelectedGames()">게임횟수 +1</button>',
+    'increaseSelectedGames()'
+)
+s = insert_before_button(
+    s,
+    'decreaseSelectedGames()',
+    '<button onclick="setSelectedBundle()">🔗 묶음 지정</button>\n'
+    '      <button onclick="clearSelectedBundle()">묶음 해제</button>',
+    'setSelectedBundle()'
+)
 
-s=s.replace('선택 위치 자동배정', '자동배정')
-s=s.replace('>위치 자동배정</button>', '>자동배정</button>')
+s = s.replace('선택 위치 자동배정', '자동배정')
+s = s.replace('>위치 자동배정</button>', '>자동배정</button>')
 
-rep('''  <div class="mobile-quick-bar">
-    <span id="mobileSelectedCount">0명 선택</span>
-    <button
-      id="mobileUndoButton"
-      class="ghost-button undo-button mobile-undo-button"
-      onclick="undoLastAction()"
-      disabled
-    >↶ 실행 취소</button>
-    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">자동배정</button>
-  </div>''','''  <div class="mobile-quick-bar admin-vnext-bottom-bar">
-    <span id="mobileSelectedCount">0명 선택</span>
-    <button id="mobileUndoButton" class="ghost-button undo-button mobile-undo-button" onclick="undoLastAction()" disabled>↶ 실행 취소</button>
-    <button class="ghost-button mobile-refresh-button" type="button" onclick="loadState()">↻ 새로고침</button>
-    <button class="primary mobile-assign-button" onclick="smartAssignSelected()">자동배정</button>
-  </div>''','bottom bar')
+# Preserve the current mobile bar and add only the required class/control.
+bar_start = s.find('<div class="mobile-quick-bar')
+if bar_start < 0:
+    bar_start = s.find("<div class='mobile-quick-bar")
+if bar_start < 0:
+    raise SystemExit('mobile quick bar missing')
+bar_open_end = s.find('>', bar_start)
+bar_end = s.find('</div>', bar_open_end)
+if bar_open_end < 0 or bar_end < 0:
+    raise SystemExit('mobile quick bar boundary missing')
+bar = s[bar_start:bar_end]
+if 'admin-vnext-bottom-bar' not in bar:
+    bar = bar.replace('mobile-quick-bar', 'mobile-quick-bar admin-vnext-bottom-bar', 1)
+if 'mobile-refresh-button' not in bar:
+    assign = re.search(r'<button\\b[^>]*onclick=["\\\']smartAssignSelected\(\)["\\\'][^>]*>', bar)
+    if not assign:
+        raise SystemExit('mobile assign button missing')
+    refresh = '<button class="ghost-button mobile-refresh-button" type="button" onclick="loadState()">↻ 새로고침</button>\n    '
+    bar = bar[:assign.start()] + refresh + bar[assign.start():]
+s = s[:bar_start] + bar + s[bar_end:]
 
-# Requested proportions: keep Undo large; refresh is half the width of Auto; all three stay one row.
-style='''
+style = """
 <style id="adminVnextBottomBarStyle">
   .admin-vnext-bottom-bar{display:grid!important;grid-template-columns:minmax(112px,1.15fr) minmax(58px,.5fr) minmax(116px,1fr);gap:8px;align-items:stretch}
   .admin-vnext-bottom-bar #mobileSelectedCount{grid-column:1/-1;font-size:12px;line-height:14px;min-height:14px}
@@ -71,9 +82,18 @@ style='''
   .admin-vnext-bottom-bar .mobile-refresh-button{font-size:13px!important}
   @media (max-width:380px){.admin-vnext-bottom-bar{grid-template-columns:minmax(100px,1.1fr) minmax(52px,.5fr) minmax(104px,1fr);gap:5px}.admin-vnext-bottom-bar button{font-size:13px!important;padding:7px 3px!important}}
 </style>
-'''
-if '</body>' not in s: raise SystemExit('body end anchor not found')
-s=s.replace('</body>',style+'\n</body>',1)
+"""
+if 'id="adminVnextBottomBarStyle"' not in s:
+    if '</body>' not in s:
+        raise SystemExit('body end anchor not found')
+    s = s.replace('</body>', style + '\n</body>', 1)
 
-p.write_text(s,encoding='utf-8')
+required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
+            'increaseSelectedGames()', 'setSelectedBundle()',
+            'admin-vnext-bottom-bar', 'mobile-refresh-button']
+missing = [item for item in required if item not in s]
+if missing:
+    raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
+
+p.write_text(s, encoding='utf-8')
 print('admin vNext UI patch prepared')
