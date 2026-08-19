@@ -78,6 +78,32 @@ if 'id="pairStatisticsModal"' not in s:
     if '</body>' not in s: raise SystemExit('body end anchor missing')
     s = s.replace('</body>', modal + '\n</body>', 1)
 
+# Admin-only fallback for mobile WebViews without :has(). Observe only the
+# Admin document and mark cards containing the already-rendered full-name span.
+admin_sizer = '''
+<script id="adminVnextNewCardSizer">
+(function() {
+  function markAdminNewCards() {
+    document.querySelectorAll('.member-vnext-full-name').forEach(function(name) {
+      var card = name.closest('.quick-member,.person');
+      if (card) card.classList.add('is-new-member');
+    });
+  }
+  document.addEventListener('DOMContentLoaded', markAdminNewCards);
+  new MutationObserver(markAdminNewCards).observe(document.body, {childList:true, subtree:true});
+  window.setTimeout(markAdminNewCards, 0);
+})();
+</script>
+'''
+old_sizer_start = s.find('<script id="adminVnextNewCardSizer">')
+if old_sizer_start >= 0:
+    old_sizer_end = s.find('</script>', old_sizer_start)
+    if old_sizer_end < 0: raise SystemExit('admin new-card sizer boundary missing')
+    s = s[:old_sizer_start] + admin_sizer.strip() + s[old_sizer_end + len('</script>'):]
+else:
+    if '</body>' not in s: raise SystemExit('body end anchor missing')
+    s = s.replace('</body>', admin_sizer + '\n</body>', 1)
+
 # Preserve the current mobile bar and add only the required class/control.
 # Upgrade an already-deployed legacy refresh handler as well.
 s = s.replace('onclick="loadState()">↻ 새로고침', 'onclick="refreshAdminState()">↻ 새로고침')
@@ -149,6 +175,7 @@ required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
 required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
+required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')"]
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
