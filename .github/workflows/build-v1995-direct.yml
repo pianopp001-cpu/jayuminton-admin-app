@@ -1,5 +1,6 @@
 name: Build Jayuminton admin v200.0 bundled Cloudflare full APK
 run-name: Jayuminton admin v200.0 bundled frontend fresh-install APK
+# Trigger only after the bundled-asset MainActivity is present on main.
 
 on:
   workflow_dispatch: {}
