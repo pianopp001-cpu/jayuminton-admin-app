@@ -48,7 +48,7 @@ addon = r'''
         if(!sponsor){
           sponsor=document.createElement('span');
           sponsor.className='member-sponsor-badge';
-          sponsor.textContent='찬조';
+          sponsor.textContent='🎁';
           sponsor.setAttribute('aria-label','찬조 회원');
           card.appendChild(sponsor);
         }
@@ -80,7 +80,7 @@ addon = r'''
     '#memberApp .member-self-star::after{content:none!important;display:none!important}',
     '#memberApp .member-self-star b,#memberApp .member-self-star small{display:none!important}',
     '#memberApp .member-new-badge{position:absolute!important;top:-5px!important;left:4px!important;display:inline-block!important;padding:0 2px!important;border:0!important;border-radius:3px!important;background:#f5f3ff!important;color:#7c3aed!important;font-size:5.5px!important;font-weight:900!important;line-height:9px!important;height:9px!important;white-space:nowrap!important;pointer-events:none!important;z-index:10!important;box-shadow:none!important}',
-    '#memberApp .member-sponsor-badge{position:absolute!important;top:-5px!important;right:4px!important;display:inline-block!important;padding:0 3px!important;border:0!important;border-radius:3px!important;background:#fff4d6!important;color:#8a4b00!important;font-size:5.5px!important;font-weight:900!important;line-height:9px!important;height:9px!important;white-space:nowrap!important;pointer-events:none!important;z-index:10!important;box-shadow:none!important}',
+    '#memberApp .member-sponsor-badge{position:absolute!important;top:-7px!important;right:3px!important;display:inline-block!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;color:inherit!important;font-size:9px!important;font-weight:400!important;line-height:11px!important;width:11px!important;height:11px!important;white-space:nowrap!important;pointer-events:none!important;z-index:10!important;box-shadow:none!important}',
     '#memberApp .member-public-memo{display:block!important;max-width:100%!important;margin:2px auto 0!important;padding:0 2px!important;color:#64748b!important;background:transparent!important;border:0!important;font-size:7px!important;font-weight:700!important;line-height:1.15!important;text-align:center!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:keep-all!important;pointer-events:none!important}',
     '#memberApp .person[data-member-id]>.name,#memberApp .person[data-member-id] .name{position:relative!important;z-index:1!important}'
   ].join('');
@@ -109,7 +109,7 @@ s = s[:pos] + addon + '\n' + s[pos:]
 script.write_text(s, encoding='utf-8')
 
 text = script.read_text(encoding='utf-8')
-for needle in [marker, 'member.isNew===true', 'member.isSponsor===true', "sponsor.textContent='찬조'", "String(member.publicMemo||'').trim()", 'member-public-memo', 'content:"★"!important', 'color:#ffd84d!important', '#d62828', 'color:#ff5b72!important', 'content:none!important', 'flex-wrap:nowrap!important', 'width:max-content!important', "badge.textContent='NEW'", 'font-size:5.5px!important']:
+for needle in [marker, 'member.isNew===true', 'member.isSponsor===true', "sponsor.textContent='🎁'", "String(member.publicMemo||'').trim()", 'member-public-memo', 'content:"★"!important', 'color:#ffd84d!important', '#d62828', 'color:#ff5b72!important', 'content:none!important', 'flex-wrap:nowrap!important', 'width:max-content!important', "badge.textContent='NEW'", 'font-size:5.5px!important']:
     if needle not in text:
         raise SystemExit(f'missing member badges patch {needle!r}')
 if 'localDay(' in text and 'member.createdAt' in text:
