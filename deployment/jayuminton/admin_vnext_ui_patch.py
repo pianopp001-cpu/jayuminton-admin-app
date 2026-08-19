@@ -83,11 +83,65 @@ if 'id="pairStatisticsModal"' not in s:
 admin_sizer = '''
 <script id="adminVnextNewCardSizer">
 (function() {
+  function adminMemberById(id) {
+    try {
+      if (typeof STATE === 'undefined' || !STATE || !Array.isArray(STATE.members)) return null;
+      return STATE.members.find(function(member) { return String(member.id) === String(id); }) || null;
+    } catch (error) { return null; }
+  }
+  function isAdminNewMember(member) {
+    return !!member && (member.isNew === true || ['1','true'].indexOf(String(member.isNew || '').toLowerCase()) >= 0);
+  }
+  function escapeAdminName(value) {
+    return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function fullAdminNameHtml(value) {
+    var stored = String(value || '').trim();
+    var open = stored.indexOf('(');
+    if (open < 0) return '<span class="member-vnext-full-name">' + escapeAdminName(stored) + '</span>';
+    return '<span class="member-vnext-full-name"><span>' + escapeAdminName(stored.slice(0, open).trim()) +
+      '</span><br><small>' + escapeAdminName(stored.slice(open).trim()) + '</small></span>';
+  }
   function markAdminNewCards() {
-    document.querySelectorAll('.member-vnext-full-name').forEach(function(name) {
-      var card = name.closest('.quick-member,.person');
-      if (card) card.classList.add('is-new-member');
+    document.querySelectorAll('.quick-member[data-member-id],.person[data-member-id]').forEach(function(card) {
+      var member = adminMemberById(card.getAttribute('data-member-id'));
+      if (!member) return;
+      var name = card.querySelector('.quick-member-name,.name');
+      if (!name) return;
+      if (isAdminNewMember(member)) {
+        card.classList.add('is-new-member');
+        if (name.getAttribute('data-admin-name-mode') !== 'full') {
+          name.innerHTML = fullAdminNameHtml(member.name);
+          name.setAttribute('data-admin-name-mode', 'full');
+        }
+      } else {
+        card.classList.remove('is-new-member');
+        if (name.getAttribute('data-admin-name-mode') !== 'compact') {
+          name.textContent = String(member.name || '').replace(/\\s*\\(.*/, '').trim().slice(0, 2);
+          name.setAttribute('data-admin-name-mode', 'compact');
+        }
+      }
     });
+    renderAdminPickedFullName();
+  }
+  function renderAdminPickedFullName() {
+    var bar = document.getElementById('quickMoveBar');
+    if (!bar) return;
+    var memberId = '';
+    try {
+      if (typeof MEMBER_ACTION_IDS !== 'undefined' && MEMBER_ACTION_IDS.length === 1) memberId = MEMBER_ACTION_IDS[0];
+      else if (typeof QUICK_PICK !== 'undefined' && QUICK_PICK) memberId = QUICK_PICK.memberId;
+    } catch (error) {}
+    var member = adminMemberById(memberId);
+    var label = document.getElementById('quickMoveMemberFullName');
+    if (!label) {
+      label = document.createElement('strong');
+      label.id = 'quickMoveMemberFullName';
+      label.className = 'quick-move-full-name';
+      bar.insertBefore(label, bar.firstChild);
+    }
+    label.textContent = member && isAdminNewMember(member) ? String(member.name || '') : '';
+    label.classList.toggle('hidden', !label.textContent);
   }
   var bubbleTimer = 0;
   function showAdminNewNameBubble(card) {
@@ -116,7 +170,7 @@ admin_sizer = '''
     if (card) showAdminNewNameBubble(card);
   }, true);
   document.addEventListener('DOMContentLoaded', markAdminNewCards);
-  new MutationObserver(markAdminNewCards).observe(document.body, {childList:true, subtree:true});
+  new MutationObserver(markAdminNewCards).observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['class']});
   window.setTimeout(markAdminNewCards, 0);
 })();
 </script>
@@ -178,6 +232,7 @@ style = """
   .pair-statistics-empty{padding:24px;text-align:center;color:#64748b}
   .admin-new-name-bubble{position:fixed;z-index:99999;box-sizing:border-box;padding:10px 12px;border-radius:12px;background:#172033;color:#fff;font-size:15px;font-weight:900;line-height:1.35;text-align:center;overflow-wrap:anywhere;box-shadow:0 8px 24px rgba(15,23,42,.28);opacity:0;visibility:hidden;transform:translateY(5px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
   .admin-new-name-bubble.is-visible{opacity:1;visibility:visible;transform:translateY(0)}
+  .quick-move-full-name{max-width:42vw;padding:4px 7px;border-radius:8px;background:#fff;color:#172033;font-size:12px;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-align:center}
   .member-vnext-full-name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important;text-align:center}
   .member-vnext-full-name small{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;margin-top:7px;font-size:.8em!important;line-height:1.25!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important}
   .quick-member.is-new-member,.person.is-new-member{position:relative!important;overflow:hidden!important;aspect-ratio:auto!important}
@@ -203,7 +258,7 @@ required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
 required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
-required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble']
+required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName']
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
