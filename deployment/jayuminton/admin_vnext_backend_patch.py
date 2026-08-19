@@ -14,7 +14,7 @@ def rep(old, new, label):
 s = s.replace("const SHEET_LOGS = 'ActionLogs';", "const SHEET_LOGS = 'ActionLogs';\nconst SHEET_PAIR_HISTORY = 'PairHistory';", 1)
 s = s.replace("const setupKey = 'JAYUMINTON_SETUP_V11_' + ss.getId();", "const setupKey = 'JAYUMINTON_SETUP_ADMIN_VNEXT_1_' + ss.getId();", 1)
 s = s.replace("  ensureLogsSheet_(ss);\n  migrateLegacyDataIfNeeded_(ss);", "  ensureLogsSheet_(ss);\n  ensurePairHistorySheet_(ss);\n  migrateLegacyDataIfNeeded_(ss);", 1)
-rep("""  sheet.getRange(1, 1, 1, 8).setValues([[
+members_header_8 = """  sheet.getRange(1, 1, 1, 8).setValues([[
     'ID',
     'NAME',
     'GENDER',
@@ -23,11 +23,29 @@ rep("""  sheet.getRange(1, 1, 1, 8).setValues([[
     'CREATED_AT',
     'GRADE',
     'EXPERIENCE'
-  ]]);""", """  // Preserve columns 1-8; append admin-vNext fields only.
+  ]]);"""
+members_header_9 = """  sheet.getRange(1, 1, 1, 9).setValues([[
+    'ID',
+    'NAME',
+    'GENDER',
+    'GAMES',
+    'STATUS',
+    'CREATED_AT',
+    'GRADE',
+    'EXPERIENCE',
+    'IS_NEW'
+  ]]);"""
+members_header_12 = """  // Preserve existing columns; append admin-vNext fields only.
   sheet.getRange(1, 1, 1, 12).setValues([[
     'ID', 'NAME', 'GENDER', 'GAMES', 'STATUS', 'CREATED_AT', 'GRADE', 'EXPERIENCE',
     'IS_NEW', 'PUBLIC_MEMO', 'IS_SPONSOR', 'BUNDLE_ID'
-  ]]);""", 'members header')
+  ]]);"""
+if members_header_8 in s:
+    s = s.replace(members_header_8, members_header_12, 1)
+elif members_header_9 in s:
+    s = s.replace(members_header_9, members_header_12, 1)
+elif "'PUBLIC_MEMO', 'IS_SPONSOR', 'BUNDLE_ID'" not in s:
+    raise SystemExit('members header anchor not found')
 
 anchor = "function withDocumentLock_(actionName, callback) {"
 insert = r'''function ensurePairHistorySheet_(ss) {
@@ -96,8 +114,14 @@ function clearBundle(pin,ids){return withDocumentLock_('고정 묶음 해제',fu
 rep(anchor, insert+anchor, 'lock')
 
 s = s.replace("sheet.getRange(2, 1, lastRow - 1, 8)", "sheet.getRange(2, 1, lastRow - 1, 12)")
+s = s.replace("sheet.getRange(2, 1, lastRow - 1, 9)", "sheet.getRange(2, 1, lastRow - 1, 12)")
 s = s.replace("sheet.getRange(2, 1, rows.length, 8)", "sheet.getRange(2, 1, rows.length, 12)")
-s = s.replace("experience: String(row[7] || '')", "experience: String(row[7] || ''),\n      isNew: String(row[8] || '') === '1',\n      publicMemo: String(row[9] || ''),\n      isSponsor: String(row[10] || '') === '1',\n      bundleId: String(row[11] || '')")
+s = s.replace("sheet.getRange(2, 1, rows.length, 9)", "sheet.getRange(2, 1, rows.length, 12)")
+live9_is_new = "isNew: row[8] === true || String(row[8] || '').toLowerCase() === 'true'"
+if live9_is_new in s:
+    s = s.replace(live9_is_new, live9_is_new + ",\n        publicMemo: String(row[9] || ''),\n        isSponsor: String(row[10] || '') === '1',\n        bundleId: String(row[11] || '')", 1)
+else:
+    s = s.replace("experience: String(row[7] || '')", "experience: String(row[7] || ''),\n      isNew: String(row[8] || '') === '1',\n      publicMemo: String(row[9] || ''),\n      isSponsor: String(row[10] || '') === '1',\n      bundleId: String(row[11] || '')")
 s = s.replace("member.experience || ''\n    ];", "member.experience || '',\n      member.isNew ? '1' : '',\n      member.publicMemo || '',\n      member.isSponsor ? '1' : '',\n      member.bundleId || ''\n    ];")
 s = s.replace("experience: String(member.experience || '')", "experience: String(member.experience || ''),\n      isNew: Boolean(member.isNew),\n      publicMemo: String(member.publicMemo || ''),\n      isSponsor: Boolean(member.isSponsor),\n      bundleId: String(member.bundleId || '')")
 
