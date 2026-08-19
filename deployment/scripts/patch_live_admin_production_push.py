@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 
@@ -161,6 +162,29 @@ if push_marker not in push:
     if push.count(old) != 1:
         raise SystemExit("push handler insertion point missing")
     push = push.replace(old, new, 1)
+
+# Keep the relay URL and authentication key synchronized even when only one
+# side of a previous production deployment survived.
+main, main_url_count = re.subn(
+    r"const JAYUMINTON_STATE_PUSH_RELAY_URL_ = .*?;",
+    "const JAYUMINTON_STATE_PUSH_RELAY_URL_ = " + repr(relay_url) + ";",
+    main,
+    count=1,
+)
+main, main_key_count = re.subn(
+    r"const JAYUMINTON_STATE_PUSH_INTERNAL_KEY_ = .*?;",
+    "const JAYUMINTON_STATE_PUSH_INTERNAL_KEY_ = " + repr(internal_key) + ";",
+    main,
+    count=1,
+)
+push, push_key_count = re.subn(
+    r"const JAYUMINTON_MAIN_EVENT_KEY_ = .*?;",
+    "const JAYUMINTON_MAIN_EVENT_KEY_ = " + repr(internal_key) + ";",
+    push,
+    count=1,
+)
+if (main_url_count, main_key_count, push_key_count) != (1, 1, 1):
+    raise SystemExit("production relay constants could not be synchronized")
 
 for marker in (
     main_marker, "sendStateTransitionPushes_", "type: 'wait1_ready'",
