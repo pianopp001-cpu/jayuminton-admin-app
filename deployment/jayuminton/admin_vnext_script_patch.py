@@ -299,6 +299,8 @@ elif '급수·구력 미입력' in s or '구력 미입력' in s or '급수 미�
 # Safer fallback: inject badges next to game count in standard cards and quick roster.
 s=s.replace("memberInfoDetailHtml(member) +", "memberInfoDetailHtml(member) + adminVnextMemberBadges(member) +")
 s=s.replace("memberInfoDetailHtml(member, '코트배정 대기') +", "memberInfoDetailHtml(member, '코트배정 대기') + adminVnextMemberBadges(member) +")
+s=s.replace("memberInfoDetailHtml(member, courtNo + '번코트') +", "memberInfoDetailHtml(member, courtNo + '번코트') + adminVnextMemberBadges(member) +")
+s=s.replace("memberInfoDetailHtml(member, '대기' + (groupIndex + 1)) +", "memberInfoDetailHtml(member, '대기' + (groupIndex + 1)) + adminVnextMemberBadges(member) +")
 while 'adminVnextMemberBadges(member) + adminVnextMemberBadges(member) +' in s:
  s=s.replace('adminVnextMemberBadges(member) + adminVnextMemberBadges(member) +', 'adminVnextMemberBadges(member) +')
 
