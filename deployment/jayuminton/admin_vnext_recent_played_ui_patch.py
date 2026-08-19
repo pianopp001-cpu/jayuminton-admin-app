@@ -1,29 +1,61 @@
 #!/usr/bin/env python3
-"""Admin-only recent-played display. User frontend remains untouched."""
+"""Admin-only compact partner history. Re-applying is safe."""
 from pathlib import Path
+import re
 import sys
 root=Path(sys.argv[1]) if len(sys.argv)>1 else Path('source-snapshot/current-main')
 p=root/'Script.html'; s=p.read_text(encoding='utf-8')
 marker="""function adminVnextMemberBadges(member) {"""
 if marker not in s: raise SystemExit('member badge helper anchor not found')
+
+def remove_function(text, name):
+    needle = 'function ' + name + '('
+    while needle in text:
+        start = text.find(needle)
+        brace = text.find('{', start)
+        if brace < 0: raise SystemExit(name + ' function boundary missing')
+        depth = 0
+        quote = ''
+        escape = False
+        end = -1
+        for i in range(brace, len(text)):
+            ch = text[i]
+            if quote:
+                if escape: escape = False
+                elif ch == '\\': escape = True
+                elif ch == quote: quote = ''
+                continue
+            if ch in ("'", '"', '`'): quote = ch
+            elif ch == '{': depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end < 0: raise SystemExit(name + ' function end missing')
+        text = text[:start] + text[end:].lstrip('\n')
+    return text
+
+# Remove every previous deployment's helper/call/style before installing one
+# canonical compact line. This also repairs the repeated timestamp regression.
+s = remove_function(s, 'adminVnextRecentPlayed')
+s = s.replace('adminVnextRecentPlayed(member) + ', '')
+s = re.sub(r'<style id="adminVnextRecentPlayedStyle">[\s\S]*?</style>\s*', '', s)
+
 helper='''function adminVnextRecentPlayed(member) {
-  if (!member || !member.lastPlayedAt) return '';
-  const d = new Date(member.lastPlayedAt);
-  if (isNaN(d.getTime())) return '';
-  const mm=String(d.getMonth()+1).padStart(2,'0');
-  const dd=String(d.getDate()).padStart(2,'0');
-  const hh=String(d.getHours()).padStart(2,'0');
-  const mi=String(d.getMinutes()).padStart(2,'0');
-  return '<span class="member-vnext-recent">최근 '+mm+'/'+dd+' '+hh+':'+mi+'</span>';
+  if (!member || !member.partnerSummary) return '';
+  return '<span class="member-vnext-recent">' + escapeMemberInfo(member.partnerSummary) + '</span>';
 }
 
 '''
 s=s.replace(marker,helper+marker,1)
 s=s.replace("memberInfoDetailHtml(member) + adminVnextMemberBadges(member) +", "memberInfoDetailHtml(member) + adminVnextMemberBadges(member) + adminVnextRecentPlayed(member) +")
 s=s.replace("memberInfoDetailHtml(member, '코트배정 대기') + adminVnextMemberBadges(member) +", "memberInfoDetailHtml(member, '코트배정 대기') + adminVnextMemberBadges(member) + adminVnextRecentPlayed(member) +")
-style='''\n<style id="adminVnextRecentPlayedStyle">.member-vnext-recent{font-size:11px;opacity:.72;margin-left:4px;white-space:nowrap}</style>\n'''
+style='''\n<style id="adminVnextRecentPlayedStyle">.member-vnext-recent{display:block;max-width:100%;font-size:10px;line-height:1.2;opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}</style>\n'''
 script_end = s.rfind('</script>')
 if script_end < 0: raise SystemExit('script end anchor not found')
 s = s[:script_end + len('</script>')] + style + s[script_end + len('</script>'):]
+if s.count('function adminVnextRecentPlayed(member)') != 1 or s.count('id="adminVnextRecentPlayedStyle"') != 1:
+    raise SystemExit('compact partner UI must be unique')
 p.write_text(s,encoding='utf-8')
-print('admin vNext recent-played UI patch prepared')
+print('admin vNext compact partner UI patch prepared')
