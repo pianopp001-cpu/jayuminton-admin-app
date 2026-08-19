@@ -296,6 +296,11 @@ elif '급수·구력 미입력' in s or '구력 미입력' in s or '급수 미�
  raise SystemExit('admin missing-value rendering normalization failed')
 s=s.replace("if (experience) adminParts.push(escapeMemberInfo('구력 ' + experience));", "if (experience) adminParts.push(escapeMemberInfo(experience));")
 
+# Court finish voice must run for every non-empty court, including partial
+# 2-person and 3-person games. The server already promotes wait group 1 and
+# publishes the authenticated transition event for any non-empty court.
+s=s.replace("(STATE.courts[courtNo] || []).length === 4", "(STATE.courts[courtNo] || []).length > 0")
+
 # Append badges to every detail block through the function's final return when identifiable.
 # Safer fallback: inject badges next to game count in standard cards and quick roster.
 s=s.replace("memberInfoDetailHtml(member) +", "memberInfoDetailHtml(member) + adminVnextMemberBadges(member) +")
