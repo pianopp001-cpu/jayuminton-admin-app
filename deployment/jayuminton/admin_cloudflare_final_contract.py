@@ -23,7 +23,7 @@ addon = r'''
 #adminApp .admin-vnext-bottom-bar .mobile-assign-button{font-size:14px!important}
 .admin-save-notice{position:fixed!important;inset:0!important;z-index:100000!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:24px!important;background:rgba(15,23,42,.72)!important;color:#fff!important;text-align:center!important;pointer-events:none!important;opacity:0!important;visibility:hidden!important;box-sizing:border-box!important}
 .admin-save-notice.is-visible{pointer-events:all!important;opacity:1!important;visibility:visible!important}
-.admin-save-notice>div,.admin-save-notice>strong{max-width:360px!important}
+.admin-save-notice>div,.admin-save-notice>strong{max-width:360px!important}.admin-save-notice strong{display:block!important;font-size:24px!important;line-height:1.3!important}.admin-save-notice small{display:block!important;margin-top:10px!important;font-size:14px!important}
 #pairStatisticsModal{z-index:100150!important;padding:8px!important;box-sizing:border-box!important}
 .admin-pair-statistics-open #adminApp .admin-vnext-bottom-bar{display:none!important}
 .pair-statistics-modal{width:min(920px,calc(100vw - 16px))!important;max-height:calc(100dvh - 16px)!important;overflow:auto!important;box-sizing:border-box!important}
@@ -44,6 +44,11 @@ addon = r'''
   'use strict';
   var enforcing=false,pending=false;
   function compactText(value){return String(value||'').replace(/\s+/g,'').trim();}
+  function saveNotice(){var n=document.getElementById('adminSaveNotice');if(!n){n=document.createElement('div');n.id='adminSaveNotice';n.className='admin-save-notice';document.body.appendChild(n);}return n;}
+  function showBlockingNotice(title,detail){var n=saveNotice();n.innerHTML='<strong>'+String(title||'저장 중')+'</strong><small>'+String(detail||'완료될 때까지 다른 화면은 조작할 수 없습니다.')+'</small>';n.classList.add('is-visible');}
+  function hideBlockingNotice(){var n=document.getElementById('adminSaveNotice');if(n)n.classList.remove('is-visible');}
+  function bindRefresh(bar){var button=bar&&bar.querySelector('.mobile-refresh-button');if(!button||button.__jmRefreshBound)return;button.__jmRefreshBound=true;button.removeAttribute('onclick');button.addEventListener('click',function(event){event.preventDefault();event.stopPropagation();if(button.disabled)return;button.disabled=true;button.textContent='갱신 중…';showBlockingNotice('새로고침 중','서버의 최신 배정 상태를 다시 불러오고 있습니다.');Promise.resolve().then(function(){if(typeof loadState!=='function')throw new Error('새로고침 함수를 찾지 못했습니다.');return loadState();}).then(function(){if(typeof loadSystemStatus==='function')return loadSystemStatus();}).then(function(){button.textContent='완료';window.setTimeout(function(){button.disabled=false;button.textContent='새로고침';},500);}).catch(function(error){button.disabled=false;button.textContent='새로고침';alert(String(error&&error.message||error||'새로고침에 실패했습니다.'));}).finally(hideBlockingNotice);},true);}
+  function syncBusyOverlay(){if(document.body.classList.contains('action-busy'))showBlockingNotice('저장 중','완료될 때까지 다른 화면은 조작할 수 없습니다.');else if(!document.querySelector('.mobile-refresh-button:disabled'))hideBlockingNotice();}
   function enforce(){
     if(enforcing)return;
     enforcing=true;
@@ -63,12 +68,13 @@ addon = r'''
     });
     if(bar){
       var buttons=bar.querySelectorAll(':scope>button');
-      if(buttons.length===3){if(buttons[0].textContent!=='실행취소')buttons[0].textContent='실행취소';if(buttons[1].textContent!=='새로고침')buttons[1].textContent='새로고침';if(buttons[2].textContent!=='자동배정')buttons[2].textContent='자동배정';}
+      if(buttons.length===3){if(buttons[0].textContent!=='실행취소')buttons[0].textContent='실행취소';if(!buttons[1].disabled&&buttons[1].textContent!=='새로고침')buttons[1].textContent='새로고침';if(buttons[2].textContent!=='자동배정')buttons[2].textContent='자동배정';}
+      bindRefresh(bar);
     }
     }finally{enforcing=false;}
   }
   function scheduleEnforce(){if(pending)return;pending=true;requestAnimationFrame(function(){pending=false;enforce();});}
-  function start(){enforce();var app=document.getElementById('adminApp');if(app)new MutationObserver(scheduleEnforce).observe(app,{childList:true,subtree:true});window.__JAYUMINTON_ADMIN_OBSERVER_STABLE__=true;}
+  function start(){enforce();var app=document.getElementById('adminApp');if(app)new MutationObserver(scheduleEnforce).observe(app,{childList:true,subtree:true});new MutationObserver(syncBusyOverlay).observe(document.body,{attributes:true,attributeFilter:['class']});syncBusyOverlay();window.__JAYUMINTON_ADMIN_OBSERVER_STABLE__=true;window.__JAYUMINTON_ADMIN_REFRESH_BOUND__=true;window.__JAYUMINTON_ADMIN_BLOCKING_SAVE__=true;}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 </script>
@@ -85,6 +91,8 @@ for required in (
     "grid-template-columns:repeat(3,minmax(0,1fr))",
     "header-refresh-button",
     "admin-save-notice.is-visible",
+    "__JAYUMINTON_ADMIN_REFRESH_BOUND__",
+    "__JAYUMINTON_ADMIN_BLOCKING_SAVE__",
     "admin-pair-statistics-open",
     "member-vnext-full-name",
 ):
