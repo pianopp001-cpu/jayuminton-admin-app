@@ -186,13 +186,36 @@ push, push_key_count = re.subn(
 if (main_url_count, main_key_count, push_key_count) != (1, 1, 1):
     raise SystemExit("production relay constants could not be synchronized")
 
+canonical_handler = """    if (action === 'main_state_event') {
+      if (String(body.internalKey || '') !== JAYUMINTON_MAIN_EVENT_KEY_) {
+        throw new Error('Invalid main event key.');
+      }
+      return jsonOutput_(sendAssignmentEvent_(cleanEvent_(body)));
+    }
+
+    verifyAdminSecret_"""
+push, handler_count = re.subn(
+    r"    if \(action === 'main_state_event'\) \{\n.*?\n    \}\n\n    verifyAdminSecret_",
+    canonical_handler,
+    push,
+    count=1,
+    flags=re.S,
+)
+if handler_count != 1:
+    raise SystemExit("production main_state_event handler could not be canonicalized")
+
 for marker in (
     main_marker, "sendStateTransitionPushes_", "type: 'wait1_ready'",
     "type: 'court_assignment'", "UrlFetchApp.fetch",
 ):
     if marker not in main:
         raise SystemExit("missing main marker: " + marker)
-for marker in (push_marker, "action === 'main_state_event'", "Invalid main event key"):
+for marker in (
+    push_marker,
+    "action === 'main_state_event'",
+    "Invalid main event key",
+    "sendAssignmentEvent_(cleanEvent_(body))",
+):
     if marker not in push:
         raise SystemExit("missing push marker: " + marker)
 
