@@ -1,0 +1,68 @@
+name: Restore original user URL to Aug 16 version 327
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-original-user-url-aug16.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-original-user-url-restore
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      SAFE_VERSION: '327'
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Restore original user deployment ID without source push
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          USER_ID="$(jq -r '.mainDeploymentId' "$CONFIG")"
+          test -n "$SCRIPT_ID"; test "$SCRIPT_ID" != null
+          test -n "$USER_ID"; test "$USER_ID" != null
+          WORK="$RUNNER_TEMP/original-user"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
+          cd "$WORK"
+          BEFORE="$(clasp deployments)"
+          printf '%s\n' "$BEFORE" | grep -F "$USER_ID" >/dev/null
+          clasp create-deployment --deploymentId "$USER_ID" --versionNumber "$SAFE_VERSION" --description "RESTORE original user URL Aug16 v$SAFE_VERSION ${GITHUB_RUN_ID}"
+          AFTER="$(clasp deployments)"
+          printf '%s\n' "$AFTER" | grep -F "$USER_ID" | grep -F "@$SAFE_VERSION" >/dev/null
+          URL="https://script.google.com/macros/s/$USER_ID/exec"
+          sleep 7
+          CODE="$(curl -L -sS --retry 5 --retry-delay 2 --max-time 60 -o "$RUNNER_TEMP/live.html" -w '%{http_code}' "$URL?mode=user&app=user&restore=aug16-original" || true)"
+          test "$CODE" = 200
+          ! grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$RUNNER_TEMP/live.html"
+          {
+            echo "RESTORED_VERSION=$SAFE_VERSION"
+            echo "ORIGINAL_USER_DEPLOYMENT_ID=$USER_ID"
+            echo "USER_URL=$URL"
+            echo "SOURCE_PUSH=no"
+            echo "ADMIN_ISOLATED_DEPLOYMENT_MODIFIED=no"
+            echo "HTTP=$CODE"
+          } | tee "$RUNNER_TEMP/original-user-restore.txt"
+          echo "::notice title=Original user URL restored::$URL"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-user-restore-${{ github.run_id }}
+          path: ${{ runner.temp }}/original-user-restore.txt
+          retention-days: 30
