@@ -1,5 +1,5 @@
 status=success
-commit=b520f14d11d05f89e115d0f82f9268f5660c7ed9
+commit=85579a9444f78cedfeb6b3be65ad501df87b65fc
 deployment=existing-main
 protected_user_files_unchanged=yes
 member_apk_aab_changed=no
@@ -7,4 +7,4 @@ notification_contract_verified=yes
 production_push_compatibility=yes
 push_relay_deployed=yes
 relay_credentials_synchronized=yes
-deployed_at=2026-08-19T05:51:06Z
+deployed_at=2026-08-19T05:56:50Z
