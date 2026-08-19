@@ -33,9 +33,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity implements TextToSpeech.OnInitListener {
     private static final String ADMIN_URL =
-            "https://script.google.com/macros/s/AKfycbwVgdQG-DXbgxCgd8L11WA57-DCVaOwF4Sc_lktAZZ0yPJSCIosOOKkmKe3oU8a5pfJ7Q/exec?mode=admin";
+            "https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?app=admin&native=1";
     private static final String MEMBER_PWA_URL = "https://jayuminton-push.web.app/";
-    private static final String APK_WEB_BUILD = "1995-fresh-admin";
+    private static final String APK_WEB_BUILD = "1997-cloudflare-admin-vnext";
     private static final String PREFS = "jayuminton_audio_state";
     private static final String KEY_WAS_DUCKING = "was_ducking";
     private static final String KEY_MEDIA_VOLUME = "media_volume";
@@ -89,7 +89,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         settings.setDisplayZoomControls(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/199.5 FreshAdmin/1995");
+        settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/199.7 CloudflareAdmin/1997");
 
         webView.clearCache(true);
         webView.clearHistory();
@@ -418,5 +418,3 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         public void openPwa() {
             runOnUiThread(() -> openMemberPwaInBrowser(MEMBER_PWA_URL));
         }
-    }
-}
