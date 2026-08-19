@@ -101,8 +101,10 @@ jobs:
           grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$WORK/Script.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$WORK/Script.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$WORK/Script.html" >/dev/null
-          grep -F "sponsor.textContent='🎁'" "$WORK/Script.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_BADGES_V6' "$WORK/Script.html" >/dev/null
+          grep -F "sponsor.textContent='🎁 찬조'" "$WORK/Script.html" >/dev/null
+          grep -F "badge.textContent='NEW 신규'" "$WORK/Script.html" >/dev/null
+          grep -F 'member-status-list' "$WORK/Script.html" >/dev/null
           grep -F "String(member.publicMemo||'').trim()" "$WORK/Script.html" >/dev/null
           grep -F 'content:"★"!important' "$WORK/Script.html" >/dev/null
           grep -F 'color:#ffd84d!important' "$WORK/Script.html" >/dev/null
@@ -157,8 +159,10 @@ jobs:
           grep -F 'showIncoming_' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$PUBLIC/index.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$PUBLIC/index.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$PUBLIC/index.html" >/dev/null
-          grep -F "sponsor.textContent='🎁'" "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_BADGES_V6' "$PUBLIC/index.html" >/dev/null
+          grep -F "sponsor.textContent='🎁 찬조'" "$PUBLIC/index.html" >/dev/null
+          grep -F "badge.textContent='NEW 신규'" "$PUBLIC/index.html" >/dev/null
+          grep -F 'member-status-list' "$PUBLIC/index.html" >/dev/null
           grep -F "String(member.publicMemo||'').trim()" "$PUBLIC/index.html" >/dev/null
           grep -F 'detectMemberForegroundTransition' "$PUBLIC/index.html" >/dev/null
           grep -F "'wait1_ready'" "$PUBLIC/index.html" >/dev/null
@@ -212,8 +216,10 @@ jobs:
             -o "$RUNNER_TEMP/live-production.html"
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "sponsor.textContent='🎁'" "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_BADGES_V6' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F "sponsor.textContent='🎁 찬조'" "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F "badge.textContent='NEW 신규'" "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'member-status-list' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F "String(member.publicMemo||'').trim()" "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'detectMemberForegroundTransition' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F "'wait1_ready'" "$RUNNER_TEMP/live-production.html" >/dev/null
