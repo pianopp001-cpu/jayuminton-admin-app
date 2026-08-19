@@ -199,18 +199,26 @@ elif not (
     raise SystemExit('auto target entry anchor not found')
 
 # Direct/manual court entry: increment only the entrants after placement is finalized.
-rep("""  markCourtStartedIfFull_(refreshedCourts, startedAt, courtNo);
+direct_court_old = """  markCourtStartedIfFull_(refreshedCourts, startedAt, courtNo);
   writeCourts_(refreshedCourts, startedAt);
   updateMemberStatuses_(ids, 'playing');
   touch_();
 
-  return getPublicState();""","""  if ((refreshedCourts[courtNo] || []).length > 0 && !startedAt[courtNo]) startedAt[courtNo] = new Date().toISOString();
+  return getPublicState();"""
+direct_court_new = """  if ((refreshedCourts[courtNo] || []).length > 0 && !startedAt[courtNo]) startedAt[courtNo] = new Date().toISOString();
   const members = readMembers_();
   incrementGamesForCourtEntrants_(members, ids);
   recordCourtEntryPairs_(courtNo, ids, refreshedCourts[courtNo] || []);
   writeCourts_(refreshedCourts, startedAt);
   members.forEach(function(member) { if (ids.indexOf(member.id) >= 0) member.status = 'playing'; });
-  writeMembers_(members); touch_(); return getPublicState();""", 'direct court entry')
+  writeMembers_(members); touch_(); return getPublicState();"""
+if direct_court_old in s:
+    s = s.replace(direct_court_old, direct_court_new, 1)
+elif not (
+    'JAYUMINTON_SELF_SEAT_PRIORITY_AUTOFILL_V2' in s
+    or 'const needed = GROUP_SIZE - existingIds.length;' in s
+):
+    raise SystemExit('direct court entry anchor not found')
 
 rep("""  if (group.length !== GROUP_SIZE) {
     throw new Error(
