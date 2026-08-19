@@ -22,7 +22,7 @@ jobs:
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       APK_OUTPUT: releases/jayuminton-admin-v199.7-cloudflare-vnext.apk
-      DOG_ICON_SHA256: 1c7ddefbd9bedb01cd28fd0b8af26eef7c046a86131de9e0782b2e147a47e19e
+      DOG_ICON_SHA256: a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
 
     steps:
       - name: Checkout current main
@@ -221,7 +221,7 @@ jobs:
             echo 'version=199.7'
             echo 'package=com.jayuminton.admin'
             echo 'output=releases/jayuminton-admin-v199.7-cloudflare-vnext.apk'
-            echo 'dog_icon_sha256=1c7ddefbd9bedb01cd28fd0b8af26eef7c046a86131de9e0782b2e147a47e19e'
+            echo 'dog_icon_sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e'
             echo 'dog_art=chatgpt-file-library-source'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
           } > deployment/status/v1997-cloudflare-apk.txt
