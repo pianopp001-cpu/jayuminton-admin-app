@@ -1,0 +1,90 @@
+name: Issue fresh protected user web URL
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/issue-fresh-protected-user-web-url.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-fresh-user-web-url
+  cancel-in-progress: false
+
+jobs:
+  issue-user-url:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve protected user project
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "ADMIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Pull and verify current protected source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAFE="$RUNNER_TEMP/protected-user-source"
+          mkdir -p "$SAFE"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$SAFE/.clasp.json"
+          (cd "$SAFE" && clasp pull)
+          for required in Index.html Style.html Script.html Code.js appsscript.json; do
+            test -s "$SAFE/$required"
+          done
+          node --check "$SAFE/Code.js"
+          python3 - "$SAFE/Script.html" "$RUNNER_TEMP/user-script.js" <<'PY'
+          from pathlib import Path
+          import sys
+          source=Path(sys.argv[1]).read_text(encoding='utf-8')
+          start=source.find('<script>'); end=source.rfind('</script>')
+          if start < 0 or end <= start: raise SystemExit('Script.html wrapper missing')
+          Path(sys.argv[2]).write_text(source[start+8:end],encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/user-script.js"
+      - name: Create fresh user URL without changing source or admin deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAFE="$RUNNER_TEMP/protected-user-source"
+          cd "$SAFE"
+          BEFORE="$(clasp deployments)"
+          test -n "$ADMIN_DEPLOYMENT_ID"
+          OUTPUT="$(clasp create-deployment --description "fresh protected user web ${GITHUB_SHA::7}")"
+          printf '%s\n' "$OUTPUT"
+          NEW_ID="$(printf '%s\n' "$OUTPUT" | sed -n 's/.*\(AKfy[a-zA-Z0-9_-]*\).*/\1/p' | head -1)"
+          test -n "$NEW_ID"
+          test "$NEW_ID" != "$ADMIN_DEPLOYMENT_ID"
+          AFTER="$(clasp deployments)"
+          printf '%s\n' "$AFTER" | grep -F "$ADMIN_DEPLOYMENT_ID" >/dev/null
+          printf '%s\n' "$AFTER" | grep -F "$NEW_ID" >/dev/null
+          {
+            echo "USER_DEPLOYMENT_ID=$NEW_ID"
+            echo "USER_URL=https://script.google.com/macros/s/$NEW_ID/exec"
+          } | tee "$RUNNER_TEMP/fresh-user-url.txt"
+          echo "::notice title=Fresh protected user web URL::https://script.google.com/macros/s/$NEW_ID/exec"
+          echo "Source push performed: no"
+          echo "Existing admin deployment modified: no"
+      - name: Upload fresh URL record
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-protected-user-url-${{ github.run_id }}
+          path: ${{ runner.temp }}/fresh-user-url.txt
+          retention-days: 30
