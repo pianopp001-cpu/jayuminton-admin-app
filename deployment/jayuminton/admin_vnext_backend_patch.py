@@ -11,6 +11,16 @@ def rep(old, new, label):
     if old not in s: raise SystemExit(label + ' anchor not found')
     s = s.replace(old, new, 1)
 
+def rep_or_preserve_modern(old, new, label):
+    global s
+    if old in s:
+        s = s.replace(old, new, 1)
+    elif not (
+        'JAYUMINTON_SELF_SEAT_PRIORITY_AUTOFILL_V2' in s
+        or 'const needed = GROUP_SIZE - existingIds.length;' in s
+    ):
+        raise SystemExit(label + ' anchor not found')
+
 s = s.replace("const SHEET_LOGS = 'ActionLogs';", "const SHEET_LOGS = 'ActionLogs';\nconst SHEET_PAIR_HISTORY = 'PairHistory';", 1)
 s = s.replace("const setupKey = 'JAYUMINTON_SETUP_V11_' + ss.getId();", "const setupKey = 'JAYUMINTON_SETUP_ADMIN_VNEXT_1_' + ss.getId();", 1)
 s = s.replace("  ensureLogsSheet_(ss);\n  migrateLegacyDataIfNeeded_(ss);", "  ensureLogsSheet_(ss);\n  ensurePairHistorySheet_(ss);\n  migrateLegacyDataIfNeeded_(ss);", 1)
@@ -220,12 +230,12 @@ elif not (
 ):
     raise SystemExit('direct court entry anchor not found')
 
-rep("""  if (group.length !== GROUP_SIZE) {
+rep_or_preserve_modern("""  if (group.length !== GROUP_SIZE) {
     throw new Error(
       '4명이 모두 채워진 대기조만 코트에 배정할 수 있습니다.'
     );
   }""","""  if (!group.length) throw new Error('비어 있는 대기조는 코트에 배정할 수 없습니다.');""", 'partial wait to court')
-rep("""  startedAt[courtNo] = new Date().toISOString();
+rep_or_preserve_modern("""  startedAt[courtNo] = new Date().toISOString();
   writeCourts_(courts, startedAt);
   writeWaitGroups_(waitGroups);
   updateMemberStatuses_(group, 'playing');
@@ -234,7 +244,7 @@ rep("""  startedAt[courtNo] = new Date().toISOString();
   members.forEach(function(member) { if (group.indexOf(member.id) >= 0) member.status = 'playing'; });
   writeCourts_(courts, startedAt); writeWaitGroups_(waitGroups); writeMembers_(members); touch_();""", 'wait court count')
 
-rep("""  if (finished.length !== GROUP_SIZE) {
+rep_or_preserve_modern("""  if (finished.length !== GROUP_SIZE) {
     throw new Error(
       '4명이 모두 배정된 코트만 경기 종료할 수 있습니다.'
     );
