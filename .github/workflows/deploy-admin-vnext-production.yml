@@ -2,6 +2,10 @@ name: Deploy admin vNext production
 # Production deployment explicitly approved on 2026-08-19.
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-admin-vnext-production.yml'
   workflow_dispatch: {}
 
 permissions:
