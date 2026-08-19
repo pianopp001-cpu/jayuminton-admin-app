@@ -124,13 +124,13 @@ style = """
   .pair-statistics-partners{display:flex;gap:6px;flex-wrap:wrap}
   .pair-statistics-chip{font-size:12px;font-weight:700;background:#eef4ff;color:#244f91;border-radius:999px;padding:5px 8px}
   .pair-statistics-empty{padding:24px;text-align:center;color:#64748b}
-  .member-vnext-full-name{display:block!important;width:100%!important;max-width:100%!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere;line-height:1.12;text-align:center}
-  .member-vnext-full-name small{display:block!important;width:100%!important;max-width:100%!important;margin-top:5px;font-size:.68em;line-height:1.2;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
-  .quick-member:has(.member-vnext-full-name),.person:has(.member-vnext-full-name){position:relative!important;overflow:visible!important}
+  .member-vnext-full-name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important;text-align:center}
+  .member-vnext-full-name small{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;margin-top:7px;font-size:.8em!important;line-height:1.25!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important}
+  .quick-member:has(.member-vnext-full-name),.person:has(.member-vnext-full-name){position:relative!important;overflow:hidden!important;aspect-ratio:auto!important}
   .member-vnext-badge.new-badge{position:absolute!important;z-index:10!important;top:3px!important;right:3px!important;display:block!important;width:auto!important;margin:0!important;padding:1px 4px!important;font-size:7px!important;line-height:9px!important;letter-spacing:.2px!important;border-radius:4px!important;pointer-events:none!important}
-  .quick-member:has(.member-vnext-full-name){grid-column:span 2!important;width:100%!important;min-width:0!important;height:auto!important;min-height:160px!important;padding:12px 10px!important}
-  .person:has(.member-vnext-full-name){height:auto!important;min-height:112px!important;padding-top:10px!important;padding-bottom:10px!important}
-  .quick-member:has(.member-vnext-full-name) .quick-member-name,.person:has(.member-vnext-full-name) .name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;line-height:1.15!important}
+  .quick-member:has(.member-vnext-full-name){grid-column:1/-1!important;width:100%!important;min-width:0!important;height:auto!important;min-height:190px!important;padding:22px 16px 16px!important}
+  .person:has(.member-vnext-full-name){height:auto!important;min-height:132px!important;padding:18px 8px 10px!important}
+  .quick-member:has(.member-vnext-full-name) .quick-member-name,.person:has(.member-vnext-full-name) .name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important}
   @media (max-width:380px){.admin-vnext-bottom-bar{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.admin-vnext-bottom-bar button{font-size:12px!important;padding:7px 2px!important}}
 </style>
 """
