@@ -56,7 +56,8 @@ BRIDGE=r'''<script id="jayuminton-admin-cloudflare-rpc">
   function status(text,error){var el=document.getElementById('adminCloudflareLoginStatus');if(el){el.textContent=String(text||'');el.style.color=error?'#b42318':'#667085';}}
   function resetLoginButton(){var b=document.getElementById('adminCloudflareLoginButton');if(b){b.disabled=false;b.textContent='로그인';}}
   function standaloneLogin(){var input=document.getElementById('adminPinInput'),pin=String(input&&input.value||'').trim();if(!pin){status('관리자 PIN을 입력하세요.',true);return;}var b=document.getElementById('adminCloudflareLoginButton');if(b){b.disabled=true;b.textContent='확인 중…';}status('관리자 서버에 연결하고 있습니다.',false);invoke('createAdminSession',[pin],function(result){if(!result||!result.ok){status('관리자 PIN이 틀렸습니다.',true);resetLoginButton();return;}var token=String(result.token||'');try{localStorage.setItem('jayuminton_admin_session_v1',token);}catch(e){}if(typeof window.openAdminApp!=='function'){status('관리자 화면 초기화 함수가 없습니다.',true);resetLoginButton();return;}Promise.resolve(window.openAdminApp(token)).then(function(){revealAuthenticatedApp();status('',false);resetLoginButton();}).catch(function(e){hideAppUntilAuthenticated();status(String(e&&e.message||e||'관리자 화면을 불러오지 못했습니다.'),true);resetLoginButton();});},function(e){hideAppUntilAuthenticated();status(String(e&&e.message||e||'서버에 연결할 수 없습니다.'),true);resetLoginButton();});}
-  function bindLogin(){hideAppUntilAuthenticated();ensureStatus();var b=document.getElementById('adminCloudflareLoginButton'),input=document.getElementById('adminPinInput');if(b&&!b.__jmBound){b.__jmBound=true;b.addEventListener('click',standaloneLogin);}if(input&&!input.__jmBound){input.__jmBound=true;input.addEventListener('keydown',function(ev){if(ev.key==='Enter'){ev.preventDefault();standaloneLogin();}});}}
+  function bindLogin(){hideAppUntilAuthenticated();ensureStatus();var box=loginBox(),b=document.getElementById('adminCloudflareLoginButton'),input=document.getElementById('adminPinInput');if(box){box.style.setProperty('position','relative','important');box.style.setProperty('z-index','2147483000','important');box.style.setProperty('pointer-events','auto','important');}if(b&&!b.__jmBound){b.__jmBound=true;b.style.setProperty('pointer-events','auto','important');b.addEventListener('click',standaloneLogin);}if(input&&!input.__jmBound){input.__jmBound=true;input.disabled=false;input.readOnly=false;input.setAttribute('inputmode','numeric');input.setAttribute('enterkeyhint','done');input.style.setProperty('pointer-events','auto','important');input.style.setProperty('touch-action','manipulation','important');input.addEventListener('pointerdown',function(){try{input.focus();}catch(e){}});input.addEventListener('click',function(){try{input.focus();}catch(e){}});input.addEventListener('keydown',function(ev){if(ev.key==='Enter'){ev.preventDefault();standaloneLogin();}});}}
+  window.__JAYUMINTON_ADMIN_PIN_INPUT_READY__=function(){var i=document.getElementById('adminPinInput'),b=document.getElementById('adminCloudflareLoginButton');return !!(i&&b&&!i.disabled&&!i.readOnly&&i.__jmBound&&b.__jmBound);};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bindLogin,{once:true});else setTimeout(bindLogin,0);
 })();
 </script>'''
@@ -80,6 +81,7 @@ def build_frontend(work,out,rpc_url):
         return s
     for n in ['Style']: index=include(n,index)
     index=index.replace('class="primary"\n      onclick="adminLogin()"','id="adminCloudflareLoginButton"\n      class="primary"\n      type="button"',1)
+    index=index.replace('id="adminPinInput"\n      type="password"', 'id="adminPinInput"\n      type="password"\n      inputmode="numeric"\n      enterkeyhint="done"', 1)
     bridge=BRIDGE.replace('RPC_URL_JSON',json.dumps(rpc_url.rstrip('/')+'/?adminRpc=1'))
     marker='<script>const IS_ADMIN = true;</script>'
     if marker not in index: marker='<script>\nconst IS_ADMIN = true;\n</script>'
@@ -89,6 +91,7 @@ def build_frontend(work,out,rpc_url):
     if '<?!=' in index: raise SystemExit('Apps Script template marker remains')
     if 'script.google.com/macros/s/' in index: raise SystemExit('direct Apps Script URL remains')
     if 'adminCloudflareLoginButton' not in index: raise SystemExit('standalone admin login button patch missing')
+    if 'id="adminPinInput"' not in index or '__JAYUMINTON_ADMIN_PIN_INPUT_READY__' not in index: raise SystemExit('interactive admin PIN contract missing')
     (out/'index.html').write_text(index,encoding='utf-8')
 
 def main():
