@@ -212,9 +212,14 @@ if card_marker not in s:
 if card_marker not in s: raise SystemExit('memberInfoDetailHtml marker not found')
 name_helper='''function adminVnextCardName(member) {
   if (!member) return '';
-  return member.isNew
-    ? escapeMemberInfo(member.name || '')
-    : compactMemberName(member.name || '');
+  const storedName = String(member.name || '').trim();
+  if (!member.isNew) return compactMemberName(storedName);
+  const open = storedName.indexOf('(');
+  if (open < 0) return '<span class="member-vnext-full-name">' + escapeMemberInfo(storedName) + '</span>';
+  const firstLine = storedName.slice(0, open).trim();
+  const parenthetical = storedName.slice(open).trim();
+  return '<span class="member-vnext-full-name"><span>' + escapeMemberInfo(firstLine) +
+    '</span><br><small>' + escapeMemberInfo(parenthetical) + '</small></span>';
 }
 
 '''
