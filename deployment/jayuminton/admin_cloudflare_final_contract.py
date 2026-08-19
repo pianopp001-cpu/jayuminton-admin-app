@@ -42,8 +42,12 @@ addon = r'''
 <script id="jayumintonAdminCloudflareFinalScript">
 (function(){
   'use strict';
+  var enforcing=false,pending=false;
   function compactText(value){return String(value||'').replace(/\s+/g,'').trim();}
   function enforce(){
+    if(enforcing)return;
+    enforcing=true;
+    try{
     var app=document.getElementById('adminApp');
     if(!app)return;
     var bar=app.querySelector('.admin-vnext-bottom-bar');
@@ -52,17 +56,19 @@ addon = r'''
       if(control===keep)return;
       var key=[control.textContent,control.getAttribute('aria-label'),control.getAttribute('title'),control.id,control.className].map(compactText).join('|').toLowerCase();
       if(key.indexOf('새로고침')>=0||key.indexOf('refresh')>=0){
-        control.hidden=true;
-        control.setAttribute('aria-hidden','true');
-        control.style.setProperty('display','none','important');
+        if(!control.hidden)control.hidden=true;
+        if(control.getAttribute('aria-hidden')!=='true')control.setAttribute('aria-hidden','true');
+        if(control.style.getPropertyValue('display')!=='none')control.style.setProperty('display','none','important');
       }
     });
     if(bar){
       var buttons=bar.querySelectorAll(':scope>button');
-      if(buttons.length===3){buttons[0].textContent='실행취소';buttons[1].textContent='새로고침';buttons[2].textContent='자동배정';}
+      if(buttons.length===3){if(buttons[0].textContent!=='실행취소')buttons[0].textContent='실행취소';if(buttons[1].textContent!=='새로고침')buttons[1].textContent='새로고침';if(buttons[2].textContent!=='자동배정')buttons[2].textContent='자동배정';}
     }
+    }finally{enforcing=false;}
   }
-  function start(){enforce();var app=document.getElementById('adminApp');if(app)new MutationObserver(enforce).observe(app,{childList:true,subtree:true});}
+  function scheduleEnforce(){if(pending)return;pending=true;requestAnimationFrame(function(){pending=false;enforce();});}
+  function start(){enforce();var app=document.getElementById('adminApp');if(app)new MutationObserver(scheduleEnforce).observe(app,{childList:true,subtree:true});window.__JAYUMINTON_ADMIN_OBSERVER_STABLE__=true;}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 </script>
