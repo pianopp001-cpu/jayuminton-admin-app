@@ -1,0 +1,10 @@
+workflow=Build Jayuminton admin v200.0 bundled Cloudflare full APK
+run_id=32282270987
+status=success
+head_sha=c1fc4f934b291a718339eaba5a27d64783b9f940
+version=200.0
+package=com.jayuminton.admin
+output=releases/jayuminton-admin-v200.0-bundled-cloudflare-full.apk
+dog_icon_sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
+dog_art=chatgpt-file-library-source
+updated_at=2026-08-19T17:37:11Z
