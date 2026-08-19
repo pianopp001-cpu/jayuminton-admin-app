@@ -10,10 +10,15 @@
 4. `HTTP 200`만으로 정상 판정하지 않는다. 실제 RPC 응답에 `ok:true`가 있는지 확인한다.
 5. 복구 중 MAIN/관리자/사용자 웹/APK를 한꺼번에 재배포하지 않는다. 장애 범위만 최소 변경한다.
 6. 기존 설치 사용자 앱의 접속 경로를 바꾸는 빌드는 명시적 검증 없이 배포하지 않는다.
+7. 사용자 운영 프런트는 **항상 Cloudflare Worker RPC를 사용하는 Firebase Hosting**이다. 사용자에게 Apps Script URL을 안내하거나 사용자 운영 URL로 기록하지 않는다.
+8. 사용자 화면 변경은 `.github/workflows/deploy-unified-member-web-production.yml`만 사용한다. 이 워크플로는 MAIN/ADMIN deployment ID를 갱신하지 않아야 한다.
+9. 사용자 카드의 `NEW`와 `🎁` 표시는 카드 모서리의 작은 아이콘이며 카드 크기·이름 영역을 침범하지 않는다.
+10. 사용자 배포 전후에 로그인 화면, Worker `ok:true`, 필수 메타데이터 필드, iframe 부재, Apps Script URL 부재를 자동 검사한다.
 
 ## 현재 확인된 Cloudflare 사용자 경로
 
 - 사용자 공개 도메인: `https://www.jayfreelab.com`
+- 사용자 실제 Hosting: `https://jayuminton-push.web.app/`
 - Cloudflare Worker RPC: `https://shy-morning-f0e4.pianopp001.workers.dev/`
 - Cloudflare용 isolated Apps Script deployment ID: `AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ`
 - 성공했던 통합 Cloudflare 기준 소스 commit: `1c3aa7a4f77a280805cf43570b3a7f1695998711`
@@ -43,6 +48,8 @@
 - 사용자 웹 장애를 이유로 APK를 먼저 재빌드/재설치시키지 않는다.
 - 기존 정상 사용자 웹/앱을 삭제하거나 덮어쓰기 전에 별도 복구 경로와 검증 없이 진행 금지.
 - 과거 Workflow가 현재 secret/config 구조와 맞는지 확인하지 않고 그대로 재실행 금지.
+- 사용자 운영 장애에 Apps Script 신규 배포 ID를 만들거나 `/exec` 주소를 사용자에게 전달하는 행위 금지.
+- 관리자 패치 워크플로에서 사용자 Hosting, 사용자 Worker, 사용자 카드 CSS를 함께 배포하는 행위 금지.
 
 ## 이번 장애에서 확인한 교훈
 
