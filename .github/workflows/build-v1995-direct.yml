@@ -62,6 +62,7 @@ jobs:
           test -s "$SRC"
           base64 --decode "$SRC" > "$ICON"
           test -s "$ICON"
+          mv "$SRC" "$RUNNER_TEMP/icon_from_library.b64"
           ACTUAL=$(sha256sum "$ICON" | awk '{print $1}')
           echo "library dog icon sha256=$ACTUAL"
           test "$ACTUAL" = "$DOG_ICON_SHA256"
