@@ -143,6 +143,34 @@ elif metadata_assignment not in block:
     if marker not in block:
         raise SystemExit('update member metadata fields anchor not found')
     block = block.replace(marker, marker + '\n' + metadata_assignment, 1)
+
+# Save only the edited member row and return a lightweight response. Rewriting
+# the whole member sheet and rebuilding courts/waits made the save indicator
+# unnecessarily long.
+old_tail = """    writeMembers_(members);
+    if (typeof touch_ === 'function') touch_();
+    return getPublicState();"""
+new_tail = """    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_MEMBERS);
+    sheet.getRange(index + 2, 1, 1, 12).setValues([[
+      members[index].id,
+      members[index].name,
+      members[index].gender,
+      Number(members[index].games) || 0,
+      members[index].status || 'active',
+      members[index].createdAt || '',
+      members[index].grade || '',
+      members[index].experience || '',
+      members[index].isNew ? '1' : '',
+      members[index].publicMemo || '',
+      members[index].isSponsor ? '1' : '',
+      members[index].bundleId || ''
+    ]]);
+    if (typeof touch_ === 'function') touch_();
+    return {ok: true, member: members[index], updatedAt: new Date().toISOString()};"""
+if old_tail in block:
+    block = block.replace(old_tail, new_tail, 1)
+elif 'return {ok: true, member: members[index]' not in block:
+    raise SystemExit('update member lightweight response anchor not found')
 s = s[:a] + block + s[b:]
 
 # Undo must retain every appended metadata field.
