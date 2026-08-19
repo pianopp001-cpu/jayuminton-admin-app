@@ -100,7 +100,7 @@ jobs:
           (cd "$LIVE" && clasp pull)
           (cd "$PUSH" && clasp pull)
           cp -R "$LIVE"/. "$BACKUP"/
-          sha256sum "$LIVE/Index.html" "$LIVE/Style.html" > "$RUNNER_TEMP/protected-before.sha256"
+          sha256sum "$LIVE/Index.html" > "$RUNNER_TEMP/protected-before.sha256"
 
           INTERNAL_KEY="$(openssl rand -hex 32)"
           python3 deployment/scripts/patch_live_admin_production_push.py \
@@ -112,8 +112,14 @@ jobs:
           grep -F "action === 'main_state_event'" "$PUSH/Code.js" >/dev/null
           grep -F 'sendAssignmentEvent_(cleanEvent_(body))' "$PUSH/Code.js" >/dev/null
 
-          sha256sum "$LIVE/Index.html" "$LIVE/Style.html" > "$RUNNER_TEMP/protected-after.sha256"
+          sha256sum "$LIVE/Index.html" > "$RUNNER_TEMP/protected-after.sha256"
           diff -u "$RUNNER_TEMP/protected-before.sha256" "$RUNNER_TEMP/protected-after.sha256"
+
+          EXPECTED_STYLE="$RUNNER_TEMP/approved-style"
+          mkdir -p "$EXPECTED_STYLE"
+          cp "$BACKUP/Style.html" "$EXPECTED_STYLE/Style.html"
+          python3 deployment/jayuminton/member_sponsor_public_style_patch.py "$EXPECTED_STYLE"
+          cmp "$EXPECTED_STYLE/Style.html" "$LIVE/Style.html"
           node --check "$LIVE/Code.js"
           python3 - "$LIVE/Script.html" "$RUNNER_TEMP/admin-vnext-script.js" <<'PY'
           from pathlib import Path
@@ -125,16 +131,17 @@ jobs:
           PY
           node --check "$RUNNER_TEMP/admin-vnext-script.js"
 
-          for protected in Index.html Style.html appsscript.json; do
+          for protected in Index.html appsscript.json; do
             cmp "$BACKUP/$protected" "$LIVE/$protected"
           done
           {
             echo 'Verified protected files unchanged:'
             echo '  Index.html'
-            echo '  Style.html'
             echo '  appsscript.json'
+            echo 'Verified approved user style delta only:'
+            echo '  Style.html (compact sponsor badge)'
             echo 'Expected patched files:'
-            for changed in Admin.html Code.js Script.html; do
+            for changed in Admin.html Code.js Script.html Style.html; do
               if ! cmp -s "$BACKUP/$changed" "$LIVE/$changed"; then
                 echo "  $changed"
               fi
@@ -167,7 +174,8 @@ jobs:
             echo 'status=success'
             echo "commit=$GITHUB_SHA"
             echo 'deployment=existing-main'
-            echo 'protected_user_files_unchanged=yes'
+            echo 'protected_user_structure_unchanged=yes'
+            echo 'approved_user_style_delta=compact-sponsor-badge-only'
             echo 'member_apk_aab_changed=no'
             echo 'notification_contract_verified=yes'
             echo 'production_push_compatibility=yes'
