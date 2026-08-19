@@ -253,15 +253,21 @@ s = s[:edit_start] + edit_block + s[edit_end:]
 helper='''function adminVnextMemberBadges(member) {
   if (!member) return '';
   let html = '';
-  if (member.isNew) html += '<span class="member-vnext-badge new-badge">신규</span>';
+  if (member.isNew) html += '<span class="member-vnext-badge new-badge" aria-label="신규 회원">NEW</span>';
   if (member.isSponsor) html += '<span class="member-vnext-badge sponsor-badge">🎁 찬조</span>';
   if (member.publicMemo) html += '<span class="member-vnext-memo">' + escapeMemberInfo(member.publicMemo) + '</span>';
   return html;
 }
 
 '''
-if 'function adminVnextMemberBadges(member)' not in s:
- s=s.replace(card_marker,helper+card_marker,1)
+badge_start = s.find('function adminVnextMemberBadges(member)')
+while badge_start >= 0:
+ badge_brace = s.find('{', badge_start)
+ badge_end = matching_end(s, badge_brace, '{', '}')
+ if badge_end < 0: raise SystemExit('admin member badge helper boundary missing')
+ s = s[:badge_start] + s[badge_end + 1:].lstrip('\n')
+ badge_start = s.find('function adminVnextMemberBadges(member)')
+s=s.replace(card_marker,helper+card_marker,1)
 
 # The card is rendered optimistically; do not leave the large primary button
 # displaying a long-running "saving" label while Apps Script confirms it.
