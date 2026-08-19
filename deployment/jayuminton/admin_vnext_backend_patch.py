@@ -193,6 +193,51 @@ elif not (
 # Promote any non-empty wait group, not only groups of four.
 s=s.replace("return (group || []).length === GROUP_SIZE;", "return (group || []).length > 0;", 1)
 
+# Member-side seat moves have priority over every admin write.  The member
+# operation publishes a short-lived intent marker before waiting for the
+# document lock; an admin operation checks it both before and after obtaining
+# the lock.  This adds no extra client/server round trip.
+lock_start = s.find('function withDocumentLock_(actionName, callback) {')
+lock_end = s.find('\nfunction logAction_(', lock_start)
+if lock_start < 0 or lock_end < 0:
+    raise SystemExit('document lock function boundary missing')
+priority_lock = '''function withDocumentLock_(actionName, callback) {
+  const action = String(actionName || '');
+  const memberPriority = action.indexOf('회원 ') === 0;
+  const priorityCache = CacheService.getDocumentCache();
+  const priorityKey = 'JAYUMINTON_MEMBER_ASSIGNMENT_BUSY_V1';
+  if (memberPriority) priorityCache.put(priorityKey, '1', 30);
+  else if (priorityCache.get(priorityKey) === '1') {
+    throw new Error('회원 배정을 먼저 처리하고 있습니다. 최신 화면을 다시 확인해 주세요.');
+  }
+
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(memberPriority ? 15000 : 3500)) {
+    if (memberPriority) priorityCache.remove(priorityKey);
+    throw new Error(memberPriority
+      ? '다른 작업을 처리 중입니다. 잠시 후 다시 눌러주세요.'
+      : '회원 배정 또는 다른 저장을 처리 중입니다. 최신 화면을 다시 확인해 주세요.');
+  }
+
+  try {
+    if (!memberPriority && priorityCache.get(priorityKey) === '1') {
+      throw new Error('회원 배정을 먼저 처리하고 있습니다. 최신 화면을 다시 확인해 주세요.');
+    }
+    ensureSetup_();
+    const result = callback();
+    if (shouldLogSuccess_(actionName)) logAction_(actionName, '정상 처리');
+    return result;
+  } catch (error) {
+    logAction_(actionName, '오류: ' + String(error.message || error));
+    throw error;
+  } finally {
+    lock.releaseLock();
+    if (memberPriority) priorityCache.remove(priorityKey);
+  }
+}
+'''
+s = s[:lock_start] + priority_lock + s[lock_end:]
+
 # When assigning to a partial court append, count only entrants.
 auto_target_old = """      if (targetCourt) {
         courts[targetCourt] = ids.slice();
