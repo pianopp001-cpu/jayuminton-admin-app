@@ -233,13 +233,14 @@ style = """
   .admin-vnext-bottom-bar .mobile-refresh-button{font-size:14px!important}
   .pair-statistics-modal{width:min(720px,calc(100vw - 24px));max-height:86vh;overflow:auto}
   .pair-statistics-modal>input{width:100%;margin:4px 0 12px;box-sizing:border-box}
-  .pair-statistics-list{display:grid;gap:10px}
-  .pair-statistics-row{border:1px solid #dbe3ef;border-radius:14px;padding:12px;background:#fff}
+  .pair-statistics-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:58vh;overflow:auto;overscroll-behavior:contain;padding-right:2px}
+  .pair-statistics-row{min-width:0;border:1px solid #dbe3ef;border-radius:12px;padding:9px;background:#fff}
   .pair-statistics-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px}
   .pair-statistics-name{font-size:17px;font-weight:900;overflow-wrap:anywhere}
   .pair-statistics-games{font-size:13px;font-weight:800;color:#475569;white-space:nowrap}
   .pair-statistics-partners{display:flex;gap:6px;flex-wrap:wrap}
-  .pair-statistics-chip{font-size:12px;font-weight:700;background:#eef4ff;color:#244f91;border-radius:999px;padding:5px 8px}
+  .pair-statistics-chip{max-width:100%;font-size:11px;font-weight:700;background:#eef4ff;color:#244f91;border-radius:999px;padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pair-statistics-more{background:#e2e8f0;color:#334155}
   .pair-statistics-empty{padding:24px;text-align:center;color:#64748b}
   .admin-new-name-bubble{position:fixed;z-index:99999;box-sizing:border-box;padding:10px 12px;border-radius:12px;background:#172033;color:#fff;font-size:15px;font-weight:900;line-height:1.35;text-align:center;overflow-wrap:anywhere;box-shadow:0 8px 24px rgba(15,23,42,.28);opacity:0;visibility:hidden;transform:translateY(5px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
   .admin-new-name-bubble.is-visible{opacity:1;visibility:visible;transform:translateY(0)}
@@ -251,6 +252,7 @@ style = """
   .quick-member.is-new-member{grid-column:1/-1!important;width:100%!important;min-width:0!important;height:auto!important;min-height:190px!important;padding:22px 16px 16px!important}
   .person.is-new-member{height:auto!important;min-height:132px!important;padding:18px 8px 10px!important}
   .quick-member.is-new-member .quick-member-name,.person.is-new-member .name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important}
+  @media (max-width:520px){.pair-statistics-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.pair-statistics-row{padding:8px}.pair-statistics-name{font-size:14px}.pair-statistics-games{font-size:11px}.pair-statistics-chip{font-size:10px;padding:3px 6px}}
   @media (max-width:380px){.admin-vnext-bottom-bar{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.admin-vnext-bottom-bar button{font-size:12px!important;padding:7px 2px!important}}
 </style>
 """
