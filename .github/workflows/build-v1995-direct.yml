@@ -102,24 +102,24 @@ jobs:
               'JayumintonNative/200.1 CloudflareAdmin/2001', text)
           if 'import android.os.VibrationEffect;' not in text:
               text = text.replace('import android.os.Bundle;', 'import android.os.Bundle;\nimport android.os.VibrationEffect;\nimport android.os.Vibrator;', 1)
-          voice_anchor = '''        public boolean isSpeaking() {
-            return speaking.get() || (tts != null && tts.isSpeaking());
-        }'''
-          vibration_method = voice_anchor + '''
-
-        @JavascriptInterface
-        public void vibrate() {
-            runOnUiThread(() -> {
-                Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-                if (vibrator == null || !vibrator.hasVibrator()) return;
-                long[] pattern = {0, 420, 180, 420, 180, 650};
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
-                } else {
-                    vibrator.vibrate(pattern, -1);
-                }
-            });
-        }'''
+          voice_anchor = "\n".join([
+              '        public boolean isSpeaking() {',
+              '            return speaking.get() || (tts != null && tts.isSpeaking());',
+              '        }'])
+          vibration_method = voice_anchor + "\n\n" + "\n".join([
+              '        @JavascriptInterface',
+              '        public void vibrate() {',
+              '            runOnUiThread(() -> {',
+              '                Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);',
+              '                if (vibrator == null || !vibrator.hasVibrator()) return;',
+              '                long[] pattern = {0, 420, 180, 420, 180, 650};',
+              '                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {',
+              '                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));',
+              '                } else {',
+              '                    vibrator.vibrate(pattern, -1);',
+              '                }',
+              '            });',
+              '        }'])
           if 'public void vibrate()' not in text:
               if voice_anchor not in text: raise SystemExit('VoiceBridge anchor missing')
               text = text.replace(voice_anchor, vibration_method, 1)
