@@ -1,0 +1,10 @@
+workflow=Build Jayuminton admin v199.7 Cloudflare APK
+run_id=32274399163
+status=failure
+head_sha=0fdd9755d00ad163df53d44919132a09657e9431
+version=199.7
+package=com.jayuminton.admin
+output=releases/jayuminton-admin-v199.7-cloudflare-vnext.apk
+dog_icon_sha256=1c7ddefbd9bedb01cd28fd0b8af26eef7c046a86131de9e0782b2e147a47e19e
+dog_art=chatgpt-file-library-source
+updated_at=2026-08-19T16:13:04Z
