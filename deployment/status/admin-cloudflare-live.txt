@@ -1,0 +1,15 @@
+status=success
+architecture=separate-admin-frontend-plus-cloudflare-worker-rpc
+admin_frontend_url=https://jayuminton-push--admin-cloudflare-dnhyj6hu.web.app/
+admin_worker_url=https://jayuminton-admin-rpc.pianopp001.workers.dev/
+workflow_run=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32271618580
+workflow_run_number=33
+admin_cloudflare_vnext_ready=yes
+refresh_button_present=yes
+auto_assignment_present=yes
+pair_statistics_present=yes
+iframe_present=no
+apps_script_direct_url_present=no
+member_production_updated=no
+main_admin_apps_script_deployment_updated=no
+deployed_at=2026-08-19T15:43:13Z
