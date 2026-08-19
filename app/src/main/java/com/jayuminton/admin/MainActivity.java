@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity implements TextToSpeech.OnInitListener {
     private static final String ADMIN_URL =
-            "https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?app=admin&native=1";
+            "file:///android_asset/admin/index.html?app=admin&native=1";
     private static final String MEMBER_PWA_URL = "https://jayuminton-push.web.app/";
     private static final String APK_WEB_BUILD = "1997-cloudflare-admin-vnext";
     private static final String PREFS = "jayuminton_audio_state";
@@ -97,6 +97,8 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         webView.requestFocus(View.FOCUS_DOWN);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(false);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setTextZoom(100);
