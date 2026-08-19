@@ -1,0 +1,4 @@
+source=chatgpt-file-library
+source_name=자유민턴 관리자 배드민턴 아이콘.png
+resource=res/drawable/icon.png
+sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
