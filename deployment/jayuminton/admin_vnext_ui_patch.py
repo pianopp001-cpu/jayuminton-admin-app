@@ -55,6 +55,9 @@ s = s.replace('선택 위치 자동배정', '자동배정')
 s = s.replace('>위치 자동배정</button>', '>자동배정</button>')
 
 # Preserve the current mobile bar and add only the required class/control.
+# Upgrade an already-deployed legacy refresh handler as well.
+s = s.replace('onclick="loadState()">↻ 새로고침', 'onclick="refreshAdminState()">↻ 새로고침')
+s = s.replace("onclick='loadState()'>↻ 새로고침", "onclick='refreshAdminState()'>↻ 새로고침")
 bar_start = s.find('<div class="mobile-quick-bar')
 if bar_start < 0:
     bar_start = s.find("<div class='mobile-quick-bar")
@@ -90,7 +93,13 @@ style = """
   @media (max-width:380px){.admin-vnext-bottom-bar{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.admin-vnext-bottom-bar button{font-size:12px!important;padding:7px 2px!important}}
 </style>
 """
-if 'id="adminVnextBottomBarStyle"' not in s:
+style_start = s.find('<style id="adminVnextBottomBarStyle">')
+if style_start >= 0:
+    style_end = s.find('</style>', style_start)
+    if style_end < 0:
+        raise SystemExit('existing bottom bar style boundary missing')
+    s = s[:style_start] + style.strip() + s[style_end + len('</style>'):]
+else:
     if '</body>' not in s:
         raise SystemExit('body end anchor not found')
     s = s.replace('</body>', style + '\n</body>', 1)
