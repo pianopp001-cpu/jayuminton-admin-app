@@ -287,13 +287,14 @@ missing_detail_old = """  if (!grade && !experience) {
     '</span>';"""
 missing_detail_new = """  const adminParts = [];
   if (grade) adminParts.push(escapeMemberInfo(grade));
-  if (experience) adminParts.push(escapeMemberInfo('구력 ' + experience));
+  if (experience) adminParts.push(escapeMemberInfo(experience));
   if (!adminParts.length) return '';
   return '<span class="member-info-detail">' + adminParts.join(' · ') + '</span>';"""
 if missing_detail_old in s:
  s=s.replace(missing_detail_old,missing_detail_new,1)
 elif '급수·구력 미입력' in s or '구력 미입력' in s or '급수 미입력' in s:
  raise SystemExit('admin missing-value rendering normalization failed')
+s=s.replace("if (experience) adminParts.push(escapeMemberInfo('구력 ' + experience));", "if (experience) adminParts.push(escapeMemberInfo(experience));")
 
 # Append badges to every detail block through the function's final return when identifiable.
 # Safer fallback: inject badges next to game count in standard cards and quick roster.
