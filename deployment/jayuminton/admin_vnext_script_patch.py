@@ -253,7 +253,7 @@ s = s[:edit_start] + edit_block + s[edit_end:]
 helper='''function adminVnextMemberBadges(member) {
   if (!member) return '';
   let html = '';
-  if (member.isNew) html += '<span class="member-vnext-badge new-badge" aria-label="신규 회원">NEW</span>';
+  if (member.isNew) html += '<span class="member-vnext-badge new-badge" aria-label="신규 회원">NEW <small>신규</small></span>';
   if (member.isSponsor) html += '<span class="member-vnext-badge sponsor-badge">🎁 찬조</span>';
   if (member.publicMemo) html += '<span class="member-vnext-memo">' + escapeMemberInfo(member.publicMemo) + '</span>';
   return html;
