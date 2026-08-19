@@ -51,12 +51,24 @@ jobs:
           BACKUP="$RUNNER_TEMP/head-backup"; WORK="$RUNNER_TEMP/admin-backend"; mkdir -p "$BACKUP" "$WORK"; printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"; (cd "$BACKUP" && clasp pull); cp -a "$BACKUP"/. "$WORK"/
           python3 deployment/jayuminton/admin_cloudflare_rpc.py patch-backend --work "$WORK"
           python3 deployment/jayuminton/apply_admin_vnext_patches.py "$WORK"
+          python3 deployment/jayuminton/admin_vnext_notification_contract_test.py "$WORK/Code.js"
+          python3 deployment/jayuminton/admin_vnext_push_compatibility_check.py "$WORK/Code.js"
           grep -F 'updateMemberProfile: true' "$WORK/Code.js"
           grep -F 'JAYUMINTON_MEMBER_ASSIGNMENT_BUSY_V1' "$WORK/Code.js"
           grep -F "WAIT_ONE_PROMOTED: 'WAIT_ONE_PROMOTED'" "$WORK/Code.js"
           grep -F 'admin-vnext-bottom-bar' "$WORK/Admin.html"
           grep -F 'mobile-refresh-button' "$WORK/Admin.html"
           grep -F 'pairStatisticsModal' "$WORK/Admin.html"
+          node --check "$WORK/Code.js"
+          python3 - "$WORK/Script.html" "$RUNNER_TEMP/admin-cloudflare-script.js" <<'PY'
+          from pathlib import Path
+          import sys
+          source=Path(sys.argv[1]).read_text(encoding='utf-8')
+          start=source.find('<script>'); end=source.rfind('</script>')
+          if start < 0 or end <= start: raise SystemExit('Script.html wrapper missing')
+          Path(sys.argv[2]).write_text(source[start+8:end],encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/admin-cloudflare-script.js"
           restore_head(){ (cd "$BACKUP" && clasp push --force); }; trap restore_head EXIT; (cd "$WORK" && clasp push --force); (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin v15 preview $GITHUB_RUN_ID"); restore_head; trap - EXIT
       - name: Deploy admin Worker
         shell: bash
