@@ -64,18 +64,22 @@ new="""  const pool=members.filter(function(m){return m.status==='active'&&fixed
     const mates=Object.keys(map).filter(function(k){return map[k].bundleId===m.bundleId;});
     if(mates.some(function(k){return !activeSet[k];})) delete activeSet[id];
   });"""
-if old in s:
+if 'const activeSet={};' in s:
+ pass
+elif old in s:
  s=s.replace(old,new,1)
-elif 'const activeSet={};' not in s:
+else:
  raise SystemExit('bundle active universe implementation missing')
 
 # Apply activeSet to candidate walk so a temporarily unavailable bundle mate prevents
 # the other member from being auto-picked alone.
 old="""    for(let i=start;i<pool.length;i++){picked.push(pool[i]);walk(i+1,picked);picked.pop();}"""
 new="""    for(let i=start;i<pool.length;i++){if(!activeSet[pool[i]])continue;picked.push(pool[i]);walk(i+1,picked);picked.pop();}"""
-if old in s:
+if 'if(!activeSet[pool[i]])continue' in s:
+ pass
+elif old in s:
  s=s.replace(old,new,1)
-elif 'if(!activeSet[pool[i]])continue' not in s:
+else:
  raise SystemExit('bundle candidate filter implementation missing')
 
 p.write_text(s,encoding='utf-8')
