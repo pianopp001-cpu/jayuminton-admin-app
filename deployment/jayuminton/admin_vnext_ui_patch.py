@@ -140,6 +140,8 @@ admin_sizer = '''
     window.ADMIN_COURT_MULTI_FILL_READY = true;
     var originalToggle = window.toggleEmptySlotTarget;
     var originalSmartAssign = window.smartAssignSelected;
+    var originalToggleSelected = window.toggleSelected;
+    var targetCommitInFlight = false;
     window.assignMemberToChosenEmpty = function() { return false; };
     window.toggleEmptySlotTarget = function(type, index, slotIndex) {
       var normalizedType = type === 'court' ? 'court' : 'wait';
@@ -155,6 +157,45 @@ admin_sizer = '''
       }
       if (!already && EMPTY_SLOT_TARGETS.length >= 4) return;
       return originalToggle.apply(this, arguments);
+    };
+    async function commitSelectedEmptyTargets() {
+      if (targetCommitInFlight || !EMPTY_SLOT_TARGETS.length) return;
+      var first = EMPTY_SLOT_TARGETS[0];
+      var sameRow = EMPTY_SLOT_TARGETS.every(function(target) {
+        return target.type === first.type && Number(target.index) === Number(first.index);
+      });
+      if (!sameRow || SELECTED.size !== EMPTY_SLOT_TARGETS.length) return;
+      var ids = Array.from(SELECTED);
+      var previousState = JSON.parse(JSON.stringify(STATE));
+      var previousTargets = EMPTY_SLOT_TARGETS.map(copyEmptySlotTarget);
+      targetCommitInFlight = true;
+      showAdminSaveNotice('선택한 빈자리에 즉시 배정', true);
+      try {
+        applyBatchAssignLocally(ids, first.type, Number(first.index));
+        SELECTED.clear();
+        clearEmptySlotTargets();
+        renderState();
+        var method = first.type === 'court' ? 'assignMembersToCourt' : 'assignMembersToWaitGroup';
+        var saved = await server(method, [ADMIN_PIN_VALUE, Number(first.index), ids]);
+        renderState(saved);
+        if (typeof setUndoState === 'function') setUndoState(previousState);
+      } catch (error) {
+        STATE = previousState;
+        clearEmptySlotTargets();
+        previousTargets.forEach(function(target) { EMPTY_SLOT_TARGETS.push(copyEmptySlotTarget(target)); });
+        if (typeof syncPrimaryEmptyTarget === 'function') syncPrimaryEmptyTarget();
+        ids.forEach(function(id) { SELECTED.add(id); });
+        renderState();
+        alert(error && error.message ? error.message : error);
+      } finally {
+        targetCommitInFlight = false;
+        hideAdminSaveNotice();
+      }
+    }
+    window.toggleSelected = function(id) {
+      var result = originalToggleSelected.apply(this, arguments);
+      window.setTimeout(commitSelectedEmptyTargets, 0);
+      return result;
     };
     window.smartAssignSelected = async function() {
       if (!EMPTY_SLOT_TARGETS.length || EMPTY_SLOT_TARGETS[0].type !== 'court') {
@@ -212,7 +253,7 @@ admin_sizer = '''
     compactAdminPairStatistics();
     installAdminCourtMultiFill();
   }
-  function showAdminSaveNotice(text) {
+  function showAdminSaveNotice(text, persistent) {
     var notice = document.getElementById('adminSaveNotice');
     if (!notice) {
       notice = document.createElement('div');
@@ -223,7 +264,17 @@ admin_sizer = '''
     notice.innerHTML = '<strong>' + escapeAdminName(text || '화면 반영 완료') + '</strong><small>서버 저장을 확인하고 있습니다</small>';
     notice.classList.add('is-visible');
     window.clearTimeout(notice._hideTimer);
-    notice._hideTimer = window.setTimeout(function() { notice.classList.remove('is-visible'); }, 1800);
+    if (!persistent) notice._hideTimer = window.setTimeout(function() { notice.classList.remove('is-visible'); }, 1800);
+  }
+  function hideAdminSaveNotice() {
+    var notice = document.getElementById('adminSaveNotice');
+    if (notice) notice.classList.remove('is-visible');
+  }
+  function monitorAdminSave() {
+    var busy = false;
+    try { busy = !!ADD_MEMBER_IN_FLIGHT || !!ACTION_IN_FLIGHT; } catch (error) {}
+    if (busy) { window.setTimeout(monitorAdminSave, 80); return; }
+    hideAdminSaveNotice();
   }
   function scheduleAdminNewCardRender() {
     if (adminCardRenderScheduled) return;
@@ -278,7 +329,10 @@ admin_sizer = '''
     var card = event.target && event.target.closest ? event.target.closest('.is-new-member') : null;
     if (card) showAdminNewNameBubble(card);
     var saveButton = event.target && event.target.closest ? event.target.closest('#addMemberButton,#updateMemberButton,#applyMemberEditButton') : null;
-    if (saveButton) showAdminSaveNotice(saveButton.id === 'addMemberButton' ? '회원 카드 즉시 반영' : '회원 정보 즉시 반영');
+    if (saveButton) {
+      showAdminSaveNotice(saveButton.id === 'addMemberButton' ? '회원 카드 즉시 반영' : '회원 정보 즉시 반영', true);
+      window.setTimeout(monitorAdminSave, 0);
+    }
     window.setTimeout(scheduleAdminNewCardRender, 0);
   }, true);
   document.addEventListener('pointerup', function() { window.setTimeout(scheduleAdminNewCardRender, 0); }, true);
@@ -346,8 +400,8 @@ style = """
   .pair-statistics-empty{padding:24px;text-align:center;color:#64748b}
   .admin-new-name-bubble{position:fixed;z-index:99999;box-sizing:border-box;padding:10px 12px;border-radius:12px;background:#172033;color:#fff;font-size:15px;font-weight:900;line-height:1.35;text-align:center;overflow-wrap:anywhere;box-shadow:0 8px 24px rgba(15,23,42,.28);opacity:0;visibility:hidden;transform:translateY(5px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
   .admin-new-name-bubble.is-visible{opacity:1;visibility:visible;transform:translateY(0)}
-  .admin-save-notice{position:fixed;z-index:100000;left:50%;top:22%;width:min(360px,calc(100vw - 32px));box-sizing:border-box;padding:22px 18px;border-radius:18px;background:rgba(23,32,51,.96);color:#fff;text-align:center;box-shadow:0 16px 45px rgba(15,23,42,.35);opacity:0;visibility:hidden;transform:translate(-50%,-8px) scale(.97);transition:.15s ease;pointer-events:none}
-  .admin-save-notice.is-visible{opacity:1;visibility:visible;transform:translate(-50%,0) scale(1)}
+  .admin-save-notice{position:fixed;z-index:100000;inset:0;box-sizing:border-box;padding:30vh 24px 24px;background:rgba(15,23,42,.72);color:#fff;text-align:center;backdrop-filter:blur(3px);opacity:0;visibility:hidden;transform:scale(.99);transition:.12s ease;pointer-events:none}
+  .admin-save-notice.is-visible{opacity:1;visibility:visible;transform:scale(1);pointer-events:all}
   .admin-save-notice strong{display:block;font-size:22px;line-height:1.25}.admin-save-notice small{display:block;margin-top:8px;font-size:13px;opacity:.82}
   .quick-move-full-name{max-width:42vw;padding:4px 7px;border-radius:8px;background:#fff;color:#172033;font-size:12px;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-align:center}
   .member-vnext-full-name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important;text-align:center}
@@ -377,7 +431,7 @@ required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
 required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
-required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'function installAdminCourtMultiFill()', "server('smartAssignSelected'", 'pair-statistics-more', 'function showAdminSaveNotice(text)', 'admin-save-notice']
+required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'function installAdminCourtMultiFill()', 'commitSelectedEmptyTargets()', "server('smartAssignSelected'", "'assignMembersToCourt'", 'pair-statistics-more', 'function showAdminSaveNotice(text, persistent)', 'function hideAdminSaveNotice()', 'admin-save-notice']
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
