@@ -89,6 +89,32 @@ admin_sizer = '''
       if (card) card.classList.add('is-new-member');
     });
   }
+  var bubbleTimer = 0;
+  function showAdminNewNameBubble(card) {
+    var name = card && card.querySelector('.member-vnext-full-name');
+    if (!name) return;
+    var bubble = document.getElementById('adminNewNameBubble');
+    if (!bubble) {
+      bubble = document.createElement('div');
+      bubble.id = 'adminNewNameBubble';
+      bubble.className = 'admin-new-name-bubble';
+      document.body.appendChild(bubble);
+    }
+    bubble.textContent = String(name.textContent || '').trim();
+    bubble.classList.add('is-visible');
+    var rect = card.getBoundingClientRect();
+    var bubbleWidth = Math.min(320, Math.max(150, window.innerWidth - 24));
+    var left = Math.max(12, Math.min(window.innerWidth - bubbleWidth - 12, rect.left + rect.width / 2 - bubbleWidth / 2));
+    bubble.style.width = bubbleWidth + 'px';
+    bubble.style.left = left + 'px';
+    bubble.style.top = Math.max(12, rect.top - 58) + 'px';
+    window.clearTimeout(bubbleTimer);
+    bubbleTimer = window.setTimeout(function() { bubble.classList.remove('is-visible'); }, 2500);
+  }
+  document.addEventListener('click', function(event) {
+    var card = event.target && event.target.closest ? event.target.closest('.is-new-member') : null;
+    if (card) showAdminNewNameBubble(card);
+  }, true);
   document.addEventListener('DOMContentLoaded', markAdminNewCards);
   new MutationObserver(markAdminNewCards).observe(document.body, {childList:true, subtree:true});
   window.setTimeout(markAdminNewCards, 0);
@@ -150,6 +176,8 @@ style = """
   .pair-statistics-partners{display:flex;gap:6px;flex-wrap:wrap}
   .pair-statistics-chip{font-size:12px;font-weight:700;background:#eef4ff;color:#244f91;border-radius:999px;padding:5px 8px}
   .pair-statistics-empty{padding:24px;text-align:center;color:#64748b}
+  .admin-new-name-bubble{position:fixed;z-index:99999;box-sizing:border-box;padding:10px 12px;border-radius:12px;background:#172033;color:#fff;font-size:15px;font-weight:900;line-height:1.35;text-align:center;overflow-wrap:anywhere;box-shadow:0 8px 24px rgba(15,23,42,.28);opacity:0;visibility:hidden;transform:translateY(5px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
+  .admin-new-name-bubble.is-visible{opacity:1;visibility:visible;transform:translateY(0)}
   .member-vnext-full-name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important;text-align:center}
   .member-vnext-full-name small{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;margin-top:7px;font-size:.8em!important;line-height:1.25!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important}
   .quick-member.is-new-member,.person.is-new-member{position:relative!important;overflow:hidden!important;aspect-ratio:auto!important}
@@ -175,7 +203,7 @@ required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
 required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
-required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')"]
+required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble']
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
