@@ -28,13 +28,14 @@ if 'id="newPublicMemo"' not in s or 'id="newIsNew"' not in s or 'id="newIsSponso
 def insert_before_button(text, onclick, html, marker):
     if marker in text:
         return text
-    match = re.search(
-        r'<button\\b[^>]*onclick=["\\\']' + re.escape(onclick) + r'["\\\'][^>]*>',
-        text
-    )
-    if not match:
+    hit = text.find('onclick="' + onclick + '"')
+    if hit < 0:
+        hit = text.find("onclick='" + onclick + "'")
+    start = text.rfind('<button', 0, hit + 1)
+    end = text.find('>', hit)
+    if hit < 0 or start < 0 or end < 0:
         raise SystemExit(marker + ' button anchor missing')
-    return text[:match.start()] + html + '\n      ' + text[match.start():]
+    return text[:start] + html + '\n      ' + text[start:]
 
 s = insert_before_button(
     s,
@@ -67,11 +68,15 @@ bar = s[bar_start:bar_end]
 if 'admin-vnext-bottom-bar' not in bar:
     bar = bar.replace('mobile-quick-bar', 'mobile-quick-bar admin-vnext-bottom-bar', 1)
 if 'mobile-refresh-button' not in bar:
-    assign = re.search(r'<button\\b[^>]*onclick=["\\\']smartAssignSelected\(\)["\\\'][^>]*>', bar)
-    if not assign:
+    hit = bar.find('onclick="smartAssignSelected()"')
+    if hit < 0:
+        hit = bar.find("onclick='smartAssignSelected()'")
+    assign_start = bar.rfind('<button', 0, hit + 1)
+    if hit < 0 or assign_start < 0:
         raise SystemExit('mobile assign button missing')
     refresh = '<button class="ghost-button mobile-refresh-button" type="button" onclick="loadState()">↻ 새로고침</button>\n    '
-    bar = bar[:assign.start()] + refresh + bar[assign.start():]
+    bar = bar[:assign_start] + refresh + bar[assign_start:]
+
 s = s[:bar_start] + bar + s[bar_end:]
 
 style = """
