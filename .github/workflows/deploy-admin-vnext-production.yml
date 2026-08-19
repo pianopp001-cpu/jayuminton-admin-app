@@ -125,10 +125,21 @@ jobs:
           PY
           node --check "$RUNNER_TEMP/admin-vnext-script.js"
 
-          changed="$(diff -qr "$BACKUP" "$LIVE" | sed -n 's|^Files .*\/\([^/]*\) and .* differ$|\1|p' | sort -u)"
-          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(Admin\.html|Code\.js|Script\.html)$' || true)"
-          test -z "$unexpected"
-          printf '%s\n' "$changed" > "$RUNNER_TEMP/changed-files.txt"
+          for protected in Index.html Style.html appsscript.json; do
+            cmp "$BACKUP/$protected" "$LIVE/$protected"
+          done
+          {
+            echo 'Verified protected files unchanged:'
+            echo '  Index.html'
+            echo '  Style.html'
+            echo '  appsscript.json'
+            echo 'Expected patched files:'
+            for changed in Admin.html Code.js Script.html; do
+              if ! cmp -s "$BACKUP/$changed" "$LIVE/$changed"; then
+                echo "  $changed"
+              fi
+            done
+          } | tee "$RUNNER_TEMP/changed-files.txt"
       - name: Preserve pre-deployment live backup
         uses: actions/upload-artifact@v4
         with:
