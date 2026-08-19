@@ -75,14 +75,28 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
 
           python3 deployment/jayuminton/v3_unified_member_preview_patch.py "$WORK"
+          # Cloudflare user contract only: persisted metadata, member-priority
+          # writes, partial-court finish, and transition events.  These patches
+          # are deployed only to the isolated member RPC deployment below.
+          python3 deployment/jayuminton/admin_vnext_backend_patch.py "$WORK"
+          python3 deployment/jayuminton/admin_vnext_assignment_guard_patch.py "$WORK"
+          python3 deployment/jayuminton/admin_vnext_notification_contract.py "$WORK"
+          python3 deployment/jayuminton/admin_vnext_member_fields_patch.py "$WORK"
           python3 deployment/jayuminton/v3_member_badges_patch.py "$WORK"
           python3 deployment/jayuminton/v3_cloudflare_member_preview.py patch-backend --work "$WORK"
 
           grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
+          grep -F "'IS_NEW', 'PUBLIC_MEMO', 'IS_SPONSOR', 'BUNDLE_ID'" "$WORK/Code.js" >/dev/null
+          grep -F "publicMemo: String(member.publicMemo || '').slice(0, 40)" "$WORK/Code.js" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_ASSIGNMENT_BUSY_V1' "$WORK/Code.js" >/dev/null
+          grep -F "WAIT_ONE_PROMOTED: 'WAIT_ONE_PROMOTED'" "$WORK/Code.js" >/dev/null
+          grep -F "if (!finished.length) throw new Error('비어 있는 코트는 경기 종료할 수 없습니다.');" "$WORK/Code.js" >/dev/null
           grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$WORK/Script.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$WORK/Script.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$WORK/Script.html" >/dev/null
+          grep -F "sponsor.textContent='찬조'" "$WORK/Script.html" >/dev/null
+          grep -F "String(member.publicMemo||'').trim()" "$WORK/Script.html" >/dev/null
           grep -F 'content:"★"!important' "$WORK/Script.html" >/dev/null
           grep -F 'color:#ffd84d!important' "$WORK/Script.html" >/dev/null
           grep -F '#d62828' "$WORK/Script.html" >/dev/null
@@ -137,6 +151,11 @@ jobs:
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$PUBLIC/index.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$PUBLIC/index.html" >/dev/null
+          grep -F "sponsor.textContent='찬조'" "$PUBLIC/index.html" >/dev/null
+          grep -F "String(member.publicMemo||'').trim()" "$PUBLIC/index.html" >/dev/null
+          grep -F 'detectMemberForegroundTransition' "$PUBLIC/index.html" >/dev/null
+          grep -F "'wait1_ready'" "$PUBLIC/index.html" >/dev/null
+          grep -F "'court_assignment'" "$PUBLIC/index.html" >/dev/null
           grep -F 'content:"★"!important' "$PUBLIC/index.html" >/dev/null
           grep -F 'color:#ffd84d!important' "$PUBLIC/index.html" >/dev/null
           grep -F '#d62828' "$PUBLIC/index.html" >/dev/null
@@ -187,6 +206,11 @@ jobs:
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F "sponsor.textContent='찬조'" "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F "String(member.publicMemo||'').trim()" "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F 'detectMemberForegroundTransition' "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F "'wait1_ready'" "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F "'court_assignment'" "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'content:"★"!important' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'color:#ffd84d!important' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F '#d62828' "$RUNNER_TEMP/live-production.html" >/dev/null
