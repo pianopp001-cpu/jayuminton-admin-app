@@ -10,68 +10,98 @@ def rep(a,b,label):
  if a not in s: raise SystemExit(label+' anchor not found')
  s=s.replace(a,b,1)
 
-old="""      ADMIN_PIN_VALUE,
-      name,
-      gender,
-      grade,
-      experience
-    ]);"""
-new="""      ADMIN_PIN_VALUE,
-      name,
-      gender,
-      grade,
-      experience,
-      {
+metadata_payload = """{
         isNew: !!(document.getElementById('newIsNew') && document.getElementById('newIsNew').checked),
         publicMemo: String(document.getElementById('newPublicMemo') && document.getElementById('newPublicMemo').value || '').trim(),
         isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
-      }
-    ]);"""
-legacy_is_new_old="""      ADMIN_PIN_VALUE,
-      name,
-      gender,
-      grade,
-      experience,
-      isNew
-    ]);"""
-if old in s:
- s=s.replace(old,new,1)
-elif legacy_is_new_old in s:
- s=s.replace(legacy_is_new_old,new,1)
-else:
- direct_old="""        .addMember(
-          ADMIN_PIN_VALUE,
-          name,
-          gender,
-          grade,
-          experience
-        );"""
- direct_new="""        .addMember(
-          ADMIN_PIN_VALUE,
-          name,
-          gender,
-          grade,
-          experience,
-          {
-            isNew: !!(document.getElementById('newIsNew') && document.getElementById('newIsNew').checked),
-            publicMemo: String(document.getElementById('newPublicMemo') && document.getElementById('newPublicMemo').value || '').trim(),
-            isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
-          }
-        );"""
- legacy_direct_old="""        .addMember(
-          ADMIN_PIN_VALUE,
-          name,
-          gender,
-          grade,
-          experience,
-          isNew
-        );"""
- if direct_old in s:
-  s=s.replace(direct_old,direct_new,1)
- elif legacy_direct_old in s:
-  s=s.replace(legacy_direct_old,direct_new,1)
- else:
-  raise SystemExit('add metadata call anchor not found')
+      }"""
+
+def matching_end(text, start, opener, closer):
+    depth = 0
+    quote = ''
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if quote:
+            if escape:
+                escape = False
+            elif ch == '\\\\':
+                escape = True
+            elif ch == quote:
+                quote = ''
+            continue
+        if ch in ("'", '"', '\x60'):
+            quote = ch
+        elif ch == opener:
+            depth += 1
+        elif ch == closer:
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+def split_top_level(value):
+    parts, start, stack, quote, escape = [], 0, [], '', False
+    pairs = {')': '(', ']': '[', '}': '{'}
+    for i, ch in enumerate(value):
+        if quote:
+            if escape:
+                escape = False
+            elif ch == '\\\\':
+                escape = True
+            elif ch == quote:
+                quote = ''
+            continue
+        if ch in ("'", '"', '\x60'):
+            quote = ch
+        elif ch in '([{':
+            stack.append(ch)
+        elif ch in ')]}':
+            if stack and stack[-1] == pairs[ch]:
+                stack.pop()
+        elif ch == ',' and not stack:
+            parts.append(value[start:i].strip())
+            start = i + 1
+    parts.append(value[start:].strip())
+    return [part for part in parts if part]
+
+def patch_server_args(text, method, keep):
+    for quote in ("'", '"'):
+        needle = 'server(' + quote + method + quote + ', ['
+        hit = text.find(needle)
+        if hit >= 0:
+            start = text.find('[', hit)
+            end = matching_end(text, start, '[', ']')
+            if end < 0:
+                raise SystemExit(method + ' server argument boundary missing')
+            args = split_top_level(text[start + 1:end])
+            if len(args) < keep:
+                raise SystemExit(method + ' server arguments incomplete')
+            replacement = ',\n      '.join(args[:keep] + [metadata_payload])
+            return text[:start + 1] + replacement + text[end:]
+    return None
+
+def patch_direct_args(text, method, keep):
+    needle = '.' + method + '('
+    hit = text.find(needle)
+    if hit < 0:
+        return None
+    start = text.find('(', hit)
+    end = matching_end(text, start, '(', ')')
+    if end < 0:
+        raise SystemExit(method + ' direct argument boundary missing')
+    args = split_top_level(text[start + 1:end])
+    if len(args) < keep:
+        raise SystemExit(method + ' direct arguments incomplete')
+    replacement = ',\n          '.join(args[:keep] + [metadata_payload])
+    return text[:start + 1] + replacement + text[end:]
+
+patched = patch_server_args(s, 'addMember', 5)
+if patched is None:
+    patched = patch_direct_args(s, 'addMember', 5)
+if patched is None:
+    raise SystemExit('addMember call not found')
+s = patched
 
 # Clear metadata inputs after either add or update completes.
 for anchor in [
@@ -90,54 +120,12 @@ for edit_anchor in [
   s=s.replace(edit_anchor,edit_anchor+"\n  const memo=document.getElementById('newPublicMemo'); if(memo) memo.value=member.publicMemo||'';\n  const isNew=document.getElementById('newIsNew'); if(isNew) isNew.checked=!!member.isNew;\n  const sponsor=document.getElementById('newIsSponsor'); if(sponsor) sponsor.checked=!!member.isSponsor;",1)
   break
 
-update_old="""      ADMIN_PIN_VALUE,
-      EDIT_MEMBER_ID,
-      name,
-      gender,
-      grade,
-      experience
-    ]);"""
-update_new="""      ADMIN_PIN_VALUE,
-      EDIT_MEMBER_ID,
-      name,
-      gender,
-      grade,
-      experience,
-      {
-        isNew: !!(document.getElementById('newIsNew') && document.getElementById('newIsNew').checked),
-        publicMemo: String(document.getElementById('newPublicMemo') && document.getElementById('newPublicMemo').value || '').trim(),
-        isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
-      }
-    ]);"""
-legacy_update_old="""      ADMIN_PIN_VALUE,
-      EDIT_MEMBER_ID,
-      name,
-      gender,
-      grade,
-      experience,
-      isNew
-    ]);"""
-if update_old in s:
- s=s.replace(update_old,update_new,1)
-elif legacy_update_old in s:
- s=s.replace(legacy_update_old,update_new,1)
-else:
- direct_update_old="server('updateMemberProfile', [ADMIN_PIN_VALUE, targetId, name, gender, grade, experience])"
- direct_update_new="""server('updateMemberProfile', [
-    ADMIN_PIN_VALUE, targetId, name, gender, grade, experience,
-    {
-      isNew: !!(document.getElementById('newIsNew') && document.getElementById('newIsNew').checked),
-      publicMemo: String(document.getElementById('newPublicMemo') && document.getElementById('newPublicMemo').value || '').trim(),
-      isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
-    }
-  ])"""
- legacy_direct_update_old="server('updateMemberProfile', [ADMIN_PIN_VALUE, targetId, name, gender, grade, experience, isNew])"
- if direct_update_old in s:
-  s=s.replace(direct_update_old,direct_update_new,1)
- elif legacy_direct_update_old in s:
-  s=s.replace(legacy_direct_update_old,direct_update_new,1)
- else:
-  raise SystemExit('update metadata call anchor not found')
+patched = patch_server_args(s, 'updateMemberProfile', 6)
+if patched is None:
+    patched = patch_direct_args(s, 'updateMemberProfile', 6)
+if patched is None:
+    raise SystemExit('updateMemberProfile call not found')
+s = patched
 
 insert='''
 function increaseSelectedGames() {
