@@ -126,11 +126,12 @@ s = s.replace("member.experience || ''\n    ];", "member.experience || '',\n    
 s = s.replace("experience: String(member.experience || '')", "experience: String(member.experience || ''),\n      isNew: Boolean(member.isNew),\n      publicMemo: String(member.publicMemo || ''),\n      isSponsor: Boolean(member.isSponsor),\n      bundleId: String(member.bundleId || '')")
 
 # Auto assign may fill an already partly occupied selected court.
-rep("""      if (ids.length !== GROUP_SIZE) {
+auto_variable_old = """      if (ids.length !== GROUP_SIZE) {
         throw new Error('빠른 자동 배정은 정확히 4명을 선택하세요.');
       }
 
-      const members = readMembers_();""","""      const members = readMembers_();
+      const members = readMembers_();"""
+auto_variable_new = """      const members = readMembers_();
       const preCourts = readCourts_();
       const fixed = preferredCourt && preCourts[preferredCourt] ? preCourts[preferredCourt].slice() : [];
       const capacity = Math.max(0, GROUP_SIZE - fixed.length);
@@ -140,7 +141,14 @@ rep("""      if (ids.length !== GROUP_SIZE) {
         const autoPicked = chooseAutoCandidates_(members, fixed.concat(ids), capacity - ids.length);
         if (autoPicked.length !== capacity - ids.length) throw new Error('조건에 맞는 자동배정 인원이 부족합니다.');
         ids = ids.concat(autoPicked);
-      }""", 'auto variable size')
+      }"""
+if auto_variable_old in s:
+    s = s.replace(auto_variable_old, auto_variable_new, 1)
+elif not (
+    'JAYUMINTON_SELF_SEAT_PRIORITY_AUTOFILL_V2' in s
+    or 'const needed = GROUP_SIZE - existingIds.length;' in s
+):
+    raise SystemExit('auto variable size anchor not found')
 
 # Existing partial target court is a valid target; do not require empty only.
 rep("""      let emptyCourts = ['1', '2', '3', '4'].filter(function(courtNo) {
