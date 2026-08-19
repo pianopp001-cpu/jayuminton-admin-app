@@ -54,6 +54,30 @@ s = insert_before_button(
 s = s.replace('선택 위치 자동배정', '자동배정')
 s = s.replace('>위치 자동배정</button>', '>자동배정</button>')
 
+# Separate statistics view: never place pair counts inside member cards.
+if 'onclick="openPairStatistics()"' not in s:
+    menu_anchor = '<button\n        class="ghost-button"\n        onclick="createBackup()"'
+    stats_button = '''<button class="ghost-button" type="button" onclick="openPairStatistics()">📊 함께 경기 통계</button>\n\n      '''
+    if menu_anchor not in s: raise SystemExit('top admin menu anchor missing')
+    s = s.replace(menu_anchor, stats_button + menu_anchor, 1)
+
+if 'id="pairStatisticsModal"' not in s:
+    modal = '''
+  <div id="pairStatisticsModal" class="modal-backdrop hidden" onclick="closePairStatistics(event)">
+    <div class="modal-card pair-statistics-modal" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div><span class="eyebrow dark-eyebrow">PLAY TOGETHER</span><h2>함께 경기 통계</h2></div>
+        <button class="modal-close" type="button" onclick="closePairStatistics()">×</button>
+      </div>
+      <p class="modal-help">각 회원의 게임횟수와 함께 경기한 상대별 누적 횟수입니다.</p>
+      <input id="pairStatisticsSearch" type="search" placeholder="회원 이름 검색" oninput="renderPairStatistics()">
+      <div id="pairStatisticsList" class="pair-statistics-list"><div class="pair-statistics-empty">불러오는 중…</div></div>
+    </div>
+  </div>
+'''
+    if '</body>' not in s: raise SystemExit('body end anchor missing')
+    s = s.replace('</body>', modal + '\n</body>', 1)
+
 # Preserve the current mobile bar and add only the required class/control.
 # Upgrade an already-deployed legacy refresh handler as well.
 s = s.replace('onclick="loadState()">↻ 새로고침', 'onclick="refreshAdminState()">↻ 새로고침')
@@ -90,6 +114,21 @@ style = """
   .admin-vnext-bottom-bar .mobile-undo-button,.admin-vnext-bottom-bar .mobile-refresh-button{background:#475569!important;color:#fff!important;border-color:#475569!important}
   .admin-vnext-bottom-bar .mobile-undo-button:disabled{opacity:.78!important;color:#fff!important}
   .admin-vnext-bottom-bar .mobile-refresh-button{font-size:14px!important}
+  .pair-statistics-modal{width:min(720px,calc(100vw - 24px));max-height:86vh;overflow:auto}
+  .pair-statistics-modal>input{width:100%;margin:4px 0 12px;box-sizing:border-box}
+  .pair-statistics-list{display:grid;gap:10px}
+  .pair-statistics-row{border:1px solid #dbe3ef;border-radius:14px;padding:12px;background:#fff}
+  .pair-statistics-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px}
+  .pair-statistics-name{font-size:17px;font-weight:900;overflow-wrap:anywhere}
+  .pair-statistics-games{font-size:13px;font-weight:800;color:#475569;white-space:nowrap}
+  .pair-statistics-partners{display:flex;gap:6px;flex-wrap:wrap}
+  .pair-statistics-chip{font-size:12px;font-weight:700;background:#eef4ff;color:#244f91;border-radius:999px;padding:5px 8px}
+  .pair-statistics-empty{padding:24px;text-align:center;color:#64748b}
+  .member-vnext-full-name{display:inline-block;max-width:100%;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere;line-height:1.12;text-align:center}
+  .member-vnext-full-name small{display:inline-block;margin-top:3px;font-size:.68em;line-height:1.15;white-space:normal;overflow-wrap:anywhere}
+  .quick-member:has(.member-vnext-full-name){height:auto!important;min-height:138px!important;padding-top:12px!important;padding-bottom:12px!important;overflow:hidden!important}
+  .person:has(.member-vnext-full-name){height:auto!important;min-height:94px!important;padding-top:10px!important;padding-bottom:10px!important;overflow:hidden!important}
+  .quick-member:has(.member-vnext-full-name) .quick-member-name,.person:has(.member-vnext-full-name) .name{display:block!important;width:100%!important;max-width:100%!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
   @media (max-width:380px){.admin-vnext-bottom-bar{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.admin-vnext-bottom-bar button{font-size:12px!important;padding:7px 2px!important}}
 </style>
 """
@@ -107,6 +146,7 @@ else:
 required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
+required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
