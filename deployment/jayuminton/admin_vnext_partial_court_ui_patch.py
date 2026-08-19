@@ -8,8 +8,12 @@ old="""    return state && state.courts && Array.isArray(state.courts[no]) &&
       state.courts[no].length === 4;"""
 new="""    return state && state.courts && Array.isArray(state.courts[no]) &&
       state.courts[no].length > 0;"""
-if old not in s: raise SystemExit('elapsed court full-only anchor not found')
-s=s.replace(old,new,1)
+if old in s:
+    s=s.replace(old,new,1)
+elif 'state.courts[no].length === 4' in s:
+    s=s.replace('state.courts[no].length === 4', 'state.courts[no].length > 0', 1)
+elif 'state.courts[no].length > 0' not in s:
+    raise SystemExit('elapsed court occupancy check missing')
 # Defensive cleanup for admin-only messages/buttons that still describe full courts as the only finishable state.
 s=s.replace('4명이 모두 배정된 코트만', '1명 이상 배정된 코트는')
 s=s.replace('4명이 모두 채워진 코트만', '1명 이상 배정된 코트는')
