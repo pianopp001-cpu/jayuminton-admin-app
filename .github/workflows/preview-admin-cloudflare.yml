@@ -20,7 +20,7 @@ jobs:
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      PREVIEW_CHANNEL: admin-cloudflare
+      PREVIEW_CHANNEL: admin-cloudflare-vnext
       ADMIN_WORKER_NAME: jayuminton-admin-rpc
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +50,7 @@ jobs:
           set -euo pipefail
           BACKUP="$RUNNER_TEMP/head-backup"; WORK="$RUNNER_TEMP/admin-backend"; mkdir -p "$BACKUP" "$WORK"; printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"; (cd "$BACKUP" && clasp pull); cp -a "$BACKUP"/. "$WORK"/
           python3 deployment/jayuminton/admin_cloudflare_rpc.py patch-backend --work "$WORK"
+          python3 -c "from deployment.jayuminton.admin_cloudflare_rpc import ALLOWED,REQUIRED_ADMIN_VNEXT_RPC; assert REQUIRED_ADMIN_VNEXT_RPC.issubset(ALLOWED)"
           python3 deployment/jayuminton/apply_admin_vnext_patches.py "$WORK"
           python3 deployment/jayuminton/admin_vnext_notification_contract_test.py "$WORK/Code.js"
           python3 deployment/jayuminton/admin_vnext_push_compatibility_check.py "$WORK/Code.js"
