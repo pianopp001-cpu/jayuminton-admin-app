@@ -18,11 +18,16 @@ import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -44,6 +49,10 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     private static final int VOICE_VOLUME_STEP = 6;
 
     private WebView webView;
+    private View adminLoadPanel;
+    private ProgressBar adminLoadProgress;
+    private TextView adminLoadMessage;
+    private Button adminRetryButton;
     private TextToSpeech tts;
     private AudioManager audioManager;
     private final AtomicBoolean ttsReady = new AtomicBoolean(false);
@@ -78,6 +87,11 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     private void configureWebView() {
         webView = findViewById(R.id.webView);
+        adminLoadPanel = findViewById(R.id.adminLoadPanel);
+        adminLoadProgress = findViewById(R.id.adminLoadProgress);
+        adminLoadMessage = findViewById(R.id.adminLoadMessage);
+        adminRetryButton = findViewById(R.id.adminRetryButton);
+        adminRetryButton.setOnClickListener(view -> loadAdminPage());
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
         webView.requestFocus(View.FOCUS_DOWN);
@@ -111,6 +125,12 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                showAdminLoadState("관리자 화면을 불러오는 중입니다.", false);
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 if (isMemberPwaUri(uri)) {
@@ -133,11 +153,41 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                         "document.documentElement.setAttribute('data-native-app','1');" +
                         "document.documentElement.setAttribute('data-apk-web-build','" + APK_WEB_BUILD + "');" +
                         "(function(){var i=document.getElementById('adminPinInput');if(i){i.disabled=false;i.readOnly=false;i.style.pointerEvents='auto';}})();",
-                        null
+                        value -> view.evaluateJavascript(
+                                "(function(){var p=document.getElementById('adminPinInput'),a=document.getElementById('adminApp');return !!(document.body&&document.body.innerText.trim().length>10&&(p||a));})()",
+                                ready -> {
+                                    if ("true".equals(ready)) {
+                                        adminLoadPanel.setVisibility(View.GONE);
+                                    } else {
+                                        showAdminLoadState("관리자 로그인 화면을 표시하지 못했습니다.", true);
+                                    }
+                                }
+                        )
                 );
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                if (request != null && request.isForMainFrame()) {
+                    showAdminLoadState("관리자 서버에 연결하지 못했습니다.", true);
+                }
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                super.onReceivedHttpError(view, request, response);
+                if (request != null && request.isForMainFrame() && response != null && response.getStatusCode() >= 400) {
+                    showAdminLoadState("관리자 서버 응답 오류: " + response.getStatusCode(), true);
+                }
             }
         });
 
+        loadAdminPage();
+    }
+
+    private void loadAdminPage() {
+        showAdminLoadState("관리자 화면을 불러오는 중입니다.", false);
         String freshAdminUrl = ADMIN_URL
                 + "&apkBuild=" + APK_WEB_BUILD
                 + "&ts=" + System.currentTimeMillis();
@@ -146,6 +196,15 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         headers.put("Pragma", "no-cache");
         headers.put("Expires", "0");
         webView.loadUrl(freshAdminUrl, headers);
+    }
+
+    private void showAdminLoadState(String message, boolean failed) {
+        runOnUiThread(() -> {
+            adminLoadPanel.setVisibility(View.VISIBLE);
+            adminLoadMessage.setText(message);
+            adminLoadProgress.setVisibility(failed ? View.GONE : View.VISIBLE);
+            adminRetryButton.setVisibility(failed ? View.VISIBLE : View.GONE);
+        });
     }
 
     private boolean isMemberPwaUri(Uri uri) {
