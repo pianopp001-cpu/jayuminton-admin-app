@@ -103,6 +103,26 @@ admin_sizer = '''
     return '<span class="member-vnext-full-name"><span>' + escapeAdminName(stored.slice(0, open).trim()) +
       '</span><br><small>' + escapeAdminName(stored.slice(open).trim()) + '</small></span>';
   }
+  function compactAdminPairStatistics() {
+    document.querySelectorAll('#pairStatisticsList .pair-statistics-partners').forEach(function(group) {
+      var chips = Array.prototype.filter.call(group.querySelectorAll('.pair-statistics-chip'), function(chip) {
+        return !chip.classList.contains('pair-statistics-more');
+      });
+      chips.forEach(function(chip, index) { chip.hidden = index >= 3; });
+      var hiddenCount = Math.max(0, chips.length - 3);
+      var more = group.querySelector('.pair-statistics-more');
+      if (!hiddenCount) {
+        if (more) more.remove();
+        return;
+      }
+      if (!more) {
+        more = document.createElement('span');
+        more.className = 'pair-statistics-chip pair-statistics-more';
+        group.appendChild(more);
+      }
+      more.textContent = '+' + hiddenCount + '명';
+    });
+  }
   function markAdminNewCards() {
     document.querySelectorAll('.quick-member[data-member-id],.person[data-member-id]').forEach(function(card) {
       var member = adminMemberById(card.getAttribute('data-member-id'));
@@ -124,6 +144,7 @@ admin_sizer = '''
       }
     });
     renderAdminPickedFullName();
+    compactAdminPairStatistics();
   }
   function scheduleAdminNewCardRender() {
     if (adminCardRenderScheduled) return;
@@ -271,7 +292,7 @@ required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
 required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
-required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName']
+required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'pair-statistics-more']
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
