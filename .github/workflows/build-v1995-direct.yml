@@ -1,5 +1,5 @@
-name: Build Jayuminton admin v199.7 Cloudflare APK
-run-name: Jayuminton admin v199.7 Cloudflare vNext APK
+name: Build Jayuminton admin v199.8 PIN-fixed full APK
+run-name: Jayuminton admin v199.8 PIN-fixed full APK
 
 on:
   workflow_dispatch: {}
@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      APK_OUTPUT: releases/jayuminton-admin-v199.7-cloudflare-vnext.apk
+      APK_OUTPUT: releases/jayuminton-admin-v199.8-pin-fixed-full.apk
       DOG_ICON_SHA256: a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
 
     steps:
@@ -75,7 +75,7 @@ jobs:
             echo "sha256=$ACTUAL"
           } > deployment/status/v1996-dog-icon-source.txt
 
-      - name: Prepare v199.7 against Cloudflare admin vNext
+      - name: Prepare v199.8 against PIN-fixed Cloudflare admin vNext
         shell: bash
         run: |
           set -euo pipefail
@@ -85,40 +85,42 @@ jobs:
 
           java = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           text = java.read_text(encoding='utf-8')
-          admin_url = 'https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?app=admin&native=1&appVersion=199.7'
+          admin_url = 'https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?app=admin&native=1&appVersion=199.8'
           text, n = re.subn(
               r'https://[^"\\]+(?:web\.app|/exec)[^"\\]*', admin_url, text, count=1)
           if n != 1:
               raise SystemExit('ADMIN_URL replacement failed')
           text, n = re.subn(
               r'private static final String APK_WEB_BUILD = "[^"]+";',
-              'private static final String APK_WEB_BUILD = "1997-cloudflare-admin-vnext";',
+              'private static final String APK_WEB_BUILD = "1998-pin-fixed-full";',
               text, count=1)
           if n != 1:
               raise SystemExit('APK_WEB_BUILD replacement failed')
           text = re.sub(
               r'JayumintonNative/[0-9A-Za-z.\-]+(?: FreshAdmin/[0-9A-Za-z.\-]+)?',
-              'JayumintonNative/199.7 CloudflareAdmin/1997', text)
+              'JayumintonNative/199.8 CloudflareAdmin/1998', text)
           java.write_text(text, encoding='utf-8')
 
           gradle = Path('app/build.gradle')
           g = gradle.read_text(encoding='utf-8')
           g, a = re.subn(r"applicationId\s+['\"][^'\"]+['\"]", "applicationId 'com.jayuminton.admin'", g, count=1)
-          g, b = re.subn(r'versionCode\s+\d+', 'versionCode 1997', g, count=1)
-          g, c = re.subn(r"versionName\s+['\"][^'\"]+['\"]", "versionName '199.7'", g, count=1)
+          g, b = re.subn(r'versionCode\s+\d+', 'versionCode 1998', g, count=1)
+          g, c = re.subn(r"versionName\s+['\"][^'\"]+['\"]", "versionName '199.8'", g, count=1)
           if not (a and b and c):
               raise SystemExit('Gradle version/package replacement failed')
           gradle.write_text(g, encoding='utf-8')
 
-          Path('deployment/status/v1997-build-target.txt').write_text(
+          Path('deployment/status/v1998-build-target.txt').write_text(
               'admin_url=' + admin_url + '\n' +
-              'apk_web_build=1997-cloudflare-admin-vnext\n', encoding='utf-8')
+              'apk_web_build=1998-pin-fixed-full\n', encoding='utf-8')
           PY
 
           grep -F "applicationId 'com.jayuminton.admin'" app/build.gradle
-          grep -F 'versionCode 1997' app/build.gradle
-          grep -F "versionName '199.7'" app/build.gradle
-          grep -F '1997-cloudflare-admin-vnext' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'versionCode 1998' app/build.gradle
+          grep -F "versionName '199.8'" app/build.gradle
+          grep -F '1998-pin-fixed-full' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'setFocusableInTouchMode(true)' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'SOFT_INPUT_ADJUST_RESIZE' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'admin-cloudflare-vnext-z3bgvi2g.web.app' app/src/main/java/com/jayuminton/admin/MainActivity.java
           python3 - <<'PY'
           from pathlib import Path
@@ -141,7 +143,7 @@ jobs:
           set -euo pipefail
           URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?apkVerify=${{ github.run_id }}'
           curl --fail --location --retry 5 "$URL" -o "$RUNNER_TEMP/admin-cloudflare.html"
-          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 admin-vnext-bottom-bar commitSelectedEmptyTargets 'fullAdminNameHtml(member.name)' compactAdminPairStatistics; do
+          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 admin-vnext-bottom-bar commitSelectedEmptyTargets 'fullAdminNameHtml(member.name)' compactAdminPairStatistics 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__; do
             grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null
           done
           if grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
@@ -169,8 +171,8 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/new-badging.txt"
           grep -F "package: name='com.jayuminton.admin'" "$RUNNER_TEMP/new-badging.txt"
-          grep -F "versionCode='1997'" "$RUNNER_TEMP/new-badging.txt"
-          grep -F "versionName='199.7'" "$RUNNER_TEMP/new-badging.txt"
+          grep -F "versionCode='1998'" "$RUNNER_TEMP/new-badging.txt"
+          grep -F "versionName='199.8'" "$RUNNER_TEMP/new-badging.txt"
           "$AAPT" dump resources "$APK" | grep -F 'drawable/icon' >/dev/null
           ls -lh "$APK"
 
@@ -181,19 +183,19 @@ jobs:
           mkdir -p releases deployment/status
           cp app/build/outputs/apk/release/app-release.apk "$APK_OUTPUT"
           test -s "$APK_OUTPUT"
-          sha256sum "$APK_OUTPUT" | tee deployment/status/v1997-cloudflare-apk.sha256
+          sha256sum "$APK_OUTPUT" | tee deployment/status/v1998-pin-fixed-apk.sha256
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$APK_OUTPUT" deployment/status/v1997-cloudflare-apk.sha256 deployment/status/v1997-build-target.txt deployment/status/v1996-dog-icon-source.txt
-          git commit -m 'Add Jayuminton admin v199.7 Cloudflare vNext APK'
+          git add "$APK_OUTPUT" deployment/status/v1998-pin-fixed-apk.sha256 deployment/status/v1998-build-target.txt deployment/status/v1996-dog-icon-source.txt
+          git commit -m 'Add Jayuminton admin v199.8 PIN-fixed full APK'
           git pull --rebase origin main || true
           git push origin main
 
       - name: Upload verified APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-admin-v199.7-cloudflare-vnext
-          path: releases/jayuminton-admin-v199.7-cloudflare-vnext.apk
+          name: jayuminton-admin-v199.8-pin-fixed-full
+          path: releases/jayuminton-admin-v199.8-pin-fixed-full.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -204,20 +206,20 @@ jobs:
           set -u
           mkdir -p deployment/status
           {
-            echo 'workflow=Build Jayuminton admin v199.7 Cloudflare APK'
+            echo 'workflow=Build Jayuminton admin v199.8 PIN-fixed full APK'
             echo 'run_id=${{ github.run_id }}'
             echo 'status=${{ job.status }}'
             echo 'head_sha=${{ github.sha }}'
-            echo 'version=199.7'
+            echo 'version=199.8'
             echo 'package=com.jayuminton.admin'
-            echo 'output=releases/jayuminton-admin-v199.7-cloudflare-vnext.apk'
+            echo 'output=releases/jayuminton-admin-v199.8-pin-fixed-full.apk'
             echo 'dog_icon_sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e'
             echo 'dog_art=chatgpt-file-library-source'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
-          } > deployment/status/v1997-cloudflare-apk.txt
+          } > deployment/status/v1998-pin-fixed-apk.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/v1997-cloudflare-apk.txt
-          git commit -m 'Record v199.7 Cloudflare APK result: ${{ job.status }}' || exit 0
+          git add deployment/status/v1998-pin-fixed-apk.txt
+          git commit -m 'Record v199.8 PIN-fixed APK result: ${{ job.status }}' || exit 0
           git pull --rebase origin main || true
           git push origin main
