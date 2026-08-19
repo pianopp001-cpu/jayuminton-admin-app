@@ -1,5 +1,5 @@
 status=success
-commit=a1322713a3dabfc949f00d12b9d3a193b5a6bb85
+commit=f41c05f4b83f896afad8b3be4ba147acf58a7a0a
 deployment=existing-main
 protected_user_structure_unchanged=yes
 approved_user_style_delta=compact-sponsor-badge-only
@@ -8,4 +8,4 @@ notification_contract_verified=yes
 production_push_compatibility=yes
 push_relay_deployed=yes
 relay_credentials_synchronized=yes
-deployed_at=2026-08-19T14:15:44Z
+deployed_at=2026-08-19T14:17:00Z
