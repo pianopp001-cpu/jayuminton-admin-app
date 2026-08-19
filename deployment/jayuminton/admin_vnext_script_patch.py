@@ -218,6 +218,28 @@ helper='''function adminVnextMemberBadges(member) {
 '''
 s=s.replace(card_marker,helper+card_marker,1)
 
+# Admin cards must omit absent grade/experience instead of printing placeholders.
+missing_detail_old = """  if (!grade && !experience) {
+    return '<span class="member-info-detail is-missing">급수·구력 미입력</span>';
+  }
+
+  const gradeText = grade || '급수 미입력';
+  const experienceText = experience ? '구력 ' + experience : '구력 미입력';
+
+  return '<span class="member-info-detail' +
+    ((!grade || !experience) ? ' is-missing' : '') + '">' +
+    escapeMemberInfo(gradeText) + ' · ' + escapeMemberInfo(experienceText) +
+    '</span>';"""
+missing_detail_new = """  const adminParts = [];
+  if (grade) adminParts.push(escapeMemberInfo(grade));
+  if (experience) adminParts.push(escapeMemberInfo('구력 ' + experience));
+  if (!adminParts.length) return '';
+  return '<span class="member-info-detail">' + adminParts.join(' · ') + '</span>';"""
+if missing_detail_old in s:
+ s=s.replace(missing_detail_old,missing_detail_new,1)
+elif '급수·구력 미입력' in s or '구력 미입력' in s or '급수 미입력' in s:
+ raise SystemExit('admin missing-value rendering normalization failed')
+
 # Append badges to every detail block through the function's final return when identifiable.
 # Safer fallback: inject badges next to game count in standard cards and quick roster.
 s=s.replace("memberInfoDetailHtml(member) +", "memberInfoDetailHtml(member) + adminVnextMemberBadges(member) +")
