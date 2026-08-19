@@ -120,6 +120,12 @@ jobs:
           grep -F "versionName '199.7'" app/build.gradle
           grep -F '1997-cloudflare-admin-vnext' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'admin-cloudflare-vnext-z3bgvi2g.web.app' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java').read_text(encoding='utf-8')
+          if not source.rstrip().endswith('}') or source.count('{') != source.count('}'):
+              raise SystemExit('MainActivity.java is incomplete or has unbalanced braces')
+          PY
           grep -F 'WebSettings.LOAD_NO_CACHE' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'WebStorage.getInstance().deleteAllData()' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'NativeBrowser' app/src/main/java/com/jayuminton/admin/MainActivity.java
