@@ -9,8 +9,15 @@ ALLOWED = [
     'autoFillCourt','autoFillWaitGroup','moveOrSwapMember','finishCourt',
     'swapCourts','swapWaitGroups','undoLastAction','decreaseSelectedGameCounts','resetSelectedGameCounts',
     'removeFromCourt','removeFromWaitGroup','adjustCourtMembers','adjustWaitGroupMembers',
+    'adjustMemberGames','setBundle','clearBundle','getPairStatistics','smartAssignSelected',
     'resetAll','resetAllOperationData','createBackup','restoreBackup','createManualBackup','restoreManualBackup'
 ]
+
+REQUIRED_ADMIN_VNEXT_RPC = {
+    'adjustMemberGames','setBundle','clearBundle','getPairStatistics','smartAssignSelected'
+}
+if not REQUIRED_ADMIN_VNEXT_RPC.issubset(ALLOWED):
+    raise RuntimeError('admin Cloudflare RPC is missing vNext methods')
 
 def rpc_helper():
     cases='\n'.join("    else if (name === %s) result = %s.apply(null,args);"%(json.dumps(n),n) for n in ALLOWED[1:])
