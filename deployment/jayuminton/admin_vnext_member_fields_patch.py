@@ -14,6 +14,38 @@ def bounds(text, name, next_name):
         raise SystemExit(name + ' function boundary not found')
     return start, end
 
+# Canonical 12-column reader. The previous deployment stored IS_NEW in column
+# 9 but still read only 8 columns, so every refreshed member lost the flag.
+a, b = bounds(s, 'readMembers_(', 'appendMember_(')
+reader = '''function readMembers_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_MEMBERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(2, 1, lastRow - 1, 12).getValues()
+    .filter(function(row) { return String(row[0]).trim() !== ''; })
+    .map(function(row) {
+      return {
+        id: String(row[0]),
+        name: String(row[1]),
+        gender: String(row[2]) === 'female' ? 'female' : 'male',
+        games: Number(row[3]) || 0,
+        status: normalizeStatus_(String(row[4])),
+        createdAt: String(row[5] || ''),
+        grade: String(row[6] || ''),
+        experience: String(row[7] || ''),
+        isNew: String(row[8] || '') === '1',
+        publicMemo: String(row[9] || ''),
+        isSponsor: String(row[10] || '') === '1',
+        bundleId: String(row[11] || ''),
+        level: String(row[6] || ''),
+        career: String(row[7] || '')
+      };
+    });
+}
+
+'''
+s = s[:a] + reader + s[b:]
+
 # Existing production may have either 8 or 9 columns. Keep the first nine
 # columns unchanged and append the three admin-only metadata columns.
 for width in ('8', '9'):
@@ -81,6 +113,7 @@ if 'isNew: isNew' in block:
         "isNew: isNew,\n    publicMemo: publicMemo,\n    isSponsor: isSponsor,\n    bundleId: ''",
         1
     )
+
 elif 'publicMemo: publicMemo' not in block:
     marker = '    experience: experience,'
     if marker not in block:
@@ -90,6 +123,19 @@ elif 'publicMemo: publicMemo' not in block:
         marker + "\n    isNew: isNew,\n    publicMemo: publicMemo,\n    isSponsor: isSponsor,\n    bundleId: '',",
         1
     )
+
+# Registration only needs the current row count. Avoid reading and parsing all
+# members before a single-row append.
+old_count = """  const members = readMembers_();
+
+  if (members.length >= MAX_MEMBERS) {"""
+new_count = """  const memberSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_MEMBERS);
+  const memberCount = Math.max(0, memberSheet.getLastRow() - 1);
+
+  if (memberCount >= MAX_MEMBERS) {"""
+if old_count in block:
+    block = block.replace(old_count, new_count, 1)
+block = block.replace('  members.push(member);\n', '')
 s = s[:a] + block + s[b:]
 
 a, b = bounds(s, 'addMember(', 'setMemberStatus(')
