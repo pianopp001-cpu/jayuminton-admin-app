@@ -1,0 +1,92 @@
+name: Emergency restore protected user web
+# Restores the verified pre-user-style production backup from run 32260020395.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-restore-protected-user-web.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: jayuminton-user-web-emergency-restore
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      GH_TOKEN: ${{ github.token }}
+      SAFE_ARTIFACT_ID: '9367926708'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve protected production deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+      - name: Install clasp
+        run: npm install --global @google/clasp@latest
+      - name: Preserve current live code
+        shell: bash
+        run: |
+          set -euo pipefail
+          CURRENT="$RUNNER_TEMP/current-live-before-emergency-restore"
+          mkdir -p "$CURRENT"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$CURRENT/.clasp.json"
+          (cd "$CURRENT" && clasp pull)
+      - name: Upload current live recovery point
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-live-before-emergency-restore-${{ github.run_id }}
+          path: ${{ runner.temp }}/current-live-before-emergency-restore
+          retention-days: 30
+          include-hidden-files: true
+      - name: Download and verify protected backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$RUNNER_TEMP/protected-user-web.zip"
+          SAFE="$RUNNER_TEMP/protected-user-web"
+          mkdir -p "$SAFE"
+          gh api -H 'Accept: application/vnd.github+json'             "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SAFE_ARTIFACT_ID}/zip" > "$ZIP"
+          unzip -q "$ZIP" -d "$SAFE"
+          for required in Index.html Style.html Code.js Script.html Admin.html appsscript.json; do
+            test -s "$SAFE/$required"
+          done
+          node --check "$SAFE/Code.js"
+          python3 - "$SAFE/Script.html" "$RUNNER_TEMP/safe-script.js" <<'PY'
+          from pathlib import Path
+          import sys
+          source=Path(sys.argv[1]).read_text(encoding='utf-8')
+          start=source.find('<script>'); end=source.rfind('</script>')
+          if start < 0 or end <= start: raise SystemExit('Script.html wrapper missing')
+          Path(sys.argv[2]).write_text(source[start+8:end],encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/safe-script.js"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$SAFE/.clasp.json"
+      - name: Restore existing protected user web deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAFE="$RUNNER_TEMP/protected-user-web"
+          cd "$SAFE"
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "emergency protected user web restore ${GITHUB_SHA::7}"
+          clasp deployments | grep -F "$MAIN_DEPLOYMENT_ID" >/dev/null
+          echo "Restored protected user web from artifact $SAFE_ARTIFACT_ID"
