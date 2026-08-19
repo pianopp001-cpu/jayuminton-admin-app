@@ -12,7 +12,7 @@
 6. 기존 설치 사용자 앱의 접속 경로를 바꾸는 빌드는 명시적 검증 없이 배포하지 않는다.
 7. 사용자 운영 프런트는 **항상 Cloudflare Worker RPC를 사용하는 Firebase Hosting**이다. 사용자에게 Apps Script URL을 안내하거나 사용자 운영 URL로 기록하지 않는다.
 8. 사용자 화면 변경은 `.github/workflows/deploy-unified-member-web-production.yml`만 사용한다. 이 워크플로는 MAIN/ADMIN deployment ID를 갱신하지 않아야 한다.
-9. 사용자 카드의 `NEW`와 `🎁` 표시는 카드 모서리의 작은 아이콘이며 카드 크기·이름 영역을 침범하지 않는다.
+9. 사용자 카드의 `NEW 신규`와 `🎁 찬조`는 의미가 보이는 작은 표시로 각각 별도 줄에 배치한다. 이름 위에 겹치지 않고, 필요하면 카드를 세로로 늘려 글자가 잘리지 않게 한다.
 10. 사용자 배포 전후에 로그인 화면, Worker `ok:true`, 필수 메타데이터 필드, iframe 부재, Apps Script URL 부재를 자동 검사한다.
 
 ## 현재 확인된 Cloudflare 사용자 경로
