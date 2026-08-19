@@ -74,18 +74,18 @@ if 'mobile-refresh-button' not in bar:
     assign_start = bar.rfind('<button', 0, hit + 1)
     if hit < 0 or assign_start < 0:
         raise SystemExit('mobile assign button missing')
-    refresh = '<button class="ghost-button mobile-refresh-button" type="button" onclick="loadState()">↻ 새로고침</button>\n    '
+    refresh = '<button class="ghost-button mobile-refresh-button" type="button" onclick="refreshAdminState()">↻ 새로고침</button>\n    '
     bar = bar[:assign_start] + refresh + bar[assign_start:]
 
 s = s[:bar_start] + bar + s[bar_end:]
 
 style = """
 <style id="adminVnextBottomBarStyle">
-  .admin-vnext-bottom-bar{display:grid!important;grid-template-columns:minmax(112px,1.15fr) minmax(58px,.5fr) minmax(116px,1fr);gap:8px;align-items:stretch}
+  .admin-vnext-bottom-bar{display:grid!important;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,2fr);gap:8px;align-items:stretch}
   .admin-vnext-bottom-bar #mobileSelectedCount{grid-column:1/-1;font-size:12px;line-height:14px;min-height:14px}
   .admin-vnext-bottom-bar button{min-height:48px!important;margin:0!important;padding:8px 6px!important;font-size:15px!important;font-weight:800!important;white-space:nowrap}
   .admin-vnext-bottom-bar .mobile-refresh-button{font-size:13px!important}
-  @media (max-width:380px){.admin-vnext-bottom-bar{grid-template-columns:minmax(100px,1.1fr) minmax(52px,.5fr) minmax(104px,1fr);gap:5px}.admin-vnext-bottom-bar button{font-size:13px!important;padding:7px 3px!important}}
+  @media (max-width:380px){.admin-vnext-bottom-bar{grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,2fr);gap:5px}.admin-vnext-bottom-bar button{font-size:13px!important;padding:7px 3px!important}}
 </style>
 """
 if 'id="adminVnextBottomBarStyle"' not in s:
