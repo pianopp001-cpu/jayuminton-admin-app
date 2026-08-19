@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Admin vNext member metadata patch. Development branch only; never deploys user production."""
+"""Admin vNext member metadata patch; preserves legacy user-web callers."""
 from pathlib import Path
 import sys
 
@@ -7,130 +7,145 @@ root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('source-snapshot/current
 p = root / 'Code.js'
 s = p.read_text(encoding='utf-8')
 
+def bounds(text, name, next_name):
+    start = text.find('function ' + name)
+    end = text.find('\nfunction ' + next_name, start + 1)
+    if start < 0 or end < 0:
+        raise SystemExit(name + ' function boundary not found')
+    return start, end
 
-def rep(old, new, label):
-    global s
-    if old not in s:
-        raise SystemExit(label + ' anchor not found')
-    s = s.replace(old, new, 1)
+# Existing production may have either 8 or 9 columns. Keep the first nine
+# columns unchanged and append the three admin-only metadata columns.
+for width in ('8', '9'):
+    s = s.replace(
+        'getRange(sheet.getLastRow() + 1, 1, 1, ' + width + ')',
+        'getRange(sheet.getLastRow() + 1, 1, 1, 12)'
+    )
+    s = s.replace(
+        'getRange(2, 1, lastRow - 1, ' + width + ')\n      .clearContent();',
+        'getRange(2, 1, lastRow - 1, 12)\n      .clearContent();'
+    )
 
-# Complete the 8 -> 12 column migration for every write path.  The backend
-# patch already widens readMembers_/writeMembers_ row output; these anchors
-# cover append and clear ranges that must not remain at 8 columns.
-s = s.replace(
-    "getRange(sheet.getLastRow() + 1, 1, 1, 8)",
-    "getRange(sheet.getLastRow() + 1, 1, 1, 12)"
-)
-s = s.replace(
-    "getRange(2, 1, lastRow - 1, 8)\n      .clearContent();",
-    "getRange(2, 1, lastRow - 1, 12)\n      .clearContent();"
-)
-
-rep(
-"""      member.grade || '',
-      member.experience || ''
-    ]]);""",
-"""      member.grade || '',
+# Canonicalize appendMember_ by function bounds instead of formatting anchors.
+a, b = bounds(s, 'appendMember_(', 'writeMembers_(')
+block = s[a:b]
+values_start = block.find('.setValues([[')
+values_end = block.find(']]);', values_start)
+if values_start < 0 or values_end < 0:
+    raise SystemExit('append member values bounds not found')
+canonical_values = """.setValues([[
+      member.id,
+      member.name,
+      member.gender,
+      Number(member.games) || 0,
+      member.status || 'active',
+      member.createdAt || new Date().toISOString(),
+      member.grade || '',
       member.experience || '',
       member.isNew ? '1' : '',
       member.publicMemo || '',
       member.isSponsor ? '1' : '',
       member.bundleId || ''
-    ]]);""",
-'append member metadata'
-)
+    ]]);"""
+block = block[:values_start] + canonical_values + block[values_end + 4:]
+s = s[:a] + block + s[b:]
 
-# Registration accepts one optional object. Existing five-argument callers stay
-# compatible, while the new admin UI can send isNew/publicMemo/isSponsor.
-rep(
-"function addMemberUnlocked_(pin, name, gender, grade, experience) {",
-"function addMemberUnlocked_(pin, name, gender, grade, experience, extra) {",
-'add member unlocked signature'
-)
-rep(
-"""  experience = String(experience == null ? '' : experience).trim();
-
-  if (!name || name.length > 20) {""",
-"""  experience = String(experience == null ? '' : experience).trim();
-  extra = extra && typeof extra === 'object' ? extra : {};
+# Registration keeps legacy boolean isNew callers compatible while accepting
+# the admin-vNext metadata object.
+a, b = bounds(s, 'addMemberUnlocked_(', 'setMemberStatusUnlocked_(')
+block = s[a:b]
+for old in (
+    'function addMemberUnlocked_(pin, name, gender, grade, experience) {',
+    'function addMemberUnlocked_(pin, name, gender, grade, experience, isNew) {'
+):
+    block = block.replace(
+        old,
+        'function addMemberUnlocked_(pin, name, gender, grade, experience, extra) {',
+        1
+    )
+legacy_normalize = "  isNew = isNew === true || String(isNew || '').toLowerCase() === 'true';"
+metadata_normalize = """  extra = extra && typeof extra === 'object' ? extra : {isNew: extra};
   const isNew = Boolean(extra.isNew);
   const publicMemo = String(extra.publicMemo == null ? '' : extra.publicMemo).trim().slice(0, 40);
-  const isSponsor = Boolean(extra.isSponsor);
+  const isSponsor = Boolean(extra.isSponsor);"""
+if legacy_normalize in block:
+    block = block.replace(legacy_normalize, metadata_normalize, 1)
+elif 'const publicMemo =' not in block:
+    marker = "  experience = String(experience == null ? '' : experience).trim();"
+    if marker not in block:
+        raise SystemExit('add member normalization anchor not found')
+    block = block.replace(marker, marker + '\n' + metadata_normalize, 1)
+if 'isNew: isNew' in block:
+    block = block.replace(
+        'isNew: isNew',
+        "isNew: isNew,\n    publicMemo: publicMemo,\n    isSponsor: isSponsor,\n    bundleId: ''",
+        1
+    )
+elif 'publicMemo: publicMemo' not in block:
+    marker = '    experience: experience,'
+    if marker not in block:
+        raise SystemExit('new member object anchor not found')
+    block = block.replace(
+        marker,
+        marker + "\n    isNew: isNew,\n    publicMemo: publicMemo,\n    isSponsor: isSponsor,\n    bundleId: '',",
+        1
+    )
+s = s[:a] + block + s[b:]
 
-  if (!name || name.length > 20) {""",
-'add member metadata normalization'
-)
-rep(
-"""    grade: grade,
-    experience: experience,
-    level: grade,
-    career: experience
-  };""",
-"""    grade: grade,
-    experience: experience,
-    isNew: isNew,
-    publicMemo: publicMemo,
-    isSponsor: isSponsor,
-    bundleId: '',
-    level: grade,
-    career: experience
-  };""",
-'new member metadata object'
-)
-rep(
-"function addMember(pin, name, gender, grade, experience) {",
-"function addMember(pin, name, gender, grade, experience, extra) {",
-'add member public signature'
-)
-rep(
-"""        gender,
-        grade,
-        experience
-      );""",
-"""        gender,
-        grade,
-        experience,
-        extra
-      );""",
-'add member public forwarding'
-)
+a, b = bounds(s, 'addMember(', 'setMemberStatus(')
+block = s[a:b]
+for old in (
+    'function addMember(pin, name, gender, grade, experience) {',
+    'function addMember(pin, name, gender, grade, experience, isNew) {'
+):
+    block = block.replace(
+        old,
+        'function addMember(pin, name, gender, grade, experience, extra) {',
+        1
+    )
+block = block.replace('\n        isNew\n      );', '\n        extra\n      );', 1)
+if 'function addMember(pin, name, gender, grade, experience, extra)' not in block:
+    raise SystemExit('add member public signature not normalized')
+if '\n        extra\n      );' not in block:
+    # Legacy five-argument forwarding.
+    block = block.replace('\n        experience\n      );', '\n        experience,\n        extra\n      );', 1)
+s = s[:a] + block + s[b:]
 
-# Admin edit API carries the same optional object and preserves placement,
-# status, game count and bundle id unless explicitly changed elsewhere.
-rep(
-"function updateMemberProfile(pin, memberId, name, gender, grade, experience) {",
-"function updateMemberProfile(pin, memberId, name, gender, grade, experience, extra) {",
-'update member signature'
-)
-rep(
-"""    experience = String(experience == null ? '' : experience).trim();
-
-    if (!memberId) throw new Error('수정할 멤버가 없습니다.');""",
-"""    experience = String(experience == null ? '' : experience).trim();
-    extra = extra && typeof extra === 'object' ? extra : {};
-
-    if (!memberId) throw new Error('수정할 멤버가 없습니다.');""",
-'update member metadata normalization'
-)
-rep(
-"""    members[index].grade = grade;
-    members[index].experience = experience;
-
-    writeMembers_(members);""",
-"""    members[index].grade = grade;
-    members[index].experience = experience;
-    if (Object.prototype.hasOwnProperty.call(extra, 'isNew')) members[index].isNew = Boolean(extra.isNew);
+# Admin edit API: legacy isNew boolean is accepted as {isNew: ...}.
+a, b = bounds(s, 'updateMemberProfile(', 'addMember(')
+block = s[a:b]
+for old in (
+    'function updateMemberProfile(pin, memberId, name, gender, grade, experience) {',
+    'function updateMemberProfile(pin, memberId, name, gender, grade, experience, isNew) {'
+):
+    block = block.replace(
+        old,
+        'function updateMemberProfile(pin, memberId, name, gender, grade, experience, extra) {',
+        1
+    )
+marker = "    experience = String(experience == null ? '' : experience).trim();"
+if marker not in block:
+    raise SystemExit('update member normalization anchor not found')
+if "extra = extra && typeof extra === 'object'" not in block:
+    block = block.replace(
+        marker,
+        marker + "\n    extra = extra && typeof extra === 'object' ? extra : {isNew: extra};",
+        1
+    )
+legacy_assignment = "    members[index].isNew = isNew === true || String(isNew || '').toLowerCase() === 'true';"
+metadata_assignment = """    if (Object.prototype.hasOwnProperty.call(extra, 'isNew')) members[index].isNew = Boolean(extra.isNew);
     if (Object.prototype.hasOwnProperty.call(extra, 'publicMemo')) members[index].publicMemo = String(extra.publicMemo == null ? '' : extra.publicMemo).trim().slice(0, 40);
-    if (Object.prototype.hasOwnProperty.call(extra, 'isSponsor')) members[index].isSponsor = Boolean(extra.isSponsor);
+    if (Object.prototype.hasOwnProperty.call(extra, 'isSponsor')) members[index].isSponsor = Boolean(extra.isSponsor);"""
+if legacy_assignment in block:
+    block = block.replace(legacy_assignment, metadata_assignment, 1)
+elif metadata_assignment not in block:
+    marker = '    members[index].experience = experience;'
+    if marker not in block:
+        raise SystemExit('update member metadata fields anchor not found')
+    block = block.replace(marker, marker + '\n' + metadata_assignment, 1)
+s = s[:a] + block + s[b:]
 
-    writeMembers_(members);""",
-'update member metadata fields'
-)
-
-# Undo must restore all vNext member metadata; otherwise one undo would silently
-# erase new/sponsor/memo/bundle information. The backend migration may already
-# have injected these fields, so normalize the bounded undo object instead of
-# relying on the legacy eight-column text anchor.
+# Undo must retain every appended metadata field.
 undo_start = s.find('const members = state.members.map(function(member) {')
 undo_end = s.find('}).filter(function(member) {', undo_start)
 if undo_start < 0 or undo_end < 0:
@@ -150,13 +165,15 @@ canonical = """          grade: String(member.grade || '').slice(0, 12),
 undo_chunk = undo_chunk[:grade_start] + canonical + undo_chunk[object_end:]
 s = s[:undo_start] + undo_chunk + s[undo_end:]
 
-normalized_undo = s[undo_start:s.find('}).filter(function(member) {', undo_start)]
-for required in [
+required = [
+    'function addMemberUnlocked_(pin, name, gender, grade, experience, extra)',
+    'function updateMemberProfile(pin, memberId, name, gender, grade, experience, extra)',
     "publicMemo: String(member.publicMemo || '').slice(0, 40)",
     "bundleId: String(member.bundleId || '')"
-]:
-    if required not in normalized_undo:
-        raise SystemExit('undo member metadata normalization missing: ' + required)
+]
+missing = [item for item in required if item not in s]
+if missing:
+    raise SystemExit('member metadata normalization incomplete: ' + ' | '.join(missing))
 
 p.write_text(s, encoding='utf-8')
 print('admin vNext member metadata persistence patch prepared')
