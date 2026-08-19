@@ -131,7 +131,8 @@ function adjustMemberGames(pin,id,delta){return withDocumentLock_('게임횟수 
 function setBundle(pin,ids){return withDocumentLock_('고정 묶음 지정',function(){auth_(pin);ids=normalizeIds_(ids);if(ids.length!==2)throw new Error('고정 묶음은 정확히 2명을 선택하세요.');const bundleId=Utilities.getUuid();const members=readMembers_();members.forEach(function(m){if(ids.indexOf(m.id)>=0)m.bundleId=bundleId;});writeMembers_(members);touch_();return getPublicState();});}
 function clearBundle(pin,ids){return withDocumentLock_('고정 묶음 해제',function(){auth_(pin);ids=normalizeIds_(ids);const members=readMembers_(),bundleIds={};members.forEach(function(m){if(ids.indexOf(m.id)>=0&&m.bundleId)bundleIds[m.bundleId]=true;});members.forEach(function(m){if(bundleIds[m.bundleId])m.bundleId='';});writeMembers_(members);touch_();return getPublicState();});}
 '''
-if 'function ensurePairHistorySheet_(ss)' not in s:\n    rep(anchor, insert + anchor, 'lock')
+if 'function ensurePairHistorySheet_(ss)' not in s:
+    rep(anchor, insert + anchor, 'lock')
 
 s = s.replace("sheet.getRange(2, 1, lastRow - 1, 8)", "sheet.getRange(2, 1, lastRow - 1, 12)")
 s = s.replace("sheet.getRange(2, 1, lastRow - 1, 9)", "sheet.getRange(2, 1, lastRow - 1, 12)")
