@@ -1,0 +1,10 @@
+workflow=Build Jayuminton admin v199.9 white-screen-safe full APK
+run_id=32279631287
+status=success
+head_sha=543399697f5829ec8c555b554bbc0ced3236ba5e
+version=199.9
+package=com.jayuminton.admin
+output=releases/jayuminton-admin-v199.9-white-screen-safe-full.apk
+dog_icon_sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
+dog_art=chatgpt-file-library-source
+updated_at=2026-08-19T17:06:44Z
