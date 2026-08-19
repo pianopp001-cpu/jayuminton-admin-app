@@ -108,8 +108,8 @@ admin_sizer = '''
       var chips = Array.prototype.filter.call(group.querySelectorAll('.pair-statistics-chip'), function(chip) {
         return !chip.classList.contains('pair-statistics-more');
       });
-      chips.forEach(function(chip, index) { chip.hidden = index >= 3; });
-      var hiddenCount = Math.max(0, chips.length - 3);
+      chips.forEach(function(chip, index) { chip.hidden = index >= 2; });
+      var hiddenCount = Math.max(0, chips.length - 2);
       var more = group.querySelector('.pair-statistics-more');
       if (!hiddenCount) {
         if (more) more.remove();
@@ -122,6 +122,60 @@ admin_sizer = '''
       }
       more.textContent = '+' + hiddenCount + '명';
     });
+  }
+  function installAdminCourtMultiFill() {
+    if (window.ADMIN_COURT_MULTI_FILL_READY) return;
+    if (typeof EMPTY_SLOT_TARGETS === 'undefined' || typeof server !== 'function') return;
+    window.ADMIN_COURT_MULTI_FILL_READY = true;
+    var originalToggle = window.toggleEmptySlotTarget;
+    var originalSmartAssign = window.smartAssignSelected;
+    window.assignMemberToChosenEmpty = function() { return false; };
+    window.toggleEmptySlotTarget = function(type, index, slotIndex) {
+      var normalizedType = type === 'court' ? 'court' : 'wait';
+      var normalizedIndex = Number(index);
+      var already = typeof selectedEmptyTargetIndex === 'function'
+        ? selectedEmptyTargetIndex(normalizedType, normalizedIndex, Number(slotIndex)) >= 0
+        : false;
+      if (!already && EMPTY_SLOT_TARGETS.length) {
+        var first = EMPTY_SLOT_TARGETS[0];
+        if (first.type !== normalizedType || Number(first.index) !== normalizedIndex) {
+          if (typeof clearEmptySlotTargets === 'function') clearEmptySlotTargets();
+        }
+      }
+      if (!already && EMPTY_SLOT_TARGETS.length >= 4) return;
+      return originalToggle.apply(this, arguments);
+    };
+    window.smartAssignSelected = async function() {
+      if (!EMPTY_SLOT_TARGETS.length || EMPTY_SLOT_TARGETS[0].type !== 'court') {
+        return originalSmartAssign.apply(this, arguments);
+      }
+      if (typeof pruneEmptySlotTargets === 'function') pruneEmptySlotTargets();
+      if (!EMPTY_SLOT_TARGETS.length) return;
+      var courtNo = Number(EMPTY_SLOT_TARGETS[0].index);
+      var sameRow = EMPTY_SLOT_TARGETS.every(function(target) {
+        return target.type === 'court' && Number(target.index) === courtNo;
+      });
+      if (!sameRow) {
+        alert('같은 코트 줄의 빈자리만 함께 선택해 주세요.');
+        return;
+      }
+      var existing = (STATE.courts[courtNo] || []).slice();
+      var needed = 4 - existing.length;
+      var picked = Array.from(SELECTED || []);
+      if (needed <= 0) { alert('선택한 코트는 이미 4명입니다.'); return; }
+      if (picked.length > needed) {
+        alert('이 코트에는 ' + needed + '명만 더 들어갈 수 있습니다.');
+        return;
+      }
+      try {
+        var saved = await server('smartAssignSelected', [ADMIN_PIN_VALUE, picked, String(courtNo)]);
+        SELECTED.clear();
+        if (typeof clearEmptySlotTargets === 'function') clearEmptySlotTargets();
+        renderState(saved);
+      } catch (error) {
+        alert(error && error.message ? error.message : error);
+      }
+    };
   }
   function markAdminNewCards() {
     document.querySelectorAll('.quick-member[data-member-id],.person[data-member-id]').forEach(function(card) {
@@ -145,6 +199,7 @@ admin_sizer = '''
     });
     renderAdminPickedFullName();
     compactAdminPairStatistics();
+    installAdminCourtMultiFill();
   }
   function scheduleAdminNewCardRender() {
     if (adminCardRenderScheduled) return;
@@ -252,14 +307,14 @@ style = """
   .admin-vnext-bottom-bar .mobile-undo-button,.admin-vnext-bottom-bar .mobile-refresh-button{background:#475569!important;color:#fff!important;border-color:#475569!important}
   .admin-vnext-bottom-bar .mobile-undo-button:disabled{opacity:.78!important;color:#fff!important}
   .admin-vnext-bottom-bar .mobile-refresh-button{font-size:14px!important}
-  .pair-statistics-modal{width:min(720px,calc(100vw - 24px));max-height:86vh;overflow:auto}
+  .pair-statistics-modal{width:min(920px,calc(100vw - 16px));max-height:92vh;overflow:hidden}
   .pair-statistics-modal>input{width:100%;margin:4px 0 12px;box-sizing:border-box}
-  .pair-statistics-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:58vh;overflow:auto;overscroll-behavior:contain;padding-right:2px}
-  .pair-statistics-row{min-width:0;border:1px solid #dbe3ef;border-radius:12px;padding:9px;background:#fff}
-  .pair-statistics-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px}
-  .pair-statistics-name{font-size:17px;font-weight:900;overflow-wrap:anywhere}
-  .pair-statistics-games{font-size:13px;font-weight:800;color:#475569;white-space:nowrap}
-  .pair-statistics-partners{display:flex;gap:6px;flex-wrap:wrap}
+  .pair-statistics-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:68vh;overflow:auto;overscroll-behavior:contain;padding-right:2px}
+  .pair-statistics-row{min-width:0;border:1px solid #dbe3ef;border-radius:10px;padding:7px;background:#fff}
+  .pair-statistics-head{display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:5px}
+  .pair-statistics-name{font-size:14px;font-weight:900;overflow-wrap:anywhere}
+  .pair-statistics-games{font-size:11px;font-weight:800;color:#475569;white-space:nowrap}
+  .pair-statistics-partners{display:flex;gap:4px;flex-wrap:wrap}
   .pair-statistics-chip{max-width:100%;font-size:11px;font-weight:700;background:#eef4ff;color:#244f91;border-radius:999px;padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pair-statistics-more{background:#e2e8f0;color:#334155}
   .pair-statistics-empty{padding:24px;text-align:center;color:#64748b}
@@ -268,8 +323,9 @@ style = """
   .quick-move-full-name{max-width:42vw;padding:4px 7px;border-radius:8px;background:#fff;color:#172033;font-size:12px;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-align:center}
   .member-vnext-full-name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important;text-align:center}
   .member-vnext-full-name small{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;margin-top:7px;font-size:.8em!important;line-height:1.25!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important}
-  .quick-member.is-new-member,.person.is-new-member{position:relative!important;overflow:hidden!important;aspect-ratio:auto!important}
-  .member-vnext-badge.new-badge{position:absolute!important;z-index:10!important;top:3px!important;right:3px!important;display:block!important;width:auto!important;margin:0!important;padding:1px 4px!important;font-size:7px!important;line-height:9px!important;letter-spacing:.2px!important;border-radius:4px!important;pointer-events:none!important}
+  .quick-member.is-new-member,.person.is-new-member{position:relative!important;overflow:visible!important;aspect-ratio:auto!important}
+  .member-vnext-badge.new-badge{position:absolute!important;z-index:10!important;top:0!important;right:7px!important;transform:translateY(-58%)!important;display:block!important;width:auto!important;margin:0!important;padding:1px 4px!important;font-size:7px!important;line-height:9px!important;letter-spacing:.2px!important;border-radius:4px!important;pointer-events:none!important}
+  .member-vnext-badge.sponsor-badge{display:inline-flex!important;align-items:center!important;width:auto!important;margin:2px!important;padding:1px 4px!important;font-size:8px!important;line-height:11px!important;border-radius:5px!important}
   .quick-member.is-new-member{grid-column:1/-1!important;width:100%!important;min-width:0!important;height:auto!important;min-height:190px!important;padding:22px 16px 16px!important}
   .person.is-new-member{height:auto!important;min-height:132px!important;padding:18px 8px 10px!important}
   .quick-member.is-new-member .quick-member-name,.person.is-new-member .name{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;line-height:1.2!important}
@@ -292,7 +348,7 @@ required = ['id="newPublicMemo"', 'id="newIsNew"', 'id="newIsSponsor"',
             'increaseSelectedGames()', 'setSelectedBundle()',
             'admin-vnext-bottom-bar', 'mobile-refresh-button']
 required += ['openPairStatistics()', 'id="pairStatisticsModal"', 'id="pairStatisticsList"']
-required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'pair-statistics-more']
+required += ['id="adminVnextNewCardSizer"', "card.classList.add('is-new-member')", 'showAdminNewNameBubble(card)', 'admin-new-name-bubble', 'function adminMemberById(id)', 'fullAdminNameHtml(member.name)', 'quickMoveMemberFullName', 'function compactAdminPairStatistics()', 'function installAdminCourtMultiFill()', "server('smartAssignSelected'", 'pair-statistics-more']
 missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('admin UI incomplete: ' + ' | '.join(missing))
