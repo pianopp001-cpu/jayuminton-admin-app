@@ -211,7 +211,10 @@ if card_marker not in s:
  card_marker = "function memberInfoDetailHtml(member, locationOverride) {"
 if card_marker not in s: raise SystemExit('memberInfoDetailHtml marker not found')
 name_helper='''function adminVnextCardName(member) {
-  return escapeMemberInfo(member && member.name ? member.name : '');
+  if (!member) return '';
+  return member.isNew
+    ? escapeMemberInfo(member.name || '')
+    : compactMemberName(member.name || '');
 }
 
 '''
