@@ -1,0 +1,10 @@
+workflow=Build Jayuminton admin v200.1 native finish alert full APK
+run_id=32284833989
+status=success
+head_sha=6d1926193e080b120c159e848f6f90518bd34f28
+version=200.1
+package=com.jayuminton.admin
+output=releases/jayuminton-admin-v200.1-native-finish-alert-full.apk
+dog_icon_sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
+dog_art=chatgpt-file-library-source
+updated_at=2026-08-19T18:03:14Z
