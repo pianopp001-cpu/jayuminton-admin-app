@@ -62,6 +62,9 @@ jobs:
             echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
           } >> "$GITHUB_ENV"
 
+      - name: Enforce permanent Cloudflare user lock
+        run: python3 deployment/jayuminton/verify_cloudflare_user_lock.py "$GITHUB_WORKSPACE"
+
       - name: Prepare unified member backend on isolated RPC deployment
         shell: bash
         run: |
@@ -99,7 +102,7 @@ jobs:
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$WORK/Script.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$WORK/Script.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$WORK/Script.html" >/dev/null
-          grep -F "sponsor.textContent='찬조'" "$WORK/Script.html" >/dev/null
+          grep -F "sponsor.textContent='🎁'" "$WORK/Script.html" >/dev/null
           grep -F "String(member.publicMemo||'').trim()" "$WORK/Script.html" >/dev/null
           grep -F 'content:"★"!important' "$WORK/Script.html" >/dev/null
           grep -F 'color:#ffd84d!important' "$WORK/Script.html" >/dev/null
@@ -155,7 +158,7 @@ jobs:
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$PUBLIC/index.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$PUBLIC/index.html" >/dev/null
-          grep -F "sponsor.textContent='찬조'" "$PUBLIC/index.html" >/dev/null
+          grep -F "sponsor.textContent='🎁'" "$PUBLIC/index.html" >/dev/null
           grep -F "String(member.publicMemo||'').trim()" "$PUBLIC/index.html" >/dev/null
           grep -F 'detectMemberForegroundTransition' "$PUBLIC/index.html" >/dev/null
           grep -F "'wait1_ready'" "$PUBLIC/index.html" >/dev/null
@@ -210,7 +213,7 @@ jobs:
           grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'courtDestinationFromCard' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_BADGES_V5' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "sponsor.textContent='찬조'" "$RUNNER_TEMP/live-production.html" >/dev/null
+          grep -F "sponsor.textContent='🎁'" "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F "String(member.publicMemo||'').trim()" "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F 'detectMemberForegroundTransition' "$RUNNER_TEMP/live-production.html" >/dev/null
           grep -F "'wait1_ready'" "$RUNNER_TEMP/live-production.html" >/dev/null
