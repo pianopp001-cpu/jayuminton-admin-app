@@ -38,6 +38,8 @@ jobs:
       - name: Require isolated deployment
         run: |
           MAIN_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId // empty')"; MEMBER_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.previewDeploymentId // empty')"; test "$PREVIEW_DEPLOYMENT_ID" != "$MAIN_ID"; test "$PREVIEW_DEPLOYMENT_ID" != "$MEMBER_ID"
+      - name: Enforce separate Cloudflare admin frontend
+        run: python3 deployment/jayuminton/verify_cloudflare_admin_lock.py "$GITHUB_WORKSPACE"
       - name: Patch isolated backend v15
         shell: bash
         run: |
