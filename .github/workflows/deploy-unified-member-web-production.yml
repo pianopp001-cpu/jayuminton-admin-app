@@ -1,6 +1,10 @@
 name: Deploy unified member web production
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-unified-member-web-production.yml'
   workflow_dispatch: {}
 
 permissions:
