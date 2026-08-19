@@ -83,6 +83,7 @@ if 'id="pairStatisticsModal"' not in s:
 admin_sizer = '''
 <script id="adminVnextNewCardSizer">
 (function() {
+  var adminCardRenderScheduled = false;
   function adminMemberById(id) {
     try {
       if (typeof STATE === 'undefined' || !STATE || !Array.isArray(STATE.members)) return null;
@@ -123,6 +124,14 @@ admin_sizer = '''
       }
     });
     renderAdminPickedFullName();
+  }
+  function scheduleAdminNewCardRender() {
+    if (adminCardRenderScheduled) return;
+    adminCardRenderScheduled = true;
+    window.requestAnimationFrame(function() {
+      adminCardRenderScheduled = false;
+      markAdminNewCards();
+    });
   }
   function renderAdminPickedFullName() {
     var bar = document.getElementById('quickMoveBar');
@@ -168,10 +177,12 @@ admin_sizer = '''
   document.addEventListener('click', function(event) {
     var card = event.target && event.target.closest ? event.target.closest('.is-new-member') : null;
     if (card) showAdminNewNameBubble(card);
+    window.setTimeout(scheduleAdminNewCardRender, 0);
   }, true);
-  document.addEventListener('DOMContentLoaded', markAdminNewCards);
-  new MutationObserver(markAdminNewCards).observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['class']});
-  window.setTimeout(markAdminNewCards, 0);
+  document.addEventListener('pointerup', function() { window.setTimeout(scheduleAdminNewCardRender, 0); }, true);
+  document.addEventListener('DOMContentLoaded', scheduleAdminNewCardRender);
+  new MutationObserver(scheduleAdminNewCardRender).observe(document.body, {childList:true, subtree:true});
+  window.setTimeout(scheduleAdminNewCardRender, 0);
 })();
 </script>
 '''
