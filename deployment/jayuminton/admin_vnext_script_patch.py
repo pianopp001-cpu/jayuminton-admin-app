@@ -195,17 +195,29 @@ function clearSelectedBundle() {
 '''
 marker='function decreaseSelectedGames() {'
 if marker not in s: raise SystemExit('decrease marker not found')
-s=s.replace(marker,insert+'\n'+marker,1)
+if 'function refreshAdminState()' not in s:
+ s=s.replace(marker,insert+'\n'+marker,1)
 
-# Admin card policy: 신규는 괄호까지 포함한 저장된 이름 전체를 표시한다.
-# 비신규는 기존 compactMemberName 동작을 유지한다.
-s=s.replace("compactMemberName(member.name)", "(member.isNew ? escapeMemberInfo(member.name) : compactMemberName(member.name))")
+# Admin cards always show the full stored nickname. Canonicalize nested results
+# left by earlier deployments before replacing remaining compact render calls.
+while "(member.isNew ? escapeMemberInfo(member.name) : (member.isNew ? escapeMemberInfo(member.name) : compactMemberName(member.name)))" in s:
+ s=s.replace("(member.isNew ? escapeMemberInfo(member.name) : (member.isNew ? escapeMemberInfo(member.name) : compactMemberName(member.name)))", "adminVnextCardName(member)")
+s=s.replace("(member.isNew ? escapeMemberInfo(member.name) : compactMemberName(member.name))", "adminVnextCardName(member)")
+s=s.replace("compactMemberName(member.name)", "adminVnextCardName(member)")
 
 # Add visible badges/details without inventing '미입력' text. Blank grade/experience remain absent.
 card_marker = "function memberInfoDetailHtml(member, contextLabel) {"
 if card_marker not in s:
  card_marker = "function memberInfoDetailHtml(member, locationOverride) {"
 if card_marker not in s: raise SystemExit('memberInfoDetailHtml marker not found')
+name_helper='''function adminVnextCardName(member) {
+  return escapeMemberInfo(member && member.name ? member.name : '');
+}
+
+'''
+if 'function adminVnextCardName(member)' not in s:
+ s=s.replace(card_marker,name_helper+card_marker,1)
+
 helper='''function adminVnextMemberBadges(member) {
   if (!member) return '';
   let html = '';
@@ -216,7 +228,12 @@ helper='''function adminVnextMemberBadges(member) {
 }
 
 '''
-s=s.replace(card_marker,helper+card_marker,1)
+if 'function adminVnextMemberBadges(member)' not in s:
+ s=s.replace(card_marker,helper+card_marker,1)
+
+# The card is rendered optimistically; do not leave the large primary button
+# displaying a long-running "saving" label while Apps Script confirms it.
+s=s.replace("  renderStats();\n  const count = document.getElementById('memberCount');", "  renderStats();\n  if (button) button.textContent = '등록 확인 중';\n  const count = document.getElementById('memberCount');", 1)
 
 # Admin cards must omit absent grade/experience instead of printing placeholders.
 missing_detail_old = """  if (!grade && !experience) {
@@ -244,6 +261,8 @@ elif '급수·구력 미입력' in s or '구력 미입력' in s or '급수 미�
 # Safer fallback: inject badges next to game count in standard cards and quick roster.
 s=s.replace("memberInfoDetailHtml(member) +", "memberInfoDetailHtml(member) + adminVnextMemberBadges(member) +")
 s=s.replace("memberInfoDetailHtml(member, '코트배정 대기') +", "memberInfoDetailHtml(member, '코트배정 대기') + adminVnextMemberBadges(member) +")
+while 'adminVnextMemberBadges(member) + adminVnextMemberBadges(member) +' in s:
+ s=s.replace('adminVnextMemberBadges(member) + adminVnextMemberBadges(member) +', 'adminVnextMemberBadges(member) +')
 
 p.write_text(s,encoding='utf-8')
 print('admin vNext Script API + card rendering patch prepared')
