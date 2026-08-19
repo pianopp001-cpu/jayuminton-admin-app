@@ -83,8 +83,13 @@ jobs:
           python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$ADMIN_WORKER_URL/"
           python3 deployment/jayuminton/admin_finish_alert_v12_patch.py "$ROOT/public/index.html"
           for x in jayuminton-admin-finish-alert-v15 'NativeVoice.speak' adminVoiceTestButton '__JAYUMINTON_V15_VOICE_TEST__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal; do grep -F "$x" "$ROOT/public/index.html"; done
-          ! grep -Eqi '<iframe' "$ROOT/public/index.html"
-          ! grep -F 'script.google.com/macros/s/' "$ROOT/public/index.html"
+          python3 - "$ROOT/public/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          html = Path(sys.argv[1]).read_text(encoding='utf-8')
+          if '<iframe' in html.lower(): raise SystemExit('iframe is forbidden in admin frontend')
+          if 'script.google.com/macros/s/' in html: raise SystemExit('Apps Script URL is forbidden in admin frontend')
+          PY
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
@@ -95,4 +100,18 @@ jobs:
       - name: Verify separate live admin frontend
         shell: bash
         run: |
-          set -euo pipefail; sleep 5; curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"; for x in jayuminton-admin-finish-alert-v15 'NativeVoice.speak' adminVoiceTestButton '__JAYUMINTON_V15_VOICE_TEST__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal; do grep -F "$x" "$RUNNER_TEMP/live.html"; done; ! grep -Eqi '<iframe' "$RUNNER_TEMP/live.html"; ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live.html"; echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"; echo 'ADMIN_CLOUDFLARE_VNEXT_READY'; echo 'MEMBER_PRODUCTION_NOT_UPDATED'; echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          for x in jayuminton-admin-finish-alert-v15 'NativeVoice.speak' adminVoiceTestButton '__JAYUMINTON_V15_VOICE_TEST__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal; do grep -F "$x" "$RUNNER_TEMP/live.html"; done
+          python3 - "$RUNNER_TEMP/live.html" <<'PY'
+          from pathlib import Path
+          import sys
+          html = Path(sys.argv[1]).read_text(encoding='utf-8')
+          if '<iframe' in html.lower(): raise SystemExit('iframe is forbidden in live admin frontend')
+          if 'script.google.com/macros/s/' in html: raise SystemExit('Apps Script URL is forbidden in live admin frontend')
+          PY
+          echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
+          echo 'ADMIN_CLOUDFLARE_VNEXT_READY'
+          echo 'MEMBER_PRODUCTION_NOT_UPDATED'
+          echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
