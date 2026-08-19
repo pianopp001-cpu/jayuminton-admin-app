@@ -25,7 +25,13 @@ new="""function recordCourtEntryPairs_(courtNo, entrantIds, finalCourtIds) {
   for(let i=0;i<finalCourtIds.length;i++) for(let j=i+1;j<finalCourtIds.length;j++) keys.push(pairKey_(finalCourtIds[i],finalCourtIds[j]));
   SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_PAIR_HISTORY).appendRow([new Date(),String(courtNo),finalCourtIds.join(','),keys.join(',')]);
 }"""
-rep(old,new,'complete pair history')
+if old in s:
+ s=s.replace(old,new,1)
+elif 'for(let i=0;i<finalCourtIds.length;i++) for(let j=i+1;j<finalCourtIds.length;j++)' not in s:
+ start=s.find('function recordCourtEntryPairs_(')
+ end=s.find('\nfunction ',start+1)
+ if start<0 or end<0: raise SystemExit('recordCourtEntryPairs_ function boundary not found')
+ s=s[:start]+new+'\n'+s[end:]
 
 # Prefer fair skill patterns in this order: 2 skilled + 2 developing, then all-skilled
 # or all-developing.  1/3 splits are allowed only when needed.
@@ -42,7 +48,10 @@ new="""  if(maxPair>=2) score+=1000000; // third shared game is the strongest av
   }
   // Among otherwise similar groups, favor members who have played fewer games.
   score+=games*5;"""
-rep(old,new,'fairness score')
+if old in s:
+ s=s.replace(old,new,1)
+elif 'score+=1000000' not in s:
+ raise SystemExit('fairness score implementation missing')
 
 # Bundle integrity must include bundle mates in the active candidate universe. A bundled
 # pair is never silently split by auto assignment.
@@ -55,13 +64,19 @@ new="""  const pool=members.filter(function(m){return m.status==='active'&&fixed
     const mates=Object.keys(map).filter(function(k){return map[k].bundleId===m.bundleId;});
     if(mates.some(function(k){return !activeSet[k];})) delete activeSet[id];
   });"""
-rep(old,new,'bundle active universe')
+if old in s:
+ s=s.replace(old,new,1)
+elif 'const activeSet={};' not in s:
+ raise SystemExit('bundle active universe implementation missing')
 
 # Apply activeSet to candidate walk so a temporarily unavailable bundle mate prevents
 # the other member from being auto-picked alone.
 old="""    for(let i=start;i<pool.length;i++){picked.push(pool[i]);walk(i+1,picked);picked.pop();}"""
 new="""    for(let i=start;i<pool.length;i++){if(!activeSet[pool[i]])continue;picked.push(pool[i]);walk(i+1,picked);picked.pop();}"""
-rep(old,new,'bundle candidate filter')
+if old in s:
+ s=s.replace(old,new,1)
+elif 'if(!activeSet[pool[i]])continue' not in s:
+ raise SystemExit('bundle candidate filter implementation missing')
 
 p.write_text(s,encoding='utf-8')
 print('admin vNext assignment fairness guard patch prepared')
