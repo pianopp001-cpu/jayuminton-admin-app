@@ -27,8 +27,17 @@ new="""      ADMIN_PIN_VALUE,
         isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
       }
     ]);"""
+legacy_is_new_old="""      ADMIN_PIN_VALUE,
+      name,
+      gender,
+      grade,
+      experience,
+      isNew
+    ]);"""
 if old in s:
  s=s.replace(old,new,1)
+elif legacy_is_new_old in s:
+ s=s.replace(legacy_is_new_old,new,1)
 else:
  direct_old="""        .addMember(
           ADMIN_PIN_VALUE,
@@ -49,8 +58,20 @@ else:
             isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
           }
         );"""
- if direct_old not in s: raise SystemExit('add metadata call anchor not found')
- s=s.replace(direct_old,direct_new,1)
+ legacy_direct_old="""        .addMember(
+          ADMIN_PIN_VALUE,
+          name,
+          gender,
+          grade,
+          experience,
+          isNew
+        );"""
+ if direct_old in s:
+  s=s.replace(direct_old,direct_new,1)
+ elif legacy_direct_old in s:
+  s=s.replace(legacy_direct_old,direct_new,1)
+ else:
+  raise SystemExit('add metadata call anchor not found')
 
 # Clear metadata inputs after either add or update completes.
 for anchor in [
@@ -88,8 +109,18 @@ update_new="""      ADMIN_PIN_VALUE,
         isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
       }
     ]);"""
+legacy_update_old="""      ADMIN_PIN_VALUE,
+      EDIT_MEMBER_ID,
+      name,
+      gender,
+      grade,
+      experience,
+      isNew
+    ]);"""
 if update_old in s:
  s=s.replace(update_old,update_new,1)
+elif legacy_update_old in s:
+ s=s.replace(legacy_update_old,update_new,1)
 else:
  direct_update_old="server('updateMemberProfile', [ADMIN_PIN_VALUE, targetId, name, gender, grade, experience])"
  direct_update_new="""server('updateMemberProfile', [
@@ -100,8 +131,13 @@ else:
       isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)
     }
   ])"""
- if direct_update_old not in s: raise SystemExit('update metadata call anchor not found')
- s=s.replace(direct_update_old,direct_update_new,1)
+ legacy_direct_update_old="server('updateMemberProfile', [ADMIN_PIN_VALUE, targetId, name, gender, grade, experience, isNew])"
+ if direct_update_old in s:
+  s=s.replace(direct_update_old,direct_update_new,1)
+ elif legacy_direct_update_old in s:
+  s=s.replace(legacy_direct_update_old,direct_update_new,1)
+ else:
+  raise SystemExit('update metadata call anchor not found')
 
 insert='''
 function increaseSelectedGames() {
