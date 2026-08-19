@@ -103,6 +103,33 @@ if patched is None:
     raise SystemExit('addMember call not found')
 s = patched
 
+# Normalize persisted sheet flags before any card rendering.
+normalize_anchor = """function normalizeMemberProfile(member) {
+  if (!member) return member;"""
+normalize_replacement = """function normalizeMemberProfile(member) {
+  if (!member) return member;
+  member.isNew = member.isNew === true || ['true','1'].indexOf(String(member.isNew || '').toLowerCase()) >= 0;
+  member.isSponsor = member.isSponsor === true || ['true','1'].indexOf(String(member.isSponsor || '').toLowerCase()) >= 0;"""
+if normalize_anchor in s:
+ s=s.replace(normalize_anchor,normalize_replacement,1)
+elif "member.isNew = member.isNew === true" not in s:
+ raise SystemExit('member flag normalization anchor not found')
+
+# Ensure the optimistic card uses the checkbox state immediately.
+temporary_anchor = """    experience: experience,
+    createdAt: new Date().toISOString()
+  };"""
+temporary_replacement = """    experience: experience,
+    isNew: !!(document.getElementById('newIsNew') && document.getElementById('newIsNew').checked),
+    publicMemo: String(document.getElementById('newPublicMemo') && document.getElementById('newPublicMemo').value || '').trim(),
+    isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked),
+    createdAt: new Date().toISOString()
+  };"""
+if temporary_anchor in s:
+ s=s.replace(temporary_anchor,temporary_replacement,1)
+elif "id: temporaryId" in s and "isNew: !!(document.getElementById('newIsNew')" not in s[s.find("id: temporaryId"):s.find("id: temporaryId")+900]:
+ raise SystemExit('temporary member metadata anchor not found')
+
 # Clear metadata inputs only when the current admin script has not already
 # implemented the same reset variables.
 if "const newMemo=document.getElementById('newPublicMemo')" not in s:
@@ -134,6 +161,22 @@ if patched is None:
 s = patched
 
 insert='''
+function refreshAdminState() {
+  const button = document.querySelector('.mobile-refresh-button');
+  if (button) { button.disabled = true; button.textContent = '갱신 중…'; }
+  return loadState()
+    .then(function() {
+      if (button) button.textContent = '✓ 완료';
+      window.setTimeout(function() {
+        if (button) { button.disabled = false; button.textContent = '↻ 새로고침'; }
+      }, 700);
+    })
+    .catch(function(error) {
+      if (button) { button.disabled = false; button.textContent = '↻ 새로고침'; }
+      alert(error && error.message ? error.message : error);
+    });
+}
+
 function increaseSelectedGames() {
   const ids = Array.from(SELECTED);
   if (!ids.length) { alert('게임횟수를 올릴 멤버를 선택하세요.'); return; }
@@ -142,7 +185,7 @@ function increaseSelectedGames() {
     .catch(function(error) { alert(error.message || error); });
 }
 function setSelectedBundle() {
-  const ids=Array.from(SELECTED); if(ids.length<2){alert('묶음으로 지정할 멤버를 2명 이상 선택하세요.');return;}
+  const ids=Array.from(SELECTED); if(ids.length!==2){alert('묶음으로 지정할 멤버를 정확히 2명 선택하세요.');return;}
   runAction('setBundle',[ADMIN_PIN_VALUE,ids]);
 }
 function clearSelectedBundle() {
