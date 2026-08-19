@@ -151,27 +151,36 @@ elif not (
     raise SystemExit('auto variable size anchor not found')
 
 # Existing partial target court is a valid target; do not require empty only.
-rep("""      let emptyCourts = ['1', '2', '3', '4'].filter(function(courtNo) {
+partial_target_old = """      let emptyCourts = ['1', '2', '3', '4'].filter(function(courtNo) {
         return (courts[courtNo] || []).length === 0;
-      });""","""      let emptyCourts = ['1', '2', '3', '4'].filter(function(courtNo) {
+      });"""
+partial_target_new = """      let emptyCourts = ['1', '2', '3', '4'].filter(function(courtNo) {
         return (courts[courtNo] || []).length === 0;
       });
       if (preferredCourt && (courts[preferredCourt] || []).length > 0 && (courts[preferredCourt] || []).length < GROUP_SIZE) {
         emptyCourts = [preferredCourt];
-      }""", 'partial target')
+      }"""
+if partial_target_old in s:
+    s = s.replace(partial_target_old, partial_target_new, 1)
+elif not (
+    'JAYUMINTON_SELF_SEAT_PRIORITY_AUTOFILL_V2' in s
+    or 'const needed = GROUP_SIZE - existingIds.length;' in s
+):
+    raise SystemExit('partial target anchor not found')
 
 # Promote any non-empty wait group, not only groups of four.
 s=s.replace("return (group || []).length === GROUP_SIZE;", "return (group || []).length > 0;", 1)
 
 # When assigning to a partial court append, count only entrants.
-rep("""      if (targetCourt) {
+auto_target_old = """      if (targetCourt) {
         courts[targetCourt] = ids.slice();
         courtsChanged = true;
         startedAt[targetCourt] = new Date().toISOString();
         ids.forEach(function(id) {
           memberMap[id].status = 'playing';
         });
-      } else {""","""      if (targetCourt) {
+      } else {"""
+auto_target_new = """      if (targetCourt) {
         const already=(courts[targetCourt] || []).slice();
         const entrants=ids.filter(function(id){return already.indexOf(id)<0;});
         courts[targetCourt] = already.concat(entrants).slice(0,GROUP_SIZE);
@@ -180,7 +189,14 @@ rep("""      if (targetCourt) {
         incrementGamesForCourtEntrants_(members, entrants);
         recordCourtEntryPairs_(targetCourt, entrants, courts[targetCourt]);
         entrants.forEach(function(id) { memberMap[id].status = 'playing'; });
-      } else {""", 'auto target entry')
+      } else {"""
+if auto_target_old in s:
+    s = s.replace(auto_target_old, auto_target_new, 1)
+elif not (
+    'JAYUMINTON_SELF_SEAT_PRIORITY_AUTOFILL_V2' in s
+    or 'const needed = GROUP_SIZE - existingIds.length;' in s
+):
+    raise SystemExit('auto target entry anchor not found')
 
 # Direct/manual court entry: increment only the entrants after placement is finalized.
 rep("""  markCourtStartedIfFull_(refreshedCourts, startedAt, courtNo);
