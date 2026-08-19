@@ -1,5 +1,5 @@
-name: Build Jayuminton admin v200.0 bundled Cloudflare full APK
-run-name: Jayuminton admin v200.0 bundled frontend fresh-install APK
+name: Build Jayuminton admin v200.1 native voice vibration full APK
+run-name: Jayuminton admin v200.1 native finish alert fresh-install APK
 # Trigger only after the bundled-asset MainActivity is present on main.
 
 on:
@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-v2000-bundled-apk
+  group: jayuminton-v2001-native-alert-apk
   cancel-in-progress: true
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      APK_OUTPUT: releases/jayuminton-admin-v200.0-bundled-cloudflare-full.apk
+      APK_OUTPUT: releases/jayuminton-admin-v200.1-native-finish-alert-full.apk
       DOG_ICON_SHA256: a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
 
     steps:
@@ -76,7 +76,7 @@ jobs:
             echo "sha256=$ACTUAL"
           } > deployment/status/v1996-dog-icon-source.txt
 
-      - name: Prepare v200.0 with bundled Cloudflare admin frontend
+      - name: Prepare v200.1 with bundled Cloudflare admin frontend
         shell: bash
         run: |
           set -euo pipefail
@@ -86,40 +86,63 @@ jobs:
 
           java = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           text = java.read_text(encoding='utf-8')
-          admin_url = 'file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.0'
+          admin_url = 'file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.1'
           text, n = re.subn(
               r'(?:https://[^"\\]+(?:web\.app|/exec)|file:///android_asset/admin/index\.html)[^"\\]*', admin_url, text, count=1)
           if n != 1:
               raise SystemExit('ADMIN_URL replacement failed')
           text, n = re.subn(
               r'private static final String APK_WEB_BUILD = "[^"]+";',
-              'private static final String APK_WEB_BUILD = "2000-bundled-cloudflare-full";',
+              'private static final String APK_WEB_BUILD = "2001-native-finish-alert-full";',
               text, count=1)
           if n != 1:
               raise SystemExit('APK_WEB_BUILD replacement failed')
           text = re.sub(
               r'JayumintonNative/[0-9A-Za-z.\-]+(?: FreshAdmin/[0-9A-Za-z.\-]+)?',
-              'JayumintonNative/200.0 CloudflareAdmin/2000', text)
+              'JayumintonNative/200.1 CloudflareAdmin/2001', text)
+          if 'import android.os.VibrationEffect;' not in text:
+              text = text.replace('import android.os.Bundle;', 'import android.os.Bundle;\nimport android.os.VibrationEffect;\nimport android.os.Vibrator;', 1)
+          voice_anchor = '''        public boolean isSpeaking() {
+            return speaking.get() || (tts != null && tts.isSpeaking());
+        }'''
+          vibration_method = voice_anchor + '''
+
+        @JavascriptInterface
+        public void vibrate() {
+            runOnUiThread(() -> {
+                Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (vibrator == null || !vibrator.hasVibrator()) return;
+                long[] pattern = {0, 420, 180, 420, 180, 650};
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                } else {
+                    vibrator.vibrate(pattern, -1);
+                }
+            });
+        }'''
+          if 'public void vibrate()' not in text:
+              if voice_anchor not in text: raise SystemExit('VoiceBridge anchor missing')
+              text = text.replace(voice_anchor, vibration_method, 1)
           java.write_text(text, encoding='utf-8')
 
           gradle = Path('app/build.gradle')
           g = gradle.read_text(encoding='utf-8')
           g, a = re.subn(r"applicationId\s+['\"][^'\"]+['\"]", "applicationId 'com.jayuminton.admin'", g, count=1)
-          g, b = re.subn(r'versionCode\s+\d+', 'versionCode 2000', g, count=1)
-          g, c = re.subn(r"versionName\s+['\"][^'\"]+['\"]", "versionName '200.0'", g, count=1)
+          g, b = re.subn(r'versionCode\s+\d+', 'versionCode 2001', g, count=1)
+          g, c = re.subn(r"versionName\s+['\"][^'\"]+['\"]", "versionName '200.1'", g, count=1)
           if not (a and b and c):
               raise SystemExit('Gradle version/package replacement failed')
           gradle.write_text(g, encoding='utf-8')
 
-          Path('deployment/status/v2000-build-target.txt').write_text(
+          Path('deployment/status/v2001-build-target.txt').write_text(
               'admin_url=' + admin_url + '\n' +
-              'apk_web_build=2000-bundled-cloudflare-full\nfrontend=bundled-android-asset\n', encoding='utf-8')
+              'apk_web_build=2001-native-finish-alert-full\nfrontend=bundled-android-asset\n', encoding='utf-8')
           PY
 
           grep -F "applicationId 'com.jayuminton.admin'" app/build.gradle
-          grep -F 'versionCode 2000' app/build.gradle
-          grep -F "versionName '200.0'" app/build.gradle
-          grep -F '2000-bundled-cloudflare-full' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'versionCode 2001' app/build.gradle
+          grep -F "versionName '200.1'" app/build.gradle
+          grep -F '2001-native-finish-alert-full' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'file:///android_asset/admin/index.html' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'setAllowFileAccess(true)' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'setFocusableInTouchMode(true)' app/src/main/java/com/jayuminton/admin/MainActivity.java
@@ -127,6 +150,9 @@ jobs:
           grep -F 'adminLoadPanel' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F '관리자 로그인 화면을 표시하지 못했습니다.' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'android:id="@+id/adminRetryButton"' app/src/main/res/layout/activity_main.xml
+          grep -F 'public void vibrate()' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'VibrationEffect.createWaveform' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'android.permission.VIBRATE' app/src/main/AndroidManifest.xml
           python3 - <<'PY'
           from pathlib import Path
           source=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java').read_text(encoding='utf-8')
@@ -157,6 +183,12 @@ jobs:
           cp "$RUNNER_TEMP/admin-cloudflare.html" app/src/main/assets/admin/index.html
           test "$(wc -c < app/src/main/assets/admin/index.html)" -gt 200000
           grep -F 'jayuminton-admin-rpc.pianopp001.workers.dev' app/src/main/assets/admin/index.html >/dev/null
+          grep -F 'jayuminton-admin-finish-alert-v16' app/src/main/assets/admin/index.html >/dev/null
+          grep -F 'emptyCourtAllowed:true' app/src/main/assets/admin/index.html >/dev/null
+          grep -F 'NEW <small>신규</small>' app/src/main/assets/admin/index.html >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_REFRESH_BOUND__' app/src/main/assets/admin/index.html >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_BLOCKING_SAVE__' app/src/main/assets/admin/index.html >/dev/null
+          if grep -F 'adminVoiceTestButton' app/src/main/assets/admin/index.html >/dev/null; then exit 1; fi
 
       - name: Restore release signing key
         shell: bash
@@ -181,8 +213,8 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/new-badging.txt"
           grep -F "package: name='com.jayuminton.admin'" "$RUNNER_TEMP/new-badging.txt"
-          grep -F "versionCode='2000'" "$RUNNER_TEMP/new-badging.txt"
-          grep -F "versionName='200.0'" "$RUNNER_TEMP/new-badging.txt"
+          grep -F "versionCode='2001'" "$RUNNER_TEMP/new-badging.txt"
+          grep -F "versionName='200.1'" "$RUNNER_TEMP/new-badging.txt"
           unzip -l "$APK" | grep -F 'assets/admin/index.html' >/dev/null
           unzip -p "$APK" assets/admin/index.html | grep -F '__JAYUMINTON_ADMIN_OBSERVER_STABLE__' >/dev/null
           "$AAPT" dump resources "$APK" | grep -F 'drawable/icon' >/dev/null
@@ -195,11 +227,11 @@ jobs:
           mkdir -p releases deployment/status
           cp app/build/outputs/apk/release/app-release.apk "$APK_OUTPUT"
           test -s "$APK_OUTPUT"
-          sha256sum "$APK_OUTPUT" | tee deployment/status/v2000-bundled-cloudflare-apk.sha256
+          sha256sum "$APK_OUTPUT" | tee deployment/status/v2001-native-finish-alert-apk.sha256
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$APK_OUTPUT" deployment/status/v2000-bundled-cloudflare-apk.sha256 deployment/status/v2000-build-target.txt deployment/status/v1996-dog-icon-source.txt
-          git commit -m 'Add Jayuminton admin v200.0 bundled Cloudflare full APK'
+          git add "$APK_OUTPUT" deployment/status/v2001-native-finish-alert-apk.sha256 deployment/status/v2001-build-target.txt deployment/status/v1996-dog-icon-source.txt
+          git commit -m 'Add Jayuminton admin v200.1 native finish alert full APK'
           git stash push --include-untracked --keep-index --message 'v2000-build-only-source-mutations' || true
           git pull --rebase origin main
           git push origin main
@@ -207,8 +239,8 @@ jobs:
       - name: Upload verified APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jayuminton-admin-v200.0-bundled-cloudflare-full
-          path: releases/jayuminton-admin-v200.0-bundled-cloudflare-full.apk
+          name: jayuminton-admin-v200.1-native-finish-alert-full
+          path: releases/jayuminton-admin-v200.1-native-finish-alert-full.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -219,21 +251,21 @@ jobs:
           set -u
           mkdir -p deployment/status
           {
-            echo 'workflow=Build Jayuminton admin v200.0 bundled Cloudflare full APK'
+            echo 'workflow=Build Jayuminton admin v200.1 native finish alert full APK'
             echo 'run_id=${{ github.run_id }}'
             echo 'status=${{ job.status }}'
             echo 'head_sha=${{ github.sha }}'
-            echo 'version=200.0'
+            echo 'version=200.1'
             echo 'package=com.jayuminton.admin'
-            echo 'output=releases/jayuminton-admin-v200.0-bundled-cloudflare-full.apk'
+            echo 'output=releases/jayuminton-admin-v200.1-native-finish-alert-full.apk'
             echo 'dog_icon_sha256=a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e'
             echo 'dog_art=chatgpt-file-library-source'
             date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
-          } > deployment/status/v2000-bundled-cloudflare-apk.txt
+          } > deployment/status/v2001-native-finish-alert-apk.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/v2000-bundled-cloudflare-apk.txt
-          git commit -m 'Record v200.0 bundled Cloudflare APK result: ${{ job.status }}' || exit 0
+          git add deployment/status/v2001-native-finish-alert-apk.txt
+          git commit -m 'Record v200.1 native finish alert APK result: ${{ job.status }}' || exit 0
           git stash push --include-untracked --keep-index --message 'v2000-result-only-source-mutations' || true
           git pull --rebase origin main
           git push origin main
