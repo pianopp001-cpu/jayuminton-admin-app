@@ -37,9 +37,12 @@ jobs:
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          jq -e '.mainScriptId and .mainDeploymentId' "$CONFIG" >/dev/null
+          jq -e '.mainScriptId and .mainDeploymentId and .pushScriptId and .pushDeploymentId and .pushUrl' "$CONFIG" >/dev/null
           echo "MAIN_SCRIPT_ID=$(jq -r '.mainScriptId' "$CONFIG")" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "PUSH_SCRIPT_ID=$(jq -r '.pushScriptId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "PUSH_DEPLOYMENT_ID=$(jq -r '.pushDeploymentId' "$CONFIG")" >> "$GITHUB_ENV"
+          echo "PUSH_URL=$(jq -r '.pushUrl' "$CONFIG")" >> "$GITHUB_ENV"
       - name: Install clasp
         run: npm install --global @google/clasp@latest
       - name: Pull live, back up, patch, and verify
@@ -47,16 +50,25 @@ jobs:
         run: |
           set -Eeuo pipefail
           LIVE="$RUNNER_TEMP/admin-vnext-live"
+          PUSH="$RUNNER_TEMP/admin-vnext-push"
           BACKUP="$RUNNER_TEMP/admin-vnext-live-before"
-          mkdir -p "$LIVE" "$BACKUP"
+          mkdir -p "$LIVE" "$PUSH" "$BACKUP"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$LIVE/.clasp.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$PUSH/.clasp.json"
           (cd "$LIVE" && clasp pull)
+          (cd "$PUSH" && clasp pull)
           cp -R "$LIVE"/. "$BACKUP"/
           sha256sum "$LIVE/Index.html" "$LIVE/Style.html" > "$RUNNER_TEMP/protected-before.sha256"
 
+          INTERNAL_KEY="$(openssl rand -hex 32)"
+          python3 deployment/scripts/patch_live_admin_production_push.py \
+            "$LIVE/Code.js" "$PUSH/Code.js" "$PUSH_URL" "$INTERNAL_KEY"
           python3 deployment/jayuminton/apply_admin_vnext_patches.py "$LIVE"
           python3 deployment/jayuminton/admin_vnext_notification_contract_test.py "$LIVE/Code.js"
           python3 deployment/jayuminton/admin_vnext_push_compatibility_check.py "$LIVE/Code.js"
+          grep -F 'JAYUMINTON_MAIN_EVENT_RELAY_V1' "$PUSH/Code.js" >/dev/null
+          grep -F "action === 'main_state_event'" "$PUSH/Code.js" >/dev/null
+          grep -F 'sendAssignmentEvent_(cleanEvent_(body))' "$PUSH/Code.js" >/dev/null
 
           sha256sum "$LIVE/Index.html" "$LIVE/Style.html" > "$RUNNER_TEMP/protected-after.sha256"
           diff -u "$RUNNER_TEMP/protected-before.sha256" "$RUNNER_TEMP/protected-after.sha256"
@@ -82,10 +94,14 @@ jobs:
           path: ${{ runner.temp }}/admin-vnext-live-before
           retention-days: 30
           include-hidden-files: true
-      - name: Deploy existing production web app
+      - name: Deploy synchronized push relay and existing production web app
         shell: bash
         run: |
           set -Eeuo pipefail
+          cd "$RUNNER_TEMP/admin-vnext-push"
+          clasp push --force
+          clasp create-deployment --deploymentId "$PUSH_DEPLOYMENT_ID" --description "admin vNext push relay ${GITHUB_SHA::7}"
+          clasp deployments | grep -F "$PUSH_DEPLOYMENT_ID" >/dev/null
           cd "$RUNNER_TEMP/admin-vnext-live"
           clasp push --force
           clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "admin vNext production ${GITHUB_SHA::7}"
@@ -102,6 +118,8 @@ jobs:
             echo 'member_apk_aab_changed=no'
             echo 'notification_contract_verified=yes'
             echo 'production_push_compatibility=yes'
+            echo 'push_relay_deployed=yes'
+            echo 'relay_credentials_synchronized=yes'
             echo "deployed_at=$(date -u +%FT%TZ)"
           } > deployment/status/admin-vnext-production-live.txt
           git config user.name 'github-actions[bot]'
