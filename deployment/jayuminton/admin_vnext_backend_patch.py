@@ -139,8 +139,9 @@ s = s.replace("sheet.getRange(2, 1, lastRow - 1, 9)", "sheet.getRange(2, 1, last
 s = s.replace("sheet.getRange(2, 1, rows.length, 8)", "sheet.getRange(2, 1, rows.length, 12)")
 s = s.replace("sheet.getRange(2, 1, rows.length, 9)", "sheet.getRange(2, 1, rows.length, 12)")
 live9_is_new = "isNew: row[8] === true || String(row[8] || '').toLowerCase() === 'true'"
+live9_is_new_canonical = "isNew: row[8] === true || ['true', '1'].indexOf(String(row[8] || '').toLowerCase()) >= 0"
 if live9_is_new in s:
-    s = s.replace(live9_is_new, live9_is_new + ",\n        publicMemo: String(row[9] || ''),\n        isSponsor: String(row[10] || '') === '1',\n        bundleId: String(row[11] || '')", 1)
+    s = s.replace(live9_is_new, live9_is_new_canonical + ",\n        publicMemo: String(row[9] || ''),\n        isSponsor: ['true', '1'].indexOf(String(row[10] || '').toLowerCase()) >= 0,\n        bundleId: String(row[11] || '')", 1)
 else:
     s = s.replace("experience: String(row[7] || '')", "experience: String(row[7] || ''),\n      isNew: String(row[8] || '') === '1',\n      publicMemo: String(row[9] || ''),\n      isSponsor: String(row[10] || '') === '1',\n      bundleId: String(row[11] || '')")
 s = s.replace("member.experience || ''\n    ];", "member.experience || '',\n      member.isNew ? '1' : '',\n      member.publicMemo || '',\n      member.isSponsor ? '1' : '',\n      member.bundleId || ''\n    ];")
