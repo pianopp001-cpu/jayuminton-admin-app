@@ -29,13 +29,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/main"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/main/.clasp.json"
           (cd "$RUNNER_TEMP/main" && clasp pull)
-      - name: Print live wait1 push functions
+      - name: Print live push relay functions
         shell: bash
         run: |
           set -euo pipefail
           python3 - "$RUNNER_TEMP/main/Code.js" <<'PY'
           from pathlib import Path
-          import sys
+          import re,sys
           src=Path(sys.argv[1]).read_text(encoding='utf-8')
           def block(name):
               i=src.find('function '+name)
@@ -54,7 +54,11 @@ jobs:
                       d-=1
                       if d==0:return src[i:j+1]
               return 'UNBALANCED'
-          for n in ['withDocumentLock_(','shouldCheckStatePush_(','sendStateTransitionPushes_(','finishCourtUnlocked_(']:
+          for n in ['captureStatePushSnapshot_(','postStatePushEvent_(','sendStateTransitionPushes_(']:
               print('\n--- '+n+' ---')
-              print(block(n))
+              text=block(n)
+              text=re.sub(r'https://[^\s\"\']+','https://[URL_REDACTED]',text)
+              print(text)
+          for marker in ['JAYUMINTON_PUSH_URL','PUSH_URL','statePushUrl','UrlFetchApp.fetch']:
+              print('\nMARKER',marker,'=',marker in src)
           PY
