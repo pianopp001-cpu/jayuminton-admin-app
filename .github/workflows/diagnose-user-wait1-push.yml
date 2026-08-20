@@ -29,36 +29,32 @@ jobs:
           mkdir -p "$RUNNER_TEMP/main"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/main/.clasp.json"
           (cd "$RUNNER_TEMP/main" && clasp pull)
-      - name: Print live push relay functions
+      - name: Inspect live relay constants and call site
         shell: bash
         run: |
           set -euo pipefail
           python3 - "$RUNNER_TEMP/main/Code.js" <<'PY'
           from pathlib import Path
-          import re,sys
+          import re,sys,urllib.parse
           src=Path(sys.argv[1]).read_text(encoding='utf-8')
-          def block(name):
-              i=src.find('function '+name)
-              if i<0:return 'NOT_FOUND'
-              b=src.find('{',i); d=0; q=None; esc=False
-              for j in range(b,len(src)):
-                  c=src[j]
-                  if q:
-                      if esc: esc=False
-                      elif c=='\\': esc=True
-                      elif c==q:q=None
-                      continue
-                  if c in "'\"`":q=c
-                  elif c=='{':d+=1
-                  elif c=='}':
-                      d-=1
-                      if d==0:return src[i:j+1]
-              return 'UNBALANCED'
-          for n in ['captureStatePushSnapshot_(','postStatePushEvent_(','sendStateTransitionPushes_(']:
-              print('\n--- '+n+' ---')
-              text=block(n)
-              text=re.sub(r'https://[^\s\"\']+','https://[URL_REDACTED]',text)
-              print(text)
-          for marker in ['JAYUMINTON_PUSH_URL','PUSH_URL','statePushUrl','UrlFetchApp.fetch']:
-              print('\nMARKER',marker,'=',marker in src)
+          for name in ['JAYUMINTON_STATE_PUSH_RELAY_URL_','JAYUMINTON_STATE_PUSH_INTERNAL_KEY_']:
+              m=re.search(r'(?:const|let|var)\s+'+re.escape(name)+r'\s*=\s*([^;]+);',src)
+              if not m:
+                  print(name,'= NOT_FOUND')
+                  continue
+              expr=m.group(1).strip()
+              if name.endswith('URL_'):
+                  sm=re.match(r"['\"]([^'\"]+)['\"]",expr)
+                  if sm:
+                      u=urllib.parse.urlparse(sm.group(1))
+                      print(name,'HOST=',u.scheme+'://'+u.netloc,'PATH_PRESENT=',bool(u.path.strip('/')))
+                  else:
+                      print(name,'= NON_LITERAL',expr[:120])
+              else:
+                  sm=re.match(r"['\"]([^'\"]*)['\"]",expr)
+                  print(name,'LENGTH=',len(sm.group(1)) if sm else -1,'LITERAL=',bool(sm))
+          i=src.find('function postStatePushEvent_(')
+          print('POST_FUNCTION_PRESENT=',i>=0)
+          print('USES_URLFETCH=', 'UrlFetchApp.fetch(JAYUMINTON_STATE_PUSH_RELAY_URL_' in src)
+          print('USES_INTERNAL_KEY=', 'event.internalKey = JAYUMINTON_STATE_PUSH_INTERNAL_KEY_' in src)
           PY
