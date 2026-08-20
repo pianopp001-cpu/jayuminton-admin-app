@@ -46,35 +46,50 @@ def function_block(text, signature):
         i += 1
     raise SystemExit('unbalanced function: ' + signature)
 
-# Registration already appends one row. Returning a complete state snapshot makes
-# the admin wait for another full spreadsheet read. Return only the row that was
-# actually saved; the admin card is already rendered optimistically.
-a, b, block = function_block(code, 'function addMemberUnlocked_(')
-if 'JAYUMINTON_ADMIN_FAST_ADD_MEMBER_V1' not in block:
-    if 'appendMember_(member);' not in block:
-        raise SystemExit('addMemberUnlocked_ append anchor missing')
-    replaced = False
+
+def replace_final_return_with_fast_member(block):
+    new_return = "return {ok: true, member: member, updatedAt: new Date().toISOString(), fastAdminSave: 'JAYUMINTON_ADMIN_FAST_ADD_MEMBER_V1'};"
     for old in ('return getPublicState();', 'return makeState_();'):
         pos = block.rfind(old)
         if pos >= 0:
-            new = "return {ok: true, member: member, updatedAt: new Date().toISOString(), fastAdminSave: 'JAYUMINTON_ADMIN_FAST_ADD_MEMBER_V1'};"
-            block = block[:pos] + new + block[pos + len(old):]
-            replaced = True
-            break
-    if not replaced:
-        raise SystemExit('addMemberUnlocked_ full-state return anchor missing')
+            return block[:pos] + new_return + block[pos + len(old):]
+    # Current GAS snapshots may already return a compact object instead of a
+    # complete state. Replace the last top-level return after appendMember_.
+    append_pos = block.find('appendMember_(member);')
+    if append_pos < 0:
+        raise SystemExit('addMemberUnlocked_ append anchor missing')
+    tail = block[append_pos:]
+    matches = list(re.finditer(r'(?m)^\s*return\s+[^;]+;', tail))
+    if matches:
+        m = matches[-1]
+        start = append_pos + m.start()
+        end = append_pos + m.end()
+        indent = re.match(r'\s*', block[start:end]).group(0)
+        return block[:start] + indent + new_return + block[end:]
+    # If the snapshot has no explicit return after append, add the compact
+    # result immediately before the function closes. This keeps touch_/logging
+    # statements that already occur after append intact.
+    close = block.rfind('}')
+    if close < 0:
+        raise SystemExit('addMemberUnlocked_ closing brace missing')
+    return block[:close] + "  " + new_return + "\n" + block[close:]
+
+
+# Registration already appends one row. Never wait for another full spreadsheet
+# state rebuild just to close the admin save overlay.
+a, b, block = function_block(code, 'function addMemberUnlocked_(')
+if 'JAYUMINTON_ADMIN_FAST_ADD_MEMBER_V1' not in block:
+    block = replace_final_return_with_fast_member(block)
     code = code[:a] + block + code[b:]
 
-# Keep legacy callers compatible: if addMember() itself rebuilds a full state
-# after the unlocked call, return the lightweight result directly instead.
+# Keep legacy callers compatible: if addMember() simply returns the unlocked
+# result, no wrapper rewrite is needed.
 a, b, public_block = function_block(code, 'function addMember(')
-if 'JAYUMINTON_ADMIN_FAST_ADD_MEMBER_V1' not in public_block and 'addMemberUnlocked_' in public_block:
-    # No rewrite is required when the wrapper simply returns the unlocked result.
-    pass
+if 'addMemberUnlocked_' not in public_block:
+    raise SystemExit('addMember wrapper no longer calls addMemberUnlocked_')
 
 # Admin add flow: replace the optimistic temporary card with the saved row rather
-# than waiting for/rendering a full state object. Support both await and Promise
-# styles used by older GAS snapshots.
+# than waiting for/rendering a full state object. Support await and Promise styles.
 a, b, add_block = function_block(script, 'async function addMember()')
 if 'JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1' not in add_block:
     await_match = re.search(r"const\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+server\((['\"])addMember\2", add_block)
@@ -99,7 +114,7 @@ if 'JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1' not in add_block:
         add_block = add_block.replace(old, new, 1)
     else:
         promise_match = re.search(r"\.then\(function\(([A-Za-z_$][\w$]*)\)\s*\{", add_block)
-        if not promise_match or "server('addMember'" not in add_block and 'server("addMember"' not in add_block:
+        if not promise_match or ("server('addMember'" not in add_block and 'server("addMember"' not in add_block):
             raise SystemExit('addMember client response style not recognized')
         var = promise_match.group(1)
         old = 'renderState(' + var + ');'
