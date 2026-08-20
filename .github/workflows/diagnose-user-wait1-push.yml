@@ -12,49 +12,51 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
-      JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
     steps:
       - uses: actions/checkout@v4
-      - name: Test relay auth contract with nonexistent member only
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Test live main key with legacy relay contract
         shell: bash
         run: |
           set -euo pipefail
           test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
-          test -n "$JAYUMINTON_PUSH_SHARED_SECRET"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$RUNNER_TEMP/deploy.json")"
+          test -n "$MAIN_SCRIPT_ID"
+          mkdir -p "$RUNNER_TEMP/main"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/main/.clasp.json"
+          (cd "$RUNNER_TEMP/main" && clasp pull)
 
-          post_and_follow() {
-            local url="$1"
-            local payload="$2"
-            local prefix="$3"
-            curl -sS -D "$RUNNER_TEMP/$prefix.headers" -o "$RUNNER_TEMP/$prefix.first" -X POST \
-              --data-urlencode "payload=$payload" "$url" || true
-            local loc
-            loc="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/$prefix.headers")"
-            if [ -n "$loc" ]; then
-              curl -sS -o "$RUNNER_TEMP/$prefix.final" "$loc" || true
-            else
-              cp "$RUNNER_TEMP/$prefix.first" "$RUNNER_TEMP/$prefix.final"
-            fi
-          }
+          python3 - "$RUNNER_TEMP/main/Code.js" "$RUNNER_TEMP/live-key.txt" <<'PY'
+          from pathlib import Path
+          import re,sys
+          src=Path(sys.argv[1]).read_text(encoding='utf-8')
+          m=re.search(r"(?:const|let|var)\s+JAYUMINTON_STATE_PUSH_INTERNAL_KEY_\s*=\s*['\"]([^'\"]+)['\"]",src)
+          if not m: raise SystemExit('live internal key missing')
+          key=m.group(1)
+          print('LIVE_INTERNAL_KEY_LENGTH=',len(key))
+          Path(sys.argv[2]).write_text(key,encoding='utf-8')
+          PY
+          LIVE_KEY="$(cat "$RUNNER_TEMP/live-key.txt")"
+          SAFE_PAYLOAD='{"action":"main_state_event","type":"wait1_ready","assignmentId":"diagnostic-live-main-key-123456","expectedCourtNo":1,"members":[{"id":"__diag_nonexistent_member__","name":"DIAG"}]}'
 
-          # Old contract: ?key=<shared secret>. The fake member ID cannot match any real registration.
-          SAFE_PAYLOAD='{"action":"main_state_event","type":"wait1_ready","assignmentId":"diagnostic-auth-contract-123456","expectedCourtNo":1,"members":[{"id":"__diag_nonexistent_member__","name":"DIAG"}]}'
-          post_and_follow "$JAYUMINTON_PUSH_APPS_SCRIPT_URL?key=$JAYUMINTON_PUSH_SHARED_SECRET" "$SAFE_PAYLOAD" oldauth
-
-          # New contract: internalKey in JSON body.
-          SAFE_PAYLOAD_NEW="{\"action\":\"main_state_event\",\"internalKey\":\"$JAYUMINTON_PUSH_SHARED_SECRET\",\"type\":\"wait1_ready\",\"assignmentId\":\"diagnostic-auth-contract-654321\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
-          post_and_follow "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" "$SAFE_PAYLOAD_NEW" newauth
-
-          python3 - "$RUNNER_TEMP/oldauth.final" "$RUNNER_TEMP/newauth.final" <<'PY'
+          curl -sS -D "$RUNNER_TEMP/h" -o "$RUNNER_TEMP/first" -X POST \
+            --data-urlencode "payload=$SAFE_PAYLOAD" \
+            "$JAYUMINTON_PUSH_APPS_SCRIPT_URL?key=$LIVE_KEY" || true
+          LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/h")"
+          if [ -n "$LOC" ]; then curl -sS -o "$RUNNER_TEMP/final" "$LOC" || true; else cp "$RUNNER_TEMP/first" "$RUNNER_TEMP/final"; fi
+          python3 - "$RUNNER_TEMP/final" <<'PY'
           from pathlib import Path
           import json,sys
-          def load(p):
-              try:return json.loads(Path(p).read_text(encoding='utf-8',errors='ignore'))
-              except Exception:return {}
-          old=load(sys.argv[1]); new=load(sys.argv[2])
-          print('OLD_QUERY_KEY_CONTRACT_ACCEPTED=', bool(old.get('ok')) and old.get('sent') == 0)
-          print('OLD_QUERY_KEY_SENT_ZERO=', old.get('sent') == 0 if old else False)
-          print('NEW_INTERNAL_KEY_CONTRACT_ACCEPTED=', bool(new.get('ok')) and new.get('sent') == 0)
-          print('NEW_INTERNAL_KEY_REJECTED=', bool(new) and new.get('ok') is False)
-          print('NEW_INTERNAL_KEY_ERROR_PRESENT=', bool(new.get('error')) if new else False)
+          try:j=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore'))
+          except Exception:j={}
+          print('LIVE_MAIN_KEY_QUERY_ACCEPTED=', bool(j.get('ok')) and j.get('sent') == 0)
+          print('LIVE_MAIN_KEY_SENT_ZERO=', j.get('sent') == 0 if j else False)
+          print('LIVE_MAIN_KEY_REJECTED=', bool(j) and j.get('ok') is False)
+          print('LIVE_MAIN_KEY_ERROR_PRESENT=', bool(j.get('error')) if j else False)
           PY
