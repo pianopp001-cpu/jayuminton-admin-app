@@ -6,7 +6,7 @@ on:
       - '.github/workflows/diagnose-user-wait1-push.yml'
   workflow_dispatch: {}
 permissions:
-  contents: read
+  contents: write
 jobs:
   diagnose:
     runs-on: ubuntu-latest
@@ -16,41 +16,28 @@ jobs:
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
     steps:
       - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: npm install --global @google/clasp@latest
-      - name: Repair relay auth and redeploy same endpoint
+      - name: Inspect live relay auth structure safely
         shell: bash
         run: |
           set -euo pipefail
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$RUNNER_TEMP/deploy.json")"
-          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$RUNNER_TEMP/deploy.json")"
-          test -n "$MAIN_SCRIPT_ID"; test -n "$MAIN_DEPLOYMENT_ID"
           RELAY_DEPLOYMENT_ID="$(python3 - <<'PY'
           import os,re
-          u=os.environ['JAYUMINTON_PUSH_APPS_SCRIPT_URL']
-          m=re.search(r'/macros/s/([^/]+)/exec',u)
+          m=re.search(r'/macros/s/([^/]+)/exec',os.environ['JAYUMINTON_PUSH_APPS_SCRIPT_URL'])
           print(m.group(1) if m else '')
           PY
           )"
-          test -n "$RELAY_DEPLOYMENT_ID"
+          test -n "$MAIN_SCRIPT_ID"; test -n "$RELAY_DEPLOYMENT_ID"
 
-          MW="$RUNNER_TEMP/main"
-          mkdir -p "$MW"
+          MW="$RUNNER_TEMP/main"; mkdir -p "$MW"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$MW/.clasp.json"
-          (cd "$MW" && clasp pull)
-          python3 - "$MW/Code.js" "$RUNNER_TEMP/live-key.txt" <<'PY'
-          from pathlib import Path
-          import re,sys
-          s=Path(sys.argv[1]).read_text(encoding='utf-8')
-          m=re.search(r"(?:const|let|var)\s+JAYUMINTON_STATE_PUSH_INTERNAL_KEY_\s*=\s*['\"]([^'\"]+)['\"]",s)
-          if not m: raise SystemExit('main internal key missing')
-          Path(sys.argv[2]).write_text(m.group(1),encoding='utf-8')
-          PY
-          LIVE_KEY="$(cat "$RUNNER_TEMP/live-key.txt")"
-          echo "LIVE_MAIN_KEY_LENGTH=${#LIVE_KEY}"
+          (cd "$MW" && clasp pull >/dev/null)
 
           clasp list > "$RUNNER_TEMP/projects.txt"
           : > "$RUNNER_TEMP/relay-script.txt"
@@ -60,88 +47,47 @@ jobs:
             W="$RUNNER_TEMP/check-$RANDOM"; mkdir -p "$W"
             printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
             if (cd "$W" && clasp deployments) > "$W/d.txt" 2>/dev/null && grep -F "$RELAY_DEPLOYMENT_ID" "$W/d.txt" >/dev/null; then
-              printf '%s' "$SID" > "$RUNNER_TEMP/relay-script.txt"
-              break
+              printf '%s' "$SID" > "$RUNNER_TEMP/relay-script.txt"; break
             fi
           done < "$RUNNER_TEMP/projects.txt"
           test -s "$RUNNER_TEMP/relay-script.txt"
           RELAY_SCRIPT_ID="$(cat "$RUNNER_TEMP/relay-script.txt")"
-          echo "RELAY_SCRIPT_FOUND=true"
-
           RW="$RUNNER_TEMP/relay"; mkdir -p "$RW"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$RELAY_SCRIPT_ID" > "$RW/.clasp.json"
-          (cd "$RW" && clasp pull)
+          (cd "$RW" && clasp pull >/dev/null)
           RELAY_CODE="$(find "$RW" -maxdepth 1 -type f \( -name 'Code.js' -o -name 'Code.gs' \) | head -1)"
           test -n "$RELAY_CODE"
-          python3 - "$RELAY_CODE" "$LIVE_KEY" <<'PY'
-          from pathlib import Path
-          import sys
-          p=Path(sys.argv[1]); key=sys.argv[2]; s=p.read_text(encoding='utf-8')
-          old='verifyAdminSecret_(e);'
-          if old in s:
-              s=s.replace(old,'verifyAdminSecret_(e, body);',1)
-          sig='function verifyAdminSecret_(e) {'
-          start=s.find(sig)
-          if start<0:
-              sig='function verifyAdminSecret_(e, body) {'
-              start=s.find(sig)
-          if start<0: raise SystemExit('verifyAdminSecret_ missing')
-          b=s.find('{',start); d=0; q=None; esc=False; end=None
-          for i in range(b,len(s)):
-              c=s[i]
-              if q:
-                  if esc: esc=False
-                  elif c=='\\': esc=True
-                  elif c==q:q=None
-                  continue
-              if c in "'\"`": q=c
-              elif c=='{': d+=1
-              elif c=='}':
-                  d-=1
-                  if d==0: end=i+1; break
-          if end is None: raise SystemExit('verifyAdminSecret_ unbalanced')
-          repl=f'''function verifyAdminSecret_(e, body) {{
-  const expected = String(PropertiesService.getScriptProperties().getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || '');
-  const queryKey = String(e && e.parameter ? (e.parameter.key || '') : '');
-  const bodyKey = String(body && body.internalKey || '');
-  const synchronizedKey = {key!r};
-  const supplied = queryKey || bodyKey;
-  if (!(secureEquals_(supplied, expected) || secureEquals_(supplied, synchronizedKey))) {{
-    throw new Error('unauthorized');
-  }}
-}}'''
-          s=s[:start]+repl+s[end:]
-          p.write_text(s,encoding='utf-8')
-          PY
-          node --check "$RELAY_CODE"
-          (cd "$RW" && clasp push --force)
-          (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "repair state push auth $GITHUB_RUN_ID")
 
-          python3 - "$MW/Code.js" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" <<'PY'
+          mkdir -p deployment/status
+          python3 - "$MW/Code.js" "$RELAY_CODE" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" deployment/status/user-push-relay-structure.txt <<'PY'
           from pathlib import Path
           import re,sys
-          p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8'); url=sys.argv[2]
-          pat=r"((?:const|let|var)\s+JAYUMINTON_STATE_PUSH_RELAY_URL_\s*=\s*)['\"][^'\"]+['\"]"
-          ns,n=re.subn(pat,lambda m:m.group(1)+repr(url),s,count=1)
-          if n!=1: raise SystemExit('main relay URL constant missing')
-          p.write_text(ns,encoding='utf-8')
+          main=Path(sys.argv[1]).read_text(encoding='utf-8')
+          relay=Path(sys.argv[2]).read_text(encoding='utf-8')
+          target=sys.argv[3]
+          out=Path(sys.argv[4])
+          m=re.search(r"(?:const|let|var)\s+JAYUMINTON_STATE_PUSH_RELAY_URL_\s*=\s*['\"]([^'\"]+)['\"]",main)
+          live=m.group(1) if m else ''
+          rows={
+            'relay_script_found':True,
+            'main_url_matches_secret_url': live.rstrip('/')==target.rstrip('/'),
+            'doPost_calls_verify_e': 'verifyAdminSecret_(e);' in relay,
+            'doPost_calls_verify_e_body': 'verifyAdminSecret_(e, body);' in relay,
+            'verify_sig_e': 'function verifyAdminSecret_(e) {' in relay,
+            'verify_sig_e_body': 'function verifyAdminSecret_(e, body) {' in relay,
+            'has_secure_equals': 'secureEquals_' in relay,
+            'has_register_web_token': 'register_web_token' in relay,
+            'has_main_state_event': 'main_state_event' in relay,
+          }
+          out.write_text('\n'.join(f'{k}={str(v).lower()}' for k,v in rows.items())+'\n',encoding='utf-8')
           PY
-          (cd "$MW" && clasp push --force)
-          (cd "$MW" && clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "restore user push relay $GITHUB_RUN_ID")
-
-      - name: Verify repaired relay without notifying any real member
+      - name: Record structure diagnostic
         shell: bash
         run: |
-          set -euo pipefail
-          LIVE_KEY="$(cat "$RUNNER_TEMP/live-key.txt")"
-          PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$LIVE_KEY\",\"type\":\"wait1_ready\",\"assignmentId\":\"repair-verify-$GITHUB_RUN_ID\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
-          curl -sS -D "$RUNNER_TEMP/h" -o "$RUNNER_TEMP/first" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
-          LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/h")"
-          if [ -n "$LOC" ]; then curl -sS -o "$RUNNER_TEMP/final" "$LOC"; else cp "$RUNNER_TEMP/first" "$RUNNER_TEMP/final"; fi
-          python3 - "$RUNNER_TEMP/final" <<'PY'
-          import json,sys
-          j=json.load(open(sys.argv[1],encoding='utf-8'))
-          print('RELAY_REPAIR_OK=', bool(j.get('ok')) and j.get('sent')==0)
-          print('RELAY_REPAIR_SENT_ZERO=', j.get('sent')==0)
-          if not (j.get('ok') is True and j.get('sent')==0): raise SystemExit(1)
-          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-push-relay-structure.txt
+          git commit -m 'Record live relay auth structure' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
+# inspect retry
