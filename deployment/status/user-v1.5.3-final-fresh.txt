@@ -1,0 +1,15 @@
+status=success
+version=1.5.3
+version_code=153
+application_id=com.jayuminton.user.final153
+install_mode=true-new-package-fresh-install
+launch_url=https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?mode=user&apkUser=1&userAppVersion=1.5.3
+route_preflight=success
+user_page_marker=memberSelfSettings
+foreground_alert=present
+admin_loader_absent=verified
+native_install_signal=NativeUserApp
+web_storage=preserved
+apk_size_bytes=28084
+apk_sha256=206f6ab6aee2d55bddd57f782f66bf7f73953ddc19d2e9c13256e0a8dce6b5f0
+signer_sha256=D47ADB93363FF397601E63667E79F27F99AE499AADC1FD0013861809950FC787
