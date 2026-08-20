@@ -15,54 +15,46 @@ jobs:
       JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
     steps:
       - uses: actions/checkout@v4
-      - name: Follow Apps Script redirect correctly
+      - name: Test relay auth contract with nonexistent member only
         shell: bash
         run: |
           set -euo pipefail
-          echo "LEGACY_URL_PRESENT=$([ -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ] && echo true || echo false)"
-          echo "LEGACY_SHARED_SECRET_PRESENT=$([ -n "$JAYUMINTON_PUSH_SHARED_SECRET" ] && echo true || echo false)"
-          echo "LEGACY_SHARED_SECRET_LENGTH=${#JAYUMINTON_PUSH_SHARED_SECRET}"
           test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
+          test -n "$JAYUMINTON_PUSH_SHARED_SECRET"
 
-          # Apps Script web apps normally answer /exec with 302 to a googleusercontent URL.
-          curl -sS -D "$RUNNER_TEMP/get.headers" -o "$RUNNER_TEMP/get.first" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" || true
-          GET_LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/get.headers")"
-          echo "GET_REDIRECT_PRESENT=$([ -n "$GET_LOC" ] && echo true || echo false)"
-          if [ -n "$GET_LOC" ]; then
-            curl -sS -o "$RUNNER_TEMP/get.final" "$GET_LOC" || true
-          else
-            cp "$RUNNER_TEMP/get.first" "$RUNNER_TEMP/get.final"
-          fi
-          python3 - "$RUNNER_TEMP/get.final" <<'PY'
+          post_and_follow() {
+            local url="$1"
+            local payload="$2"
+            local prefix="$3"
+            curl -sS -D "$RUNNER_TEMP/$prefix.headers" -o "$RUNNER_TEMP/$prefix.first" -X POST \
+              --data-urlencode "payload=$payload" "$url" || true
+            local loc
+            loc="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/$prefix.headers")"
+            if [ -n "$loc" ]; then
+              curl -sS -o "$RUNNER_TEMP/$prefix.final" "$loc" || true
+            else
+              cp "$RUNNER_TEMP/$prefix.first" "$RUNNER_TEMP/$prefix.final"
+            fi
+          }
+
+          # Old contract: ?key=<shared secret>. The fake member ID cannot match any real registration.
+          SAFE_PAYLOAD='{"action":"main_state_event","type":"wait1_ready","assignmentId":"diagnostic-auth-contract-123456","expectedCourtNo":1,"members":[{"id":"__diag_nonexistent_member__","name":"DIAG"}]}'
+          post_and_follow "$JAYUMINTON_PUSH_APPS_SCRIPT_URL?key=$JAYUMINTON_PUSH_SHARED_SECRET" "$SAFE_PAYLOAD" oldauth
+
+          # New contract: internalKey in JSON body.
+          SAFE_PAYLOAD_NEW="{\"action\":\"main_state_event\",\"internalKey\":\"$JAYUMINTON_PUSH_SHARED_SECRET\",\"type\":\"wait1_ready\",\"assignmentId\":\"diagnostic-auth-contract-654321\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
+          post_and_follow "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" "$SAFE_PAYLOAD_NEW" newauth
+
+          python3 - "$RUNNER_TEMP/oldauth.final" "$RUNNER_TEMP/newauth.final" <<'PY'
           from pathlib import Path
           import json,sys
-          t=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore') if Path(sys.argv[1]).exists() else ''
-          try:j=json.loads(t)
-          except Exception:j={}
-          print('LEGACY_HEALTH_OK=',bool(j.get('ok')))
-          print('LEGACY_SERVICE=',str(j.get('service') or ''))
-          print('LEGACY_HAS_TOKEN_COUNT=', 'registeredTokens' in j)
-          print('LEGACY_REGISTERED_TOKENS_NONZERO=', int(j.get('registeredTokens') or 0) > 0 if j else False)
-          PY
-
-          curl -sS -D "$RUNNER_TEMP/post.headers" -o "$RUNNER_TEMP/post.first" -X POST \
-            --data-urlencode 'payload={"action":"main_state_event","internalKey":"__diagnostic_invalid_key__","type":"wait1_ready","assignmentId":"diagnostic-invalid-key","members":[]}' \
-            "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" || true
-          POST_LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/post.headers")"
-          echo "POST_REDIRECT_PRESENT=$([ -n "$POST_LOC" ] && echo true || echo false)"
-          if [ -n "$POST_LOC" ]; then
-            # Critical: follow the Apps Script redirect with GET, not another POST.
-            curl -sS -o "$RUNNER_TEMP/post.final" "$POST_LOC" || true
-          else
-            cp "$RUNNER_TEMP/post.first" "$RUNNER_TEMP/post.final"
-          fi
-          python3 - "$RUNNER_TEMP/post.final" <<'PY'
-          from pathlib import Path
-          import json,sys
-          t=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore') if Path(sys.argv[1]).exists() else ''
-          try:j=json.loads(t)
-          except Exception:j={}
-          print('LEGACY_POST_JSON=',bool(j))
-          print('LEGACY_POST_REJECTED=',bool(j) and j.get('ok') is False)
-          print('LEGACY_POST_ERROR_PRESENT=',bool(j.get('error')) if j else False)
+          def load(p):
+              try:return json.loads(Path(p).read_text(encoding='utf-8',errors='ignore'))
+              except Exception:return {}
+          old=load(sys.argv[1]); new=load(sys.argv[2])
+          print('OLD_QUERY_KEY_CONTRACT_ACCEPTED=', bool(old.get('ok')) and old.get('sent') == 0)
+          print('OLD_QUERY_KEY_SENT_ZERO=', old.get('sent') == 0 if old else False)
+          print('NEW_INTERNAL_KEY_CONTRACT_ACCEPTED=', bool(new.get('ok')) and new.get('sent') == 0)
+          print('NEW_INTERNAL_KEY_REJECTED=', bool(new) and new.get('ok') is False)
+          print('NEW_INTERNAL_KEY_ERROR_PRESENT=', bool(new.get('error')) if new else False)
           PY
