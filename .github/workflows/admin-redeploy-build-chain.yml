@@ -51,3 +51,6 @@ jobs:
           done
           test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Chain completed
+        run: echo 'ADMIN_REDEPLOY_AND_APK_REBUILD_CHAIN_OK'
