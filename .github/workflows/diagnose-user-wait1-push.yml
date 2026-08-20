@@ -156,3 +156,4 @@ jobs:
           git pull --rebase origin main || true
           git push origin main
 # PR-observable live relay repair
+# trigger-run: 2026-08-21T08:50+09:00
