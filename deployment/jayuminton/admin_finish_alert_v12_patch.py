@@ -15,7 +15,7 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
 #jayumintonAlertNotice .jm-alert-message{font-size:18px!important;font-weight:900!important;line-height:1.5!important;white-space:pre-line!important;word-break:keep-all!important}
 #jayumintonAlertNotice .jm-alert-close{margin-top:18px!important;width:100%!important;min-height:50px!important;border:0!important;border-radius:13px!important;background:#2563eb!important;color:#fff!important;font-size:17px!important;font-weight:900!important}
 </style>
-<!-- jayuminton-admin-finish-alert-v16 compatibility marker; behavior is v18 -->
+<!-- jayuminton-admin-finish-alert-v16 compatibility marker; jayuminton-admin-finish-alert-v17 compatibility marker; behavior is v18 -->
 <script id="jayuminton-admin-finish-alert-v18">
 (function(){
   var heldUtterance=null;
@@ -50,6 +50,6 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
 })();
 </script>'''
 s=s.replace(marker,patch+'\n'+marker,1)
-for x in ['jayuminton-admin-finish-alert-v16','jayuminton-admin-finish-alert-v18','__JAYUMINTON_ADMIN_FINISH_ALERT_V16__','__JAYUMINTON_ADMIN_FINISH_ALERT_V17__','__JAYUMINTON_ADMIN_FINISH_ALERT_V18__','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','cancelOnAlertDismiss:true','alertBeforeServerCompletion:true','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true']:
+for x in ['jayuminton-admin-finish-alert-v16','jayuminton-admin-finish-alert-v17','jayuminton-admin-finish-alert-v18','__JAYUMINTON_ADMIN_FINISH_ALERT_V16__','__JAYUMINTON_ADMIN_FINISH_ALERT_V17__','__JAYUMINTON_ADMIN_FINISH_ALERT_V18__','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','cancelOnAlertDismiss:true','alertBeforeServerCompletion:true','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true']:
     if x not in s: raise SystemExit('missing '+x)
 p.write_text(s,encoding='utf-8')
