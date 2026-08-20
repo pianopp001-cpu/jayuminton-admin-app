@@ -29,29 +29,29 @@ jobs:
           mkdir -p "$RUNNER_TEMP/main"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/main/.clasp.json"
           (cd "$RUNNER_TEMP/main" && clasp pull)
-      - name: Compare relay config safely
+      - name: Probe live relay with invalid key only
         shell: bash
         run: |
           set -euo pipefail
-          C="$RUNNER_TEMP/deploy.json"
-          python3 - "$RUNNER_TEMP/main/Code.js" "$C" <<'PY'
+          python3 - "$RUNNER_TEMP/main/Code.js" "$RUNNER_TEMP/relay-url.txt" <<'PY'
           from pathlib import Path
-          import json,re,sys,urllib.parse
+          import re,sys
           src=Path(sys.argv[1]).read_text(encoding='utf-8')
-          cfg=json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
           m=re.search(r"(?:const|let|var)\s+JAYUMINTON_STATE_PUSH_RELAY_URL_\s*=\s*['\"]([^'\"]+)['\"]",src)
-          live=m.group(1).strip() if m else ''
-          configured=str(cfg.get('pushUrl') or '').strip()
-          push_script=str(cfg.get('pushScriptId') or '').strip()
-          def norm(u): return u.rstrip('/')
-          print('LIVE_RELAY_PRESENT=',bool(live))
-          print('CONFIG_PUSH_URL_PRESENT=',bool(configured))
-          print('RELAY_URL_MATCH=',bool(live and configured and norm(live)==norm(configured)))
-          print('LIVE_HOST=',urllib.parse.urlparse(live).netloc if live else '')
-          print('CONFIG_HOST=',urllib.parse.urlparse(configured).netloc if configured else '')
-          print('PUSH_SCRIPT_ID_PRESENT=',bool(push_script))
-          print('PUSH_SCRIPT_ID_LENGTH=',len(push_script))
-          print('PUSH_SCRIPT_ID_HAS_SLASH=', '/' in push_script)
-          print('PUSH_SCRIPT_ID_LOOKS_DEPLOYMENT=', push_script.startswith('AKfycb'))
-          print('PUSH_SCRIPT_ID_LOOKS_SCRIPT_ID=', len(push_script)>30 and not push_script.startswith('AKfycb') and '/' not in push_script)
+          if not m: raise SystemExit('relay URL missing')
+          Path(sys.argv[2]).write_text(m.group(1).strip(),encoding='utf-8')
+          PY
+          URL="$(cat "$RUNNER_TEMP/relay-url.txt")"
+          STATUS="$(curl -L -sS -o "$RUNNER_TEMP/relay-response.txt" -w '%{http_code}' -X POST \
+            --data-urlencode 'payload={"action":"main_state_event","internalKey":"__diagnostic_invalid_key__","type":"wait1_ready","assignmentId":"diagnostic","members":[]}' \
+            "$URL" || true)"
+          echo "RELAY_HTTP_STATUS=$STATUS"
+          echo "RELAY_RESPONSE_BYTES=$(wc -c < "$RUNNER_TEMP/relay-response.txt" 2>/dev/null || echo 0)"
+          python3 - "$RUNNER_TEMP/relay-response.txt" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1]); t=p.read_text(encoding='utf-8',errors='ignore').lower() if p.exists() else ''
+          print('RELAY_LOOKS_AUTH_REJECTION=', any(x in t for x in ['invalid','unauthorized','forbidden','internalkey','internal key','인증','권한']))
+          print('RELAY_LOOKS_GOOGLE_LOGIN=', 'accounts.google.com' in t or 'sign in' in t)
+          print('RELAY_LOOKS_NOT_FOUND=', 'not found' in t or '페이지를 찾을 수' in t)
           PY
