@@ -66,7 +66,6 @@ jobs:
           for n in names: parts += ['\n--- '+n+' ---', block(main,n)]
           parts += ['\n=== LIVE PUSH RELAY FUNCTIONS ===']
           for n in push_names: parts += ['\n--- '+n+' ---', block(push,n)]
-          # redact obvious bearer/private key material if any
           text='\n'.join(parts)
           text=re.sub(r'Bearer\s+[A-Za-z0-9._-]+','Bearer [REDACTED]',text)
           text=re.sub(r'-----BEGIN PRIVATE KEY-----.*?-----END PRIVATE KEY-----','[PRIVATE KEY REDACTED]',text,flags=re.S)
@@ -82,3 +81,4 @@ jobs:
           git commit -m 'Record live user wait1 push diagnostic' || exit 0
           git pull --rebase origin main
           git push origin main
+# retrigger: 2026-08-21 wait1 push diagnosis
