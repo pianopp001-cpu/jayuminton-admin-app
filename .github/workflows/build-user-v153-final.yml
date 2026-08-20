@@ -76,24 +76,25 @@ jobs:
             SIGNER=$(grep -Ei 'SHA-256 digest:' "$RUNNER_TEMP/signer.txt" | head -1 | sed -E 's/.*digest:[[:space:]]*//' | tr -d ':' | tr '[:lower:]' '[:upper:]')
             if [ $A -eq 0 ] && [ $S -eq 0 ] && grep -Fq "package: name='com.jayuminton.user.final153' versionCode='153' versionName='1.5.3'" "$RUNNER_TEMP/badging.txt" && grep -Fq "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/classes.txt" && grep -Fq '?mode=user' "$RUNNER_TEMP/classes.txt" && grep -Fq 'NativeUserApp' "$RUNNER_TEMP/classes.txt" && ! grep -Fq '?mode=admin' "$RUNNER_TEMP/classes.txt" && ! grep -Fq '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/classes.txt" && [ "$SIGNER" = 'D47ADB93363FF397601E63667E79F27F99AE499AADC1FD0013861809950FC787' ]; then
               VERIFY=success
-              SIZE=$(stat -c%s "$FINAL_APK"); SHA=$(sha256sum "$FINAL_APK" | awk '{print $1}')
-              cat > "$FINAL_STATUS" <<EOF
-status=success
-version=1.5.3
-version_code=153
-application_id=com.jayuminton.user.final153
-install_mode=true-new-package-fresh-install
-launch_url=$URL
-route_preflight=success
-user_page_marker=memberSelfSettings
-foreground_alert=present
-admin_loader_absent=verified
-native_install_signal=NativeUserApp
-web_storage=preserved
-apk_size_bytes=$SIZE
-apk_sha256=$SHA
-signer_sha256=$SIGNER
-EOF
+              SIZE=$(stat -c%s "$FINAL_APK")
+              SHA=$(sha256sum "$FINAL_APK" | awk '{print $1}')
+              {
+                echo 'status=success'
+                echo 'version=1.5.3'
+                echo 'version_code=153'
+                echo 'application_id=com.jayuminton.user.final153'
+                echo 'install_mode=true-new-package-fresh-install'
+                echo "launch_url=$URL"
+                echo 'route_preflight=success'
+                echo 'user_page_marker=memberSelfSettings'
+                echo 'foreground_alert=present'
+                echo 'admin_loader_absent=verified'
+                echo 'native_install_signal=NativeUserApp'
+                echo 'web_storage=preserved'
+                echo "apk_size_bytes=$SIZE"
+                echo "apk_sha256=$SHA"
+                echo "signer_sha256=$SIGNER"
+              } > "$FINAL_STATUS"
             else REASON='verify'; fi
           fi
 
@@ -103,8 +104,17 @@ EOF
             echo "build_apk=$BUILD"
             echo "verify_apk=$VERIFY"
             echo "failure_reason=$REASON"
-            [ -f "$RUNNER_TEMP/build.log" ] && { echo 'build_log_tail_begin'; tail -n 80 "$RUNNER_TEMP/build.log" | tr '\n' ' '; echo; echo 'build_log_tail_end'; }
-            [ -f "$FINAL_STATUS" ] && { echo 'final_status_begin'; cat "$FINAL_STATUS"; echo 'final_status_end'; }
+            if [ -f "$RUNNER_TEMP/build.log" ]; then
+              echo 'build_log_tail_begin'
+              tail -n 80 "$RUNNER_TEMP/build.log" | tr '\n' ' '
+              echo
+              echo 'build_log_tail_end'
+            fi
+            if [ -f "$FINAL_STATUS" ]; then
+              echo 'final_status_begin'
+              cat "$FINAL_STATUS"
+              echo 'final_status_end'
+            fi
             echo "updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           } > "$EVIDENCE"
 
