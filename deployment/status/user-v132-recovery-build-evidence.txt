@@ -1,0 +1,8 @@
+source_sha=0a801a91f5dc9a0c21471fc99805921cb3dd714c
+resolve=success
+discover_push=success
+live_member_guard=success
+build_apk=success
+publish=success
+required_contract=current-selected-member-only
+assignment_types=wait1_ready,court_assignment
