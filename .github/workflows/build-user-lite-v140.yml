@@ -1,0 +1,75 @@
+name: Build lightweight user APK v1.4.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/scripts/build_user_lite_fresh_v140.sh'
+      - '.github/workflows/build-user-lite-v140.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-lite-v140
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Resolve user deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          jq -e '.mainDeploymentId' "$C" >/dev/null
+          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.7'}
+      - name: Build lightweight APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash deployment/scripts/build_user_lite_fresh_v140.sh
+          test -s releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk
+          grep -F 'status=success' deployment/status/user-lite-v1.4.0.txt >/dev/null
+          grep -F 'firebase_messaging=removed' deployment/status/user-lite-v1.4.0.txt >/dev/null
+          grep -F 'native_vibration_bridge=3-pulses-x-8-groups-stop-on-vibrate-zero' deployment/status/user-lite-v1.4.0.txt >/dev/null
+          SIZE=$(stat -c%s releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk)
+          [ "$SIZE" -lt 500000 ]
+          cp releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk "$RUNNER_TEMP/user-lite.apk"
+          cp deployment/status/user-lite-v1.4.0.txt "$RUNNER_TEMP/user-lite-status.txt"
+      - name: Publish verified lite APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          git fetch origin main
+          git checkout -B main origin/main
+          cp "$RUNNER_TEMP/user-lite.apk" releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk
+          cp "$RUNNER_TEMP/user-lite-status.txt" deployment/status/user-lite-v1.4.0.txt
+          sha256sum releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk > deployment/status/user-lite-v1.4.0.sha256
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk deployment/status/user-lite-v1.4.0.txt deployment/status/user-lite-v1.4.0.sha256
+          git commit -m 'Publish lightweight user APK v1.4.0'
+          git pull --rebase origin main
+          git push origin main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-courtstatus-v1.4.0-lite-fresh
+          path: releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk
+          if-no-files-found: error
+          retention-days: 30
