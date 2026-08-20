@@ -15,31 +15,48 @@ jobs:
       JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
     steps:
       - uses: actions/checkout@v4
-      - name: Check legacy relay secrets and endpoint safely
+      - name: Follow Apps Script redirect correctly
         shell: bash
         run: |
           set -euo pipefail
           echo "LEGACY_URL_PRESENT=$([ -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ] && echo true || echo false)"
           echo "LEGACY_SHARED_SECRET_PRESENT=$([ -n "$JAYUMINTON_PUSH_SHARED_SECRET" ] && echo true || echo false)"
           echo "LEGACY_SHARED_SECRET_LENGTH=${#JAYUMINTON_PUSH_SHARED_SECRET}"
-          if [ -z "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ]; then exit 0; fi
-          STATUS="$(curl -sS -o "$RUNNER_TEMP/get.txt" -w '%{http_code}' "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" || true)"
-          echo "LEGACY_GET_STATUS=$STATUS"
-          python3 - "$RUNNER_TEMP/get.txt" <<'PY'
+          test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
+
+          # Apps Script web apps normally answer /exec with 302 to a googleusercontent URL.
+          curl -sS -D "$RUNNER_TEMP/get.headers" -o "$RUNNER_TEMP/get.first" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" || true
+          GET_LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/get.headers")"
+          echo "GET_REDIRECT_PRESENT=$([ -n "$GET_LOC" ] && echo true || echo false)"
+          if [ -n "$GET_LOC" ]; then
+            curl -sS -o "$RUNNER_TEMP/get.final" "$GET_LOC" || true
+          else
+            cp "$RUNNER_TEMP/get.first" "$RUNNER_TEMP/get.final"
+          fi
+          python3 - "$RUNNER_TEMP/get.final" <<'PY'
           from pathlib import Path
           import json,sys
           t=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore') if Path(sys.argv[1]).exists() else ''
           try:j=json.loads(t)
           except Exception:j={}
           print('LEGACY_HEALTH_OK=',bool(j.get('ok')))
-          print('LEGACY_SERVICE_PRESENT=',bool(j.get('service')))
+          print('LEGACY_SERVICE=',str(j.get('service') or ''))
           print('LEGACY_HAS_TOKEN_COUNT=', 'registeredTokens' in j)
+          print('LEGACY_REGISTERED_TOKENS_NONZERO=', int(j.get('registeredTokens') or 0) > 0 if j else False)
           PY
-          STATUS2="$(curl -sS -o "$RUNNER_TEMP/post.txt" -w '%{http_code}' -X POST \
+
+          curl -sS -D "$RUNNER_TEMP/post.headers" -o "$RUNNER_TEMP/post.first" -X POST \
             --data-urlencode 'payload={"action":"main_state_event","internalKey":"__diagnostic_invalid_key__","type":"wait1_ready","assignmentId":"diagnostic-invalid-key","members":[]}' \
-            "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" || true)"
-          echo "LEGACY_POST_STATUS=$STATUS2"
-          python3 - "$RUNNER_TEMP/post.txt" <<'PY'
+            "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" || true
+          POST_LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/post.headers")"
+          echo "POST_REDIRECT_PRESENT=$([ -n "$POST_LOC" ] && echo true || echo false)"
+          if [ -n "$POST_LOC" ]; then
+            # Critical: follow the Apps Script redirect with GET, not another POST.
+            curl -sS -o "$RUNNER_TEMP/post.final" "$POST_LOC" || true
+          else
+            cp "$RUNNER_TEMP/post.first" "$RUNNER_TEMP/post.final"
+          fi
+          python3 - "$RUNNER_TEMP/post.final" <<'PY'
           from pathlib import Path
           import json,sys
           t=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore') if Path(sys.argv[1]).exists() else ''
@@ -47,4 +64,5 @@ jobs:
           except Exception:j={}
           print('LEGACY_POST_JSON=',bool(j))
           print('LEGACY_POST_REJECTED=',bool(j) and j.get('ok') is False)
+          print('LEGACY_POST_ERROR_PRESENT=',bool(j.get('error')) if j else False)
           PY
