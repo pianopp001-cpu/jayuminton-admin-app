@@ -1,5 +1,6 @@
 name: Redeploy admin after Cloudflare patches
 
+# PR-merge trigger marker: v2001-cloudflare-source-clean
 on:
   push:
     branches: [main]
