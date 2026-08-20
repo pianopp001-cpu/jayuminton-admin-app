@@ -1,0 +1,6 @@
+source_sha=e5af887e9ed6a79b2cf52ec77786ae50760f762c
+resolve=success
+discover_push=success
+live_member_guard=success
+build_apk=failure
+publish=skipped
