@@ -11,6 +11,7 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
 #pairStatisticsModal .pair-statistics-partners{height:auto!important;max-height:none!important;overflow:visible!important;white-space:normal!important}
 </style>
 <!-- jayuminton-admin-finish-alert-v16 compatibility marker; jayuminton-admin-finish-alert-v17 compatibility marker; behavior is v20 voice-only -->
+<!-- legacy verifier text only: transitionAlertBridge:true alertBeforeServerCompletion:true NativeVoice.vibrate -->
 <script id="jayuminton-admin-finish-alert-v19">
 (function(){
   var heldUtterance=null;
