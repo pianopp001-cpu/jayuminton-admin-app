@@ -44,6 +44,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p signing
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          test -s signing/jayuminton-release.jks
           bash deployment/scripts/build_user_lite_fresh_v140.sh 2>&1 | tee "$RUNNER_TEMP/user-lite-build.log"
           test -s releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk
           grep -F 'status=success' deployment/status/user-lite-v1.4.0.txt >/dev/null
