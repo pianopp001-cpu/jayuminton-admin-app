@@ -5,7 +5,6 @@ import sys
 path = Path(sys.argv[1])
 s = path.read_text(encoding='utf-8')
 
-# Advance the user APK identity from the last cap8 candidate.
 for old, new in (
     ('v1.3.0-cap8.apk', 'v1.3.2-current-member-only.apk'),
     ('user-native-push-v1.3.0.txt', 'user-native-push-v1.3.2.txt'),
@@ -24,10 +23,6 @@ for old, new in (
 ):
     s = s.replace(old, new)
 
-# Core rule restored from the original user flow:
-# WAIT_ONE / COURT assignment alerts are NEVER generic broadcasts.
-# They must contain a target member id and it must exactly match the member
-# explicitly selected as "me" in native SharedPreferences.
 old = '''        boolean hasTargetMemberId = !targetMemberId.isEmpty();
         boolean selectedMemberMatches = !hasTargetMemberId || NativePushRegistrar.isCurrentMember(this, targetMemberId);
         NativeDeliveryReporter.report("fcm_received", type, hasTargetMemberId,
@@ -39,7 +34,8 @@ old = '''        boolean hasTargetMemberId = !targetMemberId.isEmpty();
         NativeDeliveryReporter.report("member_accepted", type, hasTargetMemberId,
                 true, false, false, false);'''
 new = '''        boolean hasTargetMemberId = !targetMemberId.isEmpty();
-        boolean assignmentType = "WAIT_ONE".equals(type) || "COURT".equals(type) ||
+        boolean assignmentType = "wait1_ready".equals(type) || "court_assignment".equals(type) ||
+                "WAIT_ONE".equals(type) || "COURT".equals(type) ||
                 "WAIT_ONE_PROMOTED".equals(type) || "COURT_PROMOTED".equals(type);
         boolean selectedMemberMatches = hasTargetMemberId &&
                 NativePushRegistrar.isCurrentMember(this, targetMemberId);
@@ -63,13 +59,14 @@ if s.count(old) != 1:
     raise SystemExit('v132 strict member-gate anchor missing')
 s = s.replace(old, new, 1)
 
-# Release gates: keep all previously proven behavior and require strict ownership.
 for required in (
     'VERSION="1.3.2"',
     'VERSION_CODE="132"',
     'private static final int MAX_GROUPS = 8;',
     'NativePushRegistrar.isCurrentMember(this, targetMemberId)',
     'boolean selectedMemberMatches = hasTargetMemberId &&',
+    '"wait1_ready".equals(type)',
+    '"court_assignment".equals(type)',
     'assignmentType && (!hasTargetMemberId || !selectedMemberMatches)',
     '"missing_target_rejected"',
     'AlertVibrationController.stop(this);',
@@ -82,14 +79,13 @@ for required in (
     if required not in s:
         raise SystemExit('missing v1.3.2 strict-member marker: ' + required)
 
-# Forbidden regression: missing target must never be treated as a match.
 if 'selectedMemberMatches = !hasTargetMemberId || NativePushRegistrar.isCurrentMember' in s:
     raise SystemExit('generic missing-target acceptance survived v132')
 
 s = s.replace(
     'vibration_max_groups=8',
-    'vibration_max_groups=8\nassignment_alert_scope=current-selected-member-only\nmissing_target_assignment=reject-before-popup-sound-vibration',
+    'vibration_max_groups=8\nassignment_alert_scope=current-selected-member-only\nmissing_target_assignment=reject-before-popup-sound-vibration\nassignment_types=wait1_ready,court_assignment',
 )
 
 path.write_text(s, encoding='utf-8')
-print('Prepared v1.3.2 strict current-member-only assignment alerts.')
+print('Prepared v1.3.2 strict current-member-only assignment alerts for real FCM types.')
