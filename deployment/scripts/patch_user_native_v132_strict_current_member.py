@@ -42,11 +42,9 @@ new = '''        boolean hasTargetMemberId = !targetMemberId.isEmpty();
         NativeDeliveryReporter.report("fcm_received", type, hasTargetMemberId,
                 selectedMemberMatches, false, false, false);
         if (assignmentType && (!hasTargetMemberId || !selectedMemberMatches)) {
-            AlertVibrationController.stop(this);
-            AssignmentOverlay.dismissOnly();
             NativeDeliveryReporter.report(
                     hasTargetMemberId ? "member_rejected" : "missing_target_rejected",
-                    type, hasTargetMemberId, false, false, false, true);
+                    type, hasTargetMemberId, false, false, false, false);
             return;
         }
         if (!assignmentType && hasTargetMemberId && !selectedMemberMatches) {
@@ -69,8 +67,6 @@ for required in (
     '"court_assignment".equals(type)',
     'assignmentType && (!hasTargetMemberId || !selectedMemberMatches)',
     '"missing_target_rejected"',
-    'AlertVibrationController.stop(this);',
-    'AssignmentOverlay.dismissOnly();',
     'stopPreviousMemberAlert(app);',
     'jayuminton_web_push_selected_member_v1',
     '"대기 1순위입니다. 라켓 들고 준비하세요."',
@@ -82,10 +78,22 @@ for required in (
 if 'selectedMemberMatches = !hasTargetMemberId || NativePushRegistrar.isCurrentMember' in s:
     raise SystemExit('generic missing-target acceptance survived v132')
 
+# Rejecting an unrelated/malformed assignment must never cancel a currently valid
+# alert for the selected member. Alert cleanup belongs only to explicit member
+# switch/clear/disable paths preserved from v128.
+reject_start = s.find('if (assignmentType && (!hasTargetMemberId || !selectedMemberMatches))')
+reject_end = s.find('        if (!assignmentType && hasTargetMemberId && !selectedMemberMatches)', reject_start)
+if reject_start < 0 or reject_end < 0:
+    raise SystemExit('v132 reject block missing')
+reject_block = s[reject_start:reject_end]
+for forbidden in ('AlertVibrationController.stop(', 'AssignmentOverlay.dismissOnly(', 'cancelAll()'):
+    if forbidden in reject_block:
+        raise SystemExit('v132 unrelated event would cancel current alert: ' + forbidden)
+
 s = s.replace(
     'vibration_max_groups=8',
-    'vibration_max_groups=8\nassignment_alert_scope=current-selected-member-only\nmissing_target_assignment=reject-before-popup-sound-vibration\nassignment_types=wait1_ready,court_assignment',
+    'vibration_max_groups=8\nassignment_alert_scope=current-selected-member-only\nmissing_target_assignment=reject-before-popup-sound-vibration\nunrelated_assignment=ignore-without-cancelling-current-alert\nassignment_types=wait1_ready,court_assignment',
 )
 
 path.write_text(s, encoding='utf-8')
-print('Prepared v1.3.2 strict current-member-only assignment alerts for real FCM types.')
+print('Prepared v1.3.2: strict current-member alerts; unrelated events are ignored without cancelling a valid current alert.')
