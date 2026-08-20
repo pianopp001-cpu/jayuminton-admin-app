@@ -4,14 +4,20 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/kick-v2001-ui-fix.yml'
+      - '.github/workflows/preview-admin-cloudflare.yml'
+      - '.github/workflows/build-v1995-direct.yml'
+      - 'deployment/jayuminton/admin_cloudflare_final_contract.py'
   workflow_dispatch: {}
 permissions:
   actions: write
   contents: read
+concurrency:
+  group: jayuminton-v2001-ui-apk-orchestrator
+  cancel-in-progress: true
 jobs:
   kick:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Dispatch Cloudflare admin redeploy
         env:
@@ -27,21 +33,28 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/actions/workflows/preview-admin-cloudflare.yml/dispatches \
             -d '{"ref":"main"}'
           echo 'Cloudflare admin redeploy dispatched.'
-      - name: Wait for cleaned Cloudflare admin frontend
+      - name: Wait for fully cleaned Cloudflare admin frontend
         shell: bash
         run: |
           set -euo pipefail
           URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/'
-          for i in $(seq 1 120); do
+          for i in $(seq 1 150); do
             curl --fail --location --silent --show-error "$URL?uiFix=$GITHUB_RUN_ID-$i" -o "$RUNNER_TEMP/live.html" || true
-            if grep -F '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
-              && grep -F '__JAYUMINTON_ADMIN_NEW_BADGE_KO__' "$RUNNER_TEMP/live.html" >/dev/null 2>&1; then
-              echo 'Clean Cloudflare admin is live.'
+            if grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F '__JAYUMINTON_ADMIN_NEW_BADGE_KO__' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F '__JAYUMINTON_ADMIN_BLOCKING_SAVE__' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F "badge.innerHTML='<small>신규</small>'" "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F "content:'✨'" "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && ! grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && ! grep -F '>음성테스트<' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && ! grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/live.html" >/dev/null 2>&1; then
+              echo 'Fully cleaned Cloudflare admin is live.'
               exit 0
             fi
             sleep 10
           done
-          echo 'Timed out waiting for cleaned Cloudflare admin.' >&2
+          echo 'Timed out waiting for fully cleaned Cloudflare admin.' >&2
           exit 1
       - name: Dispatch fresh-install APK build
         env:
@@ -56,4 +69,4 @@ jobs:
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             https://api.github.com/repos/${{ github.repository }}/actions/workflows/build-v1995-direct.yml/dispatches \
             -d '{"ref":"main"}'
-          echo 'Fresh APK build dispatched.'
+          echo 'Fresh APK build dispatched after verified deploy.'
