@@ -1,0 +1,1 @@
+verify_after_build=aapt-package-version,apksigner-release-cert,sha256,publish
