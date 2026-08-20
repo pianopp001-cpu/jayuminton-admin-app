@@ -1,0 +1,19 @@
+source_sha=68f9730b72cf80030bffe8ca37ed5f27161f4e6e
+resolve_main=ok
+resolve_firebase=ok
+resolve_push_deployment=ok
+firebase_apps_list_exit=0
+firebase_user_app=found
+sdkconfig_exit=0
+push_script=found
+base_patch_chain_exit=0
+v133_patch_exit=0
+v133_patch_error=
+builder_exit=0
+builder_error=Note: Some input files use or override a deprecated API. Note: Recompile with -Xlint:deprecation for details. 
+apk_exists=yes
+status_exists=yes
+aapt_exit=0
+aapt_package=package: name='com.jayuminton.user' versionCode='2000133' versionName='1.3.3' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+apksigner_exit=0
+signer_line=V2 Signer: certificate SHA-256 digest: d47adb93363ff397601e63667e79f27f99ae499aadc1fd0013861809950fc787
