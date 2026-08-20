@@ -1,0 +1,8 @@
+version=1.3.3
+version_code=2000133
+application_id=com.jayuminton.user
+signer_sha256=D47ADB93363FF397601E63667E79F27F99AE499AADC1FD0013861809950FC787
+assignment_alert_scope=current-selected-member-only
+assignment_types=wait1_ready,court_assignment
+vibration=3-pulses-per-group-max8
+install_goal=avoid-downgrade-rejection-and-verify-apk-package-version-signer
