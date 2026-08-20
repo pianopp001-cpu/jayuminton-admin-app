@@ -103,6 +103,8 @@ jobs:
           grep -F 'VERSION="1.3.2"' "$SCRIPT" >/dev/null
           grep -F 'VERSION_CODE="132"' "$SCRIPT" >/dev/null
           grep -F 'boolean selectedMemberMatches = hasTargetMemberId &&' "$SCRIPT" >/dev/null
+          grep -F '"wait1_ready".equals(type)' "$SCRIPT" >/dev/null
+          grep -F '"court_assignment".equals(type)' "$SCRIPT" >/dev/null
           grep -F 'assignmentType && (!hasTargetMemberId || !selectedMemberMatches)' "$SCRIPT" >/dev/null
           grep -F '"missing_target_rejected"' "$SCRIPT" >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember(this, targetMemberId)' "$SCRIPT" >/dev/null
@@ -123,6 +125,7 @@ jobs:
           grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
           grep -F 'assignment_alert_scope=current-selected-member-only' "$STATUS" >/dev/null
           grep -F 'missing_target_assignment=reject-before-popup-sound-vibration' "$STATUS" >/dev/null
+          grep -F 'assignment_types=wait1_ready,court_assignment' "$STATUS" >/dev/null
           cp "$APK" "$RUNNER_TEMP/v132.apk"
           cp "$STATUS" "$RUNNER_TEMP/v132-status.txt"
 
