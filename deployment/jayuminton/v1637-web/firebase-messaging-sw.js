@@ -1,5 +1,5 @@
-const JAYUMINTON_SW_VERSION = '1.6.37-headsup-3x3-3x5-20260809';
-const JAYUMINTON_CACHE = 'jayuminton-shell-headsup-3x3-3x5-20260809';
+const JAYUMINTON_SW_VERSION = '1.6.37-headsup-3x3-3x5-20260821';
+const JAYUMINTON_CACHE = 'jayuminton-shell-headsup-3x3-3x5-20260821';
 const JAYUMINTON_SHELL = [
   '/',
   '/index.html',
@@ -110,7 +110,7 @@ function notificationVibrationSet() {
 function notificationTitle(type) {
   return String(type || '') === 'court_assignment'
     ? '🚨 코트 입장 — 지금 이동하세요'
-    : '🏸 대기1 진입 — 곧 경기입니다';
+    : '🏸 대기 1 — 라켓 들고 준비해 주세요';
 }
 
 try {
@@ -142,7 +142,7 @@ try {
           {
             body: data.body || (type === 'court_assignment'
               ? '코트에 배정되었습니다. 지금 코트로 이동해 주세요.'
-              : '대기1에 들어왔습니다. 곧 경기 순서입니다.'),
+              : '대기 1입니다. 라켓 들고 준비해 주세요.'),
             requireInteraction: true,
             silent: false,
             icon: '/icon-198.png',
