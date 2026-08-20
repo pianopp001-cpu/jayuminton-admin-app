@@ -29,10 +29,8 @@ package com.jayuminton.admin;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Color;
-import android.media.AudioManager;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -139,11 +137,8 @@ public final class MainActivity extends Activity {
                 pattern[idx++] = 650L; pattern[idx++] = 220L;
                 pattern[idx++] = 650L; pattern[idx++] = group == 7 ? 0L : 1100L;
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
-            } else {
-                vibrator.vibrate(pattern, -1);
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+            else vibrator.vibrate(pattern, -1);
         }
         try {
             Uri toneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
@@ -199,7 +194,6 @@ p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
 s=re.sub(r"applicationId\s+['\"][^'\"]+['\"]", "applicationId 'com.jayuminton.user'", s, count=1)
 s=re.sub(r'versionCode\s+\d+', 'versionCode 140', s, count=1)
 s=re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '1.4.0'", s, count=1)
-# Lightweight contract: no Firebase/Google services dependencies.
 s=re.sub(r"\n?\s*id ['\"]com\.google\.gms\.google-services['\"]", '', s)
 s=re.sub(r"\n?\s*implementation\s+platform\([^\n]+firebase[^\n]+\)", '', s, flags=re.I)
 s=re.sub(r"\n?\s*implementation\s+['\"][^'\"]*firebase[^'\"]*['\"]", '', s, flags=re.I)
@@ -218,20 +212,18 @@ for perm in ['MODIFY_AUDIO_SETTINGS','POST_NOTIFICATIONS','WAKE_LOCK']:
     s=re.sub(r'\s*<uses-permission android:name="android\.permission\.'+perm+r'"\s*/>\s*','\n',s)
 if 'android.permission.VIBRATE' not in s:
     s=s.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">','<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.VIBRATE" />')
-# Remove any FCM service left by a prior temporary build.
 s=re.sub(r'\s*<service[^>]*JayumintonFirebaseMessagingService[\s\S]*?</service>\s*','\n',s)
 p.write_text(s,encoding='utf-8')
 PY
 
-# Restore icon source if a previous build consumed it, using git copy when available.
-if [ -s "$SOURCE_B64" ]; then
-  python3 - "$SOURCE_B64" "$TARGET_ICON" <<'PY'
+python3 - "$SOURCE_B64" "$TARGET_ICON" <<'PY'
 import base64,re,sys
 from pathlib import Path
 raw=base64.b64decode(re.sub(r'\s+','',Path(sys.argv[1]).read_text(encoding='utf-8').strip()),validate=True)
+if raw[:8] != b'\x89PNG\r\n\x1a\n': raise SystemExit('icon source is not PNG')
 Path(sys.argv[2]).write_bytes(raw)
 PY
-fi
+rm -f "$SOURCE_B64"
 
 gradle --no-daemon clean assembleRelease
 APK="app/build/outputs/apk/release/app-release.apk"
@@ -245,7 +237,6 @@ if unzip -l "$APK" | grep -Ei 'firebase|google-services' >/dev/null; then
   echo 'Firebase payload leaked into lite APK' >&2; exit 1
 fi
 SIZE="$(stat -c%s "$APK")"
-# Guard against accidentally regressing to the 2.8 MB native-FCM package.
 [ "$SIZE" -lt 500000 ] || { echo "Lite APK unexpectedly large: $SIZE" >&2; exit 1; }
 mkdir -p releases deployment/status
 cp "$APK" "$OUT"
