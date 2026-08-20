@@ -94,6 +94,24 @@ def replace_response_render(block, var, style):
     return block.replace(old, fast_client_merge(var, indent), 1)
 
 
+def mark_optimistic_flow(block):
+    """Accept the already-optimistic add flow produced by admin_vnext_script_patch.
+
+    Some live snapshots render a temporary member before the request and their
+    success handler only clears controls / reconciles later; there is no
+    renderState(response) to replace. In that shape, forcing a response-render
+    rewrite is both unnecessary and brittle. The backend compact return still
+    prevents a full spreadsheet-state response, so mark the flow as fast-save.
+    """
+    if 'temporaryId' not in block or not re.search(r'(?:server\s*\([^)]*addMember|\.addMember\s*\()', block):
+        return None
+    close = block.rfind('}')
+    if close < 0:
+        return None
+    marker = "  window.__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ = true;\n"
+    return block[:close] + marker + block[close:]
+
+
 # Registration already appends one row. Never rebuild/return the full spreadsheet
 # state just to close the admin save overlay.
 a, b, block = function_block(code, 'function addMemberUnlocked_(')
@@ -106,29 +124,25 @@ a, b, public_block = function_block(code, 'function addMember(')
 if 'addMemberUnlocked_' not in public_block:
     raise SystemExit('addMember wrapper no longer calls addMemberUnlocked_')
 
-# Admin add flow: support all live response styles used by the native/GAS and
-# Cloudflare bridges: await server(), Promise.then(), and google.script.run
-# withSuccessHandler(). All three merge only the saved member into the optimistic
-# local STATE instead of rendering a complete server state snapshot.
+# Admin add flow: support live response styles and the existing optimistic-card
+# flow. A response render is patched when present. If no response render exists,
+# the temporary-card flow is already the faster client behavior and is retained.
 a, b, add_block = function_block(script, 'async function addMember()')
 if 'JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1' not in add_block:
     patched = False
 
     await_match = re.search(r"const\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+server\((['\"])addMember\2", add_block)
-    if await_match:
+    if await_match and ('renderState(' + await_match.group(1) + ');') in add_block:
         add_block = replace_response_render(add_block, await_match.group(1), 'await')
         patched = True
 
     if not patched:
         promise_match = re.search(r"\.then\(function\(([A-Za-z_$][\w$]*)\)\s*\{", add_block)
-        if promise_match and ("server('addMember'" in add_block or 'server("addMember"' in add_block):
+        if promise_match and ("server('addMember'" in add_block or 'server("addMember"' in add_block) and ('renderState(' + promise_match.group(1) + ');') in add_block:
             add_block = replace_response_render(add_block, promise_match.group(1), 'promise')
             patched = True
 
     if not patched:
-        # Current GAS/native admin source uses google.script.run chains. The
-        # Cloudflare bridge deliberately emulates this exact API with a Proxy,
-        # so this is also the live Cloudflare response path.
         success_patterns = [
             r"\.withSuccessHandler\(function\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{",
             r"\.withSuccessHandler\(\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>\s*\{",
@@ -140,15 +154,11 @@ if 'JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1' not in add_block:
             if success_match:
                 break
         direct_add = re.search(r"\.addMember\s*\(", add_block)
-        if success_match and direct_add:
+        if success_match and direct_add and ('renderState(' + success_match.group(1) + ');') in add_block:
             add_block = replace_response_render(add_block, success_match.group(1), 'withSuccessHandler')
             patched = True
 
     if not patched:
-        # Last-resort structural path: if the addMember function clearly invokes
-        # addMember and has exactly one renderState(responseVar), use that response
-        # variable. This avoids brittle formatting assumptions while refusing an
-        # ambiguous rewrite.
         if re.search(r"(?:server\s*\([^)]*addMember|\.addMember\s*\()", add_block):
             renders = re.findall(r"renderState\(\s*([A-Za-z_$][\w$]*)\s*\);", add_block)
             unique = []
@@ -160,7 +170,14 @@ if 'JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1' not in add_block:
                 patched = True
 
     if not patched:
-        raise SystemExit('addMember client response style not recognized')
+        optimistic = mark_optimistic_flow(add_block)
+        if optimistic is not None:
+            add_block = optimistic
+            patched = True
+
+    if not patched:
+        preview = add_block[:1800].replace('\n', '\\n')
+        raise SystemExit('addMember client response style not recognized; block=' + preview)
 
     script = script[:a] + add_block + script[b:]
 
