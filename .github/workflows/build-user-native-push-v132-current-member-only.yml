@@ -39,7 +39,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Resolve config and Firebase user app
+      - id: resolve
+        name: Resolve config and Firebase user app
         shell: bash
         run: |
           set -euo pipefail
@@ -58,7 +59,8 @@ jobs:
           firebase apps:sdkconfig ANDROID "$APP_ID" --project "$(jq -r '.firebaseProjectId' "$C")" > app/google-services.json
           grep -F 'com.jayuminton.user' app/google-services.json >/dev/null
 
-      - name: Verify live atomic member-token guard
+      - id: live_guard
+        name: Verify live atomic member-token guard
         shell: bash
         run: |
           set -euo pipefail
@@ -74,7 +76,8 @@ jobs:
           test "$ok" = 1
           grep -F "if (memberId && String(record.memberId || '') !== memberId) return true;" "$W/Code.js" >/dev/null
 
-      - name: Build and verify strict current-member APK
+      - id: build_apk
+        name: Build and verify strict current-member APK
         shell: bash
         run: |
           set -euo pipefail
@@ -125,11 +128,13 @@ jobs:
           grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
           grep -F 'assignment_alert_scope=current-selected-member-only' "$STATUS" >/dev/null
           grep -F 'missing_target_assignment=reject-before-popup-sound-vibration' "$STATUS" >/dev/null
+          grep -F 'unrelated_assignment=ignore-without-cancelling-current-alert' "$STATUS" >/dev/null
           grep -F 'assignment_types=wait1_ready,court_assignment' "$STATUS" >/dev/null
           cp "$APK" "$RUNNER_TEMP/v132.apk"
           cp "$STATUS" "$RUNNER_TEMP/v132-status.txt"
 
-      - name: Publish verified v1.3.2 user APK
+      - id: publish
+        name: Publish verified v1.3.2 user APK
         shell: bash
         run: |
           set -euo pipefail
@@ -144,7 +149,38 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
+      - name: Record durable build-stage evidence
+        if: ${{ always() }}
+        shell: bash
+        env:
+          RESOLVE_OUTCOME: ${{ steps.resolve.outcome }}
+          LIVE_GUARD_OUTCOME: ${{ steps.live_guard.outcome }}
+          BUILD_APK_OUTCOME: ${{ steps.build_apk.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD || true
+          git fetch origin main || true
+          git checkout -B main origin/main || true
+          mkdir -p deployment/status
+          {
+            echo "source_sha=${GITHUB_SHA}"
+            echo "resolve=${RESOLVE_OUTCOME:-not_run}"
+            echo "live_member_guard=${LIVE_GUARD_OUTCOME:-not_run}"
+            echo "build_apk=${BUILD_APK_OUTCOME:-not_run}"
+            echo "publish=${PUBLISH_OUTCOME:-not_run}"
+            echo 'required_contract=current-selected-member-only'
+            echo 'assignment_types=wait1_ready,court_assignment'
+          } > deployment/status/user-v132-build-evidence.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v132-build-evidence.txt
+          git commit -m 'Record user v1.3.2 build evidence' || exit 0
+          git pull --rebase origin main
+          git push origin main
+
       - uses: actions/upload-artifact@v4
+        if: ${{ success() }}
         with:
           name: jayuminton-courtstatus-v1.3.2-current-member-only
           path: releases/jayuminton-courtstatus-v1.3.2-current-member-only.apk
