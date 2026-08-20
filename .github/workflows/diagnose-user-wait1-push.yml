@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: npm install --global @google/clasp@latest
-      - name: Pull live main and push scripts
+      - name: Pull live main script
         shell: bash
         run: |
           set -euo pipefail
@@ -26,22 +26,18 @@ jobs:
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
-          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$C")"
-          mkdir -p "$RUNNER_TEMP/main" "$RUNNER_TEMP/push"
+          mkdir -p "$RUNNER_TEMP/main"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/main/.clasp.json"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$RUNNER_TEMP/push/.clasp.json"
           (cd "$RUNNER_TEMP/main" && clasp pull)
-          (cd "$RUNNER_TEMP/push" && clasp pull)
-      - name: Print safe wait1 push diagnostics
+      - name: Print live wait1 push functions
         shell: bash
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/main/Code.js" "$RUNNER_TEMP/push/Code.js" <<'PY'
+          python3 - "$RUNNER_TEMP/main/Code.js" <<'PY'
           from pathlib import Path
-          import re,sys
-          main=Path(sys.argv[1]).read_text(encoding='utf-8')
-          push=Path(sys.argv[2]).read_text(encoding='utf-8')
-          def block(src,name):
+          import sys
+          src=Path(sys.argv[1]).read_text(encoding='utf-8')
+          def block(name):
               i=src.find('function '+name)
               if i<0:return 'NOT_FOUND'
               b=src.find('{',i); d=0; q=None; esc=False
@@ -58,14 +54,7 @@ jobs:
                       d-=1
                       if d==0:return src[i:j+1]
               return 'UNBALANCED'
-          names=['withDocumentLock_(','shouldCheckStatePush_(','sendStateTransitionPushes_(','finishCourtUnlocked_(']
-          push_names=['registerWebToken_(','sendPushToMember_(','sendPush_(','sendFcm','doPost(']
-          parts=['=== LIVE MAIN PUSH FUNCTIONS ===']
-          for n in names: parts += ['\n--- '+n+' ---', block(main,n)]
-          parts += ['\n=== LIVE PUSH RELAY FUNCTIONS ===']
-          for n in push_names: parts += ['\n--- '+n+' ---', block(push,n)]
-          text='\n'.join(parts)
-          text=re.sub(r'Bearer\s+[A-Za-z0-9._-]+','Bearer [REDACTED]',text)
-          text=re.sub(r'-----BEGIN PRIVATE KEY-----.*?-----END PRIVATE KEY-----','[PRIVATE KEY REDACTED]',text,flags=re.S)
-          print(text)
+          for n in ['withDocumentLock_(','shouldCheckStatePush_(','sendStateTransitionPushes_(','finishCourtUnlocked_(']:
+              print('\n--- '+n+' ---')
+              print(block(n))
           PY
