@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Admin-only Script patch: route court/wait transition notices through the native alert bridge.
-
-The final Cloudflare v19 contract exposes window.__JAYUMINTON_TRANSITION_ALERT__.
-Until that final script is present, the patched function safely falls back to
-window.alert, so the isolated source remains syntactically/runtimely valid.
-"""
+"""Admin-only Script patch: route court/wait transition notices through the native alert bridge."""
 from pathlib import Path
 import sys
 
@@ -50,19 +45,20 @@ if end < 0:
 block = source[start:end+1]
 
 if '__jmTransitionAlert' not in block:
-    block = block[:block.find('{')+1] + "\n  const __jmTransitionAlert = (typeof window.__JAYUMINTON_TRANSITION_ALERT__ === 'function') ? window.__JAYUMINTON_TRANSITION_ALERT__ : function(value){ window.alert(value); };" + block[block.find('{')+1:]
+    local = "\n  const __jmTransitionAlert = (typeof window.__JAYUMINTON_TRANSITION_ALERT__ === 'function') ? window.__JAYUMINTON_TRANSITION_ALERT__ : function(value){ window.alert(value); };"
+    block = block[:block.find('{')+1] + local + block[block.find('{')+1:]
 
-# Only notification alerts inside this transition-event function are replaced.
-# Validation/error alerts elsewhere retain the ordinary browser alert behavior.
 block = block.replace('alert(', '__jmTransitionAlert(')
-# Do not rewrite the fallback we just injected.
 block = block.replace('window.__jmTransitionAlert(', 'window.alert(')
 if '__jmTransitionAlert(' not in block:
     raise SystemExit('transition alert call was not wired')
 
 source = source[:start] + block + source[end+1:]
 if '__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__' not in source:
-    source += "\n<script>window.__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__=true;</script>\n"
+    close = source.rfind('</script>')
+    if close < 0:
+        raise SystemExit('Script.html closing wrapper missing')
+    source = source[:close] + "\nwindow.__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__=true;\n" + source[close:]
 
 path.write_text(source, encoding='utf-8')
 print('ADMIN_TRANSITION_ALERT_BRIDGE_OK')
