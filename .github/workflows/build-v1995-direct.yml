@@ -2,10 +2,6 @@ name: Build Jayuminton admin v200.1 native voice vibration full APK
 run-name: Jayuminton admin v200.1 native finish alert fresh-install APK
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/build-v1995-direct.yml'
 permissions:
   contents: write
 concurrency:
@@ -76,8 +72,10 @@ jobs:
           set -euo pipefail
           URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?apkVerify=${{ github.run_id }}'
           curl --fail --location --retry 8 "$URL" -o "$RUNNER_TEMP/admin-cloudflare.html"
-          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v16 'emptyCourtAllowed:true'; do grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; done
-          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'voice test still present'; exit 1; fi
+          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v16 'emptyCourtAllowed:true' "badge.innerHTML='<small>신규</small>'" "content:'✨'"; do grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; done
+          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'voice test id still present'; exit 1; fi
+          if grep -F '>음성테스트<' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'visible voice test text still present'; exit 1; fi
+          if grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'legacy NEW badge still present'; exit 1; fi
           if grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
           mkdir -p app/src/main/assets/admin; cp "$RUNNER_TEMP/admin-cloudflare.html" app/src/main/assets/admin/index.html
       - name: Restore release signing key
@@ -94,9 +92,10 @@ jobs:
           APK=app/build/outputs/apk/release/app-release.apk; test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
-          grep -F '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F '__JAYUMINTON_ADMIN_NEW_BADGE_KO__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then exit 1; fi
+          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ "badge.innerHTML='<small>신규</small>'" "content:'✨'"; do grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null; done
+          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo 'voice test id survived in APK'; exit 1; fi
+          if grep -F '>음성테스트<' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo 'visible voice test text survived in APK'; exit 1; fi
+          if grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo 'legacy NEW badge survived in APK'; exit 1; fi
       - name: Publish verified fresh-install APK
         shell: bash
         run: |
