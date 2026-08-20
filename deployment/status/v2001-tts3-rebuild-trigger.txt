@@ -1,0 +1,3 @@
+contract=tts3-max-alarm-media6
+source=main
+purpose=force fresh-install APK rebuild after native TTS3 source contract
