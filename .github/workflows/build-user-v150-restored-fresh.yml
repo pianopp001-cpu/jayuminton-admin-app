@@ -1,0 +1,136 @@
+name: Build restored Jayuminton user APK v1.5.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-user-v150-restored-fresh.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-v150-restored
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MAIN_DEPLOYMENT_ID: AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      FINAL_APK: releases/jayuminton-courtstatus-v1.5.0-restored-fresh.apk
+      FINAL_STATUS: deployment/status/user-v1.5.0-restored-fresh.txt
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Verify real user route before building
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://script.google.com/macros/s/${MAIN_DEPLOYMENT_ID}/exec?mode=user&apkUser=1&userAppVersion=1.5.0"
+          curl -L --fail --silent --show-error --max-time 40 "$URL" -o "$RUNNER_TEMP/user-live.html"
+          test -s "$RUNNER_TEMP/user-live.html"
+          grep -F '자유민턴 코트배정 현황' "$RUNNER_TEMP/user-live.html" >/dev/null
+          grep -F 'memberSelfSettings' "$RUNNER_TEMP/user-live.html" >/dev/null
+          grep -F 'memberForegroundAlert' "$RUNNER_TEMP/user-live.html" >/dev/null
+          if grep -F '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/user-live.html" >/dev/null; then
+            echo 'ADMIN LOADER FOUND IN USER ROUTE' >&2
+            exit 1
+          fi
+          if grep -F 'mode=admin' "$RUNNER_TEMP/user-live.html" | grep -F '관리자 화면을 불러오는 중입니다' >/dev/null; then
+            echo 'ADMIN ROUTE LEAK FOUND' >&2
+            exit 1
+          fi
+          echo 'user_route_preflight=success'
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Restore verified v1.0.0 builder as v1.5.0 fresh package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp deployment/scripts/build_user_apk_v100.sh "$RUNNER_TEMP/build_user_v150.sh"
+          python3 - "$RUNNER_TEMP/build_user_v150.sh" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('releases/jayuminton-user-v1.0.0.apk', 'releases/jayuminton-courtstatus-v1.5.0-restored-fresh.apk')
+          s = s.replace('deployment/status/user-apk-v1.0.0.txt', 'deployment/status/user-v1.5.0-restored-fresh.txt')
+          s = s.replace('com.jayuminton.user', 'com.jayuminton.user.restored150')
+          s = s.replace('1.0.0', '1.5.0')
+          s = s.replace('versionCode 100', 'versionCode 150')
+          s = s.replace("version_code=100", "version_code=150")
+          p.write_text(s, encoding='utf-8')
+          PY
+          chmod +x "$RUNNER_TEMP/build_user_v150.sh"
+          bash "$RUNNER_TEMP/build_user_v150.sh"
+
+      - name: Verify packaged APK contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$FINAL_APK"
+          test -s "$FINAL_STATUS"
+          grep -F 'status=success' "$FINAL_STATUS" >/dev/null
+          grep -F 'application_id=com.jayuminton.user.restored150' "$FINAL_STATUS" >/dev/null
+          grep -F 'version=1.5.0' "$FINAL_STATUS" >/dev/null
+          grep -F 'version_code=150' "$FINAL_STATUS" >/dev/null
+          grep -F 'native_install_signal=NativeUserApp' "$FINAL_STATUS" >/dev/null
+          grep -F "user_deployment_id=${MAIN_DEPLOYMENT_ID}" "$FINAL_STATUS" >/dev/null
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS/aapt" dump badging "$FINAL_APK" > "$RUNNER_TEMP/final-badging.txt"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$FINAL_APK" > "$RUNNER_TEMP/final-signer.txt"
+          grep -F "package: name='com.jayuminton.user.restored150' versionCode='150' versionName='1.5.0'" "$RUNNER_TEMP/final-badging.txt" >/dev/null
+          unzip -p "$FINAL_APK" classes.dex > "$RUNNER_TEMP/final-classes.dex"
+          strings "$RUNNER_TEMP/final-classes.dex" > "$RUNNER_TEMP/final-classes.txt"
+          grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/final-classes.txt" >/dev/null
+          grep -F '?mode=user' "$RUNNER_TEMP/final-classes.txt" >/dev/null
+          grep -F 'NativeUserApp' "$RUNNER_TEMP/final-classes.txt" >/dev/null
+          if grep -F '?mode=admin' "$RUNNER_TEMP/final-classes.txt" >/dev/null; then
+            echo 'admin URL leaked into APK' >&2
+            exit 1
+          fi
+          if grep -F '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/final-classes.txt" >/dev/null; then
+            echo 'admin loader leaked into APK' >&2
+            exit 1
+          fi
+          SIZE="$(stat -c%s "$FINAL_APK")"
+          SHA="$(sha256sum "$FINAL_APK" | awk '{print $1}')"
+          {
+            echo 'route_preflight=success'
+            echo 'user_page_marker=memberSelfSettings'
+            echo 'admin_loader_absent=verified'
+            echo 'install_mode=new-application-id'
+            echo "apk_size_bytes=$SIZE"
+            echo "apk_sha256=$SHA"
+          } >> "$FINAL_STATUS"
+          cat "$FINAL_STATUS"
+
+      - name: Publish verified restored APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$FINAL_APK" "$FINAL_STATUS"
+          git commit -m 'Publish restored fresh user APK v1.5.0' || true
+          git pull --rebase origin main
+          git push origin main
