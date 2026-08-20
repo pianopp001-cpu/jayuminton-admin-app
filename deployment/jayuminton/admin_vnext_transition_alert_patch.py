@@ -5,6 +5,9 @@ The live admin source no longer guarantees a showPendingAlertsIfReady() helper, 
 this patch hooks renderState() and consumes the persistent adminVnextEvents contract
 already published by the backend. It intentionally ignores COURT_FINISHED because
 finishCourt() already raises its immediate alert before the server response.
+
+Important: the first render only seeds already-existing event ids. This prevents
+stale persistent transition events from vibrating immediately when the admin app opens.
 """
 from pathlib import Path
 import sys
@@ -26,6 +29,7 @@ if 'function renderState(' not in source:
 addon = r'''
 (function(){
   var jmSeenTransitionEvents = {};
+  var jmTransitionBaselineReady = false;
   var jmOriginalRenderState = renderState;
   function jmMemberNameFromState(state,id){
     var members=(state&&state.members)||[];
@@ -47,8 +51,18 @@ addon = r'''
     }
     return '';
   }
+  function jmSeedInitialTransitionEvents(events){
+    (events||[]).forEach(function(event){
+      if(event&&event.eventId)jmSeenTransitionEvents[event.eventId]=true;
+    });
+    jmTransitionBaselineReady=true;
+  }
   function jmDeliverTransitionEvents(state){
     var events=(state&&state.adminVnextEvents)||[];
+    if(!jmTransitionBaselineReady){
+      jmSeedInitialTransitionEvents(events);
+      return;
+    }
     events.forEach(function(event){
       if(!event||!event.eventId||jmSeenTransitionEvents[event.eventId])return;
       jmSeenTransitionEvents[event.eventId]=true;
@@ -68,7 +82,7 @@ addon = r'''
     try{jmDeliverTransitionEvents(state||STATE);}catch(e){}
     return result;
   };
-  window.__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__=function(){return {renderHook:true,courtPromoted:true,waitOnePromoted:true,finishHandledSeparately:true};};
+  window.__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__=function(){return {renderHook:true,courtPromoted:true,waitOnePromoted:true,finishHandledSeparately:true,initialReplaySuppressed:true};};
 })();
 '''
 
@@ -80,7 +94,10 @@ for required in [
     "event.type==='WAIT_ONE_PROMOTED'",
     "event.type==='COURT_FINISHED'",
     '__JAYUMINTON_TRANSITION_ALERT__',
-    'renderState=function(state)'
+    'renderState=function(state)',
+    'jmTransitionBaselineReady = false',
+    'jmSeedInitialTransitionEvents(events)',
+    'initialReplaySuppressed:true'
 ]:
     if required not in source:
         raise SystemExit('transition event hook missing: '+required)
