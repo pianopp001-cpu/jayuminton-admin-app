@@ -6,6 +6,8 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.media.AudioManager;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -56,6 +58,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     private Button adminRetryButton;
     private TextToSpeech tts;
     private AudioManager audioManager;
+    private AudioFocusRequest voiceFocusRequest;
     private final AtomicBoolean ttsReady = new AtomicBoolean(false);
     private final AtomicBoolean speaking = new AtomicBoolean(false);
     private final Object audioLock = new Object();
@@ -389,6 +392,22 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                     .apply();
 
             try {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        AudioAttributes attrs = new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build();
+                        voiceFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                                .setAudioAttributes(attrs)
+                                .setAcceptsDelayedFocusGain(false)
+                                .setWillPauseWhenDucked(true)
+                                .build();
+                        audioManager.requestAudioFocus(voiceFocusRequest);
+                    } else {
+                        audioManager.requestAudioFocus(null, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+                    }
+                } catch (Exception ignored) {}
                 int maxMedia = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                 int duckedMusic = Math.max(0, Math.min(MEDIA_DUCK_VOLUME_STEP, maxMedia));
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, duckedMusic, 0);
@@ -415,6 +434,14 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                 }
             } catch (SecurityException ignored) {
             }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && voiceFocusRequest != null) {
+                    audioManager.abandonAudioFocusRequest(voiceFocusRequest);
+                    voiceFocusRequest = null;
+                } else {
+                    audioManager.abandonAudioFocus(null);
+                }
+            } catch (Exception ignored) {}
             ducking = false;
             originalMediaVolume = -1;
             originalAlarmVolume = -1;
