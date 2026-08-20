@@ -1,0 +1,16 @@
+source_sha=9c2722fceb187af26827bea5bbda4fb053756946
+auth_outcome=success
+deploy_secret=present
+clasprc_secret=present
+firebase_secret=present
+deploy_json=valid
+config_mainDeploymentId=present
+config_pushUrl=missing
+config_pushScriptId=missing
+config_firebaseProjectId=present
+firebase_cli=ok
+firebase_apps_list_exit=0
+firebase_apps_json=valid
+user_app_id=found
+sdkconfig_exit=0
+google_services=valid_user_package
