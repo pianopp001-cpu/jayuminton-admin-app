@@ -11,46 +11,58 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     env:
-      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - run: npm install --global @google/clasp@latest
-      - name: Discover accessible relay Apps Script project
+        with: {ref: main}
+      - name: Test 64-character candidates from historical admin APKs
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          clasp list > "$RUNNER_TEMP/clasp-list.txt"
-          echo 'CLASP_LIST_OK=true'
-          python3 - "$RUNNER_TEMP/clasp-list.txt" "$RUNNER_TEMP/candidates.txt" <<'PY'
+          test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
+          python3 - <<'PY'
           from pathlib import Path
-          import re,sys
-          text=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore')
-          ids=[]
-          for m in re.finditer(r'https://script\.google\.com/d/([A-Za-z0-9_-]+)/edit', text):
-              if m.group(1) not in ids: ids.append(m.group(1))
-          Path(sys.argv[2]).write_text('\n'.join(ids),encoding='utf-8')
-          print('ACCESSIBLE_SCRIPT_COUNT=',len(ids))
+          import re
+          files=[
+            Path('releases/jayuminton-admin-v1.5-session-fix.apk'),
+            Path('releases/jayuminton-admin-v1.6.6.apk'),
+            Path('releases/jayuminton-admin-v199.7-cloudflare-vnext.apk'),
+            Path('releases/jayuminton-admin-v199.8-pin-fixed-full.apk'),
+            Path('releases/jayuminton-admin-v199.9-white-screen-safe-full.apk'),
+            Path('releases/jayuminton-admin-v200.0-bundled-cloudflare-full.apk'),
+            Path('releases/jayuminton-admin-v200.1-native-finish-alert-full.apk'),
+          ]
+          vals=[]
+          for p in files:
+            if not p.exists(): continue
+            b=p.read_bytes()
+            for m in re.finditer(rb'(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{64})(?![A-Za-z0-9_-])',b):
+              s=m.group(1).decode('ascii')
+              if s not in vals: vals.append(s)
+          Path('/tmp/candidates.txt').write_text('\n'.join(vals),encoding='utf-8')
+          print('APK_KEY_CANDIDATE_COUNT=',len(vals))
           PY
           found=0
-          n=0
-          while IFS= read -r SID; do
-            [ -n "$SID" ] || continue
-            n=$((n+1))
-            WORK="$RUNNER_TEMP/candidate-$n"
-            mkdir -p "$WORK"
-            printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$WORK/.clasp.json"
-            if (cd "$WORK" && clasp pull >/dev/null 2>&1); then
-              if grep -R -l -E 'jayuminton-free-web-push-relay|JAYUMINTON_WEB_PUSH_TOKENS_V1|registerWebToken_' "$WORK" >/dev/null 2>&1; then
-                echo "RELAY_PROJECT_FOUND=true"
-                echo "RELAY_SCRIPT_ID_LENGTH=${#SID}"
-                echo "RELAY_SCRIPT_ID_PREFIX=${SID:0:6}"
-                printf '%s' "$SID" > "$RUNNER_TEMP/found-relay-script-id.txt"
-                found=1
-                break
-              fi
+          idx=0
+          while IFS= read -r KEY; do
+            [ -n "$KEY" ] || continue
+            idx=$((idx+1))
+            PAYLOAD="{\"action\":\"main_state_event\",\"type\":\"wait1_ready\",\"assignmentId\":\"diagnostic-apk-key-$idx-123456\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
+            curl -sS -D "/tmp/h-$idx" -o "/tmp/f-$idx" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL?key=$KEY" || true
+            LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "/tmp/h-$idx")"
+            if [ -n "$LOC" ]; then curl -sS -o "/tmp/r-$idx" "$LOC" || true; else cp "/tmp/f-$idx" "/tmp/r-$idx"; fi
+            if python3 - "/tmp/r-$idx" <<'PY'
+          import json,sys
+          try:j=json.load(open(sys.argv[1],encoding='utf-8'))
+          except Exception:j={}
+          raise SystemExit(0 if (j.get('ok') is True and j.get('sent') == 0) else 1)
+          PY
+            then
+              echo 'APK_RELAY_KEY_FOUND=true'
+              echo "APK_RELAY_KEY_INDEX=$idx"
+              printf '%s' "$KEY" > /tmp/found-key.txt
+              found=1
+              break
             fi
-          done < "$RUNNER_TEMP/candidates.txt"
-          echo "RELAY_PROJECT_FOUND_FINAL=$([ "$found" -eq 1 ] && echo true || echo false)"
+          done < /tmp/candidates.txt
+          echo "APK_RELAY_KEY_FOUND_FINAL=$([ "$found" -eq 1 ] && echo true || echo false)"
