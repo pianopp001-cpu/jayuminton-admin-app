@@ -1,0 +1,7 @@
+source_sha=eda125339f4e61f707cc46e17162477f6cf64969
+resolve=success
+build_apk=failure
+publish=skipped
+build_log_tail_begin
+missing v141 anchor: user-lite-v1.4.1-true-fresh 
+build_log_tail_end
