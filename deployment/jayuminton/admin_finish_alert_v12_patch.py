@@ -4,7 +4,13 @@ import sys
 p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
 marker='</body>'
 if marker not in s: raise SystemExit('body marker missing')
-patch=r'''<script id="jayuminton-admin-finish-alert-v17">
+patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
+#pairStatisticsModal .pair-statistics-modal{max-height:calc(100dvh - 16px)!important;overflow-y:auto!important;overscroll-behavior:contain!important;padding-bottom:max(28px,env(safe-area-inset-bottom))!important}
+#pairStatisticsModal .pair-statistics-list{max-height:none!important;height:auto!important;overflow:visible!important;padding-bottom:max(48px,calc(env(safe-area-inset-bottom) + 32px))!important;align-content:start!important}
+#pairStatisticsModal .pair-statistics-row:last-child{margin-bottom:24px!important}
+#pairStatisticsModal .pair-statistics-partners{height:auto!important;max-height:none!important;overflow:visible!important;white-space:normal!important}
+</style>
+<script id="jayuminton-admin-finish-alert-v17">
 (function(){
   var heldUtterance=null;
   function waitingOneMembers(){var ids=(STATE&&STATE.waitGroups&&STATE.waitGroups[0]||[]).slice();return ids.map(function(id){return memberById(id);}).filter(Boolean);}
@@ -44,10 +50,10 @@ patch=r'''<script id="jayuminton-admin-finish-alert-v17">
       else alertAndStop(Number(courtNo)+'번 코트 경기가 종료되었습니다.');
     }catch(error){alertAndStop(error&&error.message||error);}
   };
-  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V17__=function(){return {nativeVoice:!!(window.NativeVoice&&typeof window.NativeVoice.speak==='function'),nativeVibrate:!!(window.NativeVoice&&typeof window.NativeVoice.vibrate==='function'),cancelVibration:!!(window.NativeVoice&&typeof window.NativeVoice.cancelVibration==='function'),waiting:waitingOneMembers().map(cleanName),emptyCourtAllowed:true,vibrationSets:8,vibrationsPerSet:3};};
+  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V17__=function(){return {nativeVoice:!!(window.NativeVoice&&typeof window.NativeVoice.speak==='function'),nativeVibrate:!!(window.NativeVoice&&typeof window.NativeVoice.vibrate==='function'),cancelVibration:!!(window.NativeVoice&&typeof window.NativeVoice.cancelVibration==='function'),waiting:waitingOneMembers().map(cleanName),emptyCourtAllowed:true,vibrationSets:8,vibrationsPerSet:3,statisticsNoClip:true};};
 })();
 </script>'''
 s=s.replace(marker,patch+'\n'+marker,1)
-for x in ['jayuminton-admin-finish-alert-v17','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3']:
+for x in ['jayuminton-admin-finish-alert-v17','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true']:
     if x not in s: raise SystemExit('missing '+x)
 p.write_text(s,encoding='utf-8')
