@@ -84,10 +84,11 @@ jobs:
           grep -Fq '?mode=user' "$RUNNER_TEMP/classes.txt"
           grep -Fq 'NativeUserApp' "$RUNNER_TEMP/classes.txt"
           ! grep -Fq '?mode=admin' "$RUNNER_TEMP/classes.txt"
-          unzip -p "$FINAL_APK" res/layout/activity_main.xml > "$RUNNER_TEMP/packed-layout.bin"
-          strings "$RUNNER_TEMP/packed-layout.bin" > "$RUNNER_TEMP/packed-layout.txt" || true
-          ! grep -Fq 'adminLoadPanel' "$RUNNER_TEMP/packed-layout.txt"
-          ! grep -Fq '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/packed-layout.txt"
+          "$BT/aapt" dump xmltree "$FINAL_APK" res/layout/activity_main.xml > "$RUNNER_TEMP/layout-tree.txt"
+          grep -Fq 'android.webkit.WebView' "$RUNNER_TEMP/layout-tree.txt"
+          ! grep -Fq 'adminLoadPanel' "$RUNNER_TEMP/layout-tree.txt"
+          ! grep -Fq 'adminLoadMessage' "$RUNNER_TEMP/layout-tree.txt"
+          ! grep -Fq '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/layout-tree.txt"
           SIGNER=$(grep -Ei 'SHA-256 digest:' "$RUNNER_TEMP/signer.txt" | head -1 | sed -E 's/.*digest:[[:space:]]*//' | tr -d ':' | tr '[:lower:]' '[:upper:]')
           test "$SIGNER" = 'D47ADB93363FF397601E63667E79F27F99AE499AADC1FD0013861809950FC787'
           SIZE=$(stat -c%s "$FINAL_APK"); SHA=$(sha256sum "$FINAL_APK" | awk '{print $1}')
