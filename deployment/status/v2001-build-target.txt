@@ -1,4 +1,4 @@
 admin_url=file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.1
-apk_web_build=2001-native-alert-restored
+apk_web_build=2001-native-alert-v19
 frontend=bundled-android-asset
-alert_contract=tts-max_media-6_vibrate-3x8_cancel
+alert_contract=tts-max_media-6_vibrate-3x8_cancel_empty-transition-fast-save
