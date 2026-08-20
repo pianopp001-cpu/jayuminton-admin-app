@@ -11,47 +11,40 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     env:
-      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
+      JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - run: npm install --global @google/clasp@latest
-      - name: Pull live main script
+      - name: Check legacy relay secrets and endpoint safely
         shell: bash
         run: |
           set -euo pipefail
-          C="$RUNNER_TEMP/deploy.json"
-          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
-          mkdir -p "$RUNNER_TEMP/main"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/main/.clasp.json"
-          (cd "$RUNNER_TEMP/main" && clasp pull)
-      - name: Probe live relay with invalid key only
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - "$RUNNER_TEMP/main/Code.js" "$RUNNER_TEMP/relay-url.txt" <<'PY'
+          echo "LEGACY_URL_PRESENT=$([ -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ] && echo true || echo false)"
+          echo "LEGACY_SHARED_SECRET_PRESENT=$([ -n "$JAYUMINTON_PUSH_SHARED_SECRET" ] && echo true || echo false)"
+          echo "LEGACY_SHARED_SECRET_LENGTH=${#JAYUMINTON_PUSH_SHARED_SECRET}"
+          if [ -z "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" ]; then exit 0; fi
+          STATUS="$(curl -sS -o "$RUNNER_TEMP/get.txt" -w '%{http_code}' "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" || true)"
+          echo "LEGACY_GET_STATUS=$STATUS"
+          python3 - "$RUNNER_TEMP/get.txt" <<'PY'
           from pathlib import Path
-          import re,sys
-          src=Path(sys.argv[1]).read_text(encoding='utf-8')
-          m=re.search(r"(?:const|let|var)\s+JAYUMINTON_STATE_PUSH_RELAY_URL_\s*=\s*['\"]([^'\"]+)['\"]",src)
-          if not m: raise SystemExit('relay URL missing')
-          Path(sys.argv[2]).write_text(m.group(1).strip(),encoding='utf-8')
+          import json,sys
+          t=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore') if Path(sys.argv[1]).exists() else ''
+          try:j=json.loads(t)
+          except Exception:j={}
+          print('LEGACY_HEALTH_OK=',bool(j.get('ok')))
+          print('LEGACY_SERVICE_PRESENT=',bool(j.get('service')))
+          print('LEGACY_HAS_TOKEN_COUNT=', 'registeredTokens' in j)
           PY
-          URL="$(cat "$RUNNER_TEMP/relay-url.txt")"
-          STATUS="$(curl -L -sS -o "$RUNNER_TEMP/relay-response.txt" -w '%{http_code}' -X POST \
-            --data-urlencode 'payload={"action":"main_state_event","internalKey":"__diagnostic_invalid_key__","type":"wait1_ready","assignmentId":"diagnostic","members":[]}' \
-            "$URL" || true)"
-          echo "RELAY_HTTP_STATUS=$STATUS"
-          echo "RELAY_RESPONSE_BYTES=$(wc -c < "$RUNNER_TEMP/relay-response.txt" 2>/dev/null || echo 0)"
-          python3 - "$RUNNER_TEMP/relay-response.txt" <<'PY'
+          STATUS2="$(curl -sS -o "$RUNNER_TEMP/post.txt" -w '%{http_code}' -X POST \
+            --data-urlencode 'payload={"action":"main_state_event","internalKey":"__diagnostic_invalid_key__","type":"wait1_ready","assignmentId":"diagnostic-invalid-key","members":[]}' \
+            "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" || true)"
+          echo "LEGACY_POST_STATUS=$STATUS2"
+          python3 - "$RUNNER_TEMP/post.txt" <<'PY'
           from pathlib import Path
-          import sys
-          p=Path(sys.argv[1]); t=p.read_text(encoding='utf-8',errors='ignore').lower() if p.exists() else ''
-          print('RELAY_LOOKS_AUTH_REJECTION=', any(x in t for x in ['invalid','unauthorized','forbidden','internalkey','internal key','인증','권한']))
-          print('RELAY_LOOKS_GOOGLE_LOGIN=', 'accounts.google.com' in t or 'sign in' in t)
-          print('RELAY_LOOKS_NOT_FOUND=', 'not found' in t or '페이지를 찾을 수' in t)
+          import json,sys
+          t=Path(sys.argv[1]).read_text(encoding='utf-8',errors='ignore') if Path(sys.argv[1]).exists() else ''
+          try:j=json.loads(t)
+          except Exception:j={}
+          print('LEGACY_POST_JSON=',bool(j))
+          print('LEGACY_POST_REJECTED=',bool(j) and j.get('ok') is False)
           PY
