@@ -1,6 +1,6 @@
 name: Kick v200.1 Cloudflare UI cleanup APK rebuild
 
-# PR-merge rerun marker: restored-alert-v17
+# PR-merge rerun marker: alert-v18-fast-save
 on:
   push:
     branches: [main]
@@ -11,6 +11,7 @@ on:
       - 'deployment/jayuminton/admin_cloudflare_final_contract.py'
       - 'deployment/jayuminton/admin_finish_alert_v12_patch.py'
       - 'deployment/jayuminton/apply_admin_vnext_patches.py'
+      - 'deployment/jayuminton/admin_vnext_fast_save_patch.py'
       - 'deployment/jayuminton/admin_vnext_badge_cleanup_patch.py'
   workflow_dispatch: {}
 permissions:
@@ -31,11 +32,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p deployment/status
-          printf 'started=%s\nsource_commit=%s\nkick_run=%s\nstate=started\ncontract=restored-alert-v17\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/status/v2001-kick-status.txt
+          printf 'started=%s\nsource_commit=%s\nkick_run=%s\nstate=started\ncontract=alert-v18-fast-save\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/status/v2001-kick-status.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/v2001-kick-status.txt
-          git commit -m 'Record v200.1 restored alert rebuild start'
+          git commit -m 'Record v200.1 alert v18 fast-save rebuild start'
           git pull --rebase origin main
           git push origin main
       - name: Dispatch Cloudflare admin redeploy
@@ -44,19 +45,21 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' https://api.github.com/repos/${{ github.repository }}/actions/workflows/preview-admin-cloudflare.yml/dispatches -d '{"ref":"main"}'
-      - name: Wait for restored Cloudflare admin frontend
+      - name: Wait for alert-v18 fast-save Cloudflare admin frontend
         shell: bash
         run: |
           set -euo pipefail
           URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/'
           for i in $(seq 1 150); do
-            curl --fail --location --silent --show-error "$URL?alertV17=$GITHUB_RUN_ID-$i" -o "$RUNNER_TEMP/live.html" || true
+            curl --fail --location --silent --show-error "$URL?alertV18=$GITHUB_RUN_ID-$i" -o "$RUNNER_TEMP/live.html" || true
             if grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
-              && grep -F 'jayuminton-admin-finish-alert-v17' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F 'jayuminton-admin-finish-alert-v18' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
               && grep -F 'emptyCourtAllowed:true' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
               && grep -F 'vibrationSets:8' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
               && grep -F 'vibrationsPerSet:3' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
-              && grep -F 'cancelVibration' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F 'cancelOnAlertDismiss:true' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F 'alertBeforeServerCompletion:true' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
+              && grep -F '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
               && grep -F 'jayuminton-admin-statistics-no-clip-v1' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
               && grep -F '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
               && grep -F '__JAYUMINTON_ADMIN_NEW_BADGE_KO__' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
@@ -64,12 +67,12 @@ jobs:
               && ! grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
               && ! grep -F '>음성테스트<' "$RUNNER_TEMP/live.html" >/dev/null 2>&1 \
               && ! grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/live.html" >/dev/null 2>&1; then
-              echo 'Restored v17 Cloudflare admin is live.'
+              echo 'Alert-v18 fast-save Cloudflare admin is live.'
               exit 0
             fi
             sleep 10
           done
-          echo 'Timed out waiting for restored v17 Cloudflare admin.' >&2
+          echo 'Timed out waiting for alert-v18 fast-save Cloudflare admin.' >&2
           exit 1
       - name: Dispatch fresh-install APK build
         env: {GH_TOKEN: '${{ github.token }}'}
@@ -77,4 +80,4 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' https://api.github.com/repos/${{ github.repository }}/actions/workflows/build-v1995-direct.yml/dispatches -d '{"ref":"main"}'
-          echo 'Fresh APK build dispatched after restored v17 deploy verification.'
+          echo 'Fresh APK build dispatched after alert-v18 fast-save deploy verification.'
