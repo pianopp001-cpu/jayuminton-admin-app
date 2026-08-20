@@ -1,0 +1,53 @@
+name: Redeploy admin Cloudflare and rebuild APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/admin_vnext_transition_alert_patch.py'
+      - 'deployment/jayuminton/admin_finish_alert_v12_patch.py'
+      - 'deployment/jayuminton/admin_cloudflare_final_contract.py'
+      - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
+      - '.github/workflows/admin-redeploy-build-chain.yml'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  redeploy-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Redeploy Cloudflare admin and wait
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow preview-admin-cloudflare.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run preview-admin-cloudflare.yml --repo "$GITHUB_REPOSITORY" --ref main
+          run_id=''
+          for i in $(seq 1 60); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow preview-admin-cloudflare.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Rebuild verified admin APK and wait
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v1995-direct.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run build-v1995-direct.yml --repo "$GITHUB_REPOSITORY" --ref main
+          run_id=''
+          for i in $(seq 1 60); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v1995-direct.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
