@@ -1,0 +1,42 @@
+name: Apply Jayuminton admin v200.1 native TTS3 contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - deployment/jayuminton/admin_native_tts3_patch.py
+      - .github/workflows/apply-v2001-native-tts3.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply native TTS3 patch
+        run: python3 deployment/jayuminton/admin_native_tts3_patch.py
+      - name: Verify exact native audio contract
+        run: |
+          set -euo pipefail
+          JAVA=app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'VOICE_REPEAT_COUNT = 3' "$JAVA"
+          grep -F 'remainingVoiceRepeats = VOICE_REPEAT_COUNT' "$JAVA"
+          grep -F 'MEDIA_DUCK_VOLUME_STEP = 6' "$JAVA"
+          grep -F 'setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)' "$JAVA"
+          if grep -F 'VOICE_VOLUME_STEP = 6' "$JAVA"; then exit 1; fi
+          if grep -F 'int minimumMusic = maxMedia > 0 ? 1 : 0' "$JAVA"; then exit 1; fi
+      - name: Commit native source contract
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- app/src/main/java/com/jayuminton/admin/MainActivity.java; then
+            echo 'Native TTS3 contract already applied.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- app/src/main/java/com/jayuminton/admin/MainActivity.java
+          git commit -m 'Restore admin TTS 3x max-volume contract'
+          git pull --rebase origin main
+          git push origin main
