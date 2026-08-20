@@ -1,0 +1,117 @@
+name: Build Jayuminton user APK v1.5.3 final
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-user-v153-final.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MAIN_DEPLOYMENT_ID: AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      FINAL_APK: releases/jayuminton-courtstatus-v1.5.3-final-fresh.apk
+      FINAL_STATUS: deployment/status/user-v1.5.3-final-fresh.txt
+      EVIDENCE: deployment/status/user-v1.5.3-build-evidence.txt
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build verify publish
+        shell: bash
+        run: |
+          set +e
+          mkdir -p deployment/status releases
+          ROUTE=failure; BUILD=failure; VERIFY=failure; REASON=''
+          URL="https://script.google.com/macros/s/${MAIN_DEPLOYMENT_ID}/exec?mode=user&apkUser=1&userAppVersion=1.5.3"
+          curl -L --fail --silent --show-error --max-time 40 "$URL" -o "$RUNNER_TEMP/user-live.html"
+          if [ $? -eq 0 ] && grep -Fq '자유민턴 코트배정 현황' "$RUNNER_TEMP/user-live.html" && grep -Fq 'memberSelfSettings' "$RUNNER_TEMP/user-live.html" && grep -Fq 'memberForegroundAlert' "$RUNNER_TEMP/user-live.html" && ! grep -Fq '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/user-live.html"; then ROUTE=success; else REASON='route'; fi
+
+          if [ "$ROUTE" = success ]; then
+            cp deployment/scripts/build_user_apk_v100.sh "$RUNNER_TEMP/build.sh"
+            python3 - "$RUNNER_TEMP/build.sh" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
+          s=s.replace('releases/jayuminton-user-v1.0.0.apk','releases/jayuminton-courtstatus-v1.5.3-final-fresh.apk')
+          s=s.replace('deployment/status/user-apk-v1.0.0.txt','deployment/status/user-v1.5.3-final-fresh.txt')
+          s=s.replace('com.jayuminton.user','com.jayuminton.user.final153')
+          s=s.replace('1.0.0','1.5.3').replace('versionCode 100','versionCode 153').replace('version_code=100','version_code=153')
+          marker='gradle --no-daemon clean assembleRelease\n'
+          if marker not in s: raise SystemExit('gradle marker missing')
+          s=s.split(marker,1)[0]+marker
+          p.write_text(s,encoding='utf-8')
+          PY
+            chmod +x "$RUNNER_TEMP/build.sh"
+            bash "$RUNNER_TEMP/build.sh" > "$RUNNER_TEMP/build.log" 2>&1
+            if [ $? -eq 0 ]; then BUILD=success; else REASON='build'; fi
+          fi
+
+          if [ "$BUILD" = success ]; then
+            SRC_APK='app/build/outputs/apk/release/app-release.apk'
+            cp "$SRC_APK" "$FINAL_APK"
+            BT="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+            "$BT/aapt" dump badging "$FINAL_APK" > "$RUNNER_TEMP/badging.txt"
+            A=$?
+            "$BT/apksigner" verify --verbose --print-certs "$FINAL_APK" > "$RUNNER_TEMP/signer.txt"
+            S=$?
+            unzip -p "$FINAL_APK" classes.dex > "$RUNNER_TEMP/classes.dex"
+            strings "$RUNNER_TEMP/classes.dex" > "$RUNNER_TEMP/classes.txt"
+            SIGNER=$(grep -Ei 'SHA-256 digest:' "$RUNNER_TEMP/signer.txt" | head -1 | sed -E 's/.*digest:[[:space:]]*//' | tr -d ':' | tr '[:lower:]' '[:upper:]')
+            if [ $A -eq 0 ] && [ $S -eq 0 ] && grep -Fq "package: name='com.jayuminton.user.final153' versionCode='153' versionName='1.5.3'" "$RUNNER_TEMP/badging.txt" && grep -Fq "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/classes.txt" && grep -Fq '?mode=user' "$RUNNER_TEMP/classes.txt" && grep -Fq 'NativeUserApp' "$RUNNER_TEMP/classes.txt" && ! grep -Fq '?mode=admin' "$RUNNER_TEMP/classes.txt" && ! grep -Fq '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/classes.txt" && [ "$SIGNER" = 'D47ADB93363FF397601E63667E79F27F99AE499AADC1FD0013861809950FC787' ]; then
+              VERIFY=success
+              SIZE=$(stat -c%s "$FINAL_APK"); SHA=$(sha256sum "$FINAL_APK" | awk '{print $1}')
+              cat > "$FINAL_STATUS" <<EOF
+status=success
+version=1.5.3
+version_code=153
+application_id=com.jayuminton.user.final153
+install_mode=true-new-package-fresh-install
+launch_url=$URL
+route_preflight=success
+user_page_marker=memberSelfSettings
+foreground_alert=present
+admin_loader_absent=verified
+native_install_signal=NativeUserApp
+web_storage=preserved
+apk_size_bytes=$SIZE
+apk_sha256=$SHA
+signer_sha256=$SIGNER
+EOF
+            else REASON='verify'; fi
+          fi
+
+          {
+            echo 'workflow=Build Jayuminton user APK v1.5.3 final'
+            echo "route=$ROUTE"
+            echo "build_apk=$BUILD"
+            echo "verify_apk=$VERIFY"
+            echo "failure_reason=$REASON"
+            [ -f "$RUNNER_TEMP/build.log" ] && { echo 'build_log_tail_begin'; tail -n 80 "$RUNNER_TEMP/build.log" | tr '\n' ' '; echo; echo 'build_log_tail_end'; }
+            [ -f "$FINAL_STATUS" ] && { echo 'final_status_begin'; cat "$FINAL_STATUS"; echo 'final_status_end'; }
+            echo "updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          } > "$EVIDENCE"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if [ "$VERIFY" = success ]; then git add "$FINAL_APK" "$FINAL_STATUS" "$EVIDENCE"; else git add "$EVIDENCE"; fi
+          git commit -m 'Record user APK v1.5.3 final build result' || true
+          git pull --rebase origin main
+          git push origin main
+          exit 0
