@@ -1,4 +1,4 @@
-source_sha=904b546a84ec91305830d3b665f8113513764bea
+source_sha=506ba775abad37b9fa8d1c4abe912fdfc05d9753
 resolve=failure
 live_member_guard=skipped
 build_apk=skipped
