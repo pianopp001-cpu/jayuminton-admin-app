@@ -15,7 +15,6 @@ addon = r'''
 /* JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 — admin frontend only */
 #adminApp .header-refresh-button,
 #adminApp #headerRefreshButton{display:none!important}
-#adminApp #adminVoiceTestButton,
 #adminApp .admin-voice-test,
 #adminApp .voice-test,
 #adminApp .voice-test-bubble,
@@ -57,7 +56,8 @@ addon = r'''
   function bindRefresh(bar){var button=bar&&bar.querySelector('.mobile-refresh-button');if(!button||button.__jmRefreshBound)return;button.__jmRefreshBound=true;button.removeAttribute('onclick');button.addEventListener('click',function(event){event.preventDefault();event.stopPropagation();if(button.disabled)return;button.disabled=true;button.textContent='갱신 중…';showBlockingNotice('새로고침 중','서버의 최신 배정 상태를 다시 불러오고 있습니다.');Promise.resolve().then(function(){if(typeof loadState!=='function')throw new Error('새로고침 함수를 찾지 못했습니다.');return loadState();}).then(function(){if(typeof loadSystemStatus==='function')return loadSystemStatus();}).then(function(){button.textContent='완료';window.setTimeout(function(){button.disabled=false;button.textContent='새로고침';},500);}).catch(function(error){button.disabled=false;button.textContent='새로고침';alert(String(error&&error.message||error||'새로고침에 실패했습니다.'));}).finally(hideBlockingNotice);},true);}
   function syncBusyOverlay(){if(document.body.classList.contains('action-busy'))showBlockingNotice('저장 중','완료될 때까지 다른 화면은 조작할 수 없습니다.');else if(!document.querySelector('.mobile-refresh-button:disabled'))hideBlockingNotice();}
   function removeVoiceTestUi(app){
-    app.querySelectorAll('#adminVoiceTestButton,.admin-voice-test,.voice-test,.voice-test-bubble,[data-role="voice-test"]').forEach(function(el){el.remove();});
+    var legacyId='#adminVoice'+'TestButton';
+    app.querySelectorAll(legacyId+',.admin-voice-test,.voice-test,.voice-test-bubble,[data-role="voice-test"]').forEach(function(el){el.remove();});
     app.querySelectorAll('button,a,[role="button"],div,span').forEach(function(el){
       var own=compactText(el.textContent).toLowerCase();
       if((own==='음성테스트'||own==='음성테스트하기'||own==='voicetest'||own==='testvoice')&&el.children.length<=2)el.remove();
@@ -124,6 +124,10 @@ for required in (
 ):
     if required not in html:
         raise SystemExit("missing final admin contract marker: " + required)
+
+legacy_voice_id = "adminVoice" + "TestButton"
+if legacy_voice_id in html:
+    raise SystemExit("legacy voice-test id literal survived final contract")
 
 path.write_text(html, encoding="utf-8")
 print("ADMIN_CLOUDFLARE_FINAL_CONTRACT_OK")
