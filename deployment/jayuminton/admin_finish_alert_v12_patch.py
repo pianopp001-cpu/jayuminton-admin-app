@@ -38,5 +38,7 @@ patch=r'''<script id="jayuminton-admin-finish-alert-v16">
 s=s.replace(marker,patch+'\n'+marker,1)
 for x in ['jayuminton-admin-finish-alert-v16','NativeVoice.speak','NativeVoice.vibrate','__JAYUMINTON_ADMIN_FINISH_ALERT_V16__','emptyCourtAllowed:true']:
     if x not in s: raise SystemExit('missing '+x)
-if 'adminVoiceTestButton' in s: raise SystemExit('visible voice test button must not ship')
+# Voice-test UI cleanup is intentionally enforced by admin_cloudflare_final_contract.py
+# after this native finish-alert patch is injected. Final deployed HTML/APK checks still
+# fail if any voice-test id/text survives, so this stage must not reject the pre-clean DOM.
 p.write_text(s,encoding='utf-8')
