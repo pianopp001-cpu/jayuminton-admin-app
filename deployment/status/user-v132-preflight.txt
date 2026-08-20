@@ -1,0 +1,63 @@
+status=success
+failed_step=
+source_sha=208cf878d6ffa5d57f731ce984d4d57f8710d3fa
+contract=current-selected-member-only
+assignment_types=wait1_ready,court_assignment
+missing_target=reject
+unrelated_assignment=ignore_without_cancelling_current
+vibration=3-pulses-max-8-groups
+--- log tail ---
+=== patch_build_user_native_v111.py ===
+Prepared native background push APK build v1.1.1.
+=== patch_build_user_native_v112.py ===
+Prepared native v1.1.2 with direct member bridge and registration retries.
+=== patch_build_user_native_v113.py ===
+Prepared native v1.1.3 with verified registration and local alert probe.
+=== patch_build_user_native_v114.py ===
+Prepared native v1.1.4 with pre-created Android system notification channels.
+=== patch_build_user_native_v115.py ===
+Prepared native v1.1.5 with token registration and no automatic test push.
+=== patch_build_user_native_v116.py ===
+Prepared native v1.1.6 with unconditional alarm-usage assignment vibration.
+=== patch_build_user_native_v117.py ===
+Prepared v1.1.7 persistent alert with uncancelled explicit vibration.
+=== patch_build_user_native_v118.py ===
+Prepared v1.1.8 with correct wait1 wording, stale-member guard and until-dismissed vibration.
+=== patch_build_user_native_v119.py ===
+Prepared v1.1.9 with always-available notification stop action.
+=== patch_build_user_native_v120_diagnostic.py ===
+Prepared safe v1.2.0 native delivery diagnostic APK.
+=== patch_build_user_native_v121.py ===
+Prepared v1.2.1 with Android full-screen access flow and strict member resync.
+=== patch_build_user_native_v122.py ===
+Prepared v1.2.2 deterministic overlay stop UI and safe vibration fallback.
+=== patch_build_user_native_v124_confirmed_overlay.py ===
+Prepared v1.2.4 with verified overlay add before repeating vibration.
+=== patch_build_user_native_v126_stop_controller.py ===
+Prepared v1.2.6 candidate: finite-group controller + manager-wide cancel + guarded cancel retries.
+=== patch_build_user_native_v126_raceguard.py ===
+Guarded v1.2.6 against confirm racing a late vibration start.
+=== patch_build_user_native_v127_member_switch.py ===
+Prepared v1.2.7: idempotent member sync, immediate token reassignment, stale registration generation guard, v1.2.6 vibration controller preserved.
+=== patch_build_user_native_v128_repeat_switch.py ===
+Prepared v1.2.8: repeated A->B->C member changes stop stale alerts immediately; current-member FCM starts the same proven vibration controller.
+=== patch_build_user_native_v129_background_registration.py ===
+Prepared v1.2.9 diagnostic candidate: immediate + JobScheduler background token registration, stale-registering recovery, v1.2.8 alert behavior preserved.
+=== patch_user_native_v130_vibration_cap8.py ===
+Prepared v1.3.0 code130: existing behavior preserved, both wait1/court capped at 8 groups of 3 pulses.
+=== patch_user_native_v132_strict_current_member.py ===
+Prepared v1.3.2: strict current-member alerts; unrelated events are ignored without cancelling a valid current alert.
+VERSION="1.3.2"
+VERSION_CODE="132"
+        boolean assignmentType = "wait1_ready".equals(type) || "court_assignment".equals(type) ||
+        boolean court = "court_assignment".equals(type);
+        boolean assignmentType = "wait1_ready".equals(type) || "court_assignment".equals(type) ||
+        boolean selectedMemberMatches = hasTargetMemberId &&
+        if (assignmentType && (!hasTargetMemberId || !selectedMemberMatches)) {
+                NativePushRegistrar.isCurrentMember(this, targetMemberId);
+        stopPreviousMemberAlert(app);
+        stopPreviousMemberAlert(app);
+            stopPreviousMemberAlert(app);
+    private static final int MAX_GROUPS = 8;
+                    "var m=JSON.parse(localStorage.getItem('jayuminton_web_push_selected_member_v1')||'null');" +
+                "var m=JSON.parse(localStorage.getItem('jayuminton_web_push_selected_member_v1')||'null');" +
