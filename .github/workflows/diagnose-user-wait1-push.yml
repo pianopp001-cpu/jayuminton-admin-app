@@ -1,6 +1,6 @@
 name: Diagnose user wait1 push live
 on:
-  pull_request:
+  push:
     branches: [main]
     paths:
       - '.github/workflows/diagnose-user-wait1-push.yml'
@@ -75,7 +75,7 @@ jobs:
           test -n "$RELAY_CODE"
           python3 - "$RELAY_CODE" "$LIVE_KEY" <<'PY'
           from pathlib import Path
-          import re,sys
+          import sys
           p=Path(sys.argv[1]); key=sys.argv[2]; s=p.read_text(encoding='utf-8')
           old='verifyAdminSecret_(e);'
           if old in s:
@@ -124,13 +124,8 @@ jobs:
           pat=r"((?:const|let|var)\s+JAYUMINTON_STATE_PUSH_RELAY_URL_\s*=\s*)['\"][^'\"]+['\"]"
           ns,n=re.subn(pat,lambda m:m.group(1)+repr(url),s,count=1)
           if n!=1: raise SystemExit('main relay URL constant missing')
-          if ns!=s:
-              p.write_text(ns,encoding='utf-8')
-              print('MAIN_RELAY_URL_UPDATED=true')
-          else:
-              print('MAIN_RELAY_URL_UPDATED=false')
+          p.write_text(ns,encoding='utf-8')
           PY
-          if ! git diff --no-index /dev/null /dev/null >/dev/null 2>&1; then :; fi
           (cd "$MW" && clasp push --force)
           (cd "$MW" && clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "restore user push relay $GITHUB_RUN_ID")
 
