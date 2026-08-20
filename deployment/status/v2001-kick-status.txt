@@ -1,5 +1,5 @@
-started=2026-08-20T02:09:19Z
-source_commit=3affac8c9863bc7251489baa46595036d406115f
-kick_run=32323610936
+started=2026-08-20T02:27:30Z
+source_commit=9efd2cc4be4ffdac921b7f2bbfb2a5ae5b597a71
+kick_run=32324688789
 state=started
-contract=restored-alert-v17
+contract=alert-v18-fast-save
