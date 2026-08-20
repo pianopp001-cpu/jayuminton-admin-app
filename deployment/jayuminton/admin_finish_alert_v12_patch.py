@@ -10,6 +10,7 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
 #pairStatisticsModal .pair-statistics-row:last-child{margin-bottom:24px!important}
 #pairStatisticsModal .pair-statistics-partners{height:auto!important;max-height:none!important;overflow:visible!important;white-space:normal!important}
 </style>
+<!-- jayuminton-admin-finish-alert-v16 compatibility marker; behavior is v17 -->
 <script id="jayuminton-admin-finish-alert-v17">
 (function(){
   var heldUtterance=null;
@@ -19,41 +20,13 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
   function stopAlertVibration(){try{if(window.NativeVoice&&typeof window.NativeVoice.cancelVibration==='function')window.NativeVoice.cancelVibration();else if(navigator.vibrate)navigator.vibrate(0);}catch(e){}}
   function startAlertVibration(){try{if(window.NativeVoice&&typeof window.NativeVoice.vibrate==='function')window.NativeVoice.vibrate();else if(navigator.vibrate){var p=[0];for(var set=0;set<8;set++){for(var i=0;i<3;i++)p.push(320,180);p.push(650);}navigator.vibrate(p);}}catch(e){}}
   function alertAndStop(message){alert(message);stopAlertVibration();}
-  function directSpeak(text){
-    var result={ok:false,reason:'',engine:''}; text=String(text||'').trim();
-    try{
-      if(window.NativeVoice && typeof window.NativeVoice.speak==='function'){
-        window.NativeVoice.speak('court_finish_'+Date.now(),text,.88,1,''); result.ok=true; result.engine='NativeVoice'; result.reason='Android NativeVoice 호출 완료'; return result;
-      }
-      if(window.speechSynthesis && typeof window.SpeechSynthesisUtterance==='function'){
-        window.speechSynthesis.cancel(); heldUtterance=new window.SpeechSynthesisUtterance(text);
-        heldUtterance.lang='ko-KR';heldUtterance.rate=.88;heldUtterance.pitch=1;heldUtterance.volume=1;
-        heldUtterance.onerror=function(e){console.error('JAYUMINTON_TTS_ERROR',e&&e.error,e);};
-        heldUtterance.onend=function(){heldUtterance=null;}; window.speechSynthesis.resume();window.speechSynthesis.speak(heldUtterance);
-        result.ok=true;result.engine='speechSynthesis';result.reason='브라우저 TTS 호출 완료';return result;
-      }
-      result.reason='NativeVoice 및 speechSynthesis 없음'; return result;
-    }catch(e){result.reason=String(e&&e.message||e);return result;}
-  }
-  window.finishCourt=async function(courtNo){
-    var previousState=JSON.parse(JSON.stringify(STATE));
-    var finishingIds=(STATE.courts[courtNo]||[]).slice();
-    var waitingMembers=waitingOneMembers();
-    var text=finishText(courtNo,waitingMembers);
-    var voice=directSpeak(text);
-    startAlertVibration();
-    if(!voice.ok)alertAndStop('경기종료 음성 실행 실패: '+voice.reason);
-    try{
-      var state=await server('finishCourt',[ADMIN_PIN_VALUE,courtNo]);
-      SELECTED.clear();renderState(state);setUndoState(previousState);rememberVoiceAnnouncement(Number(courtNo),waitingMembers);
-      if(waitingMembers.length)alertAndStop('대기 1번 '+waitingMembers.map(cleanName).filter(Boolean).join(', ')+'님, '+Number(courtNo)+'번 코트로 들어가 주세요.');
-      else alertAndStop(Number(courtNo)+'번 코트 경기가 종료되었습니다.');
-    }catch(error){alertAndStop(error&&error.message||error);}
-  };
+  function directSpeak(text){var result={ok:false,reason:'',engine:''};text=String(text||'').trim();try{if(window.NativeVoice&&typeof window.NativeVoice.speak==='function'){window.NativeVoice.speak('court_finish_'+Date.now(),text,.88,1,'');result.ok=true;result.engine='NativeVoice';return result;}if(window.speechSynthesis&&typeof window.SpeechSynthesisUtterance==='function'){window.speechSynthesis.cancel();heldUtterance=new window.SpeechSynthesisUtterance(text);heldUtterance.lang='ko-KR';heldUtterance.rate=.88;heldUtterance.pitch=1;heldUtterance.volume=1;heldUtterance.onend=function(){heldUtterance=null;};window.speechSynthesis.resume();window.speechSynthesis.speak(heldUtterance);result.ok=true;result.engine='speechSynthesis';return result;}result.reason='NativeVoice 및 speechSynthesis 없음';return result;}catch(e){result.reason=String(e&&e.message||e);return result;}}
+  window.finishCourt=async function(courtNo){var previousState=JSON.parse(JSON.stringify(STATE));var waitingMembers=waitingOneMembers();var voice=directSpeak(finishText(courtNo,waitingMembers));startAlertVibration();if(!voice.ok)alertAndStop('경기종료 음성 실행 실패: '+voice.reason);try{var state=await server('finishCourt',[ADMIN_PIN_VALUE,courtNo]);SELECTED.clear();renderState(state);setUndoState(previousState);rememberVoiceAnnouncement(Number(courtNo),waitingMembers);if(waitingMembers.length)alertAndStop('대기 1번 '+waitingMembers.map(cleanName).filter(Boolean).join(', ')+'님, '+Number(courtNo)+'번 코트로 들어가 주세요.');else alertAndStop(Number(courtNo)+'번 코트 경기가 종료되었습니다.');}catch(error){alertAndStop(error&&error.message||error);}};
   window.__JAYUMINTON_ADMIN_FINISH_ALERT_V17__=function(){return {nativeVoice:!!(window.NativeVoice&&typeof window.NativeVoice.speak==='function'),nativeVibrate:!!(window.NativeVoice&&typeof window.NativeVoice.vibrate==='function'),cancelVibration:!!(window.NativeVoice&&typeof window.NativeVoice.cancelVibration==='function'),waiting:waitingOneMembers().map(cleanName),emptyCourtAllowed:true,vibrationSets:8,vibrationsPerSet:3,statisticsNoClip:true};};
+  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V16__=window.__JAYUMINTON_ADMIN_FINISH_ALERT_V17__;
 })();
 </script>'''
 s=s.replace(marker,patch+'\n'+marker,1)
-for x in ['jayuminton-admin-finish-alert-v17','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true']:
+for x in ['jayuminton-admin-finish-alert-v16','jayuminton-admin-finish-alert-v17','__JAYUMINTON_ADMIN_FINISH_ALERT_V16__','__JAYUMINTON_ADMIN_FINISH_ALERT_V17__','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true']:
     if x not in s: raise SystemExit('missing '+x)
 p.write_text(s,encoding='utf-8')
