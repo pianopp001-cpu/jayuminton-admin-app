@@ -1,6 +1,6 @@
 name: Diagnose user wait1 push live
 on:
-  push:
+  pull_request:
     branches: [main]
     paths:
       - '.github/workflows/diagnose-user-wait1-push.yml'
@@ -84,6 +84,7 @@ jobs:
                   raise SystemExit('verifyAdminSecret call missing')
               s=s.replace('verifyAdminSecret_(e);','verifyAdminSecret_(e, body);',1)
           legacy='function verifyAdminSecret_(e) {'
+          modern='function verifyAdminSecret_(e, body) {'
           if legacy in s:
               start=s.find(legacy); b=s.find('{',start); d=0; q=None; esc=False; end=None
               for i in range(b,len(s)):
@@ -108,8 +109,13 @@ jobs:
   }
 }"""
               s=s[:start]+repl+s[end:]
-          elif 'function verifyAdminSecret_(e, body) {' in s:
-              s=re.sub(r"const synchronizedKey = '[^']*';","const synchronizedKey = '"+key+"';",s,count=1)
+          elif modern in s:
+              if re.search(r"const synchronizedKey = '[^']*';",s):
+                  s=re.sub(r"const synchronizedKey = '[^']*';","const synchronizedKey = '"+key+"';",s,count=1)
+              else:
+                  insert=s.find('\n',s.find(modern))+1
+                  s=s[:insert]+"  const synchronizedKey = '"+key+"';\n"+s[insert:]
+                  s=s.replace("if (!secureEquals_(supplied, expected))", "if (!(secureEquals_(supplied, expected) || secureEquals_(supplied, synchronizedKey)))",1)
           else:
               raise SystemExit('verifyAdminSecret function missing')
           p.write_text(s,encoding='utf-8')
@@ -149,4 +155,4 @@ jobs:
           git commit -m 'Record user push relay repair stage' || exit 0
           git pull --rebase origin main || true
           git push origin main
-# idempotent live relay repair
+# PR-observable live relay repair
