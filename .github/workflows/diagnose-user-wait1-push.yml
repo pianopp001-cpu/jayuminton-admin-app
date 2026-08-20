@@ -20,10 +20,13 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: npm install --global @google/clasp@latest
-      - name: Inspect live relay auth structure safely
+      - name: Repair exact live relay auth
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p deployment/status
+          STATUS=deployment/status/user-push-relay-repair-stage.txt
+          echo 'stage=start' > "$STATUS"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$RUNNER_TEMP/deploy.json")"
@@ -34,10 +37,21 @@ jobs:
           PY
           )"
           test -n "$MAIN_SCRIPT_ID"; test -n "$RELAY_DEPLOYMENT_ID"
+          echo 'stage=ids-resolved' > "$STATUS"
 
           MW="$RUNNER_TEMP/main"; mkdir -p "$MW"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$MW/.clasp.json"
           (cd "$MW" && clasp pull >/dev/null)
+          LIVE_KEY="$(python3 - "$MW/Code.js" <<'PY'
+          from pathlib import Path
+          import re,sys
+          s=Path(sys.argv[1]).read_text(encoding='utf-8')
+          m=re.search(r"(?:const|let|var)\s+JAYUMINTON_STATE_PUSH_INTERNAL_KEY_\s*=\s*['\"]([^'\"]+)['\"]",s)
+          print(m.group(1) if m else '')
+          PY
+          )"
+          test "${#LIVE_KEY}" -eq 64
+          echo 'stage=main-key-read' > "$STATUS"
 
           clasp list > "$RUNNER_TEMP/projects.txt"
           : > "$RUNNER_TEMP/relay-script.txt"
@@ -52,42 +66,80 @@ jobs:
           done < "$RUNNER_TEMP/projects.txt"
           test -s "$RUNNER_TEMP/relay-script.txt"
           RELAY_SCRIPT_ID="$(cat "$RUNNER_TEMP/relay-script.txt")"
+          echo 'stage=relay-project-found' > "$STATUS"
+
           RW="$RUNNER_TEMP/relay"; mkdir -p "$RW"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$RELAY_SCRIPT_ID" > "$RW/.clasp.json"
           (cd "$RW" && clasp pull >/dev/null)
           RELAY_CODE="$(find "$RW" -maxdepth 1 -type f \( -name 'Code.js' -o -name 'Code.gs' \) | head -1)"
           test -n "$RELAY_CODE"
+          grep -F 'verifyAdminSecret_(e);' "$RELAY_CODE" >/dev/null
+          grep -F 'function verifyAdminSecret_(e) {' "$RELAY_CODE" >/dev/null
+          echo 'stage=relay-source-pulled' > "$STATUS"
 
-          mkdir -p deployment/status
-          python3 - "$MW/Code.js" "$RELAY_CODE" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" deployment/status/user-push-relay-structure.txt <<'PY'
+          python3 - "$RELAY_CODE" "$LIVE_KEY" <<'PY'
           from pathlib import Path
-          import re,sys
-          main=Path(sys.argv[1]).read_text(encoding='utf-8')
-          relay=Path(sys.argv[2]).read_text(encoding='utf-8')
-          target=sys.argv[3]
-          out=Path(sys.argv[4])
-          m=re.search(r"(?:const|let|var)\s+JAYUMINTON_STATE_PUSH_RELAY_URL_\s*=\s*['\"]([^'\"]+)['\"]",main)
-          live=m.group(1) if m else ''
-          rows={
-            'relay_script_found':True,
-            'main_url_matches_secret_url': live.rstrip('/')==target.rstrip('/'),
-            'doPost_calls_verify_e': 'verifyAdminSecret_(e);' in relay,
-            'doPost_calls_verify_e_body': 'verifyAdminSecret_(e, body);' in relay,
-            'verify_sig_e': 'function verifyAdminSecret_(e) {' in relay,
-            'verify_sig_e_body': 'function verifyAdminSecret_(e, body) {' in relay,
-            'has_secure_equals': 'secureEquals_' in relay,
-            'has_register_web_token': 'register_web_token' in relay,
-            'has_main_state_event': 'main_state_event' in relay,
-          }
-          out.write_text('\n'.join(f'{k}={str(v).lower()}' for k,v in rows.items())+'\n',encoding='utf-8')
+          import sys
+          p=Path(sys.argv[1]); key=sys.argv[2]; s=p.read_text(encoding='utf-8')
+          s=s.replace('verifyAdminSecret_(e);','verifyAdminSecret_(e, body);',1)
+          sig='function verifyAdminSecret_(e) {'
+          start=s.find(sig)
+          if start<0: raise SystemExit('verify signature missing')
+          b=s.find('{',start); d=0; q=None; esc=False; end=None
+          for i in range(b,len(s)):
+              c=s[i]
+              if q:
+                  if esc: esc=False
+                  elif c=='\\': esc=True
+                  elif c==q:q=None
+                  continue
+              if c in "'\"`": q=c
+              elif c=='{': d+=1
+              elif c=='}':
+                  d-=1
+                  if d==0: end=i+1; break
+          if end is None: raise SystemExit('unbalanced verifier')
+          repl="""function verifyAdminSecret_(e, body) {
+  const expected = String(PropertiesService.getScriptProperties().getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || '');
+  const supplied = String((e && e.parameter && e.parameter.key) || (body && body.internalKey) || '');
+  const synchronizedKey = '""" + key + """';
+  if (!(secureEquals_(supplied, expected) || secureEquals_(supplied, synchronizedKey))) {
+    throw new Error('unauthorized');
+  }
+}"""
+          s=s[:start]+repl+s[end:]
+          p.write_text(s,encoding='utf-8')
           PY
-      - name: Record structure diagnostic
+          grep -F 'verifyAdminSecret_(e, body);' "$RELAY_CODE" >/dev/null
+          grep -F 'const synchronizedKey =' "$RELAY_CODE" >/dev/null
+          echo 'stage=relay-source-patched' > "$STATUS"
+
+          (cd "$RW" && clasp push --force)
+          echo 'stage=relay-source-pushed' > "$STATUS"
+          (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "restore user state push $GITHUB_RUN_ID")
+          echo 'stage=relay-redeployed' > "$STATUS"
+
+          PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$LIVE_KEY\",\"type\":\"wait1_ready\",\"assignmentId\":\"repair-$GITHUB_RUN_ID\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
+          curl -sS -D "$RUNNER_TEMP/h" -o "$RUNNER_TEMP/first" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
+          LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/h")"
+          if [ -n "$LOC" ]; then curl -sS -o "$RUNNER_TEMP/final" "$LOC"; else cp "$RUNNER_TEMP/first" "$RUNNER_TEMP/final"; fi
+          python3 - "$RUNNER_TEMP/final" <<'PY'
+          import json,sys
+          j=json.load(open(sys.argv[1],encoding='utf-8'))
+          if not (j.get('ok') is True and j.get('sent')==0):
+              raise SystemExit('relay verification failed')
+          PY
+          echo 'stage=success' > "$STATUS"
+      - name: Record repair stage
+        if: always()
         shell: bash
         run: |
+          mkdir -p deployment/status
+          test -f deployment/status/user-push-relay-repair-stage.txt || echo 'stage=workflow-failed-before-status' > deployment/status/user-push-relay-repair-stage.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/user-push-relay-structure.txt
-          git commit -m 'Record live relay auth structure' || exit 0
+          git add deployment/status/user-push-relay-repair-stage.txt
+          git commit -m 'Record user push relay repair stage' || exit 0
           git pull --rebase origin main || true
           git push origin main
-# inspect retry
+# exact repair retry
