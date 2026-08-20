@@ -1,0 +1,9 @@
+relay_script_found=true
+main_url_matches_secret_url=true
+doPost_calls_verify_e=true
+doPost_calls_verify_e_body=false
+verify_sig_e=true
+verify_sig_e_body=false
+has_secure_equals=true
+has_register_web_token=true
+has_main_state_event=true
