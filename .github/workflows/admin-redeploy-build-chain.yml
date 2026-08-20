@@ -55,4 +55,4 @@ jobs:
       - name: Chain completed
         run: echo 'ADMIN_REDEPLOY_AND_APK_REBUILD_CHAIN_OK'
 
-# force-trigger: 2026-08-21-admin-member-alert-role-split
+# force-trigger: 2026-08-21-admin-voice-only-full-set-fast-finish-v2
