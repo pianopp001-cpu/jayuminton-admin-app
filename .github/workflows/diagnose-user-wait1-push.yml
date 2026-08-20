@@ -12,57 +12,47 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
     steps:
       - uses: actions/checkout@v4
-        with: {ref: main}
-      - name: Test relay-key candidates from unpacked historical admin APKs
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Locate relay project by deployment id
         shell: bash
         run: |
           set -euo pipefail
           test -n "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
-          rm -rf /tmp/apk-unpack && mkdir -p /tmp/apk-unpack
-          n=0
-          for apk in releases/jayuminton-admin-*.apk; do
-            [ -f "$apk" ] || continue
-            n=$((n+1))
-            mkdir -p "/tmp/apk-unpack/$n"
-            unzip -qq -o "$apk" -d "/tmp/apk-unpack/$n" || true
-          done
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          vals=[]
-          root=Path('/tmp/apk-unpack')
-          for p in root.rglob('*'):
-            if not p.is_file(): continue
-            try:b=p.read_bytes()
-            except Exception:continue
-            for m in re.finditer(rb'(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{64})(?![A-Za-z0-9_-])',b):
-              s=m.group(1).decode('ascii')
-              if s not in vals: vals.append(s)
-          Path('/tmp/candidates.txt').write_text('\n'.join(vals),encoding='utf-8')
-          print('UNPACKED_APK_KEY_CANDIDATE_COUNT=',len(vals))
+          test -n "$CLASPRC_JSON"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          DEPLOYMENT_ID="$(python3 - <<'PY'
+          import os,re
+          u=os.environ['JAYUMINTON_PUSH_APPS_SCRIPT_URL']
+          m=re.search(r'/macros/s/([^/]+)/exec',u)
+          print(m.group(1) if m else '')
           PY
-          found=0
-          idx=0
-          while IFS= read -r KEY; do
-            [ -n "$KEY" ] || continue
-            idx=$((idx+1))
-            PAYLOAD="{\"action\":\"main_state_event\",\"type\":\"wait1_ready\",\"assignmentId\":\"diagnostic-unpacked-key-$idx-123456\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
-            curl -sS -D "/tmp/h-$idx" -o "/tmp/f-$idx" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL?key=$KEY" || true
-            LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "/tmp/h-$idx")"
-            if [ -n "$LOC" ]; then curl -sS -o "/tmp/r-$idx" "$LOC" || true; else cp "/tmp/f-$idx" "/tmp/r-$idx"; fi
-            if python3 - "/tmp/r-$idx" <<'PY'
-          import json,sys
-          try:j=json.load(open(sys.argv[1],encoding='utf-8'))
-          except Exception:j={}
-          raise SystemExit(0 if (j.get('ok') is True and j.get('sent') == 0) else 1)
-          PY
-            then
-              echo 'UNPACKED_APK_RELAY_KEY_FOUND=true'
-              echo "UNPACKED_APK_RELAY_KEY_INDEX=$idx"
-              found=1
-              break
+          )"
+          test -n "$DEPLOYMENT_ID"
+          echo "TARGET_DEPLOYMENT_ID_PRESENT=true"
+
+          clasp list > "$RUNNER_TEMP/projects.txt"
+          echo "CLASP_PROJECT_COUNT=$(grep -c '^' "$RUNNER_TEMP/projects.txt" || true)"
+          : > "$RUNNER_TEMP/found.txt"
+          while IFS= read -r line; do
+            SCRIPT_ID="$(printf '%s' "$line" | grep -oE '[A-Za-z0-9_-]{30,}' | tail -1 || true)"
+            [ -n "$SCRIPT_ID" ] || continue
+            W="$RUNNER_TEMP/check-$RANDOM"
+            mkdir -p "$W"
+            printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$W/.clasp.json"
+            if (cd "$W" && clasp deployments) > "$W/deployments.txt" 2>/dev/null; then
+              if grep -F "$DEPLOYMENT_ID" "$W/deployments.txt" >/dev/null; then
+                printf '%s' "$SCRIPT_ID" > "$RUNNER_TEMP/found.txt"
+                echo 'RELAY_SCRIPT_MATCH_FOUND=true'
+                echo "RELAY_SCRIPT_ID_LENGTH=${#SCRIPT_ID}"
+                break
+              fi
             fi
-          done < /tmp/candidates.txt
-          echo "UNPACKED_APK_RELAY_KEY_FOUND_FINAL=$([ "$found" -eq 1 ] && echo true || echo false)"
+          done < "$RUNNER_TEMP/projects.txt"
+          if [ ! -s "$RUNNER_TEMP/found.txt" ]; then
+            echo 'RELAY_SCRIPT_MATCH_FOUND=false'
+          fi
