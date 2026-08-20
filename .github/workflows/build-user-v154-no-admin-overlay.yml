@@ -90,7 +90,6 @@ jobs:
           grep -Fq '?mode=user' "$RUNNER_TEMP/classes.txt"
           grep -Fq 'NativeUserApp' "$RUNNER_TEMP/classes.txt"
           ! grep -Fq '?mode=admin' "$RUNNER_TEMP/classes.txt"
-          unzip -l "$FINAL_APK" > "$RUNNER_TEMP/apk-list.txt"
           ! strings "$FINAL_APK" | grep -Fq '관리자 화면을 불러오는 중입니다'
           ! strings "$FINAL_APK" | grep -Fq 'adminLoadPanel'
           SIGNER=$(grep -Ei 'SHA-256 digest:' "$RUNNER_TEMP/signer.txt" | head -1 | sed -E 's/.*digest:[[:space:]]*//' | tr -d ':' | tr '[:lower:]' '[:upper:]')
@@ -121,3 +120,4 @@ jobs:
           git commit -m 'Publish user APK v1.5.4 without admin overlay' || true
           git pull --rebase origin main
           git push origin main
+          # retrigger 2026-08-20T22:47+09:00
