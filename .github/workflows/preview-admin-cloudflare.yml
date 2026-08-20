@@ -11,7 +11,7 @@ permissions:
   actions: write
 concurrency:
   group: jayuminton-admin-cloudflare-preview
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   preview:
     runs-on: ubuntu-latest
@@ -62,6 +62,8 @@ jobs:
           grep -F 'admin-vnext-bottom-bar' "$WORK/Admin.html"
           grep -F 'mobile-refresh-button' "$WORK/Admin.html"
           grep -F 'pairStatisticsModal' "$WORK/Admin.html"
+          grep -F 'JAYUMINTON_ADMIN_FAST_ADD_MEMBER_V1' "$WORK/Code.js"
+          grep -F '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' "$WORK/Script.html"
           node --check "$WORK/Code.js"
           python3 - "$WORK/Script.html" "$RUNNER_TEMP/admin-cloudflare-script.js" <<'PY'
           from pathlib import Path
@@ -72,7 +74,7 @@ jobs:
           Path(sys.argv[2]).write_text(source[start+8:end],encoding='utf-8')
           PY
           node --check "$RUNNER_TEMP/admin-cloudflare-script.js"
-          restore_head(){ (cd "$BACKUP" && clasp push --force); }; trap restore_head EXIT; (cd "$WORK" && clasp push --force); (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin v15 preview $GITHUB_RUN_ID"); restore_head; trap - EXIT
+          restore_head(){ (cd "$BACKUP" && clasp push --force); }; trap restore_head EXIT; (cd "$WORK" && clasp push --force); (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin v18 preview $GITHUB_RUN_ID"); restore_head; trap - EXIT
       - name: Deploy admin Worker
         shell: bash
         run: |
@@ -98,13 +100,13 @@ jobs:
           python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$ADMIN_WORKER_URL/"
           python3 deployment/jayuminton/admin_finish_alert_v12_patch.py "$ROOT/public/index.html"
           python3 deployment/jayuminton/admin_cloudflare_final_contract.py "$ROOT/public/index.html"
-          for x in jayuminton-admin-finish-alert-v16 'NativeVoice.speak' 'NativeVoice.vibrate' '__JAYUMINTON_ADMIN_FINISH_ALERT_V16__' 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$ROOT/public/index.html"; done
+          for x in jayuminton-admin-finish-alert-v16 jayuminton-admin-finish-alert-v18 'NativeVoice.speak' 'NativeVoice.vibrate' '__JAYUMINTON_ADMIN_FINISH_ALERT_V16__' '__JAYUMINTON_ADMIN_FINISH_ALERT_V18__' 'emptyCourtAllowed:true' 'vibrationSets:8' 'vibrationsPerSet:3' 'cancelOnAlertDismiss:true' 'alertBeforeServerCompletion:true' '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' 'jayuminton-admin-statistics-no-clip-v1' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$ROOT/public/index.html"; done
           if grep -F 'adminVoiceTestButton' "$ROOT/public/index.html" >/dev/null; then exit 1; fi
           if grep -F '>음성테스트<' "$ROOT/public/index.html" >/dev/null; then exit 1; fi
           if grep -F 'NEW <small>신규</small>' "$ROOT/public/index.html" >/dev/null; then exit 1; fi
           grep -F "badge.innerHTML='<small>신규</small>'" "$ROOT/public/index.html" >/dev/null
           grep -F "content:'✨'" "$ROOT/public/index.html" >/dev/null
-          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert 'grid-template-columns:repeat(3,minmax(0,1fr))' in h; assert 'header-refresh-button' in h and 'display:none!important' in h; assert '.admin-save-notice.is-visible' in h; assert '.admin-pair-statistics-open #adminApp .admin-vnext-bottom-bar' in h" "$ROOT/public/index.html"
+          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert 'grid-template-columns:repeat(3,minmax(0,1fr))' in h; assert 'header-refresh-button' in h and 'display:none!important' in h; assert '.admin-save-notice.is-visible' in h; assert '.admin-pair-statistics-open #adminApp .admin-vnext-bottom-bar' in h; assert '#pairStatisticsModal .pair-statistics-list{max-height:none!important' in h" "$ROOT/public/index.html"
           python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h" "$ROOT/public/index.html"
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
@@ -119,13 +121,13 @@ jobs:
           set -euo pipefail
           sleep 5
           curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          for x in jayuminton-admin-finish-alert-v16 'NativeVoice.speak' 'NativeVoice.vibrate' '__JAYUMINTON_ADMIN_FINISH_ALERT_V16__' 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$RUNNER_TEMP/live.html"; done
+          for x in jayuminton-admin-finish-alert-v16 jayuminton-admin-finish-alert-v18 'NativeVoice.speak' 'NativeVoice.vibrate' '__JAYUMINTON_ADMIN_FINISH_ALERT_V16__' '__JAYUMINTON_ADMIN_FINISH_ALERT_V18__' 'emptyCourtAllowed:true' 'vibrationSets:8' 'vibrationsPerSet:3' 'cancelOnAlertDismiss:true' 'alertBeforeServerCompletion:true' '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' 'jayuminton-admin-statistics-no-clip-v1' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$RUNNER_TEMP/live.html"; done
           if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/live.html" >/dev/null; then exit 1; fi
           if grep -F '>음성테스트<' "$RUNNER_TEMP/live.html" >/dev/null; then exit 1; fi
           if grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/live.html" >/dev/null; then exit 1; fi
           grep -F "badge.innerHTML='<small>신규</small>'" "$RUNNER_TEMP/live.html" >/dev/null
           grep -F "content:'✨'" "$RUNNER_TEMP/live.html" >/dev/null
-          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h" "$RUNNER_TEMP/live.html"
+          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h; assert '#pairStatisticsModal .pair-statistics-list{max-height:none!important' in h" "$RUNNER_TEMP/live.html"
           echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
           echo 'ADMIN_CLOUDFLARE_VNEXT_READY'
           echo 'MEMBER_PRODUCTION_NOT_UPDATED'
