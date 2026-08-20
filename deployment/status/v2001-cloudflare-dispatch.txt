@@ -1,4 +1,6 @@
-started=2026-08-20T01:41:05Z
-source_commit=e0cadf5726bdf8301ede8d7975fa71d0cab21022
-trigger_run=32321895426
-dispatched=preview-admin-cloudflare.yml
+started=2026-08-20T01:45:22Z
+source_commit=e436a9a9585851670a63289b9f90466dd08e831a
+trigger_run=32322154603
+preview_run=32322162517
+preview_status=completed
+preview_conclusion=success
