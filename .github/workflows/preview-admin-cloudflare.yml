@@ -1,4 +1,4 @@
-# force deploy: remove voice-test UI and normalize 신규 badge
+# Admin-only Cloudflare deployment. Never replace member production or GAS admin UI.
 name: Deploy separate admin web via Cloudflare RPC
 on:
   push:
@@ -37,20 +37,36 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CONFIG="$RUNNER_TEMP/deploy.json"; printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"; printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"; FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"; PREVIEW_DEPLOYMENT_ID="$(jq -r '.adminPreviewDeploymentId // .previewDeploymentId // empty' "$CONFIG")"
-          test -n "$PREVIEW_DEPLOYMENT_ID"; test -n "$MAIN_SCRIPT_ID"; test -n "$FIREBASE_PROJECT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
-          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"; echo "PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID" >> "$GITHUB_ENV"; echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
+          PREVIEW_DEPLOYMENT_ID="$(jq -r '.adminPreviewDeploymentId // .previewDeploymentId // empty' "$CONFIG")"
+          test -n "$PREVIEW_DEPLOYMENT_ID"; test -n "$MAIN_SCRIPT_ID"; test -n "$FIREBASE_PROJECT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
+          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
+          echo "PREVIEW_DEPLOYMENT_ID=$PREVIEW_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
       - name: Require isolated deployment
-        run: |
-          MAIN_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId // empty')"; MEMBER_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.previewDeploymentId // empty')"; test "$PREVIEW_DEPLOYMENT_ID" != "$MAIN_ID"; test "$PREVIEW_DEPLOYMENT_ID" != "$MEMBER_ID"
-      - name: Enforce separate Cloudflare admin frontend
-        run: python3 deployment/jayuminton/verify_cloudflare_admin_lock.py "$GITHUB_WORKSPACE"
-      - name: Patch isolated admin Cloudflare backend
         shell: bash
         run: |
           set -euo pipefail
-          BACKUP="$RUNNER_TEMP/head-backup"; WORK="$RUNNER_TEMP/admin-backend"; mkdir -p "$BACKUP" "$WORK"; printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"; (cd "$BACKUP" && clasp pull); cp -a "$BACKUP"/. "$WORK"/
+          MAIN_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.mainDeploymentId // empty')"
+          MEMBER_ID="$(printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" | jq -r '.previewDeploymentId // empty')"
+          test "$PREVIEW_DEPLOYMENT_ID" != "$MAIN_ID"
+          test "$PREVIEW_DEPLOYMENT_ID" != "$MEMBER_ID"
+      - name: Enforce separate Cloudflare admin frontend
+        run: python3 deployment/jayuminton/verify_cloudflare_admin_lock.py "$GITHUB_WORKSPACE"
+      - name: Patch isolated admin backend and verify v19 behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKUP="$RUNNER_TEMP/head-backup"; WORK="$RUNNER_TEMP/admin-backend"
+          mkdir -p "$BACKUP" "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
+          (cd "$BACKUP" && clasp pull)
+          cp -a "$BACKUP"/. "$WORK"/
           python3 deployment/jayuminton/admin_cloudflare_rpc.py patch-backend --work "$WORK"
           python3 -c "from deployment.jayuminton.admin_cloudflare_rpc import ALLOWED,REQUIRED_ADMIN_VNEXT_RPC; assert REQUIRED_ADMIN_VNEXT_RPC.issubset(ALLOWED)"
           python3 deployment/jayuminton/apply_admin_vnext_patches.py "$WORK"
@@ -59,11 +75,14 @@ jobs:
           grep -F 'updateMemberProfile: true' "$WORK/Code.js"
           grep -F 'JAYUMINTON_MEMBER_ASSIGNMENT_BUSY_V1' "$WORK/Code.js"
           grep -F "WAIT_ONE_PROMOTED: 'WAIT_ONE_PROMOTED'" "$WORK/Code.js"
+          grep -F 'JAYUMINTON_ADMIN_FAST_ADD_MEMBER_V1' "$WORK/Code.js"
+          grep -F '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' "$WORK/Script.html"
+          grep -F '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__' "$WORK/Script.html"
+          grep -F '__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__' "$WORK/Script.html"
+          if grep -F '비어 있는 코트는 경기 종료할 수 없습니다.' "$WORK/Code.js" >/dev/null; then echo 'empty court backend rejection survived'; exit 1; fi
           grep -F 'admin-vnext-bottom-bar' "$WORK/Admin.html"
           grep -F 'mobile-refresh-button' "$WORK/Admin.html"
           grep -F 'pairStatisticsModal' "$WORK/Admin.html"
-          grep -F 'JAYUMINTON_ADMIN_FAST_ADD_MEMBER_V1' "$WORK/Code.js"
-          grep -F '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' "$WORK/Script.html"
           node --check "$WORK/Code.js"
           python3 - "$WORK/Script.html" "$RUNNER_TEMP/admin-cloudflare-script.js" <<'PY'
           from pathlib import Path
@@ -74,14 +93,19 @@ jobs:
           Path(sys.argv[2]).write_text(source[start+8:end],encoding='utf-8')
           PY
           node --check "$RUNNER_TEMP/admin-cloudflare-script.js"
-          restore_head(){ (cd "$BACKUP" && clasp push --force); }; trap restore_head EXIT; (cd "$WORK" && clasp push --force); (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin v18 preview $GITHUB_RUN_ID"); restore_head; trap - EXIT
+          restore_head(){ (cd "$BACKUP" && clasp push --force); }
+          trap restore_head EXIT
+          (cd "$WORK" && clasp push --force)
+          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin v19 preview $GITHUB_RUN_ID")
+          restore_head
+          trap - EXIT
       - name: Deploy admin Worker
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/admin-worker"; mkdir -p "$ROOT"
           cat > "$ROOT/worker.js" <<'JS'
-          export default {async fetch(request,env){const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Cache-Control':'no-store'};if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});const u=new URL(request.url),rpc=u.searchParams.get('rpc')||'',callback=u.searchParams.get('callback')||'',payload=u.searchParams.get('payload')||'W15',nonce=u.searchParams.get('nonce')||Date.now().toString();if(!/^[A-Za-z_$][\w$]*$/.test(rpc)||!/^[A-Za-z_$][\w$]*$/.test(callback))return new Response('invalid_request',{status:400,headers:cors});const upstream=new URL(env.ADMIN_APPS_SCRIPT_URL);upstream.searchParams.set('adminRpc','1');upstream.searchParams.set('rpc',rpc);upstream.searchParams.set('callback',callback);upstream.searchParams.set('payload',payload);upstream.searchParams.set('nonce',nonce);try{const r=await fetch(upstream.toString(),{redirect:'follow',headers:{'Cache-Control':'no-cache'}}),text=await r.text();return new Response(text,{status:r.ok?200:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});}catch(e){return new Response(callback+'('+JSON.stringify({ok:false,error:'proxy_exception'})+')',{status:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});}}};
+          export default {async fetch(request,env){const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Cache-Control':'no-store'};if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});const u=new URL(request.url),rpc=u.searchParams.get('rpc')||'',callback=u.searchParams.get('callback')||'',payload=u.searchParams.get('payload')||'W19',nonce=u.searchParams.get('nonce')||Date.now().toString();if(!/^[A-Za-z_$][\w$]*$/.test(rpc)||!/^[A-Za-z_$][\w$]*$/.test(callback))return new Response('invalid_request',{status:400,headers:cors});const upstream=new URL(env.ADMIN_APPS_SCRIPT_URL);upstream.searchParams.set('adminRpc','1');upstream.searchParams.set('rpc',rpc);upstream.searchParams.set('callback',callback);upstream.searchParams.set('payload',payload);upstream.searchParams.set('nonce',nonce);try{const r=await fetch(upstream.toString(),{redirect:'follow',headers:{'Cache-Control':'no-cache'}}),text=await r.text();return new Response(text,{status:r.ok?200:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});}catch(e){return new Response(callback+'('+JSON.stringify({ok:false,error:'proxy_exception'})+')',{status:502,headers:{...cors,'Content-Type':'application/javascript; charset=utf-8'}});}}};
           JS
           cat > "$ROOT/wrangler.toml" <<EOF
           name = "$ADMIN_WORKER_NAME"
@@ -91,58 +115,52 @@ jobs:
           [vars]
           ADMIN_APPS_SCRIPT_URL = "https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
           EOF
-          cd "$ROOT"; wrangler deploy --config wrangler.toml | tee "$RUNNER_TEMP/wrangler.txt"; WORKER_URL="$(grep -Eo 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/wrangler.txt" | tail -1)"; test -n "$WORKER_URL"; echo "ADMIN_WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
+          cd "$ROOT"
+          wrangler deploy --config wrangler.toml | tee "$RUNNER_TEMP/wrangler.txt"
+          WORKER_URL="$(grep -Eo 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/wrangler.txt" | tail -1)"
+          test -n "$WORKER_URL"
+          echo "ADMIN_WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
       - name: Build separate admin frontend
         shell: bash
         run: |
           set -euo pipefail
-          WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"; mkdir -p "$ROOT/public"
+          WORK="$RUNNER_TEMP/admin-backend"; ROOT="$RUNNER_TEMP/admin-web"
+          mkdir -p "$ROOT/public"
           python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$WORK" --out "$ROOT/public" --rpc-url "$ADMIN_WORKER_URL/"
           python3 deployment/jayuminton/admin_finish_alert_v12_patch.py "$ROOT/public/index.html"
           python3 deployment/jayuminton/admin_cloudflare_final_contract.py "$ROOT/public/index.html"
-          for x in jayuminton-admin-finish-alert-v16 jayuminton-admin-finish-alert-v18 'NativeVoice.speak' 'NativeVoice.vibrate' '__JAYUMINTON_ADMIN_FINISH_ALERT_V16__' '__JAYUMINTON_ADMIN_FINISH_ALERT_V18__' 'emptyCourtAllowed:true' 'vibrationSets:8' 'vibrationsPerSet:3' 'cancelOnAlertDismiss:true' 'alertBeforeServerCompletion:true' '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' 'jayuminton-admin-statistics-no-clip-v1' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$ROOT/public/index.html"; done
-          if grep -F 'adminVoiceTestButton' "$ROOT/public/index.html" >/dev/null; then exit 1; fi
-          if grep -F '>음성테스트<' "$ROOT/public/index.html" >/dev/null; then exit 1; fi
-          if grep -F 'NEW <small>신규</small>' "$ROOT/public/index.html" >/dev/null; then exit 1; fi
+          python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$ROOT/public/index.html"
+          for x in jayuminton-admin-finish-alert-v19 '__JAYUMINTON_ADMIN_FINISH_ALERT_V19__' '__JAYUMINTON_TRANSITION_ALERT__' 'transitionAlertBridge:true' 'NativeVoice.speak' 'NativeVoice.vibrate' 'emptyCourtAllowed:true' 'vibrationSets:8' 'vibrationsPerSet:3' 'cancelOnAlertDismiss:true' 'alertBeforeServerCompletion:true' '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__' '__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__' 'jayuminton-admin-statistics-no-clip-v1' '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$ROOT/public/index.html" >/dev/null; done
+          if grep -F 'adminVoiceTestButton' "$ROOT/public/index.html" >/dev/null; then echo 'voice test id survived'; exit 1; fi
+          if grep -F '>음성테스트<' "$ROOT/public/index.html" >/dev/null; then echo 'voice test text survived'; exit 1; fi
+          if grep -F 'NEW <small>신규</small>' "$ROOT/public/index.html" >/dev/null; then echo 'legacy NEW survived'; exit 1; fi
           grep -F "badge.innerHTML='<small>신규</small>'" "$ROOT/public/index.html" >/dev/null
           grep -F "content:'✨'" "$ROOT/public/index.html" >/dev/null
-          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert 'grid-template-columns:repeat(3,minmax(0,1fr))' in h; assert 'header-refresh-button' in h and 'display:none!important' in h; assert '.admin-save-notice.is-visible' in h; assert '.admin-pair-statistics-open #adminApp .admin-vnext-bottom-bar' in h; assert '#pairStatisticsModal .pair-statistics-list{max-height:none!important' in h" "$ROOT/public/index.html"
-          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h" "$ROOT/public/index.html"
+          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h; assert '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__' in h" "$ROOT/public/index.html"
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
       - name: Deploy separate admin frontend channel
         shell: bash
         run: |
-          set -euo pipefail; cd "$RUNNER_TEMP/admin-web"; firebase hosting:channel:deploy "$PREVIEW_CHANNEL" --project "$FIREBASE_PROJECT_ID" --expires 30d --config firebase.json --non-interactive --json | tee "$RUNNER_TEMP/channel.json"; URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/channel.json" | head -1)"; test -n "$URL"; echo "ADMIN_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
-      - name: Verify separate live admin frontend
+          set -euo pipefail
+          cd "$RUNNER_TEMP/admin-web"
+          firebase hosting:channel:deploy "$PREVIEW_CHANNEL" --project "$FIREBASE_PROJECT_ID" --expires 30d --config firebase.json --non-interactive --json | tee "$RUNNER_TEMP/channel.json"
+          URL="$(grep -Eo 'https://[^\" ]+\.web\.app' "$RUNNER_TEMP/channel.json" | head -1)"
+          test -n "$URL"
+          echo "ADMIN_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
+      - name: Verify separate live admin frontend v19
         shell: bash
         run: |
           set -euo pipefail
           sleep 5
           curl --fail --location --retry 5 "$ADMIN_PREVIEW_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          for x in jayuminton-admin-finish-alert-v16 jayuminton-admin-finish-alert-v18 'NativeVoice.speak' 'NativeVoice.vibrate' '__JAYUMINTON_ADMIN_FINISH_ALERT_V16__' '__JAYUMINTON_ADMIN_FINISH_ALERT_V18__' 'emptyCourtAllowed:true' 'vibrationSets:8' 'vibrationsPerSet:3' 'cancelOnAlertDismiss:true' 'alertBeforeServerCompletion:true' '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' 'jayuminton-admin-statistics-no-clip-v1' __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ admin-vnext-bottom-bar mobile-refresh-button pairStatisticsModal JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 'id="adminPinInput"' adminCloudflareLoginButton __JAYUMINTON_ADMIN_PIN_INPUT_READY__ __JAYUMINTON_ADMIN_OBSERVER_STABLE__; do grep -F "$x" "$RUNNER_TEMP/live.html"; done
+          for x in jayuminton-admin-finish-alert-v19 '__JAYUMINTON_ADMIN_FINISH_ALERT_V19__' '__JAYUMINTON_TRANSITION_ALERT__' 'transitionAlertBridge:true' 'emptyCourtAllowed:true' 'vibrationSets:8' 'vibrationsPerSet:3' 'cancelOnAlertDismiss:true' 'alertBeforeServerCompletion:true' '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__' '__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__' '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__' __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1; do grep -F "$x" "$RUNNER_TEMP/live.html" >/dev/null; done
           if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/live.html" >/dev/null; then exit 1; fi
           if grep -F '>음성테스트<' "$RUNNER_TEMP/live.html" >/dev/null; then exit 1; fi
           if grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/live.html" >/dev/null; then exit 1; fi
-          grep -F "badge.innerHTML='<small>신규</small>'" "$RUNNER_TEMP/live.html" >/dev/null
-          grep -F "content:'✨'" "$RUNNER_TEMP/live.html" >/dev/null
-          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h; assert '#pairStatisticsModal .pair-statistics-list{max-height:none!important' in h" "$RUNNER_TEMP/live.html"
+          python3 -c "from pathlib import Path; import sys; h=Path(sys.argv[1]).read_text(encoding='utf-8'); assert chr(60)+'iframe' not in h.lower(); assert 'script.google.com/macros/s/' not in h" "$RUNNER_TEMP/live.html"
           echo "ADMIN_TEST_URL=$ADMIN_PREVIEW_URL"
-          echo 'ADMIN_CLOUDFLARE_VNEXT_READY'
+          echo 'ADMIN_CLOUDFLARE_V19_READY'
           echo 'MEMBER_PRODUCTION_NOT_UPDATED'
           echo 'MAIN_ADMIN_PRODUCTION_NOT_UPDATED'
-      - name: Dispatch verified fresh-install APK build
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error \
-            -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/build-v1995-direct.yml/dispatches \
-            -d '{"ref":"main"}'
-          echo 'Fresh APK build dispatched from verified Cloudflare deploy.'

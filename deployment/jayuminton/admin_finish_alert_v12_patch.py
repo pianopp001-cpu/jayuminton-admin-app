@@ -15,8 +15,8 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
 #jayumintonAlertNotice .jm-alert-message{font-size:18px!important;font-weight:900!important;line-height:1.5!important;white-space:pre-line!important;word-break:keep-all!important}
 #jayumintonAlertNotice .jm-alert-close{margin-top:18px!important;width:100%!important;min-height:50px!important;border:0!important;border-radius:13px!important;background:#2563eb!important;color:#fff!important;font-size:17px!important;font-weight:900!important}
 </style>
-<!-- jayuminton-admin-finish-alert-v16 compatibility marker; jayuminton-admin-finish-alert-v17 compatibility marker; behavior is v18 -->
-<script id="jayuminton-admin-finish-alert-v18">
+<!-- jayuminton-admin-finish-alert-v16 compatibility marker; jayuminton-admin-finish-alert-v17 compatibility marker; behavior is v19 -->
+<script id="jayuminton-admin-finish-alert-v19">
 (function(){
   var heldUtterance=null;
   function waitingOneMembers(){var ids=(STATE&&STATE.waitGroups&&STATE.waitGroups[0]||[]).slice();return ids.map(function(id){return memberById(id);}).filter(Boolean);}
@@ -28,28 +28,39 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
   function showAlertNotice(message){var n=ensureAlertNotice();var m=n.querySelector('.jm-alert-message');if(m)m.textContent=String(message||'');n.classList.add('is-visible');return n;}
   function updateAlertNotice(message){var n=ensureAlertNotice();var m=n.querySelector('.jm-alert-message');if(m)m.textContent=String(message||'');n.classList.add('is-visible');}
   function directSpeak(text){var result={ok:false,reason:'',engine:''};text=String(text||'').replace(/\n/g,' ').trim();try{if(window.NativeVoice&&typeof window.NativeVoice.speak==='function'){window.NativeVoice.speak('court_finish_'+Date.now(),text,.88,1,'');result.ok=true;result.engine='NativeVoice';return result;}if(window.speechSynthesis&&typeof window.SpeechSynthesisUtterance==='function'){window.speechSynthesis.cancel();heldUtterance=new window.SpeechSynthesisUtterance(text);heldUtterance.lang='ko-KR';heldUtterance.rate=.88;heldUtterance.pitch=1;heldUtterance.volume=1;heldUtterance.onend=function(){heldUtterance=null;};window.speechSynthesis.resume();window.speechSynthesis.speak(heldUtterance);result.ok=true;result.engine='speechSynthesis';return result;}result.reason='NativeVoice 및 speechSynthesis 없음';return result;}catch(e){result.reason=String(e&&e.message||e);return result;}}
+  window.__JAYUMINTON_TRANSITION_ALERT__=function(message){
+    if(window.__JAYUMINTON_SUPPRESS_TRANSITION_ALERTS__)return;
+    stopAlertVibration();
+    startAlertVibration();
+    showAlertNotice(message);
+  };
   window.finishCourt=async function(courtNo){
     var previousState=JSON.parse(JSON.stringify(STATE));
     var waitingMembers=waitingOneMembers();
     var message=finishText(courtNo,waitingMembers);
     var voice=directSpeak(message);
+    stopAlertVibration();
     startAlertVibration();
     showAlertNotice(message);
     if(!voice.ok)updateAlertNotice(message+'\n\n음성 실행 실패: '+voice.reason);
+    window.__JAYUMINTON_SUPPRESS_TRANSITION_ALERTS__=true;
     try{
       var state=await server('finishCourt',[ADMIN_PIN_VALUE,courtNo]);
       SELECTED.clear();renderState(state);setUndoState(previousState);rememberVoiceAnnouncement(Number(courtNo),waitingMembers);
+      window.__JAYUMINTON_SUPPRESS_TRANSITION_ALERTS__=false;
     }catch(error){
+      window.__JAYUMINTON_SUPPRESS_TRANSITION_ALERTS__=false;
       stopAlertVibration();
       updateAlertNotice('저장 실패\n'+String(error&&error.message||error||'경기종료 처리에 실패했습니다.'));
     }
   };
-  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V18__=function(){return {nativeVoice:!!(window.NativeVoice&&typeof window.NativeVoice.speak==='function'),nativeVibrate:!!(window.NativeVoice&&typeof window.NativeVoice.vibrate==='function'),cancelVibration:!!(window.NativeVoice&&typeof window.NativeVoice.cancelVibration==='function'),waiting:waitingOneMembers().map(cleanName),emptyCourtAllowed:true,vibrationSets:8,vibrationsPerSet:3,cancelOnAlertDismiss:true,alertBeforeServerCompletion:true,statisticsNoClip:true};};
-  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V17__=window.__JAYUMINTON_ADMIN_FINISH_ALERT_V18__;
-  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V16__=window.__JAYUMINTON_ADMIN_FINISH_ALERT_V18__;
+  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V19__=function(){return {nativeVoice:!!(window.NativeVoice&&typeof window.NativeVoice.speak==='function'),nativeVibrate:!!(window.NativeVoice&&typeof window.NativeVoice.vibrate==='function'),cancelVibration:!!(window.NativeVoice&&typeof window.NativeVoice.cancelVibration==='function'),waiting:waitingOneMembers().map(cleanName),emptyCourtAllowed:true,vibrationSets:8,vibrationsPerSet:3,cancelOnAlertDismiss:true,alertBeforeServerCompletion:true,transitionAlertBridge:true,statisticsNoClip:true};};
+  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V18__=window.__JAYUMINTON_ADMIN_FINISH_ALERT_V19__;
+  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V17__=window.__JAYUMINTON_ADMIN_FINISH_ALERT_V19__;
+  window.__JAYUMINTON_ADMIN_FINISH_ALERT_V16__=window.__JAYUMINTON_ADMIN_FINISH_ALERT_V19__;
 })();
 </script>'''
 s=s.replace(marker,patch+'\n'+marker,1)
-for x in ['jayuminton-admin-finish-alert-v16','jayuminton-admin-finish-alert-v17','jayuminton-admin-finish-alert-v18','__JAYUMINTON_ADMIN_FINISH_ALERT_V16__','__JAYUMINTON_ADMIN_FINISH_ALERT_V17__','__JAYUMINTON_ADMIN_FINISH_ALERT_V18__','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','cancelOnAlertDismiss:true','alertBeforeServerCompletion:true','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true']:
+for x in ['jayuminton-admin-finish-alert-v16','jayuminton-admin-finish-alert-v17','jayuminton-admin-finish-alert-v19','__JAYUMINTON_ADMIN_FINISH_ALERT_V16__','__JAYUMINTON_ADMIN_FINISH_ALERT_V17__','__JAYUMINTON_ADMIN_FINISH_ALERT_V18__','__JAYUMINTON_ADMIN_FINISH_ALERT_V19__','__JAYUMINTON_TRANSITION_ALERT__','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','cancelOnAlertDismiss:true','alertBeforeServerCompletion:true','transitionAlertBridge:true','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true']:
     if x not in s: raise SystemExit('missing '+x)
 p.write_text(s,encoding='utf-8')

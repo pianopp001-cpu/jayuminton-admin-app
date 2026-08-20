@@ -17,7 +17,6 @@ required = [
     'return true;',
     "WAIT_ONE_PROMOTED: 'WAIT_ONE_PROMOTED'",
     'adminVnextEvents: readAdminVnextEvents_()',
-    "if (!finished.length) throw new Error('비어 있는 코트는 경기 종료할 수 없습니다.')",
     'if (waitOne.length > 0)'
 ]
 missing = [item for item in required if item not in source]
@@ -25,11 +24,13 @@ if missing:
     raise SystemExit('production push compatibility failed: ' + ' | '.join(missing))
 
 for obsolete in [
+    "if (!finished.length) throw new Error('비어 있는 코트는 경기 종료할 수 없습니다.')",
+    'if (!finished.length) throw new Error("비어 있는 코트는 경기 종료할 수 없습니다.")',
     'return (group || []).length === GROUP_SIZE;',
     'if (waitOne.length === GROUP_SIZE)',
     'if (finished.length !== GROUP_SIZE)'
 ]:
     if obsolete in source:
-        raise SystemExit('obsolete four-person notification gate remains: ' + obsolete)
+        raise SystemExit('obsolete notification/empty-court gate remains: ' + obsolete)
 
-print('admin-vNext is compatible with existing wait1/court FCM transition delivery')
+print('admin-vNext keeps wait1/court FCM delivery while allowing empty-court finish')
