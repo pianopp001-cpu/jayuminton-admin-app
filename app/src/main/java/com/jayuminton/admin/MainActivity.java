@@ -46,7 +46,8 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     private static final String KEY_WAS_DUCKING = "was_ducking";
     private static final String KEY_MEDIA_VOLUME = "media_volume";
     private static final String KEY_ALARM_VOLUME = "alarm_volume";
-    private static final int VOICE_VOLUME_STEP = 6;
+    private static final int MEDIA_DUCK_VOLUME_STEP = 6;
+    private static final int VOICE_REPEAT_COUNT = 3;
 
     private WebView webView;
     private View adminLoadPanel;
@@ -62,6 +63,8 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     private int originalMediaVolume = -1;
     private int originalAlarmVolume = -1;
     private SpeakRequest pendingRequest;
+    private SpeakRequest activeRepeatRequest;
+    private int remainingVoiceRepeats = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -257,8 +260,15 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
 
             @Override
             public void onDone(String utteranceId) {
-                speaking.set(false);
-                runOnUiThread(MainActivity.this::restoreAudio);
+                runOnUiThread(() -> {
+                    if (activeRepeatRequest != null && remainingVoiceRepeats > 0) {
+                        speakNextRepeat();
+                    } else {
+                        speaking.set(false);
+                        activeRepeatRequest = null;
+                        restoreAudio();
+                    }
+                });
             }
 
             @Override
@@ -330,12 +340,33 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         tts.setPitch(clamp(request.pitch, 0.90f, 1.15f));
         selectBestKoreanFemaleVoice();
 
+        activeRepeatRequest = request;
+        remainingVoiceRepeats = VOICE_REPEAT_COUNT;
+        speakNextRepeat();
+    }
+
+    private void speakNextRepeat() {
+        if (tts == null || activeRepeatRequest == null || remainingVoiceRepeats <= 0) {
+            speaking.set(false);
+            activeRepeatRequest = null;
+            restoreAudio();
+            return;
+        }
+        int repeatNumber = VOICE_REPEAT_COUNT - remainingVoiceRepeats + 1;
+        remainingVoiceRepeats--;
         Bundle params = new Bundle();
         params.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_ALARM);
         params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f);
-        int result = tts.speak(request.text, TextToSpeech.QUEUE_FLUSH, params, request.id);
+        int result = tts.speak(
+                activeRepeatRequest.text,
+                TextToSpeech.QUEUE_FLUSH,
+                params,
+                activeRepeatRequest.id + "-repeat-" + repeatNumber
+        );
         if (result == TextToSpeech.ERROR) {
+            remainingVoiceRepeats = 0;
             speaking.set(false);
+            activeRepeatRequest = null;
             restoreAudio();
         }
     }
@@ -359,12 +390,11 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
 
             try {
                 int maxMedia = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-                int minimumMusic = maxMedia > 0 ? 1 : 0;
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, minimumMusic, 0);
+                int duckedMusic = Math.max(0, Math.min(MEDIA_DUCK_VOLUME_STEP, maxMedia));
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, duckedMusic, 0);
 
                 int maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
-                int voiceStep = Math.max(1, Math.min(VOICE_VOLUME_STEP, maxAlarm));
-                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, voiceStep, 0);
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0);
                 ducking = true;
             } catch (SecurityException error) {
                 ducking = false;
@@ -468,6 +498,8 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         @JavascriptInterface
         public void stop() {
             runOnUiThread(() -> {
+                remainingVoiceRepeats = 0;
+                activeRepeatRequest = null;
                 if (tts != null) tts.stop();
                 speaking.set(false);
                 restoreAudio();
