@@ -1,0 +1,213 @@
+name: Build v1.3.3 install-safe user APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-user-native-push-v133-install-safe.yml'
+      - 'deployment/scripts/patch_user_native_v133_install_safe.py'
+      - 'deployment/scripts/patch_user_native_v132_strict_current_member.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-native-v133-install-safe
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.7'}
+      - run: npm install --global firebase-tools@latest @google/clasp@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - id: resolve
+        name: Resolve Firebase and push config
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          jq -e '.mainDeploymentId and .firebaseProjectId' "$C" >/dev/null
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$C")"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId // empty' "$C")"
+          PUSH_DEPLOYMENT_ID="$(jq -r '.pushDeploymentId // empty' "$C")"
+          if [ -z "$PUSH_DEPLOYMENT_ID" ]; then
+            PUSH_DEPLOYMENT_ID="$(sed -n 's/^push_deployment_id=//p' deployment/status/apps-script-deployments-now.txt | head -1)"
+          fi
+          test -n "$PUSH_DEPLOYMENT_ID"
+          PUSH_URL="$(jq -r '.pushUrl // empty' "$C")"
+          if [ -z "$PUSH_URL" ]; then
+            PUSH_URL="https://script.google.com/macros/s/$PUSH_DEPLOYMENT_ID/exec"
+          fi
+          {
+            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            echo "PUSH_SCRIPT_ID=$PUSH_SCRIPT_ID"
+            echo "PUSH_DEPLOYMENT_ID=$PUSH_DEPLOYMENT_ID"
+            echo "PUSH_URL=$PUSH_URL"
+          } >> "$GITHUB_ENV"
+          PACKAGE='com.jayuminton.user'
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          APP_ID="$(jq -r --arg pkg "$PACKAGE" '[.. | objects | select(((.packageName? == $pkg) or (.package_name? == $pkg) or (.androidClientInfo?.packageName? == $pkg)) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
+          test -n "$APP_ID"
+          firebase apps:sdkconfig ANDROID "$APP_ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
+          grep -F 'com.jayuminton.user' app/google-services.json >/dev/null
+
+      - id: discover_push
+        name: Discover push Apps Script project
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${PUSH_SCRIPT_ID:-}" ]; then exit 0; fi
+          PROJECTS="$(clasp list)"
+          CANDIDATES="$(printf '%s\n' "$PROJECTS" | sed -n -e 's#.*script.google.com/d/\([^/ ]*\)/edit.*#\1#p' -e 's#.*script.google.com/home/projects/\([^/ ]*\)/edit.*#\1#p' | sort -u)"
+          test -n "$CANDIDATES"
+          FOUND=''
+          while IFS= read -r candidate; do
+            [ -n "$candidate" ] || continue
+            W="$RUNNER_TEMP/push-$candidate"; mkdir -p "$W"
+            printf '{"scriptId":"%s","rootDir":"."}\n' "$candidate" > "$W/.clasp.json"
+            if (cd "$W" && clasp deployments 2>/dev/null) | grep -F "$PUSH_DEPLOYMENT_ID" >/dev/null; then FOUND="$candidate"; break; fi
+          done <<< "$CANDIDATES"
+          test -n "$FOUND"
+          echo "PUSH_SCRIPT_ID=$FOUND" >> "$GITHUB_ENV"
+
+      - id: live_guard
+        name: Verify live member-token guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/push-check"; mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$W/.clasp.json"
+          (cd "$W" && clasp pull)
+          grep -F 'JAYUMINTON_MEMBER_TOKEN_SWITCH_ATOMIC_V1' "$W/Code.js" >/dev/null
+          grep -F "if (memberId && String(record.memberId || '') !== memberId) return true;" "$W/Code.js" >/dev/null
+
+      - id: build_apk
+        name: Build and verify v1.3.3 install-safe APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCRIPT='deployment/scripts/build_user_native_push_fresh_v110.sh'
+          python3 deployment/scripts/patch_build_user_native_v111.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v112.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v113.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v114.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v115.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v116.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v117.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v118.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v119.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v120_diagnostic.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v121.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v122.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v124_confirmed_overlay.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v126_stop_controller.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v126_raceguard.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v127_member_switch.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v128_repeat_switch.py "$SCRIPT"
+          python3 deployment/scripts/patch_build_user_native_v129_background_registration.py "$SCRIPT"
+          python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$SCRIPT"
+          python3 deployment/scripts/patch_user_native_v132_strict_current_member.py "$SCRIPT"
+          python3 deployment/scripts/patch_user_native_v133_install_safe.py "$SCRIPT"
+          grep -F 'VERSION="1.3.3"' "$SCRIPT" >/dev/null
+          grep -F 'VERSION_CODE="2000133"' "$SCRIPT" >/dev/null
+          grep -F 'boolean selectedMemberMatches = hasTargetMemberId &&' "$SCRIPT" >/dev/null
+          grep -F 'assignmentType && (!hasTargetMemberId || !selectedMemberMatches)' "$SCRIPT" >/dev/null
+          grep -F 'private static final int MAX_GROUPS = 8;' "$SCRIPT" >/dev/null
+          bash "$SCRIPT"
+          APK='releases/jayuminton-courtstatus-v1.3.3-install-safe.apk'
+          STATUS='deployment/status/user-native-push-v1.3.3.txt'
+          test -s "$APK"; test -s "$STATUS"
+          grep -F 'status=success' "$STATUS" >/dev/null
+          grep -F 'version=1.3.3' "$STATUS" >/dev/null
+          grep -F 'version_code=2000133' "$STATUS" >/dev/null
+          grep -F 'application_id=com.jayuminton.user' "$STATUS" >/dev/null
+          grep -F 'assignment_alert_scope=current-selected-member-only' "$STATUS" >/dev/null
+          grep -F 'install_compat=high-version-code-same-package-same-release-signer' "$STATUS" >/dev/null
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='com.jayuminton.user' versionCode='2000133' versionName='1.3.3'" "$RUNNER_TEMP/badging.txt" >/dev/null
+          "$APKSIGNER" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/signing.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: d47adb93363ff397601e63667e79f27f99ae499aadc1fd0013861809950fc787' "$RUNNER_TEMP/signing.txt" >/dev/null
+          cp "$APK" "$RUNNER_TEMP/v133.apk"
+          cp "$STATUS" "$RUNNER_TEMP/v133-status.txt"
+
+      - id: publish
+        name: Publish verified v1.3.3 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          git fetch origin main
+          git checkout -B main origin/main
+          cp "$RUNNER_TEMP/v133.apk" releases/jayuminton-courtstatus-v1.3.3-install-safe.apk
+          cp "$RUNNER_TEMP/v133-status.txt" deployment/status/user-native-push-v1.3.3.txt
+          sha256sum releases/jayuminton-courtstatus-v1.3.3-install-safe.apk > deployment/status/user-native-push-v1.3.3.sha256
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/jayuminton-courtstatus-v1.3.3-install-safe.apk deployment/status/user-native-push-v1.3.3.txt deployment/status/user-native-push-v1.3.3.sha256
+          git commit -m 'Publish v1.3.3 install-safe user APK'
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Record v1.3.3 build evidence
+        if: ${{ always() }}
+        shell: bash
+        env:
+          RESOLVE_OUTCOME: ${{ steps.resolve.outcome }}
+          DISCOVER_OUTCOME: ${{ steps.discover_push.outcome }}
+          LIVE_GUARD_OUTCOME: ${{ steps.live_guard.outcome }}
+          BUILD_APK_OUTCOME: ${{ steps.build_apk.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD || true
+          git fetch origin main || true
+          git checkout -B main origin/main || true
+          mkdir -p deployment/status
+          {
+            echo "source_sha=${GITHUB_SHA}"
+            echo "resolve=${RESOLVE_OUTCOME:-not_run}"
+            echo "discover_push=${DISCOVER_OUTCOME:-not_run}"
+            echo "live_member_guard=${LIVE_GUARD_OUTCOME:-not_run}"
+            echo "build_apk=${BUILD_APK_OUTCOME:-not_run}"
+            echo "publish=${PUBLISH_OUTCOME:-not_run}"
+          } > deployment/status/user-v133-install-safe-build-evidence.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v133-install-safe-build-evidence.txt
+          git commit -m 'Record user v1.3.3 install-safe build evidence' || exit 0
+          git pull --rebase origin main
+          git push origin main
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ success() }}
+        with:
+          name: jayuminton-courtstatus-v1.3.3-install-safe
+          path: releases/jayuminton-courtstatus-v1.3.3-install-safe.apk
+          if-no-files-found: error
+          retention-days: 30
