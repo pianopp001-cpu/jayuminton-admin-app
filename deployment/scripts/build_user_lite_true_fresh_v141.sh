@@ -5,7 +5,15 @@ set -euo pipefail
 
 BASE="deployment/scripts/build_user_lite_fresh_v140.sh"
 TMP="${RUNNER_TEMP:-/tmp}/build_user_lite_true_fresh_v141.sh"
+SIGNING_B64="signing/jayuminton-release.keystore.b64"
+SIGNING_JKS="signing/jayuminton-release.jks"
+
 test -s "$BASE"
+test -s "$SIGNING_B64"
+mkdir -p signing
+base64 -d "$SIGNING_B64" > "$SIGNING_JKS"
+test -s "$SIGNING_JKS"
+
 cp "$BASE" "$TMP"
 
 python3 - "$TMP" <<'PY'
@@ -28,7 +36,6 @@ for old, new in repls.items():
     if old not in s:
         raise SystemExit(f'missing v140 anchor: {old}')
     s = s.replace(old, new)
-# Make the install contract explicit: this package must never collide with the legacy user app.
 s = s.replace(
     'install_mode=uninstall-old-then-fresh-install',
     'install_mode=true-new-package-fresh-install\nlegacy_application_id=com.jayuminton.user\nlegacy_package_collision=impossible-by-application-id'
