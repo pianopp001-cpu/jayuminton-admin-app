@@ -1,0 +1,84 @@
+name: Diagnose user wait1 push live
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-user-wait1-push.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Pull live main and push scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          PUSH_SCRIPT_ID="$(jq -r '.pushScriptId' "$C")"
+          mkdir -p "$RUNNER_TEMP/main" "$RUNNER_TEMP/push"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$RUNNER_TEMP/main/.clasp.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$PUSH_SCRIPT_ID" > "$RUNNER_TEMP/push/.clasp.json"
+          (cd "$RUNNER_TEMP/main" && clasp pull)
+          (cd "$RUNNER_TEMP/push" && clasp pull)
+      - name: Extract safe push diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/main/Code.js" "$RUNNER_TEMP/push/Code.js" deployment/status/user-wait1-push-live-diagnostic.txt <<'PY'
+          from pathlib import Path
+          import re,sys
+          main=Path(sys.argv[1]).read_text(encoding='utf-8')
+          push=Path(sys.argv[2]).read_text(encoding='utf-8')
+          out=Path(sys.argv[3]); out.parent.mkdir(parents=True,exist_ok=True)
+          def block(src,name):
+              i=src.find('function '+name)
+              if i<0:return 'NOT_FOUND'
+              b=src.find('{',i); d=0; q=None; esc=False
+              for j in range(b,len(src)):
+                  c=src[j]
+                  if q:
+                      if esc: esc=False
+                      elif c=='\\': esc=True
+                      elif c==q:q=None
+                      continue
+                  if c in "'\"`":q=c
+                  elif c=='{':d+=1
+                  elif c=='}':
+                      d-=1
+                      if d==0:return src[i:j+1]
+              return 'UNBALANCED'
+          names=['withDocumentLock_(','shouldCheckStatePush_(','sendStateTransitionPushes_(','finishCourtUnlocked_(']
+          push_names=['registerWebToken_(','sendPushToMember_(','sendPush_(','sendFcm','doPost(']
+          parts=['=== LIVE MAIN PUSH FUNCTIONS ===']
+          for n in names: parts += ['\n--- '+n+' ---', block(main,n)]
+          parts += ['\n=== LIVE PUSH RELAY FUNCTIONS ===']
+          for n in push_names: parts += ['\n--- '+n+' ---', block(push,n)]
+          # redact obvious bearer/private key material if any
+          text='\n'.join(parts)
+          text=re.sub(r'Bearer\s+[A-Za-z0-9._-]+','Bearer [REDACTED]',text)
+          text=re.sub(r'-----BEGIN PRIVATE KEY-----.*?-----END PRIVATE KEY-----','[PRIVATE KEY REDACTED]',text,flags=re.S)
+          out.write_text(text,encoding='utf-8')
+          PY
+      - name: Commit diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-wait1-push-live-diagnostic.txt
+          git commit -m 'Record live user wait1 push diagnostic' || exit 0
+          git pull --rebase origin main
+          git push origin main
