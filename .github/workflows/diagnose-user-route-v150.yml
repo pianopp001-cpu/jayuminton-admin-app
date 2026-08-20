@@ -1,0 +1,67 @@
+name: Diagnose Jayuminton user route v1.5.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-user-route-v150.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Check user route
+        id: route
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          URL='https://script.google.com/macros/s/AKfycbzhiLS6mrum8Izipu_1a1Osa88x4zg_qhHKTzWiaN38fJ0tADMRcWsLE-ERDSPZuKC_/exec?mode=user&apkUser=1&userAppVersion=1.5.0'
+          BODY="$RUNNER_TEMP/user-live.html"
+          CODE=$(curl -L --silent --show-error --max-time 40 -o "$BODY" -w '%{http_code}' "$URL")
+          CURL_RC=$?
+          SIZE=0
+          [ -f "$BODY" ] && SIZE=$(wc -c < "$BODY")
+          USER_TITLE=0; SELF=0; ALERT=0; ADMIN=0
+          [ -f "$BODY" ] && grep -Fq '자유민턴 코트배정 현황' "$BODY" && USER_TITLE=1
+          [ -f "$BODY" ] && grep -Fq 'memberSelfSettings' "$BODY" && SELF=1
+          [ -f "$BODY" ] && grep -Fq 'memberForegroundAlert' "$BODY" && ALERT=1
+          [ -f "$BODY" ] && grep -Fq '관리자 화면을 불러오는 중입니다' "$BODY" && ADMIN=1
+          mkdir -p deployment/status
+          {
+            echo "curl_rc=$CURL_RC"
+            echo "http_code=$CODE"
+            echo "body_bytes=$SIZE"
+            echo "user_title=$USER_TITLE"
+            echo "member_self_settings=$SELF"
+            echo "foreground_alert=$ALERT"
+            echo "admin_loader=$ADMIN"
+            echo "checked_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          } > deployment/status/user-route-v150-diagnostic.txt
+          if [ -f "$BODY" ]; then
+            python3 - "$BODY" <<'PY' > deployment/status/user-route-v150-snippet.txt
+          from pathlib import Path
+          import re, sys
+          text = Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace')
+          text = re.sub(r'\s+', ' ', text)
+          print(text[:3000])
+          PY
+          fi
+          exit 0
+      - name: Publish diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-route-v150-diagnostic.txt deployment/status/user-route-v150-snippet.txt || true
+          git commit -m 'Record user route v1.5.0 diagnostic' || true
+          git pull --rebase origin main
+          git push origin main
