@@ -1,0 +1,36 @@
+name: Redeploy admin after Cloudflare patches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/redeploy-admin-on-patches.yml'
+      - 'deployment/jayuminton/apply_admin_vnext_patches.py'
+      - 'deployment/jayuminton/admin_vnext_script_patch.py'
+      - 'deployment/jayuminton/admin_vnext_badge_cleanup_patch.py'
+      - 'deployment/jayuminton/admin_cloudflare_final_contract.py'
+      - 'deployment/jayuminton/admin_finish_alert_v12_patch.py'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch verified Cloudflare admin deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/preview-admin-cloudflare.yml/dispatches \
+            -d '{"ref":"main"}'
+          echo 'Cloudflare admin deployment dispatched from patch change.'
