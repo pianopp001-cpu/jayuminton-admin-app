@@ -1,4 +1,6 @@
 name: Kick v200.1 Cloudflare UI cleanup APK rebuild
+
+# PR-merge rerun marker: source-clean-v2
 on:
   push:
     branches: [main]
@@ -7,10 +9,12 @@ on:
       - '.github/workflows/preview-admin-cloudflare.yml'
       - '.github/workflows/build-v1995-direct.yml'
       - 'deployment/jayuminton/admin_cloudflare_final_contract.py'
+      - 'deployment/jayuminton/apply_admin_vnext_patches.py'
+      - 'deployment/jayuminton/admin_vnext_badge_cleanup_patch.py'
   workflow_dispatch: {}
 permissions:
   actions: write
-  contents: read
+  contents: write
 concurrency:
   group: jayuminton-v2001-ui-apk-orchestrator
   cancel-in-progress: true
@@ -19,6 +23,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Record orchestrator start
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          printf 'started=%s\nsource_commit=%s\nkick_run=%s\nstate=started\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_SHA" "$GITHUB_RUN_ID" > deployment/status/v2001-kick-status.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2001-kick-status.txt
+          git commit -m 'Record v200.1 rebuild orchestrator start'
+          git pull --rebase origin main
+          git push origin main
       - name: Dispatch Cloudflare admin redeploy
         env:
           GH_TOKEN: ${{ github.token }}
