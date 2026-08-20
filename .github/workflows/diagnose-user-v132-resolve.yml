@@ -1,0 +1,109 @@
+name: Diagnose v1.3.2 user APK resolve
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-user-v132-resolve.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-v132-resolve-diagnostic
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global firebase-tools@latest @google/clasp@latest
+      - id: auth
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - id: diagnose
+        name: Diagnose resolve substeps
+        shell: bash
+        run: |
+          set +e
+          OUT="$RUNNER_TEMP/v132-resolve-detail.txt"
+          C="$RUNNER_TEMP/deploy.json"
+          : > "$OUT"
+          echo "source_sha=$GITHUB_SHA" >> "$OUT"
+          echo "auth_outcome=${{ steps.auth.outcome }}" >> "$OUT"
+
+          if [ -n "${JAYUMINTON_DEPLOY_CONFIG_JSON:-}" ]; then echo 'deploy_secret=present' >> "$OUT"; else echo 'deploy_secret=missing' >> "$OUT"; fi
+          if [ -n "${CLASPRC_JSON:-}" ]; then echo 'clasprc_secret=present' >> "$OUT"; else echo 'clasprc_secret=missing' >> "$OUT"; fi
+          if [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then echo 'firebase_secret=present' >> "$OUT"; else echo 'firebase_secret=missing' >> "$OUT"; fi
+
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          if jq -e . "$C" >/dev/null 2>&1; then echo 'deploy_json=valid' >> "$OUT"; else echo 'deploy_json=invalid' >> "$OUT"; fi
+          for key in mainDeploymentId pushUrl pushScriptId firebaseProjectId; do
+            if jq -e --arg k "$key" '.[$k] != null and (.[$k]|tostring|length) > 0' "$C" >/dev/null 2>&1; then
+              echo "config_${key}=present" >> "$OUT"
+            else
+              echo "config_${key}=missing" >> "$OUT"
+            fi
+          done
+
+          PROJECT="$(jq -r '.firebaseProjectId // empty' "$C" 2>/dev/null)"
+          if firebase --version >/dev/null 2>&1; then echo 'firebase_cli=ok' >> "$OUT"; else echo 'firebase_cli=failure' >> "$OUT"; fi
+          if [ -n "$PROJECT" ]; then
+            firebase apps:list ANDROID --project "$PROJECT" --json > "$RUNNER_TEMP/apps.json" 2>"$RUNNER_TEMP/apps.err"
+            RC=$?
+            echo "firebase_apps_list_exit=$RC" >> "$OUT"
+            if [ "$RC" -eq 0 ] && jq -e . "$RUNNER_TEMP/apps.json" >/dev/null 2>&1; then
+              echo 'firebase_apps_json=valid' >> "$OUT"
+              APP_ID="$(jq -r --arg pkg 'com.jayuminton.user' '[.. | objects | select(((.packageName? == $pkg) or (.package_name? == $pkg) or (.androidClientInfo?.packageName? == $pkg)) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
+              if [ -n "$APP_ID" ]; then
+                echo 'user_app_id=found' >> "$OUT"
+                firebase apps:sdkconfig ANDROID "$APP_ID" --project "$PROJECT" > "$RUNNER_TEMP/google-services.json" 2>"$RUNNER_TEMP/sdk.err"
+                SDK_RC=$?
+                echo "sdkconfig_exit=$SDK_RC" >> "$OUT"
+                if [ "$SDK_RC" -eq 0 ] && grep -F 'com.jayuminton.user' "$RUNNER_TEMP/google-services.json" >/dev/null 2>&1; then
+                  echo 'google_services=valid_user_package' >> "$OUT"
+                else
+                  echo 'google_services=invalid_or_missing' >> "$OUT"
+                fi
+              else
+                echo 'user_app_id=not_found' >> "$OUT"
+              fi
+            else
+              echo 'firebase_apps_json=unavailable' >> "$OUT"
+            fi
+          else
+            echo 'firebase_project=unavailable' >> "$OUT"
+          fi
+
+          mkdir -p deployment/status
+          cp "$OUT" deployment/status/user-v132-resolve-detail.txt
+
+      - name: Publish safe resolve diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p deployment/status
+          cp "$RUNNER_TEMP/v132-resolve-detail.txt" deployment/status/user-v132-resolve-detail.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-v132-resolve-detail.txt
+          git commit -m 'Record detailed user v1.3.2 resolve diagnostics' || exit 0
+          git pull --rebase origin main
+          git push origin main
