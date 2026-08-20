@@ -26,7 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {ref: main, fetch-depth: 0}
-      - name: Resolve user deployment
+      - id: resolve
+        name: Resolve user deployment
         shell: bash
         run: |
           set -euo pipefail
@@ -38,11 +39,12 @@ jobs:
         with: {distribution: temurin, java-version: '17'}
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: '8.7'}
-      - name: Build lightweight APK
+      - id: build_apk
+        name: Build lightweight APK
         shell: bash
         run: |
           set -euo pipefail
-          bash deployment/scripts/build_user_lite_fresh_v140.sh
+          bash deployment/scripts/build_user_lite_fresh_v140.sh 2>&1 | tee "$RUNNER_TEMP/user-lite-build.log"
           test -s releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk
           grep -F 'status=success' deployment/status/user-lite-v1.4.0.txt >/dev/null
           grep -F 'firebase_messaging=removed' deployment/status/user-lite-v1.4.0.txt >/dev/null
@@ -51,7 +53,8 @@ jobs:
           [ "$SIZE" -lt 500000 ]
           cp releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk "$RUNNER_TEMP/user-lite.apk"
           cp deployment/status/user-lite-v1.4.0.txt "$RUNNER_TEMP/user-lite-status.txt"
-      - name: Publish verified lite APK
+      - id: publish
+        name: Publish verified lite APK
         shell: bash
         run: |
           set -euo pipefail
@@ -67,7 +70,39 @@ jobs:
           git commit -m 'Publish lightweight user APK v1.4.0'
           git pull --rebase origin main
           git push origin main
+      - name: Record build evidence
+        if: ${{ always() }}
+        shell: bash
+        env:
+          RESOLVE: ${{ steps.resolve.outcome }}
+          BUILD: ${{ steps.build_apk.outcome }}
+          PUBLISH: ${{ steps.publish.outcome }}
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD || true
+          git fetch origin main || true
+          git checkout -B main origin/main || true
+          mkdir -p deployment/status
+          {
+            echo "source_sha=${GITHUB_SHA}"
+            echo "resolve=${RESOLVE:-not_run}"
+            echo "build_apk=${BUILD:-not_run}"
+            echo "publish=${PUBLISH:-not_run}"
+            if [ -f "$RUNNER_TEMP/user-lite-build.log" ]; then
+              echo 'build_log_tail_begin'
+              tail -40 "$RUNNER_TEMP/user-lite-build.log" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g'
+              echo
+              echo 'build_log_tail_end'
+            fi
+          } > deployment/status/user-lite-v1.4.0-build-evidence.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/user-lite-v1.4.0-build-evidence.txt
+          git commit -m 'Record lightweight user APK build evidence' || exit 0
+          git pull --rebase origin main
+          git push origin main
       - uses: actions/upload-artifact@v4
+        if: ${{ success() }}
         with:
           name: jayuminton-courtstatus-v1.4.0-lite-fresh
           path: releases/jayuminton-courtstatus-v1.4.0-lite-fresh.apk
