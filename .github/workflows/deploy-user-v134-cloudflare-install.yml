@@ -5,6 +5,10 @@ on:
     branches: [fix/user-native-separate-package-v1]
     paths:
       - '.github/workflows/deploy-user-v134-cloudflare-install.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-user-v134-cloudflare-install.yml'
   workflow_dispatch: {}
 
 permissions:
