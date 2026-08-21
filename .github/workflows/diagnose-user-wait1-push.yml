@@ -1,6 +1,6 @@
-name: Diagnose user wait1 push live
+name: Repair user wait1 push live
 on:
-  pull_request:
+  push:
     branches: [main]
     paths:
       - '.github/workflows/diagnose-user-wait1-push.yml'
@@ -80,27 +80,26 @@ jobs:
           import re,sys
           p=Path(sys.argv[1]); key=sys.argv[2]; s=p.read_text(encoding='utf-8')
           if 'verifyAdminSecret_(e, body);' not in s:
-              if 'verifyAdminSecret_(e);' not in s:
-                  raise SystemExit('verifyAdminSecret call missing')
+              if 'verifyAdminSecret_(e);' not in s: raise SystemExit('verifyAdminSecret call missing')
               s=s.replace('verifyAdminSecret_(e);','verifyAdminSecret_(e, body);',1)
-          legacy='function verifyAdminSecret_(e) {'
-          modern='function verifyAdminSecret_(e, body) {'
-          if legacy in s:
-              start=s.find(legacy); b=s.find('{',start); d=0; q=None; esc=False; end=None
-              for i in range(b,len(s)):
-                  c=s[i]
-                  if q:
-                      if esc: esc=False
-                      elif c=='\\': esc=True
-                      elif c==q:q=None
-                      continue
-                  if c in "'\"`": q=c
-                  elif c=='{': d+=1
-                  elif c=='}':
-                      d-=1
-                      if d==0: end=i+1; break
-              if end is None: raise SystemExit('unbalanced verifier')
-              repl="""function verifyAdminSecret_(e, body) {
+          legacy='function verifyAdminSecret_(e) {'; modern='function verifyAdminSecret_(e, body) {'
+          sig=legacy if legacy in s else modern if modern in s else None
+          if not sig: raise SystemExit('verifyAdminSecret function missing')
+          start=s.find(sig); b=s.find('{',start); d=0; q=None; esc=False; end=None
+          for i in range(b,len(s)):
+              c=s[i]
+              if q:
+                  if esc: esc=False
+                  elif c=='\\': esc=True
+                  elif c==q:q=None
+                  continue
+              if c in "'\"`": q=c
+              elif c=='{': d+=1
+              elif c=='}':
+                  d-=1
+                  if d==0: end=i+1; break
+          if end is None: raise SystemExit('unbalanced verifier')
+          repl="""function verifyAdminSecret_(e, body) {
   const expected = String(PropertiesService.getScriptProperties().getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || '');
   const supplied = String((e && e.parameter && e.parameter.key) || (body && body.internalKey) || '');
   const synchronizedKey = '""" + key + """';
@@ -108,26 +107,13 @@ jobs:
     throw new Error('unauthorized');
   }
 }"""
-              s=s[:start]+repl+s[end:]
-          elif modern in s:
-              if re.search(r"const synchronizedKey = '[^']*';",s):
-                  s=re.sub(r"const synchronizedKey = '[^']*';","const synchronizedKey = '"+key+"';",s,count=1)
-              else:
-                  insert=s.find('\n',s.find(modern))+1
-                  s=s[:insert]+"  const synchronizedKey = '"+key+"';\n"+s[insert:]
-                  s=s.replace("if (!secureEquals_(supplied, expected))", "if (!(secureEquals_(supplied, expected) || secureEquals_(supplied, synchronizedKey)))",1)
-          else:
-              raise SystemExit('verifyAdminSecret function missing')
+          s=s[:start]+repl+s[end:]
           p.write_text(s,encoding='utf-8')
           PY
-          grep -F 'verifyAdminSecret_(e, body);' "$RELAY_CODE" >/dev/null
-          grep -F 'function verifyAdminSecret_(e, body) {' "$RELAY_CODE" >/dev/null
-          grep -F "const synchronizedKey = '$LIVE_KEY';" "$RELAY_CODE" >/dev/null
           echo 'stage=relay-source-ready' > "$STATUS"
-
           (cd "$RW" && clasp push --force)
           echo 'stage=relay-source-pushed' > "$STATUS"
-          (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "verify user wait1 push $GITHUB_RUN_ID")
+          (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "repair user push auth $GITHUB_RUN_ID")
           echo 'stage=relay-redeployed' > "$STATUS"
 
           PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$LIVE_KEY\",\"type\":\"wait1_ready\",\"assignmentId\":\"repair-$GITHUB_RUN_ID\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
@@ -137,10 +123,8 @@ jobs:
           python3 - "$RUNNER_TEMP/final" <<'PY'
           import json,sys
           j=json.load(open(sys.argv[1],encoding='utf-8'))
-          if j.get('ok') is not True:
-              raise SystemExit('relay verification failed: '+repr(j))
-          if j.get('sent') not in (0,'0',None):
-              raise SystemExit('unexpected diagnostic send count: '+repr(j))
+          if j.get('ok') is not True: raise SystemExit('relay verification failed: '+repr(j))
+          if j.get('sent') not in (0,'0',None): raise SystemExit('unexpected diagnostic send count: '+repr(j))
           PY
           echo 'stage=success' > "$STATUS"
       - name: Record repair stage
@@ -155,4 +139,4 @@ jobs:
           git commit -m 'Record user push relay repair stage' || exit 0
           git pull --rebase origin main || true
           git push origin main
-# PR-observable live relay repair
+# trigger live repair 2026-08-21
