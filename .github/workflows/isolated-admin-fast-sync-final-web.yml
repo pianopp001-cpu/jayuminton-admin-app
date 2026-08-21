@@ -1,0 +1,48 @@
+name: Isolated admin fast-sync final web
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'deployment/jayuminton/**'
+      - '.github/workflows/isolated-admin-fast-sync-final-web.yml'
+  push:
+    branches: [ isolated-admin-fast-sync-v1 ]
+
+jobs:
+  validate-final-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated snapshot
+        run: |
+          rm -rf "$RUNNER_TEMP/work" "$RUNNER_TEMP/admin-web"
+          cp -a source-snapshot/current-main "$RUNNER_TEMP/work"
+          sha256sum source-snapshot/current-main/Index.html > "$RUNNER_TEMP/user-before.sha"
+      - name: Apply complete admin patch chain
+        run: |
+          python3 deployment/jayuminton/apply_admin_vnext_patches.py "$RUNNER_TEMP/work"
+      - name: Build final Cloudflare admin HTML shape
+        run: |
+          python3 deployment/jayuminton/admin_cloudflare_rpc.py patch-backend --work "$RUNNER_TEMP/work"
+          python3 deployment/jayuminton/admin_cloudflare_rpc.py build-frontend --work "$RUNNER_TEMP/work" --out "$RUNNER_TEMP/admin-web" --rpc-url 'https://example.invalid/exec'
+      - name: Verify speed and Cloudflare contracts
+        run: |
+          grep -F 'JAYUMINTON_ADMIN_FAST_MUTATION_RETURN_V1' "$RUNNER_TEMP/work/Code.js"
+          grep -F 'JAYUMINTON_ADMIN_FAST_FINISH_RETURN_V1' "$RUNNER_TEMP/work/Code.js"
+          grep -F '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' "$RUNNER_TEMP/work/Script.html"
+          grep -F 'jayuminton-admin-cloudflare-rpc' "$RUNNER_TEMP/admin-web/index.html"
+          grep -F 'window.__JAYUMINTON_ADMIN_CLOUDFLARE__=true' "$RUNNER_TEMP/admin-web/index.html"
+          grep -F 'function server(name, args)' "$RUNNER_TEMP/admin-web/index.html"
+          grep -F 'body.action-busy' "$RUNNER_TEMP/admin-web/index.html"
+          if grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-web/index.html"; then exit 1; fi
+      - name: Verify web structure and user page untouched
+        run: |
+          test "$(grep -o '<script' "$RUNNER_TEMP/admin-web/index.html" | wc -l)" -ge 2
+          test "$(grep -o '</script>' "$RUNNER_TEMP/admin-web/index.html" | wc -l)" -ge 2
+          sha256sum source-snapshot/current-main/Index.html > "$RUNNER_TEMP/user-after.sha"
+          diff -u "$RUNNER_TEMP/user-before.sha" "$RUNNER_TEMP/user-after.sha"
+          grep -F 'https://jayuminton-push.web.app/' "$RUNNER_TEMP/work/Script.html"
+          grep -F 'function refreshMemberState()' "$RUNNER_TEMP/work/Script.html"
+      - name: Result
+        run: echo 'ADMIN_FAST_SYNC_FINAL_WEB_OK'
