@@ -134,4 +134,4 @@ jobs:
           git commit -m 'Record user push relay repair stage' || exit 0
           git pull --rebase origin main || true
           git push origin main
-# direct main push relay repair trigger 2026-08-21 17:36 KST
+# full clean rebuild trigger 2026-08-21 19:07 KST
