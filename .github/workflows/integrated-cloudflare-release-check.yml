@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 20
     env:
       ADMIN_WEB: https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/
+      ADMIN_RPC: https://jayuminton-admin-rpc.pianopp001.workers.dev/
       USER_WEB: https://jayuminton-push.web.app/
       USER_PUSH: https://jayuminton-user-push.pianopp001.workers.dev
       USER_ARTIFACT_ID: '9447484772'
@@ -83,7 +84,7 @@ jobs:
           jq -e '.ok==true and .service=="jayuminton-cloudflare-user-push" and .storage=="durable-object"' \
             "$RUNNER_TEMP/push-health.json" >/dev/null
 
-      - name: Verify administrator APK targets current Cloudflare administrator web
+      - name: Verify administrator APK uses bundled Cloudflare admin and current RPC
         shell: bash
         run: |
           set -euo pipefail
@@ -93,8 +94,10 @@ jobs:
           find "$ROOT" -type f -print0 | xargs -0 strings > "$RUNNER_TEMP/admin-apk.strings"
           echo 'Admin APK discovered web endpoints:'
           grep -Eo 'https?://[^[:space:]"<>]+' "$RUNNER_TEMP/admin-apk.strings" | grep -E 'web\.app|workers\.dev|script\.google\.com' | sort -u || true
-          grep -F 'jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app' "$RUNNER_TEMP/admin-apk.strings" >/dev/null
+          grep -F 'jayuminton-admin-rpc.pianopp001.workers.dev' "$RUNNER_TEMP/admin-apk.strings" >/dev/null
           grep -F 'NativeVoice' "$RUNNER_TEMP/admin-apk.strings" >/dev/null
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-apk.strings" >/dev/null
+          echo 'admin_apk_architecture=bundled-admin-html+cloudflare-rpc' > "$RUNNER_TEMP/admin-apk-contract.txt"
 
       - name: Verify user APK Cloudflare web and targeted notification contract
         shell: bash
@@ -119,13 +122,16 @@ jobs:
           cp "$RUNNER_TEMP/jayuminton-admin-v200.2.apk" "$ROOT/"
           cp "$RUNNER_TEMP/jayuminton-user-v1.3.3-cloudflare.apk" "$ROOT/"
           cp "$RUNNER_TEMP/push-health.json" "$ROOT/"
+          cp "$RUNNER_TEMP/admin-apk-contract.txt" "$ROOT/"
           sha256sum "$ROOT"/*.apk > "$ROOT/SHA256SUMS.txt"
           cat > "$ROOT/VERIFIED.txt" <<EOF
           status=success
           admin_web=$ADMIN_WEB
+          admin_rpc=$ADMIN_RPC
           user_web=$USER_WEB
           user_push=$USER_PUSH
           admin_apk=jayuminton-admin-v200.2.apk
+          admin_apk_architecture=bundled-admin-html+cloudflare-rpc
           user_apk=jayuminton-user-v1.3.3-cloudflare.apk
           admin_fast_sync=verified-live
           admin_voice_test_removed=verified-live
