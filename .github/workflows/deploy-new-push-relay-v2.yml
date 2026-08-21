@@ -1,0 +1,195 @@
+name: Deploy fresh user push relay v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/new-push-relay-v2/**'
+      - '.github/workflows/deploy-new-push-relay-v2.yml'
+      - 'deploy-triggers/new-push-relay-v2.txt'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-new-push-relay-v2
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Create and deploy brand-new relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+          C="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
+          jq -e '.mainScriptId and .mainDeploymentId and .firebaseProjectId and .hostingUrl' "$C" >/dev/null
+
+          RELAY_KEY="$(openssl rand -hex 32)"
+          WORK="$RUNNER_TEMP/new-relay-v2"
+          rm -rf "$WORK" && mkdir -p "$WORK"
+          cd "$WORK"
+          clasp create --type standalone --title "Jayuminton Push Relay V2 ${GITHUB_RUN_ID}" --rootDir .
+          cp "$GITHUB_WORKSPACE/deployment/new-push-relay-v2/Code.gs.template" Code.gs
+          cp "$GITHUB_WORKSPACE/deployment/new-push-relay-v2/appsscript.json" appsscript.json
+
+          PROJECT_ID="$(jq -r '.project_id' "$RUNNER_TEMP/firebase-sa.json")"
+          CLIENT_EMAIL="$(jq -r '.client_email' "$RUNNER_TEMP/firebase-sa.json")"
+          PRIVATE_KEY_B64="$(jq -r '.private_key' "$RUNNER_TEMP/firebase-sa.json" | base64 -w0)"
+          python3 - "$RELAY_KEY" "$PROJECT_ID" "$CLIENT_EMAIL" "$PRIVATE_KEY_B64" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path('Code.gs'); s=p.read_text(encoding='utf-8')
+          for a,b in zip(['__RELAY_AUTH_KEY__','__FCM_PROJECT_ID__','__FCM_CLIENT_EMAIL__','__FCM_PRIVATE_KEY_B64__'],sys.argv[1:]):
+              s=s.replace(a,b)
+          p.write_text(s,encoding='utf-8')
+          PY
+          grep -q '__RELAY_AUTH_KEY__\|__FCM_PROJECT_ID__\|__FCM_PRIVATE_KEY_B64__' Code.gs && exit 1 || true
+          clasp push --force
+          DEPLOY_OUT="$(clasp deploy --description "fresh relay v2 ${GITHUB_RUN_ID}" 2>&1 | tee /dev/stderr)"
+          DEPLOY_ID="$(printf '%s\n' "$DEPLOY_OUT" | grep -Eo 'AKfy[A-Za-z0-9_-]+' | tail -1)"
+          test -n "$DEPLOY_ID"
+          RELAY_URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec"
+          SCRIPT_ID="$(jq -r '.scriptId' .clasp.json)"
+          {
+            echo "NEW_RELAY_URL=$RELAY_URL"
+            echo "NEW_RELAY_SCRIPT_ID=$SCRIPT_ID"
+            echo "NEW_RELAY_DEPLOYMENT_ID=$DEPLOY_ID"
+            echo "NEW_RELAY_AUTH_KEY=$RELAY_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify new relay health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            if curl --fail --location --max-time 60 "$NEW_RELAY_URL?health=$GITHUB_RUN_ID-$i" > "$RUNNER_TEMP/relay-health.json"; then
+              if jq -e '.ok == true and .service == "jayuminton-push-relay-v2" and .registeredTokens == 0' "$RUNNER_TEMP/relay-health.json" >/dev/null; then
+                echo 'Fresh relay v2 health verified.'
+                exit 0
+              fi
+            fi
+            sleep 4
+          done
+          echo 'Fresh relay did not become publicly reachable.' >&2
+          cat "$RUNNER_TEMP/relay-health.json" 2>/dev/null || true
+          exit 1
+
+      - name: Connect live main server to new relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          W="$RUNNER_TEMP/live-main"
+          rm -rf "$W" && mkdir -p "$W"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"
+          cd "$W"
+          clasp pull
+          python3 - "$NEW_RELAY_URL" "$NEW_RELAY_AUTH_KEY" <<'PY'
+          from pathlib import Path
+          import re,sys
+          p=Path('Code.js'); s=p.read_text(encoding='utf-8')
+          url,key=sys.argv[1],sys.argv[2]
+          s,n1=re.subn(r"((?:const|let|var)\s+JAYUMINTON_STATE_PUSH_RELAY_URL_\s*=\s*)['\"][^'\"]*['\"]",lambda m:m.group(1)+repr(url),s,count=1)
+          s,n2=re.subn(r"((?:const|let|var)\s+JAYUMINTON_STATE_PUSH_INTERNAL_KEY_\s*=\s*)['\"][^'\"]*['\"]",lambda m:m.group(1)+repr(key),s,count=1)
+          if n1 != 1 or n2 != 1: raise SystemExit('main relay constants not found')
+          p.write_text(s,encoding='utf-8')
+          PY
+          node --check Code.js
+          grep -F "$NEW_RELAY_URL" Code.js >/dev/null
+          clasp push --force
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "connect fresh relay v2 ${GITHUB_RUN_ID}"
+
+      - name: Point user web registration to new relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/deploy.json"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$C")"
+          HOSTING_URL="$(jq -r '.hostingUrl' "$C")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
+          MAIN_URL="https://script.google.com/macros/s/${MAIN_DEPLOYMENT_ID}/exec"
+          ROOT="$RUNNER_TEMP/user-web-v2"
+          PUBLIC="$ROOT/web-push"
+          rm -rf "$ROOT" && mkdir -p "$PUBLIC"
+          cp "$GITHUB_WORKSPACE/deployment/jayuminton/firebase.json" "$ROOT/firebase.json"
+          cp "$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web/index.html" "$PUBLIC/index.html"
+          cp "$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web/setup-v205.css" "$PUBLIC/setup-v205.css"
+          cp "$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web/manifest.webmanifest" "$PUBLIC/manifest.webmanifest"
+          cp "$GITHUB_WORKSPACE/deployment/jayuminton/v1637-web/firebase-messaging-sw.js" "$PUBLIC/firebase-messaging-sw.js"
+          cat "$GITHUB_WORKSPACE"/deployment/jayuminton/v1637-web/setup-v205.js.gz.b64.part-* | tr -d '\r\n' | base64 -d | gzip -dc > "$PUBLIC/setup-v205.js"
+          python3 - "$MAIN_URL" "$NEW_RELAY_URL" "$PUBLIC" <<'PY'
+          from pathlib import Path
+          import sys
+          main,relay,public=sys.argv[1],sys.argv[2],Path(sys.argv[3])
+          tpl=Path('deployment/jayuminton/v1637-web/config-v204.template.js').read_text(encoding='utf-8')
+          cfg=tpl.replace('__MEMBER_PAGE_URL__',main).replace('__RELAY_URL__',relay)
+          for n in ('config-v202.js','config-v203.js','config-v204.js'): (public/n).write_text(cfg,encoding='utf-8')
+          idx=(public/'index.html').read_text(encoding='utf-8')
+          idx=idx.replace('/config-v204.js?v=1637','/config-v204.js?v=relay-v2').replace('/setup-v205.js?v=1637','/setup-v205.js?v=relay-v2')
+          (public/'index.html').write_text(idx,encoding='utf-8')
+          PY
+          grep -F "$NEW_RELAY_URL" "$PUBLIC/config-v204.js" >/dev/null
+          BASE="${HOSTING_URL%/}"
+          for a in icon-198.png icon-512.png apple-touch-icon-180.png badge-96.png; do
+            curl --fail --location --retry 3 --max-time 60 "$BASE/$a?copy=$GITHUB_RUN_ID" -o "$PUBLIC/$a"
+          done
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive
+
+      - name: Verify registration endpoint and main connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_TOKEN="diag-v2-${GITHUB_RUN_ID}"
+          PAYLOAD="{\"action\":\"register_web_token\",\"memberId\":\"__diag_v2__\",\"memberName\":\"DIAG\",\"token\":\"$TEST_TOKEN\"}"
+          curl --fail --location --data-urlencode "payload=$PAYLOAD" "$NEW_RELAY_URL" > "$RUNNER_TEMP/register.json"
+          jq -e '.ok == true and .registered == true' "$RUNNER_TEMP/register.json" >/dev/null
+          PAYLOAD2="{\"action\":\"unregister_web_token\",\"token\":\"$TEST_TOKEN\"}"
+          curl --fail --location --data-urlencode "payload=$PAYLOAD2" "$NEW_RELAY_URL" > "$RUNNER_TEMP/unregister.json"
+          jq -e '.ok == true' "$RUNNER_TEMP/unregister.json" >/dev/null
+          echo 'Fresh user push connection v2 verified.'
+
+      - name: Record public connection metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          cat > deployment/status/new-push-relay-v2.txt <<EOF
+          service=jayuminton-push-relay-v2
+          relay_url=$NEW_RELAY_URL
+          relay_script_id=$NEW_RELAY_SCRIPT_ID
+          relay_deployment_id=$NEW_RELAY_DEPLOYMENT_ID
+          main_connected=true
+          user_web_connected=true
+          created_run=$GITHUB_RUN_ID
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/new-push-relay-v2.txt
+          git commit -m 'Record fresh push relay v2 connection' || exit 0
+          git pull --rebase origin main
+          git push origin main
