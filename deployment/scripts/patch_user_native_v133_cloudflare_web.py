@@ -7,9 +7,6 @@ if len(sys.argv) != 2:
 p = Path(sys.argv[1])
 s = p.read_text(encoding='utf-8')
 
-# v1.3.3: keep v1.3.2 strict native FCM/vibration but stop loading the old Apps Script UI.
-# Use the established standalone member web entry; PUSH_URL remains supplied by the
-# isolated Cloudflare worker deployment at build time.
 USER_WEB = 'https://jayuminton-push.web.app/'
 
 repls = (
@@ -27,18 +24,32 @@ repls = (
 for old,new in repls:
     s=s.replace(old,new)
 
-# Replace any generated Apps Script USER_URL assignment exactly once.
-pat = r'USER_URL="https://script\.google\.com/macros/s/\$\{MAIN_DEPLOYMENT_ID\}/exec\?mode=user[^\"]*"'
-s,n = re.subn(pat, f'USER_URL="{USER_WEB}"', s, count=1)
+# Robustly replace the shell-level USER_URL regardless of extra query parameters
+# added by earlier patches. This is safer than depending on one exact historical URL.
+s, n = re.subn(
+    r'(?m)^USER_URL="https://script\.google\.com/macros/s/[^\"]+"\s*$',
+    f'USER_URL="{USER_WEB}"',
+    s,
+    count=1,
+)
 if n != 1:
-    # Some patched build versions have the Java constant already materialized.
-    pat2 = r'private static final String USER_URL = "https://script\.google\.com/macros/s/[^\"]+";'
-    s,n2 = re.subn(pat2, f'private static final String USER_URL = "{USER_WEB}";', s, count=1)
+    # Fallback for variants where only the generated Java constant remains.
+    s, n2 = re.subn(
+        r'private static final String USER_URL = "https://script\.google\.com/macros/s/[^\"]+";',
+        f'private static final String USER_URL = "{USER_WEB}";',
+        s,
+        count=1,
+    )
     if n2 != 1:
-        raise SystemExit('old Apps Script USER_URL anchor not found exactly once')
+        raise SystemExit('Apps Script USER_URL anchor not found')
 
-# The WebView must still expose the native member bridge so selecting "me" can bind
-# memberId to the FCM token. The strict FCM service must remain intact.
+# Cloudflare/Firebase standalone URL has no query string. Base builder appends &ts=,
+# so make that generated WebView load expression separator-safe.
+s = s.replace(
+    'webView.loadUrl(USER_URL + "&ts=" + System.currentTimeMillis(), headers);',
+    'webView.loadUrl(USER_URL + (USER_URL.contains("?") ? "&ts=" : "?ts=") + System.currentTimeMillis(), headers);'
+)
+
 required = (
     USER_WEB,
     'NativeUserApp',
@@ -52,8 +63,8 @@ required = (
 for marker in required:
     if marker not in s:
         raise SystemExit('missing v1.3.3 marker: ' + marker)
-if 'USER_URL="https://script.google.com/macros/s/' in s:
+if re.search(r'(?m)^USER_URL="https://script\.google\.com/macros/s/', s):
     raise SystemExit('Apps Script USER_URL survived v1.3.3')
 
 p.write_text(s, encoding='utf-8')
-print('Prepared v1.3.3: standalone user web entry + strict current-member Cloudflare push + max8 vibration.')
+print('Prepared v1.3.3: Cloudflare user web + strict selected-member push + max8 vibration.')
