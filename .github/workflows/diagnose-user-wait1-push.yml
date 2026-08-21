@@ -38,7 +38,6 @@ jobs:
           )"
           test -n "$MAIN_SCRIPT_ID"; test -n "$RELAY_DEPLOYMENT_ID"
           echo 'stage=ids-resolved' > "$STATUS"
-
           MW="$RUNNER_TEMP/main"; mkdir -p "$MW"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$MW/.clasp.json"
           (cd "$MW" && clasp pull >/dev/null)
@@ -52,7 +51,6 @@ jobs:
           )"
           test "${#LIVE_KEY}" -eq 64
           echo 'stage=main-key-read' > "$STATUS"
-
           clasp list > "$RUNNER_TEMP/projects.txt"
           : > "$RUNNER_TEMP/relay-script.txt"
           while IFS= read -r line; do
@@ -60,24 +58,20 @@ jobs:
             [ -n "$SID" ] || continue
             W="$RUNNER_TEMP/check-$RANDOM"; mkdir -p "$W"
             printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
-            if (cd "$W" && clasp deployments) > "$W/d.txt" 2>/dev/null && grep -F "$RELAY_DEPLOYMENT_ID" "$W/d.txt" >/dev/null; then
-              printf '%s' "$SID" > "$RUNNER_TEMP/relay-script.txt"; break
-            fi
+            if (cd "$W" && clasp deployments) > "$W/d.txt" 2>/dev/null && grep -F "$RELAY_DEPLOYMENT_ID" "$W/d.txt" >/dev/null; then printf '%s' "$SID" > "$RUNNER_TEMP/relay-script.txt"; break; fi
           done < "$RUNNER_TEMP/projects.txt"
           test -s "$RUNNER_TEMP/relay-script.txt"
           RELAY_SCRIPT_ID="$(cat "$RUNNER_TEMP/relay-script.txt")"
           echo 'stage=relay-project-found' > "$STATUS"
-
           RW="$RUNNER_TEMP/relay"; mkdir -p "$RW"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$RELAY_SCRIPT_ID" > "$RW/.clasp.json"
           (cd "$RW" && clasp pull >/dev/null)
           RELAY_CODE="$(find "$RW" -maxdepth 1 -type f \( -name 'Code.js' -o -name 'Code.gs' \) | head -1)"
           test -n "$RELAY_CODE"
           echo 'stage=relay-source-pulled' > "$STATUS"
-
           python3 - "$RELAY_CODE" "$LIVE_KEY" <<'PY'
           from pathlib import Path
-          import re,sys
+          import sys
           p=Path(sys.argv[1]); key=sys.argv[2]; s=p.read_text(encoding='utf-8')
           if 'verifyAdminSecret_(e, body);' not in s:
               if 'verifyAdminSecret_(e);' not in s: raise SystemExit('verifyAdminSecret call missing')
@@ -103,9 +97,7 @@ jobs:
   const expected = String(PropertiesService.getScriptProperties().getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || '');
   const supplied = String((e && e.parameter && e.parameter.key) || (body && body.internalKey) || '');
   const synchronizedKey = '""" + key + """';
-  if (!(secureEquals_(supplied, expected) || secureEquals_(supplied, synchronizedKey))) {
-    throw new Error('unauthorized');
-  }
+  if (!(secureEquals_(supplied, expected) || secureEquals_(supplied, synchronizedKey))) throw new Error('unauthorized');
 }"""
           s=s[:start]+repl+s[end:]
           p.write_text(s,encoding='utf-8')
@@ -115,7 +107,6 @@ jobs:
           echo 'stage=relay-source-pushed' > "$STATUS"
           (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "repair user push auth $GITHUB_RUN_ID")
           echo 'stage=relay-redeployed' > "$STATUS"
-
           PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$LIVE_KEY\",\"type\":\"wait1_ready\",\"assignmentId\":\"repair-$GITHUB_RUN_ID\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
           curl -sS -D "$RUNNER_TEMP/h" -o "$RUNNER_TEMP/first" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
           LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/h")"
@@ -139,4 +130,4 @@ jobs:
           git commit -m 'Record user push relay repair stage' || exit 0
           git pull --rebase origin main || true
           git push origin main
-# trigger live repair 2026-08-21
+# retrigger live repair 2026-08-21
