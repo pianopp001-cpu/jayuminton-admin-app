@@ -8,15 +8,21 @@ if len(sys.argv) != 2:
 p = Path(sys.argv[1])
 s = p.read_text(encoding='utf-8')
 
+# The browser-verified Cloudflare user web. Never point the user APK back to
+# Firebase hosting or an Apps Script page.
+USER_WEB = 'https://jayuminton-user-web.pianopp001.workers.dev/'
+s, n = re.subn(r'^USER_URL=.*$', f'USER_URL="{USER_WEB}"', s, count=1, flags=re.M)
+if n != 1:
+    raise SystemExit('USER_URL assignment not found exactly once')
+
 # Move generated Android sources out of the admin namespace entirely.
 s = s.replace('JAVA_DIR="app/src/main/java/com/jayuminton/admin"',
               'JAVA_DIR="app/src/main/java/com/jayuminton/user"')
 s = s.replace("namespace 'com.jayuminton.admin'", "namespace 'com.jayuminton.user'")
 s = s.replace('package com.jayuminton.admin;', 'package com.jayuminton.user;')
 
-# The repository itself contains the administrator Android sources. A user APK build
-# must remove those checked-in sources before javac runs, otherwise Gradle compiles
-# both the user package and the old administrator MainActivity.
+# The repository itself contains administrator Android sources. A user APK build
+# must remove them before javac runs so the two apps cannot be mixed.
 anchor = 'mkdir -p "$JAVA_DIR" releases deployment/status signing'
 replacement = 'rm -rf app/src/main/java/com/jayuminton/admin\nmkdir -p "$JAVA_DIR" releases deployment/status signing'
 if anchor not in s:
@@ -48,7 +54,7 @@ required = (
     "applicationId 'com.jayuminton.user'",
     'package com.jayuminton.user;',
     'rm -rf app/src/main/java/com/jayuminton/admin',
-    'https://jayuminton-push.web.app/',
+    USER_WEB,
     'NativeUserApp',
     'NativePushRegistrar.isCurrentMember(this, targetMemberId)',
     'private static final int MAX_GROUPS = 8;',
@@ -62,10 +68,12 @@ for forbidden in (
     'JAVA_DIR="app/src/main/java/com/jayuminton/admin"',
     "namespace 'com.jayuminton.admin'",
     'package com.jayuminton.admin;',
+    'https://jayuminton-push.web.app/',
+    'script.google.com/macros/s/',
     "versionCode='133' versionName='1.3.3'",
 ):
     if forbidden in s:
-        raise SystemExit('stale/admin Android marker survived: ' + forbidden)
+        raise SystemExit('stale/admin user-web marker survived: ' + forbidden)
 
 p.write_text(s, encoding='utf-8')
-print('Prepared v1.3.4 user-only Android namespace, removed checked-in admin Java sources, normalized v1.3.4 verifier identity, and preserved Cloudflare user push/vibration contract.')
+print('Prepared v1.3.4 user-only APK against the verified Cloudflare user web, with admin sources removed and native push/vibration preserved.')
