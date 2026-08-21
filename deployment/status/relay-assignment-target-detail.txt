@@ -1,4 +1,4 @@
-run_id=32463673584
+run_id=32464851705
 source=live-relay-read-only
 __REDACTED_LONG_VALUE__
 has_targetMemberId=False
@@ -138,6 +138,96 @@ function sendAssignmentEventWithoutDiagnostics_(event) {
     assignmentId: event.assignmentId,
     sent: sent,
     failed: targets.length - sent
+  };
+}
+
+=== makeWebFcmRequest_ ===
+function makeWebFcmRequest_(event, member, token, accessToken, userAgent) {
+  const nativeAndroid = /JayumintonNativeAndroid\//i.test(String(userAgent || ''));
+  const isWait = event.type === 'wait1_ready';
+  const courtNo = isWait
+    ? event.expectedCourtNo
+    : event.courtNo;
+  const title = isWait
+    ? '대기 1순위 안내'
+    : '코트 배정 긴급 안내';
+  const body = isWait
+    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+    : courtNo + '번 코트가 나왔습니다. ' +
+      courtNo + '번코트로 이동해주세요!';
+
+  const data = {
+    type: event.type,
+    assignmentId: event.assignmentId,
+    memberId: member.id,
+    memberName: member.name,
+    title: title,
+    body: body,
+    link: JAYUMINTON_PUSH_CONFIG.appUrl,
+    courtNo: String(event.courtNo || ''),
+    expectedCourtNo: String(event.expectedCourtNo || ''),
+    repeatCount: '1',
+    notificationTag: event.assignmentId,
+    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
+  };
+
+  const payload = {
+    message: {
+      token: token,
+      data: data,
+      android: {
+        priority: 'high',
+        ttl: '600s',
+        notification: {
+          title: data.title,
+          body: data.body,
+          icon: 'icon',
+          sound: 'default',
+          channel_id: event.type === 'court_assignment'
+            ? 'jayuminton_court_system_v114'
+            : 'jayuminton_wait1_system_v114',
+          notification_priority: 'PRIORITY_MAX',
+          visibility: 'PUBLIC',
+          vibrate_timings: event.type === 'court_assignment'
+            ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+            : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+        }
+      },
+      webpush: {
+        headers: {
+          Urgency: 'high',
+          TTL: '600'
+        },
+        fcm_options: {
+          link: JAYUMINTON_PUSH_CONFIG.appUrl
+        }
+      }
+    }
+  };
+
+  if (nativeAndroid) {
+    /* JAYUMINTON_NATIVE_FCM_CONTRACT_V2 */
+    // HTTP v1 uses lowerCamelCase. Restrict only native tokens; applying an
+    // Android package restriction to browser tokens makes FCM reject them.
+    payload.message.android.restrictedPackageName = 'com.jayuminton.user';
+    // Data-only high-priority delivery guarantees onMessageReceived owns the
+    // overlay and explicit vibrator even while another app is in front.
+    delete payload.message.android.notification;
+    delete payload.message.webpush;
+  } else {
+    // Browser/PWA registrations receive only the webpush contract.
+    delete payload.message.android;
+  }
+
+  return {
+    url: JAYUMINTON_PUSH_CONFIG.fcmUrl,
+    method: 'post',
+    contentType: 'application/json; charset=utf-8',
+    headers: {
+      Authorization: 'Bearer ' + accessToken
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
   };
 }
 
@@ -283,12 +373,17 @@ function cleanEvent_(body) {
 SUMMARY
 wrapper_found=True
 wrapper_targetMemberId_refs=0
-wrapper_memberId_refs=1
+wrapper_memberId_refs=2
 wrapper_token_refs=0
-wrapper_fcm_refs=0
+wrapper_data_refs=0
 core_found=True
 core_targetMemberId_refs=0
-core_memberId_refs=2
+core_memberId_refs=4
 core_token_refs=8
-core_fcm_refs=2
-result=CORE_MISSING_TARGET_MEMBER_ID
+core_data_refs=0
+request_found=True
+request_targetMemberId_refs=0
+request_memberId_refs=2
+request_token_refs=3
+request_data_refs=5
+result=REQUEST_MISSING_TARGET_MEMBER_ID
