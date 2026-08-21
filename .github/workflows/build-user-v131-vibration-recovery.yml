@@ -91,7 +91,6 @@ jobs:
           python3 deployment/scripts/patch_build_user_native_v129_background_registration.py "$SCRIPT"
           python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$SCRIPT"
           python3 deployment/scripts/patch_user_native_v131_vibration_recovery.py "$SCRIPT"
-
           grep -F 'VERSION="1.3.1"' "$SCRIPT" >/dev/null
           grep -F 'VERSION_CODE="131"' "$SCRIPT" >/dev/null
           grep -F 'private static final int MAX_GROUPS = 8;' "$SCRIPT" >/dev/null
@@ -99,7 +98,6 @@ jobs:
           grep -F 'channel.enableVibration(true);' "$SCRIPT" >/dev/null
           grep -F 'jayuminton_wait1_native_v131' "$SCRIPT" >/dev/null
           grep -F 'jayuminton_court_native_v131' "$SCRIPT" >/dev/null
-
           bash "$SCRIPT"
           SRC='releases/jayuminton-courtstatus-v1.3.1-vibration-recovery.apk'
           test -s "$SRC"
@@ -123,3 +121,5 @@ jobs:
           git commit -m 'Publish v1.3.1 user vibration recovery APK' || exit 0
           git pull --rebase origin main || true
           git push origin main
+
+# retrigger: native user vibration recovery 2026-08-21
