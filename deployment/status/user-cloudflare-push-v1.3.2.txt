@@ -1,0 +1,9 @@
+status=success
+push_backend=cloudflare-worker
+mapping_store=cloudflare-durable-object
+mapping_generation=fresh-v1
+worker_url=https://jayuminton-user-push.pianopp001.workers.dev
+version=1.3.2
+application_id=com.jayuminton.user
+vibration_max_groups=8
+assignment_scope=current-selected-member-only
