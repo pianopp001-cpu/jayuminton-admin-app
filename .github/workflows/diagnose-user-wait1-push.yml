@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: npm install --global @google/clasp@latest
-      - name: Repair relay auth and redeploy same endpoint
+      - name: Rebuild relay authentication and redeploy same endpoint
         shell: bash
         run: |
           set -euo pipefail
@@ -37,8 +37,7 @@ jobs:
           )"
           test -n "$RELAY_DEPLOYMENT_ID"
 
-          MW="$RUNNER_TEMP/main"
-          mkdir -p "$MW"
+          MW="$RUNNER_TEMP/main"; mkdir -p "$MW"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$MW/.clasp.json"
           (cd "$MW" && clasp pull)
           python3 - "$MW/Code.js" "$RUNNER_TEMP/live-key.txt" <<'PY'
@@ -75,17 +74,14 @@ jobs:
           test -n "$RELAY_CODE"
           python3 - "$RELAY_CODE" "$LIVE_KEY" <<'PY'
           from pathlib import Path
-          import re,sys
+          import sys
           p=Path(sys.argv[1]); key=sys.argv[2]; s=p.read_text(encoding='utf-8')
-          old='verifyAdminSecret_(e);'
-          if old in s:
-              s=s.replace(old,'verifyAdminSecret_(e, body);',1)
-          sig='function verifyAdminSecret_(e) {'
-          start=s.find(sig)
-          if start<0:
-              sig='function verifyAdminSecret_(e, body) {'
+          if 'verifyAdminSecret_(e);' in s:
+              s=s.replace('verifyAdminSecret_(e);','verifyAdminSecret_(e, body);',1)
+          for sig in ('function verifyAdminSecret_(e) {','function verifyAdminSecret_(e, body) {'):
               start=s.find(sig)
-          if start<0: raise SystemExit('verifyAdminSecret_ missing')
+              if start>=0: break
+          else: raise SystemExit('verifyAdminSecret_ missing')
           b=s.find('{',start); d=0; q=None; esc=False; end=None
           for i in range(b,len(s)):
               c=s[i]
@@ -101,12 +97,11 @@ jobs:
                   if d==0: end=i+1; break
           if end is None: raise SystemExit('verifyAdminSecret_ unbalanced')
           repl=f'''function verifyAdminSecret_(e, body) {{
-  const expected = String(PropertiesService.getScriptProperties().getProperty('JAYUMINTON_PUSH_SHARED_SECRET') || '');
   const queryKey = String(e && e.parameter ? (e.parameter.key || '') : '');
   const bodyKey = String(body && body.internalKey || '');
-  const synchronizedKey = {key!r};
   const supplied = queryKey || bodyKey;
-  if (!(secureEquals_(supplied, expected) || secureEquals_(supplied, synchronizedKey))) {{
+  const synchronizedKey = {key!r};
+  if (!secureEquals_(supplied, synchronizedKey)) {{
     throw new Error('unauthorized');
   }}
 }}'''
@@ -115,7 +110,7 @@ jobs:
           PY
           node --check "$RELAY_CODE"
           (cd "$RW" && clasp push --force)
-          (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "repair state push auth $GITHUB_RUN_ID")
+          (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "rebuild user push relay auth $GITHUB_RUN_ID")
 
           python3 - "$MW/Code.js" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL" <<'PY'
           from pathlib import Path
@@ -124,29 +119,25 @@ jobs:
           pat=r"((?:const|let|var)\s+JAYUMINTON_STATE_PUSH_RELAY_URL_\s*=\s*)['\"][^'\"]+['\"]"
           ns,n=re.subn(pat,lambda m:m.group(1)+repr(url),s,count=1)
           if n!=1: raise SystemExit('main relay URL constant missing')
-          if ns!=s:
-              p.write_text(ns,encoding='utf-8')
-              print('MAIN_RELAY_URL_UPDATED=true')
-          else:
-              print('MAIN_RELAY_URL_UPDATED=false')
+          p.write_text(ns,encoding='utf-8')
           PY
-          if ! git diff --no-index /dev/null /dev/null >/dev/null 2>&1; then :; fi
           (cd "$MW" && clasp push --force)
-          (cd "$MW" && clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "restore user push relay $GITHUB_RUN_ID")
+          (cd "$MW" && clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "reconnect user push relay $GITHUB_RUN_ID")
 
-      - name: Verify repaired relay without notifying any real member
+      - name: Verify rebuilt relay safely
         shell: bash
         run: |
           set -euo pipefail
           LIVE_KEY="$(cat "$RUNNER_TEMP/live-key.txt")"
-          PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$LIVE_KEY\",\"type\":\"wait1_ready\",\"assignmentId\":\"repair-verify-$GITHUB_RUN_ID\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
+          PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$LIVE_KEY\",\"type\":\"wait1_ready\",\"assignmentId\":\"rebuild-verify-$GITHUB_RUN_ID\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
           curl -sS -D "$RUNNER_TEMP/h" -o "$RUNNER_TEMP/first" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
           LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/h")"
           if [ -n "$LOC" ]; then curl -sS -o "$RUNNER_TEMP/final" "$LOC"; else cp "$RUNNER_TEMP/first" "$RUNNER_TEMP/final"; fi
           python3 - "$RUNNER_TEMP/final" <<'PY'
           import json,sys
           j=json.load(open(sys.argv[1],encoding='utf-8'))
-          print('RELAY_REPAIR_OK=', bool(j.get('ok')) and j.get('sent')==0)
-          print('RELAY_REPAIR_SENT_ZERO=', j.get('sent')==0)
+          print('RELAY_REBUILD_OK=', bool(j.get('ok')) and j.get('sent')==0)
+          print('RELAY_REBUILD_SENT_ZERO=', j.get('sent')==0)
           if not (j.get('ok') is True and j.get('sent')==0): raise SystemExit(1)
           PY
+# full rebuild trigger 2026-08-21
