@@ -1,6 +1,6 @@
-started=2026-08-20T16:11:36Z
-source_commit=3de79e39c9a357e26138ce05f11d447c1a1907ad
-trigger_run=32390585700
-preview_run=32390597950
+started=2026-08-21T13:48:14Z
+source_commit=617b08d41c2f33b626e5f3a4a257412db3d44e7b
+trigger_run=32488738613
+preview_run=32488753029
 preview_status=completed
-preview_conclusion=cancelled
+preview_conclusion=failure
