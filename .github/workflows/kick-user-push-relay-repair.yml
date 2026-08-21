@@ -27,3 +27,4 @@ jobs:
 # first install
 # trigger actual repair 2026-08-21
 # merge-trigger 2026-08-21 10:53 KST
+# retrigger current repair 2026-08-21
