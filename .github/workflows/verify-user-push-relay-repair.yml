@@ -37,7 +37,6 @@ jobs:
           )"
           test -n "$MAIN_SID"; test -n "$MAIN_DID"; test -n "$RELAY_DID"
 
-          # Find the existing relay Apps Script project by its still-live deployment ID.
           clasp list > "$RUNNER_TEMP/projects.txt"
           : > "$RUNNER_TEMP/relay-sid.txt"
           while IFS= read -r line; do
@@ -71,28 +70,34 @@ jobs:
           grep -F "action === 'main_state_event'" "$RELAY_CODE" >/dev/null
           grep -F "type: 'wait1_ready'" "$MAIN_CODE" >/dev/null
           grep -F "type: 'court_assignment'" "$MAIN_CODE" >/dev/null
+          grep -F 'updateMember' "$MAIN_CODE" >/dev/null
+          grep -F 'setMemberStatus' "$MAIN_CODE" >/dev/null
+          grep -F 'smartAssign' "$MAIN_CODE" >/dev/null
 
-          # Preserve the existing relay project/token properties and only update source + same deployments.
           (cd "$RELAY" && clasp push --force >/dev/null)
           (cd "$RELAY" && clasp create-deployment --deploymentId "$RELAY_DID" --description "atomic wait1 relay auth repair $GITHUB_RUN_ID" >/dev/null)
           (cd "$MAIN" && clasp push --force >/dev/null)
-          (cd "$MAIN" && clasp create-deployment --deploymentId "$MAIN_DID" --description "atomic main push auth repair $GITHUB_RUN_ID" >/dev/null)
+          (cd "$MAIN" && clasp create-deployment --deploymentId "$MAIN_DID" --description "atomic main push event repair $GITHUB_RUN_ID" >/dev/null)
 
           sleep 6
-          PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$KEY\",\"type\":\"wait1_ready\",\"assignmentId\":\"verify-$GITHUB_RUN_ID\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
-          curl -sS -D "$RUNNER_TEMP/h" -o "$RUNNER_TEMP/first" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
-          LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/h")"
-          if [ -n "$LOC" ]; then curl -sS -o "$RUNNER_TEMP/final" "$LOC"; else cp "$RUNNER_TEMP/first" "$RUNNER_TEMP/final"; fi
-          RESULT="$(python3 - "$RUNNER_TEMP/final" <<'PY'
+          test_event() {
+            local TYPE="$1" COURT="$2" OUT="$3"
+            local PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$KEY\",\"type\":\"$TYPE\",\"assignmentId\":\"verify-$TYPE-$GITHUB_RUN_ID\",\"courtNo\":\"$COURT\",\"expectedCourtNo\":\"$COURT\",\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
+            curl -sS -D "$RUNNER_TEMP/$OUT.h" -o "$RUNNER_TEMP/$OUT.first" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
+            local LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/$OUT.h")"
+            if [ -n "$LOC" ]; then curl -sS -o "$RUNNER_TEMP/$OUT.final" "$LOC"; else cp "$RUNNER_TEMP/$OUT.first" "$RUNNER_TEMP/$OUT.final"; fi
+            python3 - "$RUNNER_TEMP/$OUT.final" <<'PY'
           import json,sys
           try:j=json.load(open(sys.argv[1],encoding='utf-8'))
           except Exception:j={}
-          print('success' if j.get('ok') is True and j.get('sent') in (0,'0',None) else 'failed')
+          if not (j.get('ok') is True and j.get('sent') in (0,'0',None)):
+              raise SystemExit('fake-member relay verification failed: '+repr(j))
           PY
-          )"
+          }
+          test_event wait1_ready '' wait1
+          test_event court_assignment '1' court
           mkdir -p deployment/status
-          printf 'relay_repair=%s\nverification=fake-member-zero-delivery\nstrategy=atomic-main-relay-key-sync\nrun_id=%s\n' "$RESULT" "$GITHUB_RUN_ID" > deployment/status/user-push-relay-repair.txt
-          test "$RESULT" = success
+          printf 'relay_repair=success\nverification=wait1-and-court-fake-member-zero-delivery\nstrategy=atomic-main-relay-key-sync-and-action-capture\nrun_id=%s\n' "$GITHUB_RUN_ID" > deployment/status/user-push-relay-repair.txt
       - name: Record result
         if: always()
         shell: bash
@@ -104,3 +109,4 @@ jobs:
           git pull --rebase origin main || true
           git push origin main
 # atomic main+relay auth repair trigger 2026-08-21
+# restore English admin RPC state-transition capture and verify both wait1/court events 2026-08-21
