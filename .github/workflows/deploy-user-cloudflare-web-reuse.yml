@@ -144,7 +144,7 @@ jobs:
           cat > "$ROOT/wrangler.toml" <<EOF
           name = "$USER_WORKER_NAME"
           main = "worker.js"
-          compatibility_date = "2026-08-22"
+          compatibility_date = "2026-08-21"
           workers_dev = true
           [vars]
           USER_RPC_UPSTREAM = "$USER_RPC_UPSTREAM"
