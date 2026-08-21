@@ -1,0 +1,10 @@
+run_id=32461193423
+source=live-relay-read-only
+has_targetMemberId=False
+has_memberId=True
+has_wait1_ready=True
+has_court_assignment=True
+sendAssignmentEvent_targetMemberId_refs=0
+sendAssignmentEvent_memberId_refs=1
+sendAssignmentEvent_token_refs=0
+result=SUSPECT_MISSING_TARGET_MEMBER_ID
