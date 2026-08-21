@@ -8,6 +8,7 @@ p = Path(sys.argv[1])
 s = p.read_text(encoding='utf-8')
 
 USER_WEB = 'https://jayuminton-push.web.app/'
+TARGET_APK = 'releases/jayuminton-courtstatus-v1.3.3-cloudflare-user-web.apk'
 
 repls = (
     ('VERSION="1.3.2"', 'VERSION="1.3.3"'),
@@ -18,18 +19,18 @@ repls = (
     ('JayumintonUserNative/1.3.2', 'JayumintonUserNative/1.3.3'),
     ('JayumintonNativeAndroid/1.3.2', 'JayumintonNativeAndroid/1.3.3'),
     ('APP_VERSION = "1.3.2"', 'APP_VERSION = "1.3.3"'),
-    ('v1.3.2-current-member-only.apk', 'v1.3.3-cloudflare-user-web.apk'),
     ('user-native-push-v1.3.2.txt', 'user-native-push-v1.3.3.txt'),
 )
 for old,new in repls:
     s=s.replace(old,new)
 
-# The generated build script always has exactly one shell USER_URL assignment.
-# Replace that assignment by variable name instead of depending on its exact URL text,
-# because earlier native patches can alter the query string before this patch runs.
+# Replace generated shell variables by assignment name, independent of what earlier patches did.
 s,n = re.subn(r'^USER_URL=.*$', f'USER_URL="{USER_WEB}"', s, count=1, flags=re.M)
 if n != 1:
     raise SystemExit('USER_URL assignment not found exactly once')
+s,n = re.subn(r'^OUT=.*$', f'OUT="{TARGET_APK}"', s, count=1, flags=re.M)
+if n != 1:
+    raise SystemExit('OUT assignment not found exactly once')
 
 # Cloudflare/Firebase web root has no existing query string, so timestamp must start with ?.
 s = s.replace('webView.loadUrl(USER_URL + "&ts=" + System.currentTimeMillis(), headers);',
@@ -37,6 +38,7 @@ s = s.replace('webView.loadUrl(USER_URL + "&ts=" + System.currentTimeMillis(), h
 
 required = (
     USER_WEB,
+    TARGET_APK,
     'NativeUserApp',
     'setMember(String memberId, String memberName)',
     'NativePushRegistrar.ensureToken(this)',
@@ -52,4 +54,4 @@ if 'script.google.com/macros/s/' in re.search(r'^USER_URL=.*$', s, flags=re.M).g
     raise SystemExit('Apps Script USER_URL survived v1.3.3')
 
 p.write_text(s, encoding='utf-8')
-print('Prepared v1.3.3: Cloudflare/Firebase user web + strict current-member push + max8 vibration.')
+print('Prepared v1.3.3: Cloudflare/Firebase user web + strict current-member push + max8 vibration + deterministic APK output.')
