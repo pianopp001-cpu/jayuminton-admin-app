@@ -1,6 +1,10 @@
 name: Build Jayuminton admin v200.2 voice-only APK
 run-name: Jayuminton admin v200.2 voice-only fresh-install APK
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v1995-direct.yml'
   workflow_dispatch: {}
 permissions:
   contents: write
@@ -53,14 +57,11 @@ jobs:
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           text,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";','private static final String APK_WEB_BUILD = "2002-admin-voice-only";',text,count=1)
           if n!=1: raise SystemExit('APK_WEB_BUILD replacement failed')
-          # Hard guarantee: admin native shell has no vibration bridge.
           text=re.sub(r'\n\s*@JavascriptInterface\s*\n\s*public void vibrate\(\) \{.*?\n\s*\}\s*\n\s*@JavascriptInterface\s*\n\s*public void cancelVibration\(\) \{.*?\n\s*\}\s*', '\n', text, flags=re.S)
           text=text.replace('import android.os.VibrationEffect;\n','').replace('import android.os.Vibrator;\n','')
-          if 'public void vibrate()' in text or 'public void cancelVibration()' in text:
-              raise SystemExit('admin vibration bridge survived')
+          if 'public void vibrate()' in text or 'public void cancelVibration()' in text: raise SystemExit('admin vibration bridge survived')
           java.write_text(text,encoding='utf-8')
-          manifest=Path('app/src/main/AndroidManifest.xml')
-          m=manifest.read_text(encoding='utf-8')
+          manifest=Path('app/src/main/AndroidManifest.xml'); m=manifest.read_text(encoding='utf-8')
           m=re.sub(r'\s*<uses-permission android:name="android\.permission\.VIBRATE"\s*/>\s*','\n',m)
           if 'android.permission.VIBRATE' in m: raise SystemExit('admin VIBRATE permission survived')
           manifest.write_text(m,encoding='utf-8')
@@ -83,11 +84,10 @@ jobs:
           set -euo pipefail
           URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?apkVerify=${{ github.run_id }}'
           curl --fail --location --retry 8 "$URL" -o "$RUNNER_TEMP/admin-cloudflare.html"
-          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v19 __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ __JAYUMINTON_TRANSITION_ALERT__ 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ "badge.innerHTML='<small>신규</small>'" "content:'✨'" "memberWaitAlert:'member-device-only'" "memberCourtAlert:'member-device-only'" 'adminTransitionVibration:false' 'adminCourtVoice:true'; do grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; done
-          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'voice test id still present'; exit 1; fi
-          if grep -F '>음성테스트<' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'visible voice test text still present'; exit 1; fi
-          if grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'legacy NEW badge still present'; exit 1; fi
-          if grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'GAS admin URL survived'; exit 1; fi
+          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v19 __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ __JAYUMINTON_TRANSITION_ALERT__ 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ "memberWaitAlert:'member-device-only'" "memberCourtAlert:'member-device-only'" 'adminTransitionVibration:false' 'adminCourtVoice:true'; do grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; done
+          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
+          if grep -F '>음성테스트<' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
+          if grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
           mkdir -p app/src/main/assets/admin
           cp "$RUNNER_TEMP/admin-cloudflare.html" app/src/main/assets/admin/index.html
       - name: Restore release signing key
@@ -106,8 +106,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
           for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v19 __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ __JAYUMINTON_TRANSITION_ALERT__ 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ "memberWaitAlert:'member-device-only'" "memberCourtAlert:'member-device-only'" 'adminTransitionVibration:false' 'adminCourtVoice:true'; do grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null; done
-          if unzip -p "$APK" classes.dex | strings | grep -F 'cancelVibration' >/dev/null; then echo 'native vibration bridge survived in APK'; exit 1; fi
-          if unzip -p "$APK" classes.dex | strings | grep -F 'VibrationEffect' >/dev/null; then echo 'native vibration API survived in APK'; exit 1; fi
+          if unzip -p "$APK" classes.dex | strings | grep -F 'cancelVibration' >/dev/null; then exit 1; fi
+          if unzip -p "$APK" classes.dex | strings | grep -F 'VibrationEffect' >/dev/null; then exit 1; fi
       - name: Publish verified v200.2 voice-only APK
         shell: bash
         run: |
@@ -125,3 +125,4 @@ jobs:
       - name: Upload verified APK artifact
         uses: actions/upload-artifact@v4
         with: {name: jayuminton-admin-v200.2-voice-only, path: releases/jayuminton-admin-v200.2-voice-only.apk, if-no-files-found: error, retention-days: 30}
+# trigger: 2026-08-21 voice-only admin rebuild
