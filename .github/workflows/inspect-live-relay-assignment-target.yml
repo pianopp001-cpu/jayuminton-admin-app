@@ -1,0 +1,73 @@
+name: Inspect live relay assignment target
+on:
+  push:
+    branches: [isolated-user-push-recovery]
+    paths:
+      - '.github/workflows/inspect-live-relay-assignment-target.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: isolated-user-push-recovery
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Pull live relay source read-only and inspect routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          RELAY_DEPLOYMENT_ID="$(python3 - <<'PY'
+          import os,re
+          m=re.search(r'/macros/s/([^/]+)/exec',os.environ['JAYUMINTON_PUSH_APPS_SCRIPT_URL'])
+          print(m.group(1) if m else '')
+          PY
+          )"
+          test -n "$RELAY_DEPLOYMENT_ID"
+          clasp list > "$RUNNER_TEMP/projects.txt"
+          : > "$RUNNER_TEMP/relay-script.txt"
+          while IFS= read -r line; do
+            SID="$(printf '%s' "$line" | grep -oE '[A-Za-z0-9_-]{30,}' | tail -1 || true)"
+            [ -n "$SID" ] || continue
+            W="$RUNNER_TEMP/check-$RANDOM"; mkdir -p "$W"
+            printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
+            if (cd "$W" && clasp deployments) > "$W/d.txt" 2>/dev/null && grep -F "$RELAY_DEPLOYMENT_ID" "$W/d.txt" >/dev/null; then
+              printf '%s' "$SID" > "$RUNNER_TEMP/relay-script.txt"
+              break
+            fi
+          done < "$RUNNER_TEMP/projects.txt"
+          test -s "$RUNNER_TEMP/relay-script.txt"
+          RELAY_SCRIPT_ID="$(cat "$RUNNER_TEMP/relay-script.txt")"
+          RW="$RUNNER_TEMP/relay"; mkdir -p "$RW"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$RELAY_SCRIPT_ID" > "$RW/.clasp.json"
+          (cd "$RW" && clasp pull >/dev/null)
+          RELAY_CODE="$(find "$RW" -maxdepth 1 -type f \( -name 'Code.js' -o -name 'Code.gs' \) | head -1)"
+          test -n "$RELAY_CODE"
+          python3 deployment/scripts/inspect_relay_assignment_target.py "$RELAY_CODE" > "$RUNNER_TEMP/full-report.txt"
+          mkdir -p deployment/status
+          OUT=deployment/status/relay-assignment-target-inspection.txt
+          {
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "source=live-relay-read-only"
+            grep -E '^(has_targetMemberId|has_memberId|has_wait1_ready|has_court_assignment)=' "$RUNNER_TEMP/full-report.txt" || true
+            awk '/^SUMMARY$/{p=1;next} p && /^(sendAssignmentEvent_|result=)/{print}' "$RUNNER_TEMP/full-report.txt"
+          } > "$OUT"
+          grep -q '^result=' "$OUT"
+      - name: Record sanitized inspection only
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/relay-assignment-target-inspection.txt
+          git commit -m 'Record live relay assignment target inspection' || exit 0
+          git pull --rebase origin isolated-user-push-recovery || true
+          git push origin isolated-user-push-recovery

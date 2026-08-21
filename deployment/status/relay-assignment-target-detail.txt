@@ -1,0 +1,389 @@
+run_id=32464851705
+source=live-relay-read-only
+__REDACTED_LONG_VALUE__
+has_targetMemberId=False
+has_memberId=True
+has_wait1_ready=True
+has_court_assignment=True
+
+=== sendAssignmentEvent_ ===
+function sendAssignmentEvent_(event) {
+  const records = loadWebPushTokens_();
+  const memberIds = {};
+  (event && event.members || []).forEach(function(member) {
+    memberIds[String(member && member.id || '')] = true;
+  });
+  let matchedTokens = 0;
+  let nativeUserTargets = 0;
+  records.forEach(function(record) {
+    if (!memberIds[String(record && record.memberId || '')]) return;
+    matchedTokens += 1;
+    if (nativeTokenKind_(record && record.userAgent) === 'nativeUser') nativeUserTargets += 1;
+  });
+
+  let result;
+  try {
+    result = sendAssignmentEventWithoutDiagnostics_(event);
+    PropertiesService.getScriptProperties().setProperty(
+      __REDACTED_LONG_VALUE__,
+      JSON.stringify({
+        recordedAt: new Date().toISOString(),
+        eventType: String(event && event.type || ''),
+        eventMemberCount: Object.keys(memberIds).filter(function(id) { return Boolean(id); }).length,
+        matchedTokens: matchedTokens,
+        nativeUserTargets: nativeUserTargets,
+        sent: Number(result && result.sent || 0),
+        failed: Number(result && result.failed || 0),
+        ok: Boolean(result && result.ok)
+      })
+    );
+    return result;
+  } catch (error) {
+    PropertiesService.getScriptProperties().setProperty(
+      __REDACTED_LONG_VALUE__,
+      JSON.stringify({
+        recordedAt: new Date().toISOString(),
+        eventType: String(event && event.type || ''),
+        eventMemberCount: Object.keys(memberIds).filter(function(id) { return Boolean(id); }).length,
+        matchedTokens: matchedTokens,
+        nativeUserTargets: nativeUserTargets,
+        sent: 0,
+        failed: matchedTokens,
+        ok: false,
+        exception: true
+      })
+    );
+    throw error;
+  }
+}
+
+=== sendAssignmentEventWithoutDiagnostics_ ===
+function sendAssignmentEventWithoutDiagnostics_(event) {
+  const records = loadWebPushTokens_();
+  const now = Date.now();
+  const memberIds = {};
+  event.members.forEach(function(member) {
+    memberIds[member.id] = member;
+  });
+
+  const targets = [];
+  const seenTokens = {};
+  records.forEach(function(record) {
+    if (!record || !record.token || seenTokens[record.token]) return;
+    if (now - Number(record.updatedAt || 0) >
+        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+    const member = memberIds[String(record.memberId || '')];
+    if (!member) return;
+    seenTokens[record.token] = true;
+    targets.push({
+      token: record.token,
+      member: member,
+      userAgent: String(record.userAgent || '')
+    });
+  });
+
+  if (!targets.length) {
+    return {
+      ok: true,
+      assignmentId: event.assignmentId,
+      sent: 0,
+      failed: 0,
+      noRegisteredBrowser: event.members.length
+    };
+  }
+
+  const accessToken = getFcmAccessToken_();
+  const requests = targets.map(function(target) {
+    return makeWebFcmRequest_(
+      event,
+      target.member,
+      target.token,
+      accessToken,
+      target.userAgent
+    );
+  });
+  const responses = UrlFetchApp.fetchAll(requests);
+
+  const failedTokens = [];
+  let sent = 0;
+  responses.forEach(function(response, index) {
+    const status = response.getResponseCode();
+    if (status >= 200 && status < 300) {
+      sent += 1;
+      return;
+    }
+
+    const text = response.getContentText();
+    const target = targets[index];
+    console.error(JSON.stringify({
+      message: 'FCM web send failed',
+      assignmentId: event.assignmentId,
+      memberId: target.member.id,
+      status: status,
+      response: text
+    }));
+
+    if (status === 404 || status === 410 ||
+        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+      failedTokens.push(target.token);
+    }
+  });
+
+  if (failedTokens.length) {
+    removeInvalidTokens_(failedTokens);
+  }
+
+  return {
+    ok: sent === targets.length,
+    assignmentId: event.assignmentId,
+    sent: sent,
+    failed: targets.length - sent
+  };
+}
+
+=== makeWebFcmRequest_ ===
+function makeWebFcmRequest_(event, member, token, accessToken, userAgent) {
+  const nativeAndroid = /JayumintonNativeAndroid\//i.test(String(userAgent || ''));
+  const isWait = event.type === 'wait1_ready';
+  const courtNo = isWait
+    ? event.expectedCourtNo
+    : event.courtNo;
+  const title = isWait
+    ? '대기 1순위 안내'
+    : '코트 배정 긴급 안내';
+  const body = isWait
+    ? '대기1순위 입니다. 라켓 들고 준비해주세요.'
+    : courtNo + '번 코트가 나왔습니다. ' +
+      courtNo + '번코트로 이동해주세요!';
+
+  const data = {
+    type: event.type,
+    assignmentId: event.assignmentId,
+    memberId: member.id,
+    memberName: member.name,
+    title: title,
+    body: body,
+    link: JAYUMINTON_PUSH_CONFIG.appUrl,
+    courtNo: String(event.courtNo || ''),
+    expectedCourtNo: String(event.expectedCourtNo || ''),
+    repeatCount: '1',
+    notificationTag: event.assignmentId,
+    vibrationLevel: event.type === 'court_assignment' ? 'strong' : 'ready'
+  };
+
+  const payload = {
+    message: {
+      token: token,
+      data: data,
+      android: {
+        priority: 'high',
+        ttl: '600s',
+        notification: {
+          title: data.title,
+          body: data.body,
+          icon: 'icon',
+          sound: 'default',
+          channel_id: event.type === 'court_assignment'
+            ? 'jayuminton_court_system_v114'
+            : 'jayuminton_wait1_system_v114',
+          notification_priority: 'PRIORITY_MAX',
+          visibility: 'PUBLIC',
+          vibrate_timings: event.type === 'court_assignment'
+            ? ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+            : ['0s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s','1.1s','0.9s','0.22s','0.9s','0.22s','0.9s']
+        }
+      },
+      webpush: {
+        headers: {
+          Urgency: 'high',
+          TTL: '600'
+        },
+        fcm_options: {
+          link: JAYUMINTON_PUSH_CONFIG.appUrl
+        }
+      }
+    }
+  };
+
+  if (nativeAndroid) {
+    /* JAYUMINTON_NATIVE_FCM_CONTRACT_V2 */
+    // HTTP v1 uses lowerCamelCase. Restrict only native tokens; applying an
+    // Android package restriction to browser tokens makes FCM reject them.
+    payload.message.android.restrictedPackageName = 'com.jayuminton.user';
+    // Data-only high-priority delivery guarantees onMessageReceived owns the
+    // overlay and explicit vibrator even while another app is in front.
+    delete payload.message.android.notification;
+    delete payload.message.webpush;
+  } else {
+    // Browser/PWA registrations receive only the webpush contract.
+    delete payload.message.android;
+  }
+
+  return {
+    url: JAYUMINTON_PUSH_CONFIG.fcmUrl,
+    method: 'post',
+    contentType: 'application/json; charset=utf-8',
+    headers: {
+      Authorization: 'Bearer ' + accessToken
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+}
+
+=== nativeTokenKind_ ===
+function nativeTokenKind_(userAgent) {
+  const value = String(userAgent || '');
+  if (/JayumintonNativeAndroid\//i.test(value)) return 'nativeUser';
+  if (/JayumintonMemberNative\//i.test(value)) return 'nativeMember';
+  return 'browser';
+}
+
+=== sendNativeUserPush_ ===
+NOT_FOUND
+
+=== sendFcmHttpV1_ ===
+NOT_FOUND
+
+=== sendFcmMessage_ ===
+NOT_FOUND
+
+=== sendWebPush_ ===
+NOT_FOUND
+
+=== loadWebPushTokens_ ===
+function loadWebPushTokens_() {
+  const raw = PropertiesService.getScriptProperties()
+    .getProperty(JAYUMINTON_PUSH_CONFIG.webTokenProperty);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+=== registerWebToken_ ===
+function registerWebToken_(body) {
+  const memberId = cleanText_(body.memberId, 200);
+  const memberName = cleanText_(body.memberName, 80);
+  const token = cleanToken_(body.token);
+  const userAgent = cleanText_(body.userAgent, 300);
+
+  if (!memberId || !memberName || !token) {
+    throw new Error('memberId, memberName and token are required.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const records = loadWebPushTokens_();
+    const now = Date.now();
+    const active = records.filter(function(record) {
+      return record &&
+        record.token &&
+        now - Number(record.updatedAt || 0) <=
+          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+        record.token !== token;
+    });
+
+    active.push({
+      memberId: memberId,
+      memberName: memberName,
+      token: token,
+      userAgent: userAgent,
+      updatedAt: now
+    });
+
+    const limited = limitWebPushTokens_(active);
+    saveWebPushTokens_(limited);
+
+    return {
+      ok: true,
+      action: 'registered',
+      memberId: memberId,
+      memberName: memberName,
+      registeredTokens: limited.length
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+=== cleanEvent_ ===
+function cleanEvent_(body) {
+  const type = String(body && body.type || 'court_assignment').trim();
+  const assignmentId = String(body && body.assignmentId || '').trim();
+  const sourceMembers = Array.isArray(body && body.members)
+    ? body.members
+    : [];
+
+  if (!/^[A-Za-z0-9_.-]{8,500}$/.test(assignmentId)) {
+    throw new Error('Invalid assignmentId.');
+  }
+  if (type !== 'court_assignment' && type !== 'wait1_ready') {
+    throw new Error('Invalid notification type.');
+  }
+
+  const uniqueMembers = {};
+  sourceMembers.forEach(function(member) {
+    const id = cleanText_(member && member.id, 200);
+    const name = cleanText_(member && member.name, 80);
+    if (id && name) {
+      uniqueMembers[id] = {id: id, name: name};
+    }
+  });
+  const members = Object.keys(uniqueMembers).map(function(id) {
+    return uniqueMembers[id];
+  });
+
+  if (type === 'court_assignment') {
+    const courtNo = Number(body.courtNo);
+    if ([1, 2, 3, 4].indexOf(courtNo) === -1 ||
+        members.length !== 4) {
+      throw new Error('Court assignment requires one valid court and four members.');
+    }
+    return {
+      type: type,
+      assignmentId: assignmentId,
+      courtNo: courtNo,
+      expectedCourtNo: 0,
+      members: members
+    };
+  }
+
+  /* JAYUMINTON_WAIT1_NO_COURT_REQUIRED_V1
+   * Entering wait group 1 means prepare now; it does not yet have a court.
+   * The main assignment app deliberately sends an empty expectedCourtNo.
+   */
+  const expectedCourtNo = Number(body.expectedCourtNo) || 0;
+  if (members.length < 1 || members.length > 4) {
+    throw new Error('Wait-1 notification requires one to four members.');
+  }
+  return {
+    type: type,
+    assignmentId: assignmentId,
+    courtNo: 0,
+    expectedCourtNo: expectedCourtNo,
+    members: members
+  };
+}
+
+SUMMARY
+wrapper_found=True
+wrapper_targetMemberId_refs=0
+wrapper_memberId_refs=2
+wrapper_token_refs=0
+wrapper_data_refs=0
+core_found=True
+core_targetMemberId_refs=0
+core_memberId_refs=4
+core_token_refs=8
+core_data_refs=0
+request_found=True
+request_targetMemberId_refs=0
+request_memberId_refs=2
+request_token_refs=3
+request_data_refs=5
+result=REQUEST_MISSING_TARGET_MEMBER_ID

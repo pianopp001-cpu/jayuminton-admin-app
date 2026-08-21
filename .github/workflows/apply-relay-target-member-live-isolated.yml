@@ -1,0 +1,96 @@
+name: Apply relay target-member live isolated
+on:
+  push:
+    branches: [isolated-user-push-recovery]
+    paths:
+      - '.github/workflows/apply-relay-target-member-live-isolated.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: isolated-user-push-recovery
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Apply minimal targetMemberId patch to existing live relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          STATUS=deployment/status/relay-target-member-live-apply.txt
+          echo "run_id=${{ github.run_id }}" > "$STATUS"
+          echo 'stage=start' >> "$STATUS"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          RELAY_DEPLOYMENT_ID="$(python3 - <<'PY'
+          import os,re
+          m=re.search(r'/macros/s/([^/]+)/exec', os.environ['JAYUMINTON_PUSH_APPS_SCRIPT_URL'])
+          print(m.group(1) if m else '')
+          PY
+          )"
+          test -n "$RELAY_DEPLOYMENT_ID"
+          clasp list > "$RUNNER_TEMP/projects.txt"
+          : > "$RUNNER_TEMP/relay-script.txt"
+          while IFS= read -r line; do
+            SID="$(printf '%s' "$line" | grep -oE '[A-Za-z0-9_-]{30,}' | tail -1 || true)"
+            [ -n "$SID" ] || continue
+            W="$RUNNER_TEMP/check-$RANDOM"; mkdir -p "$W"
+            printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
+            if (cd "$W" && clasp deployments) > "$W/d.txt" 2>/dev/null && grep -F "$RELAY_DEPLOYMENT_ID" "$W/d.txt" >/dev/null; then printf '%s' "$SID" > "$RUNNER_TEMP/relay-script.txt"; break; fi
+          done < "$RUNNER_TEMP/projects.txt"
+          test -s "$RUNNER_TEMP/relay-script.txt"
+          SID="$(cat "$RUNNER_TEMP/relay-script.txt")"
+          RW="$RUNNER_TEMP/relay"; mkdir -p "$RW"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$RW/.clasp.json"
+          (cd "$RW" && clasp pull >/dev/null)
+          CODE="$(find "$RW" -maxdepth 1 -type f \( -name 'Code.js' -o -name 'Code.gs' \) | head -1)"
+          test -n "$CODE"
+          cp "$CODE" "$RUNNER_TEMP/before.js"
+          python3 deployment/scripts/patch_relay_target_member_id.py "$CODE"
+          python3 - "$RUNNER_TEMP/before.js" "$CODE" <<'PY'
+          from pathlib import Path
+          import sys,difflib
+          before=Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
+          after=Path(sys.argv[2]).read_text(encoding='utf-8').splitlines()
+          diff=list(difflib.unified_diff(before,after,lineterm=''))
+          adds=[x for x in diff if x.startswith('+') and not x.startswith('+++')]
+          if not any('targetMemberId: String(member.id)' in x for x in adds):
+              raise SystemExit('targetMemberId addition missing')
+          if any(('registerWebToken_' in x or 'saveWebPushTokens_' in x or 'loadWebPushTokens_' in x) for x in adds):
+              raise SystemExit('token-store logic unexpectedly changed')
+          if len(adds) > 8:
+              raise SystemExit('patch too large: '+str(len(adds)))
+          PY
+          echo 'stage=validated-local-diff' >> "$STATUS"
+          (cd "$RW" && clasp push --force >/dev/null)
+          echo 'stage=source-pushed' >> "$STATUS"
+          (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "targetMemberId recovery $GITHUB_RUN_ID" >/dev/null)
+          echo 'stage=deployment-updated' >> "$STATUS"
+          VERIFY="$RUNNER_TEMP/verify"; mkdir -p "$VERIFY"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$VERIFY/.clasp.json"
+          (cd "$VERIFY" && clasp pull >/dev/null)
+          VCODE="$(find "$VERIFY" -maxdepth 1 -type f \( -name 'Code.js' -o -name 'Code.gs' \) | head -1)"
+          grep -F "targetMemberId: String(member.id)" "$VCODE" >/dev/null
+          grep -F "memberId: member.id" "$VCODE" >/dev/null
+          grep -F "wait1_ready" "$VCODE" >/dev/null
+          grep -F "court_assignment" "$VCODE" >/dev/null
+          grep -F "com.jayuminton.user" "$VCODE" >/dev/null
+          echo 'stage=live-source-verified' >> "$STATUS"
+          echo 'result=success' >> "$STATUS"
+      - name: Record isolated live apply status
+        if: always()
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/relay-target-member-live-apply.txt
+          git commit -m 'Record isolated live relay target-member apply' || exit 0
+          git push origin isolated-user-push-recovery

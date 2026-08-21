@@ -1,0 +1,99 @@
+name: Validate relay target member patch isolated
+on:
+  push:
+    branches: [isolated-user-push-recovery]
+    paths:
+      - '.github/workflows/validate-relay-target-member-patch-isolated.yml'
+      - 'deployment/scripts/patch_relay_target_member_id.py'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      JAYUMINTON_PUSH_APPS_SCRIPT_URL: ${{ secrets.JAYUMINTON_PUSH_APPS_SCRIPT_URL }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: isolated-user-push-recovery
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global @google/clasp@latest
+      - name: Pull live relay and validate patch locally only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          RELAY_DEPLOYMENT_ID="$(python3 - <<'PY'
+          import os,re
+          m=re.search(r'/macros/s/([^/]+)/exec', os.environ['JAYUMINTON_PUSH_APPS_SCRIPT_URL'])
+          print(m.group(1) if m else '')
+          PY
+          )"
+          test -n "$RELAY_DEPLOYMENT_ID"
+          clasp list > "$RUNNER_TEMP/projects.txt"
+          : > "$RUNNER_TEMP/relay-script.txt"
+          while IFS= read -r line; do
+            SID="$(printf '%s' "$line" | grep -oE '[A-Za-z0-9_-]{30,}' | tail -1 || true)"
+            [ -n "$SID" ] || continue
+            W="$RUNNER_TEMP/check-$RANDOM"; mkdir -p "$W"
+            printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$W/.clasp.json"
+            if (cd "$W" && clasp deployments) > "$W/d.txt" 2>/dev/null && grep -F "$RELAY_DEPLOYMENT_ID" "$W/d.txt" >/dev/null; then
+              printf '%s' "$SID" > "$RUNNER_TEMP/relay-script.txt"
+              break
+            fi
+          done < "$RUNNER_TEMP/projects.txt"
+          test -s "$RUNNER_TEMP/relay-script.txt"
+          SID="$(cat "$RUNNER_TEMP/relay-script.txt")"
+          RW="$RUNNER_TEMP/relay"; mkdir -p "$RW"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SID" > "$RW/.clasp.json"
+          (cd "$RW" && clasp pull >/dev/null)
+          CODE="$(find "$RW" -maxdepth 1 -type f \( -name 'Code.js' -o -name 'Code.gs' \) | head -1)"
+          test -n "$CODE"
+          cp "$CODE" "$RUNNER_TEMP/relay-before.js"
+          python3 deployment/scripts/patch_relay_target_member_id.py "$CODE"
+          python3 - "$RUNNER_TEMP/relay-before.js" "$CODE" <<'PY' > deployment/status/relay-target-member-patch-validation.txt
+          from pathlib import Path
+          import re,sys
+          before=Path(sys.argv[1]).read_text(encoding='utf-8')
+          after=Path(sys.argv[2]).read_text(encoding='utf-8')
+          checks={
+            'before_target_absent': 'targetMemberId' not in before,
+            'after_target_present': 'targetMemberId: String(member.id)' in after,
+            'legacy_memberId_preserved': 'memberId: member.id' in after,
+            'wait1_preserved': "wait1_ready" in after,
+            'court_assignment_preserved': "court_assignment" in after,
+            'native_package_preserved': "restrictedPackageName = 'com.jayuminton.user'" in after,
+            'no_token_store_change_marker': 'registerWebToken_' in after and 'loadWebPushTokens_' in after,
+          }
+          changed_lines=[]
+          b=before.splitlines(); a=after.splitlines()
+          import difflib
+          for line in difflib.unified_diff(b,a,lineterm=''):
+            if line.startswith('+') and not line.startswith('+++'):
+              changed_lines.append(line[1:])
+          print('run_id=${{ github.run_id }}')
+          print('source=live-relay-local-copy-only')
+          for k,v in checks.items(): print(f'{k}={v}')
+          print('added_lines_count='+str(len(changed_lines)))
+          safe=[x.strip() for x in changed_lines if 'targetMemberId' in x or 'JAYUMINTON_TARGET_MEMBER_ID_CONTRACT_V1' in x or 'Native user app accepts' in x or 'matches the member selected' in x or 'Keep legacy memberId' in x]
+          print('relevant_added_lines='+repr(safe))
+          ok=all(checks.values()) and any('targetMemberId: String(member.id)' in x for x in changed_lines)
+          print('result=' + ('READY_FOR_MINIMAL_LIVE_PATCH' if ok else 'VALIDATION_FAILED'))
+          if not ok: raise SystemExit(1)
+          PY
+          # SAFETY: intentionally no clasp push and no deployment command in this workflow.
+      - name: Record isolated validation
+        if: always()
+        shell: bash
+        run: |
+          test -f deployment/status/relay-target-member-patch-validation.txt || echo 'result=WORKFLOW_FAILED_BEFORE_VALIDATION' > deployment/status/relay-target-member-patch-validation.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/relay-target-member-patch-validation.txt
+          git commit -m 'Record isolated relay target-member patch validation' || exit 0
+          git push origin isolated-user-push-recovery

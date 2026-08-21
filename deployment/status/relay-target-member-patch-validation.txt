@@ -1,0 +1,12 @@
+run_id=32466318185
+source=live-relay-local-copy-only
+before_target_absent=True
+after_target_present=True
+legacy_memberId_preserved=True
+wait1_preserved=True
+court_assignment_preserved=True
+native_package_preserved=True
+no_token_store_change_marker=True
+added_lines_count=5
+relevant_added_lines=['/* JAYUMINTON_TARGET_MEMBER_ID_CONTRACT_V1', '* Native user app accepts an assignment only when targetMemberId exactly', "* matches the member selected as 'me'. Keep legacy memberId too.", 'targetMemberId: String(member.id),']
+result=READY_FOR_MINIMAL_LIVE_PATCH
