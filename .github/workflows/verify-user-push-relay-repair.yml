@@ -110,3 +110,4 @@ jobs:
           git push origin main
 # atomic main+relay auth repair trigger 2026-08-21
 # restore English admin RPC state-transition capture and verify both wait1/court events 2026-08-21
+# rerun after auth drift diagnosis 2026-08-21
