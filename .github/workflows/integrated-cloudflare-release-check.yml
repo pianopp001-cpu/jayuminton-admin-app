@@ -5,6 +5,10 @@ on:
     branches: [integrated-cloudflare-release-v1]
     paths:
       - '.github/workflows/integrated-cloudflare-release-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/integrated-cloudflare-release-check.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -27,8 +31,6 @@ jobs:
       ADMIN_APK: releases/jayuminton-admin-v200.2-voice-only.apk
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: integrated-cloudflare-release-v1
 
       - name: Fetch verified v1.3.3 user APK artifact
         shell: bash
