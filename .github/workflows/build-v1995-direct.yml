@@ -1,11 +1,11 @@
-name: Build Jayuminton admin v200.1 native voice vibration full APK
-run-name: Jayuminton admin v200.1 v19 fresh-install APK
+name: Build Jayuminton admin v200.2 voice-only APK
+run-name: Jayuminton admin v200.2 voice-only fresh-install APK
 on:
   workflow_dispatch: {}
 permissions:
   contents: write
 concurrency:
-  group: jayuminton-v2001-native-alert-apk
+  group: jayuminton-v2002-admin-voice-only-apk
   cancel-in-progress: true
 jobs:
   build:
@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 30
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      APK_OUTPUT: releases/jayuminton-admin-v200.1-native-finish-alert-full.apk
+      APK_OUTPUT: releases/jayuminton-admin-v200.2-voice-only.apk
       DOG_ICON_SHA256: a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e
     steps:
       - name: Checkout current main
@@ -39,52 +39,51 @@ jobs:
           mv "$SRC" "$RUNNER_TEMP/icon_from_library.b64"
           mkdir -p deployment/status
           printf 'source=chatgpt-file-library\nsource_name=자유민턴 관리자 배드민턴 아이콘.png\nresource=res/drawable/icon.png\nsha256=%s\n' "$DOG_ICON_SHA256" > deployment/status/v1996-dog-icon-source.txt
-      - name: Prepare v200.1 native shell with restored v19 alert contract
+      - name: Prepare v200.2 admin native shell voice only
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import re
-          java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java'); text=java.read_text(encoding='utf-8')
-          admin_url='file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.1'
+          java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
+          text=java.read_text(encoding='utf-8')
+          admin_url='file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.2'
           text,n=re.subn(r'(?:https://[^"\\]+(?:web\.app|/exec)|file:///android_asset/admin/index\.html)[^"\\]*',admin_url,text,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
-          text,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";','private static final String APK_WEB_BUILD = "2001-native-alert-v19";',text,count=1)
+          text,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";','private static final String APK_WEB_BUILD = "2002-admin-voice-only";',text,count=1)
           if n!=1: raise SystemExit('APK_WEB_BUILD replacement failed')
-          if 'import android.os.VibrationEffect;' not in text: text=text.replace('import android.os.Bundle;','import android.os.Bundle;\nimport android.os.VibrationEffect;\nimport android.os.Vibrator;',1)
-          text=text.replace('private static final int VOICE_VOLUME_STEP = 6;','private static final int MEDIA_DUCK_VOLUME_STEP = 6;',1)
-          text=text.replace('int minimumMusic = maxMedia > 0 ? 1 : 0;\n                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, minimumMusic, 0);','int duckedMusic = Math.max(0, Math.min(MEDIA_DUCK_VOLUME_STEP, maxMedia));\n                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, duckedMusic, 0);',1)
-          text=text.replace('int voiceStep = Math.max(1, Math.min(VOICE_VOLUME_STEP, maxAlarm));\n                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, voiceStep, 0);','audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0);',1)
-          anchor='        public boolean isSpeaking() {\n            return speaking.get() || (tts != null && tts.isSpeaking());\n        }'
-          methods=anchor+'\n\n        @JavascriptInterface\n        public void vibrate() {\n            runOnUiThread(() -> {\n                Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);\n                if (vibrator == null || !vibrator.hasVibrator()) return;\n                java.util.ArrayList<Long> parts = new java.util.ArrayList<>();\n                parts.add(0L);\n                for (int set = 0; set < 8; set++) {\n                    for (int pulse = 0; pulse < 3; pulse++) { parts.add(320L); parts.add(180L); }\n                    parts.add(650L);\n                }\n                long[] pattern = new long[parts.size()];\n                for (int i = 0; i < parts.size(); i++) pattern[i] = parts.get(i);\n                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));\n                else vibrator.vibrate(pattern, -1);\n            });\n        }\n\n        @JavascriptInterface\n        public void cancelVibration() {\n            runOnUiThread(() -> {\n                Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);\n                if (vibrator != null) vibrator.cancel();\n            });\n        }'
-          if 'public void vibrate()' not in text:
-              if anchor not in text: raise SystemExit('VoiceBridge anchor missing')
-              text=text.replace(anchor,methods,1)
-          elif 'public void cancelVibration()' not in text:
-              raise SystemExit('legacy vibrate method present without cancelVibration')
-          for required in ['MEDIA_DUCK_VOLUME_STEP = 6','setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)','for (int set = 0; set < 8; set++)','for (int pulse = 0; pulse < 3; pulse++)','public void cancelVibration()']:
-              if required not in text: raise SystemExit('native alert contract missing: '+required)
+          # Hard guarantee: admin native shell has no vibration bridge.
+          text=re.sub(r'\n\s*@JavascriptInterface\s*\n\s*public void vibrate\(\) \{.*?\n\s*\}\s*\n\s*@JavascriptInterface\s*\n\s*public void cancelVibration\(\) \{.*?\n\s*\}\s*', '\n', text, flags=re.S)
+          text=text.replace('import android.os.VibrationEffect;\n','').replace('import android.os.Vibrator;\n','')
+          if 'public void vibrate()' in text or 'public void cancelVibration()' in text:
+              raise SystemExit('admin vibration bridge survived')
           java.write_text(text,encoding='utf-8')
+          manifest=Path('app/src/main/AndroidManifest.xml')
+          m=manifest.read_text(encoding='utf-8')
+          m=re.sub(r'\s*<uses-permission android:name="android\.permission\.VIBRATE"\s*/>\s*','\n',m)
+          if 'android.permission.VIBRATE' in m: raise SystemExit('admin VIBRATE permission survived')
+          manifest.write_text(m,encoding='utf-8')
           gradle=Path('app/build.gradle'); g=gradle.read_text(encoding='utf-8')
           g=re.sub(r"applicationId\s+['\"][^'\"]+['\"]","applicationId 'com.jayuminton.admin'",g,count=1)
-          g=re.sub(r'versionCode\s+\d+','versionCode 2001',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '200.1'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 2002',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '200.2'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
-          Path('deployment/status/v2001-build-target.txt').write_text('admin_url='+admin_url+'\napk_web_build=2001-native-alert-v19\nfrontend=bundled-android-asset\nalert_contract=tts-max_media-6_vibrate-3x8_cancel_empty-transition-fast-save\n',encoding='utf-8')
+          Path('deployment/status/v2002-build-target.txt').write_text('admin_url='+admin_url+'\napk_web_build=2002-admin-voice-only\nfrontend=bundled-android-asset\nalert_contract=admin-voice-only_no-popup_no-vibration_media-duck-6_alarm-max_repeat-3\n',encoding='utf-8')
           PY
-          grep -F 'public void vibrate()' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'public void cancelVibration()' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          if grep -F 'public void vibrate()' app/src/main/java/com/jayuminton/admin/MainActivity.java; then exit 1; fi
+          if grep -F 'public void cancelVibration()' app/src/main/java/com/jayuminton/admin/MainActivity.java; then exit 1; fi
+          if grep -F 'android.permission.VIBRATE' app/src/main/AndroidManifest.xml; then exit 1; fi
           grep -F 'MEDIA_DUCK_VOLUME_STEP = 6' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'VOICE_REPEAT_COUNT = 3' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)' app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'android.permission.VIBRATE' app/src/main/AndroidManifest.xml
-      - name: Bundle only verified v19 Cloudflare admin frontend
+      - name: Bundle verified Cloudflare admin frontend
         shell: bash
         run: |
           set -euo pipefail
           URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?apkVerify=${{ github.run_id }}'
           curl --fail --location --retry 8 "$URL" -o "$RUNNER_TEMP/admin-cloudflare.html"
-          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v19 __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ __JAYUMINTON_TRANSITION_ALERT__ 'transitionAlertBridge:true' 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ 'vibrationSets:8' 'vibrationsPerSet:3' 'cancelOnAlertDismiss:true' 'alertBeforeServerCompletion:true' 'cancelVibration' __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ "badge.innerHTML='<small>신규</small>'" "content:'✨'"; do grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; done
+          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v19 __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ __JAYUMINTON_TRANSITION_ALERT__ 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ "badge.innerHTML='<small>신규</small>'" "content:'✨'" "memberWaitAlert:'member-device-only'" "memberCourtAlert:'member-device-only'" 'adminTransitionVibration:false' 'adminCourtVoice:true'; do grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; done
           if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'voice test id still present'; exit 1; fi
           if grep -F '>음성테스트<' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'visible voice test text still present'; exit 1; fi
           if grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then echo 'legacy NEW badge still present'; exit 1; fi
@@ -98,7 +97,7 @@ jobs:
           keytool -list -keystore signing/jayuminton-release.jks -storepass 'JayuMinton14!' -alias jayuminton >/dev/null
       - name: Build signed release APK
         run: gradle --no-daemon :app:assembleRelease
-      - name: Verify signed APK and embedded v19 admin HTML
+      - name: Verify signed APK is voice-only
         shell: bash
         run: |
           set -euo pipefail
@@ -106,25 +105,23 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
-          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v19 __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ __JAYUMINTON_TRANSITION_ALERT__ 'transitionAlertBridge:true' 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ 'vibrationSets:8' 'vibrationsPerSet:3' 'cancelOnAlertDismiss:true' 'alertBeforeServerCompletion:true' 'cancelVibration' __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ "badge.innerHTML='<small>신규</small>'" "content:'✨'"; do grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null; done
-          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo 'voice test id survived in APK'; exit 1; fi
-          if grep -F '>음성테스트<' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo 'visible voice test text survived in APK'; exit 1; fi
-          if grep -F 'NEW <small>신규</small>' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo 'legacy NEW badge survived in APK'; exit 1; fi
-          if grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo 'GAS admin URL survived in APK'; exit 1; fi
-      - name: Publish verified v19 fresh-install APK
+          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v19 __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ __JAYUMINTON_TRANSITION_ALERT__ 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ "memberWaitAlert:'member-device-only'" "memberCourtAlert:'member-device-only'" 'adminTransitionVibration:false' 'adminCourtVoice:true'; do grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null; done
+          if unzip -p "$APK" classes.dex | strings | grep -F 'cancelVibration' >/dev/null; then echo 'native vibration bridge survived in APK'; exit 1; fi
+          if unzip -p "$APK" classes.dex | strings | grep -F 'VibrationEffect' >/dev/null; then echo 'native vibration API survived in APK'; exit 1; fi
+      - name: Publish verified v200.2 voice-only APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p releases deployment/status
           cp app/build/outputs/apk/release/app-release.apk "$APK_OUTPUT"
-          sha256sum "$APK_OUTPUT" | tee deployment/status/v2001-native-finish-alert-apk.sha256
+          sha256sum "$APK_OUTPUT" | tee deployment/status/v2002-admin-voice-only-apk.sha256
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$APK_OUTPUT" deployment/status/v2001-native-finish-alert-apk.sha256 deployment/status/v2001-build-target.txt deployment/status/v1996-dog-icon-source.txt
-          git commit -m 'Add Jayuminton admin v200.1 v19 fresh-install APK'
-          git stash push --include-untracked --keep-index --message 'v2001-build-only-source-mutations' || true
+          git add "$APK_OUTPUT" deployment/status/v2002-admin-voice-only-apk.sha256 deployment/status/v2002-build-target.txt deployment/status/v1996-dog-icon-source.txt
+          git commit -m 'Add Jayuminton admin v200.2 voice-only APK'
+          git stash push --include-untracked --keep-index --message 'v2002-build-only-source-mutations' || true
           git pull --rebase origin main
           git push origin main
       - name: Upload verified APK artifact
         uses: actions/upload-artifact@v4
-        with: {name: jayuminton-admin-v200.1-v19, path: releases/jayuminton-admin-v200.1-native-finish-alert-full.apk, if-no-files-found: error, retention-days: 30}
+        with: {name: jayuminton-admin-v200.2-voice-only, path: releases/jayuminton-admin-v200.2-voice-only.apk, if-no-files-found: error, retention-days: 30}
