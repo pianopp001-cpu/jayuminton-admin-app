@@ -1,0 +1,122 @@
+name: Build user-only v1.3.4 separated APK
+
+on:
+  push:
+    branches: [fix/user-native-separate-package-v1]
+    paths:
+      - '.github/workflows/build-user-v134-separated.yml'
+      - 'deployment/scripts/patch_user_native_v134_separate_package.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-user:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      PUSH_URL: https://jayuminton-user-push.pianopp001.workers.dev
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}'
+
+      - name: Resolve user Firebase app and legacy build variable
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId // empty' "$RUNNER_TEMP/deploy.json")"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$RUNNER_TEMP/deploy.json")"
+          test -n "$MAIN_DEPLOYMENT_ID"; test -n "$FIREBASE_PROJECT_ID"
+          echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          ID="$(jq -r '[.. | objects | select(((.packageName? == "com.jayuminton.user") or (.package_name? == "com.jayuminton.user") or (.androidClientInfo?.packageName? == "com.jayuminton.user")) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
+          test -n "$ID"
+          firebase apps:sdkconfig ANDROID "$ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
+          grep -F 'com.jayuminton.user' app/google-services.json >/dev/null
+
+      - name: Build fresh user-only v1.3.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$RUNNER_TEMP/build-user-v134.sh"
+          cp deployment/scripts/build_user_native_push_fresh_v110.sh "$S"
+          for p in \
+            patch_build_user_native_v111.py \
+            patch_build_user_native_v112.py \
+            patch_build_user_native_v113.py \
+            patch_build_user_native_v114.py \
+            patch_build_user_native_v115.py \
+            patch_build_user_native_v116.py \
+            patch_build_user_native_v117.py \
+            patch_build_user_native_v118.py \
+            patch_build_user_native_v119.py \
+            patch_build_user_native_v120_diagnostic.py \
+            patch_build_user_native_v121.py \
+            patch_build_user_native_v122.py \
+            patch_build_user_native_v124_confirmed_overlay.py \
+            patch_build_user_native_v126_stop_controller.py \
+            patch_build_user_native_v126_raceguard.py \
+            patch_build_user_native_v127_member_switch.py \
+            patch_build_user_native_v128_repeat_switch.py \
+            patch_build_user_native_v129_background_registration.py; do
+            python3 "deployment/scripts/$p" "$S"
+          done
+          python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$S"
+          python3 deployment/scripts/patch_user_native_v132_strict_current_member.py "$S"
+          python3 deployment/scripts/patch_user_native_v133_cloudflare_web.py "$S"
+          python3 deployment/scripts/patch_user_native_v134_separate_package.py "$S"
+          grep -F 'JAVA_DIR="app/src/main/java/com/jayuminton/user"' "$S" >/dev/null
+          grep -F "namespace 'com.jayuminton.user'" "$S" >/dev/null
+          grep -F 'package com.jayuminton.user;' "$S" >/dev/null
+          ! grep -F 'package com.jayuminton.admin;' "$S" >/dev/null
+          bash "$S"
+          test -s releases/jayuminton-user-v1.3.4-cloudflare-separated.apk
+          cp releases/jayuminton-user-v1.3.4-cloudflare-separated.apk "$RUNNER_TEMP/jayuminton-user-v1.3.4.apk"
+
+      - name: Verify APK is really user app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$RUNNER_TEMP/jayuminton-user-v1.3.4.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          cat "$RUNNER_TEMP/badging.txt" | head -20
+          grep -F "package: name='com.jayuminton.user' versionCode='134' versionName='1.3.4'" "$RUNNER_TEMP/badging.txt" >/dev/null
+          unzip -q "$APK" -d "$RUNNER_TEMP/apk"
+          find "$RUNNER_TEMP/apk" -type f -print0 | xargs -0 strings > "$RUNNER_TEMP/strings.txt"
+          grep -F 'jayuminton-push.web.app' "$RUNNER_TEMP/strings.txt" >/dev/null
+          grep -F 'jayuminton-user-push.pianopp001.workers.dev' "$RUNNER_TEMP/strings.txt" >/dev/null
+          grep -F 'NativeUserApp' "$RUNNER_TEMP/strings.txt" >/dev/null
+          ! grep -F '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/strings.txt" >/dev/null
+          ! grep -F 'com.jayuminton.admin' "$RUNNER_TEMP/strings.txt" >/dev/null
+          sha256sum "$APK" | tee "$RUNNER_TEMP/SHA256SUMS.txt"
+          printf 'status=success\napplication_id=com.jayuminton.user\nnamespace=com.jayuminton.user\nversion=1.3.4\nuser_web=https://jayuminton-push.web.app/\npush=https://jayuminton-user-push.pianopp001.workers.dev\nadmin_namespace_absent=true\nadmin_loading_text_absent=true\n' > "$RUNNER_TEMP/VERIFIED.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-user-v1.3.4-separated-verified
+          path: |
+            ${{ runner.temp }}/jayuminton-user-v1.3.4.apk
+            ${{ runner.temp }}/SHA256SUMS.txt
+            ${{ runner.temp }}/VERIFIED.txt
+          retention-days: 30
+          if-no-files-found: error
