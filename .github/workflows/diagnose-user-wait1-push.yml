@@ -1,5 +1,9 @@
 name: Repair user wait1 push live
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-user-wait1-push.yml'
   pull_request:
     branches: [main]
     paths:
@@ -130,4 +134,4 @@ jobs:
           git commit -m 'Record user push relay repair stage' || exit 0
           git pull --rebase origin main || true
           git push origin main
-# PR-run relay repair 2026-08-21 16:21 KST
+# direct main push relay repair trigger 2026-08-21 17:36 KST
