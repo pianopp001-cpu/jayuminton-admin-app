@@ -34,7 +34,6 @@ jobs:
           PY
           )"
           test -n "$MAIN_SID"; test -n "$RELAY_DEPLOYMENT_ID"
-
           MW="$RUNNER_TEMP/main"; mkdir -p "$MW"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SID" > "$MW/.clasp.json"
           (cd "$MW" && clasp pull >/dev/null)
@@ -47,7 +46,6 @@ jobs:
           PY
           )"
           test "${#KEY}" -eq 64
-
           clasp list > "$RUNNER_TEMP/projects.txt"
           : > "$RUNNER_TEMP/relay-script.txt"
           while IFS= read -r line; do
@@ -66,7 +64,6 @@ jobs:
           (cd "$RW" && clasp pull >/dev/null)
           RELAY_CODE="$(find "$RW" -maxdepth 1 -type f \( -name 'Code.js' -o -name 'Code.gs' \) | head -1)"
           test -n "$RELAY_CODE"
-
           python3 - "$RELAY_CODE" "$KEY" <<'PY'
           from pathlib import Path
           import re,sys
@@ -112,7 +109,7 @@ jobs:
           grep -F "const synchronizedKey = '$KEY';" "$RELAY_CODE" >/dev/null
           (cd "$RW" && clasp push --force >/dev/null)
           (cd "$RW" && clasp create-deployment --deploymentId "$RELAY_DEPLOYMENT_ID" --description "wait1 relay repair $GITHUB_RUN_ID" >/dev/null)
-
+          sleep 5
           PAYLOAD="{\"action\":\"main_state_event\",\"internalKey\":\"$KEY\",\"type\":\"wait1_ready\",\"assignmentId\":\"verify-$GITHUB_RUN_ID\",\"expectedCourtNo\":1,\"members\":[{\"id\":\"__diag_nonexistent_member__\",\"name\":\"DIAG\"}]}"
           curl -sS -D "$RUNNER_TEMP/h" -o "$RUNNER_TEMP/first" -X POST --data-urlencode "payload=$PAYLOAD" "$JAYUMINTON_PUSH_APPS_SCRIPT_URL"
           LOC="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]*:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' "$RUNNER_TEMP/h")"
@@ -126,11 +123,7 @@ jobs:
           PY
           )"
           mkdir -p deployment/status
-          {
-            echo "relay_repair=$RESULT"
-            echo "verification=fake-member-zero-delivery"
-            echo "run_id=$GITHUB_RUN_ID"
-          } > deployment/status/user-push-relay-repair.txt
+          printf 'relay_repair=%s\nverification=fake-member-zero-delivery\nrun_id=%s\n' "$RESULT" "$GITHUB_RUN_ID" > deployment/status/user-push-relay-repair.txt
           test "$RESULT" = success
       - name: Record result
         if: always()
@@ -142,6 +135,4 @@ jobs:
           git commit -m 'Record user push relay repair verification' || exit 0
           git pull --rebase origin main || true
           git push origin main
-# repair+verify trigger 2026-08-21
-# direct main retrigger 2026-08-21 09:xx KST
-# PR merge final trigger
+# final direct repair trigger 2026-08-21 10:33 KST
