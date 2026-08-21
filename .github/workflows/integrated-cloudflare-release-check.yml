@@ -1,0 +1,132 @@
+name: Integrated Cloudflare admin-user release check
+
+on:
+  push:
+    branches: [integrated-cloudflare-release-v1]
+    paths:
+      - '.github/workflows/integrated-cloudflare-release-check.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: jayuminton-integrated-cloudflare-release-v1
+  cancel-in-progress: false
+
+jobs:
+  verify-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ADMIN_WEB: https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/
+      USER_WEB: https://jayuminton-push.web.app/
+      USER_PUSH: https://jayuminton-user-push.pianopp001.workers.dev
+      USER_ARTIFACT_ID: '9447484772'
+      ADMIN_APK: releases/jayuminton-admin-v200.2-voice-only.apk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integrated-cloudflare-release-v1
+
+      - name: Fetch verified v1.3.3 user APK artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/user-artifact"
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$USER_ARTIFACT_ID/zip" \
+            -o "$RUNNER_TEMP/user.zip"
+          unzip -q "$RUNNER_TEMP/user.zip" -d "$RUNNER_TEMP/user-artifact"
+          USER_APK="$(find "$RUNNER_TEMP/user-artifact" -type f -name '*.apk' | head -1)"
+          test -s "$USER_APK"
+          cp "$USER_APK" "$RUNNER_TEMP/jayuminton-user-v1.3.3-cloudflare.apk"
+          test -s "$ADMIN_APK"
+          cp "$ADMIN_APK" "$RUNNER_TEMP/jayuminton-admin-v200.2.apk"
+
+      - name: Verify live administrator Cloudflare web
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 2 \
+            "$ADMIN_WEB?integrated=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin.html"
+          for marker in \
+            'JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1' \
+            '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__' \
+            '__JAYUMINTON_ADMIN_BLOCKING_SAVE__' \
+            '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__' \
+            '번 코트 나왔습니다.' \
+            '번 코트로 들어가 주세요.'; do
+            grep -F "$marker" "$RUNNER_TEMP/admin.html" >/dev/null
+          done
+          ! grep -F '>음성테스트<' "$RUNNER_TEMP/admin.html" >/dev/null
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin.html" >/dev/null
+
+      - name: Verify live user web and Cloudflare push health
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 2 \
+            "$USER_WEB?integrated=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/user.html"
+          test -s "$RUNNER_TEMP/user.html"
+          grep -F 'NativeUserApp' "$RUNNER_TEMP/user.html" >/dev/null
+          curl --fail --location --retry 5 --retry-delay 2 \
+            "$USER_PUSH/health" -o "$RUNNER_TEMP/push-health.json"
+          jq -e '.ok==true and .service=="jayuminton-cloudflare-user-push" and .storage=="durable-object"' \
+            "$RUNNER_TEMP/push-health.json" >/dev/null
+
+      - name: Verify administrator APK targets current Cloudflare administrator web
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -p "$RUNNER_TEMP/jayuminton-admin-v200.2.apk" 'classes*.dex' 2>/dev/null | strings > "$RUNNER_TEMP/admin-apk.strings"
+          grep -F 'jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app' "$RUNNER_TEMP/admin-apk.strings" >/dev/null
+          grep -F 'NativeVoice' "$RUNNER_TEMP/admin-apk.strings" >/dev/null
+
+      - name: Verify user APK Cloudflare web and targeted notification contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -p "$RUNNER_TEMP/jayuminton-user-v1.3.3-cloudflare.apk" 'classes*.dex' 2>/dev/null | strings > "$RUNNER_TEMP/user-apk.strings"
+          grep -F 'jayuminton-push.web.app' "$RUNNER_TEMP/user-apk.strings" >/dev/null
+          grep -F 'targetMemberId' "$RUNNER_TEMP/user-apk.strings" >/dev/null
+          grep -F 'NativeUserApp' "$RUNNER_TEMP/user-apk.strings" >/dev/null
+          grep -F 'com.jayuminton.user' "$RUNNER_TEMP/user-apk.strings" >/dev/null || true
+
+      - name: Build one integrated verification bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/jayuminton-integrated-cloudflare"
+          mkdir -p "$ROOT"
+          cp "$RUNNER_TEMP/jayuminton-admin-v200.2.apk" "$ROOT/"
+          cp "$RUNNER_TEMP/jayuminton-user-v1.3.3-cloudflare.apk" "$ROOT/"
+          cp "$RUNNER_TEMP/push-health.json" "$ROOT/"
+          sha256sum "$ROOT"/*.apk > "$ROOT/SHA256SUMS.txt"
+          cat > "$ROOT/VERIFIED.txt" <<EOF
+          status=success
+          admin_web=$ADMIN_WEB
+          user_web=$USER_WEB
+          user_push=$USER_PUSH
+          admin_apk=jayuminton-admin-v200.2.apk
+          user_apk=jayuminton-user-v1.3.3-cloudflare.apk
+          admin_fast_sync=verified-live
+          admin_voice_test_removed=verified-live
+          user_target_member_id=verified-apk
+          user_push_durable_object=verified-live
+          source_commit=$GITHUB_SHA
+          run_id=$GITHUB_RUN_ID
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-integrated-cloudflare-verified
+          path: ${{ runner.temp }}/jayuminton-integrated-cloudflare/
+          retention-days: 30
+          if-no-files-found: error
