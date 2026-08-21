@@ -20,6 +20,9 @@ repls = (
     ('JayumintonNativeAndroid/1.3.2', 'JayumintonNativeAndroid/1.3.3'),
     ('APP_VERSION = "1.3.2"', 'APP_VERSION = "1.3.3"'),
     ('user-native-push-v1.3.2.txt', 'user-native-push-v1.3.3.txt'),
+    ("versionCode='132' versionName='1.3.2'", "versionCode='133' versionName='1.3.3'"),
+    ('version=1.3.2', 'version=1.3.3'),
+    ('version_code=132', 'version_code=133'),
 )
 for old,new in repls:
     s=s.replace(old,new)
@@ -36,6 +39,18 @@ if n != 1:
 s = s.replace('webView.loadUrl(USER_URL + "&ts=" + System.currentTimeMillis(), headers);',
               'webView.loadUrl(USER_URL + (USER_URL.contains("?") ? "&ts=" : "?ts=") + System.currentTimeMillis(), headers);')
 
+# Old verifier expected the Apps Script deployment id to be embedded in classes.dex.
+# v1.3.3 intentionally removes that dependency, so verify the Cloudflare/Firebase web URL instead.
+s = s.replace('grep -F "$MAIN_DEPLOYMENT_ID" "$RUNNER_TEMP/classes.txt" >/dev/null',
+              f"grep -F '{USER_WEB}' \"$RUNNER_TEMP/classes.txt\" >/dev/null")
+
+# Normalize any remaining post-build badging verifier to the final v1.3.3 identity.
+s = re.sub(
+    r"grep -F \"package: name='com\.jayuminton\.user' versionCode='[0-9]+' versionName='[^']+'\" \"\$RUNNER_TEMP/badging\.txt\" >/dev/null",
+    "grep -F \"package: name='com.jayuminton.user' versionCode='133' versionName='1.3.3'\" \"$RUNNER_TEMP/badging.txt\" >/dev/null",
+    s,
+)
+
 required = (
     USER_WEB,
     TARGET_APK,
@@ -46,6 +61,7 @@ required = (
     'private static final int MAX_GROUPS = 8;',
     'VERSION="1.3.3"',
     'VERSION_CODE="133"',
+    "versionCode='133' versionName='1.3.3'",
 )
 for marker in required:
     if marker not in s:
@@ -54,4 +70,4 @@ if 'script.google.com/macros/s/' in re.search(r'^USER_URL=.*$', s, flags=re.M).g
     raise SystemExit('Apps Script USER_URL survived v1.3.3')
 
 p.write_text(s, encoding='utf-8')
-print('Prepared v1.3.3: Cloudflare/Firebase user web + strict current-member push + max8 vibration + deterministic APK output.')
+print('Prepared v1.3.3: Cloudflare/Firebase user web + strict current-member push + max8 vibration + deterministic APK output + Cloudflare-aware verifier.')
