@@ -1,0 +1,189 @@
+run_id=32461544337
+source=live-relay-read-only
+__REDACTED_LONG_VALUE__
+has_targetMemberId=False
+has_memberId=True
+has_wait1_ready=True
+has_court_assignment=True
+
+=== sendAssignmentEvent_ ===
+function sendAssignmentEvent_(event) {
+  const records = loadWebPushTokens_();
+  const memberIds = {};
+  (event && event.members || []).forEach(function(member) {
+    memberIds[String(member && member.id || '')] = true;
+  });
+  let matchedTokens = 0;
+  let nativeUserTargets = 0;
+  records.forEach(function(record) {
+    if (!memberIds[String(record && record.memberId || '')]) return;
+    matchedTokens += 1;
+    if (nativeTokenKind_(record && record.userAgent) === 'nativeUser') nativeUserTargets += 1;
+  });
+
+  let result;
+  try {
+    result = sendAssignmentEventWithoutDiagnostics_(event);
+    PropertiesService.getScriptProperties().setProperty(
+      __REDACTED_LONG_VALUE__,
+      JSON.stringify({
+        recordedAt: new Date().toISOString(),
+        eventType: String(event && event.type || ''),
+        eventMemberCount: Object.keys(memberIds).filter(function(id) { return Boolean(id); }).length,
+        matchedTokens: matchedTokens,
+        nativeUserTargets: nativeUserTargets,
+        sent: Number(result && result.sent || 0),
+        failed: Number(result && result.failed || 0),
+        ok: Boolean(result && result.ok)
+      })
+    );
+    return result;
+  } catch (error) {
+    PropertiesService.getScriptProperties().setProperty(
+      __REDACTED_LONG_VALUE__,
+      JSON.stringify({
+        recordedAt: new Date().toISOString(),
+        eventType: String(event && event.type || ''),
+        eventMemberCount: Object.keys(memberIds).filter(function(id) { return Boolean(id); }).length,
+        matchedTokens: matchedTokens,
+        nativeUserTargets: nativeUserTargets,
+        sent: 0,
+        failed: matchedTokens,
+        ok: false,
+        exception: true
+      })
+    );
+    throw error;
+  }
+}
+
+=== sendFcmMessage_ ===
+NOT_FOUND
+
+=== sendWebPush_ ===
+NOT_FOUND
+
+=== loadWebPushTokens_ ===
+function loadWebPushTokens_() {
+  const raw = PropertiesService.getScriptProperties()
+    .getProperty(JAYUMINTON_PUSH_CONFIG.webTokenProperty);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+=== registerWebToken_ ===
+function registerWebToken_(body) {
+  const memberId = cleanText_(body.memberId, 200);
+  const memberName = cleanText_(body.memberName, 80);
+  const token = cleanToken_(body.token);
+  const userAgent = cleanText_(body.userAgent, 300);
+
+  if (!memberId || !memberName || !token) {
+    throw new Error('memberId, memberName and token are required.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const records = loadWebPushTokens_();
+    const now = Date.now();
+    const active = records.filter(function(record) {
+      return record &&
+        record.token &&
+        now - Number(record.updatedAt || 0) <=
+          JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs &&
+        record.token !== token;
+    });
+
+    active.push({
+      memberId: memberId,
+      memberName: memberName,
+      token: token,
+      userAgent: userAgent,
+      updatedAt: now
+    });
+
+    const limited = limitWebPushTokens_(active);
+    saveWebPushTokens_(limited);
+
+    return {
+      ok: true,
+      action: 'registered',
+      memberId: memberId,
+      memberName: memberName,
+      registeredTokens: limited.length
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+=== cleanEvent_ ===
+function cleanEvent_(body) {
+  const type = String(body && body.type || 'court_assignment').trim();
+  const assignmentId = String(body && body.assignmentId || '').trim();
+  const sourceMembers = Array.isArray(body && body.members)
+    ? body.members
+    : [];
+
+  if (!/^[A-Za-z0-9_.-]{8,500}$/.test(assignmentId)) {
+    throw new Error('Invalid assignmentId.');
+  }
+  if (type !== 'court_assignment' && type !== 'wait1_ready') {
+    throw new Error('Invalid notification type.');
+  }
+
+  const uniqueMembers = {};
+  sourceMembers.forEach(function(member) {
+    const id = cleanText_(member && member.id, 200);
+    const name = cleanText_(member && member.name, 80);
+    if (id && name) {
+      uniqueMembers[id] = {id: id, name: name};
+    }
+  });
+  const members = Object.keys(uniqueMembers).map(function(id) {
+    return uniqueMembers[id];
+  });
+
+  if (type === 'court_assignment') {
+    const courtNo = Number(body.courtNo);
+    if ([1, 2, 3, 4].indexOf(courtNo) === -1 ||
+        members.length !== 4) {
+      throw new Error('Court assignment requires one valid court and four members.');
+    }
+    return {
+      type: type,
+      assignmentId: assignmentId,
+      courtNo: courtNo,
+      expectedCourtNo: 0,
+      members: members
+    };
+  }
+
+  /* JAYUMINTON_WAIT1_NO_COURT_REQUIRED_V1
+   * Entering wait group 1 means prepare now; it does not yet have a court.
+   * The main assignment app deliberately sends an empty expectedCourtNo.
+   */
+  const expectedCourtNo = Number(body.expectedCourtNo) || 0;
+  if (members.length < 1 || members.length > 4) {
+    throw new Error('Wait-1 notification requires one to four members.');
+  }
+  return {
+    type: type,
+    assignmentId: assignmentId,
+    courtNo: 0,
+    expectedCourtNo: expectedCourtNo,
+    members: members
+  };
+}
+
+SUMMARY
+sendAssignmentEvent_targetMemberId_refs=0
+sendAssignmentEvent_memberId_refs=1
+sendAssignmentEvent_token_refs=0
+result=SUSPECT_MISSING_TARGET_MEMBER_ID
