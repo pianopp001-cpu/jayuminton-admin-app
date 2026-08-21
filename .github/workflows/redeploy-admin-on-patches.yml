@@ -1,16 +1,19 @@
 name: Redeploy admin after Cloudflare patches
 
-# PR-merge trigger marker: v2001-cloudflare-source-clean-status
+# PR-merge trigger marker: v2001-cloudflare-fast-sync-status
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/redeploy-admin-on-patches.yml'
       - 'deployment/jayuminton/apply_admin_vnext_patches.py'
+      - 'deployment/jayuminton/admin_fast_state_return_patch.py'
       - 'deployment/jayuminton/admin_vnext_script_patch.py'
       - 'deployment/jayuminton/admin_vnext_badge_cleanup_patch.py'
       - 'deployment/jayuminton/admin_cloudflare_final_contract.py'
+      - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
       - 'deployment/jayuminton/admin_finish_alert_v12_patch.py'
+      - 'deployment/jayuminton/admin_court_voice_text_patch.py'
   workflow_dispatch:
 
 permissions:
