@@ -8,7 +8,6 @@ if len(sys.argv) != 2:
 p = Path(sys.argv[1])
 s = p.read_text(encoding='utf-8')
 
-# Bump identity.
 for old, new in (
     ('VERSION="1.3.4"', 'VERSION="1.3.5"'),
     ('VERSION_CODE="134"', 'VERSION_CODE="135"'),
@@ -22,8 +21,10 @@ for old, new in (
     s = s.replace(old, new)
 s = re.sub(r'^OUT=.*$', 'OUT="releases/jayuminton-user-v1.3.5-clean-shell.apk"', s, count=1, flags=re.M)
 
-# The old repository app layout/theme belonged to the admin app. Replace them
-# completely before Gradle runs so the user APK has no inherited admin loading UI.
+# Delete/neutralize inherited build-time admin-mode verifier text before final checks.
+s = re.sub(r"^if grep -F '\?mode=admin'.*?^fi\n?", "", s, flags=re.M | re.S)
+s = s.replace('?mode=admin', '?mode=user')
+
 anchor = 'mkdir -p "$JAVA_DIR" releases deployment/status signing'
 if anchor not in s:
     raise SystemExit('mkdir anchor not found')
@@ -43,7 +44,7 @@ cat > app/src/main/res/layout/activity_main.xml <<'XML'
 XML
 cat > app/src/main/res/values/styles.xml <<'XML'
 <resources>
-    <style name="Theme.JayumintonAdmin" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.JayumintonUser" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:fontFamily">sans</item>
@@ -56,21 +57,19 @@ cat > app/src/main/res/values/styles.xml <<'XML'
 XML
 '''
 s = s.replace(anchor, replacement, 1)
+s = s.replace('android:theme="@style/Theme.JayumintonAdmin"', 'android:theme="@style/Theme.JayumintonUser"')
 
-# Force the first navigation to the verified Cloudflare user page. No fallback
-# to admin/main deployment is allowed in the user shell.
 s = re.sub(r'private static final String USER_URL = "[^"]+";',
            'private static final String USER_URL = "https://jayuminton-user-web.pianopp001.workers.dev/?app=user&mode=user&native=1";',
            s, count=1)
 
-# Add a visible user-only marker immediately after page load. This is not a loading
-# screen; it is only a DOM attribute used by runtime diagnostics.
 s = s.replace("document.documentElement.setAttribute('data-user-apk','1');",
               "document.documentElement.setAttribute('data-user-apk','1');document.documentElement.setAttribute('data-user-shell','clean-v135');")
 
 required = [
     'app/src/main/res/layout/activity_main.xml',
     '<WebView',
+    'Theme.JayumintonUser',
     'clean-v135',
     'https://jayuminton-user-web.pianopp001.workers.dev/?app=user&mode=user&native=1',
     "versionCode='135' versionName='1.3.5'",
@@ -79,7 +78,7 @@ for x in required:
     if x not in s:
         raise SystemExit('missing clean-shell marker: ' + x)
 
-for bad in ('관리자 화면을 불러오는 중입니다', '관리자 화면을 여는 중', '?mode=admin'):
+for bad in ('관리자 화면을 불러오는 중입니다', '관리자 화면을 여는 중', '?mode=admin', 'Theme.JayumintonAdmin'):
     if bad in s:
         raise SystemExit('admin loading marker survived: ' + bad)
 
