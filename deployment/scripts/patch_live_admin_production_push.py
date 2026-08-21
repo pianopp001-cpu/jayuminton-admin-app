@@ -22,7 +22,9 @@ const JAYUMINTON_STATE_PUSH_RELAY_URL_ = __RELAY_URL__;
 const JAYUMINTON_STATE_PUSH_INTERNAL_KEY_ = __INTERNAL_KEY__;
 
 function shouldCheckStatePush_(actionName) {
-  return /(배정|이동|교환|종료|대기|코트)/.test(String(actionName || ''));
+  const name = String(actionName || '');
+  return /(배정|이동|교환|종료|대기|코트)/.test(name) ||
+    /(assign|wait|court|finish|move|swap|updateMember|setMemberStatus|smartAssign|adjust)/i.test(name);
 }
 
 function captureStatePushSnapshot_() {
@@ -163,6 +165,24 @@ if push_marker not in push:
         raise SystemExit("push handler insertion point missing")
     push = push.replace(old, new, 1)
 
+# Keep action detection current even when the production helper was already
+# installed by an older deployment. Cloudflare admin uses English RPC names,
+# while older admin flows sometimes passed Korean action labels.
+canonical_should_check = """function shouldCheckStatePush_(actionName) {
+  const name = String(actionName || '');
+  return /(배정|이동|교환|종료|대기|코트)/.test(name) ||
+    /(assign|wait|court|finish|move|swap|updateMember|setMemberStatus|smartAssign|adjust)/i.test(name);
+}"""
+main, should_check_count = re.subn(
+    r"function shouldCheckStatePush_\(actionName\) \{.*?\n\}",
+    canonical_should_check,
+    main,
+    count=1,
+    flags=re.S,
+)
+if should_check_count != 1:
+    raise SystemExit("production state-push action detector could not be canonicalized")
+
 # Keep the relay URL and authentication key synchronized even when only one
 # side of a previous production deployment survived.
 main, main_url_count = re.subn(
@@ -207,6 +227,7 @@ if handler_count != 1:
 for marker in (
     main_marker, "sendStateTransitionPushes_", "type: 'wait1_ready'",
     "type: 'court_assignment'", "UrlFetchApp.fetch",
+    "updateMember", "setMemberStatus", "smartAssign",
 ):
     if marker not in main:
         raise SystemExit("missing main marker: " + marker)
