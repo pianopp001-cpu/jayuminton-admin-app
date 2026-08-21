@@ -1,0 +1,2 @@
+clean-user-only-rebuild=2026-08-22-v134
+reject-admin-entry=true
