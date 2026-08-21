@@ -1,0 +1,95 @@
+name: Isolated admin fast-sync web regression
+
+on:
+  push:
+    branches:
+      - isolated-admin-fast-sync-v1
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'deployment/jayuminton/admin_fast_state_return_patch.py'
+      - 'deployment/jayuminton/apply_admin_vnext_patches.py'
+      - '.github/workflows/isolated-admin-fast-sync-web-regression.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare isolated snapshot
+        run: |
+          rm -rf "$RUNNER_TEMP/jm-fast-sync"
+          cp -a source-snapshot/current-main "$RUNNER_TEMP/jm-fast-sync"
+
+      - name: Record user-web invariants before patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          root=Path('source-snapshot/current-main')
+          files=['Index.html']
+          data={}
+          for f in files:
+              p=root/f
+              if p.exists(): data[f]=hashlib.sha256(p.read_bytes()).hexdigest()
+          Path(os.environ['RUNNER_TEMP'],'user-before.json').write_text(json.dumps(data,sort_keys=True),encoding='utf-8')
+          print(data)
+          PY
+
+      - name: Apply complete admin patch chain to copy only
+        run: |
+          python3 deployment/jayuminton/apply_admin_vnext_patches.py "$RUNNER_TEMP/jm-fast-sync"
+
+      - name: Verify fast return coverage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path(__import__('os').environ['RUNNER_TEMP'],'jm-fast-sync','Code.js').read_text(encoding='utf-8')
+          marker='JAYUMINTON_ADMIN_FAST_MUTATION_RETURN_V1'
+          count=code.count(marker)
+          print('fast_return_marker_count=',count)
+          if count < 8: raise SystemExit('fast return coverage too small')
+          if 'JAYUMINTON_ADMIN_FAST_FINISH_RETURN_V1' not in code: raise SystemExit('finish fast return missing')
+          PY
+
+      - name: Verify admin and member web do not break structurally
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root=Path(os.environ['RUNNER_TEMP'],'jm-fast-sync')
+          admin=(root/'Admin.html').read_text(encoding='utf-8')
+          script=(root/'Script.html').read_text(encoding='utf-8')
+          index=(root/'Index.html').read_text(encoding='utf-8') if (root/'Index.html').exists() else ''
+          required_admin=['adminApp','mobile-refresh-button','pairStatisticsModal']
+          required_member=['https://jayuminton-push.web.app/','NativeUserApp','function refreshMemberState()','function detectMemberForegroundTransition']
+          for x in required_admin:
+              if x not in admin and x not in script: raise SystemExit('admin web marker missing: '+x)
+          for x in required_member:
+              if x not in script: raise SystemExit('member web marker missing: '+x)
+          for name,text in [('Admin.html',admin),('Script.html',script),('Index.html',index)]:
+              if text and text.count('<script') != text.count('</script>'):
+                  raise SystemExit(name+' script tag mismatch')
+          if 'script.google.com/macros/s/' in script.split("const UNIFIED_MEMBER_APP_URL",1)[1].split(';',1)[0]:
+              raise SystemExit('unified member URL regressed to Apps Script')
+          print('WEB_REGRESSION_STATIC_OK')
+          PY
+
+      - name: Verify repository user page is untouched
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os
+          before=json.loads(Path(os.environ['RUNNER_TEMP'],'user-before.json').read_text())
+          root=Path('source-snapshot/current-main')
+          after={f:hashlib.sha256((root/f).read_bytes()).hexdigest() for f in before}
+          print('before=',before,'after=',after)
+          if before != after: raise SystemExit('user source changed by isolated validation')
+          PY
+
+      - name: Result
+        run: echo 'ADMIN_FAST_SYNC_WEB_REGRESSION_OK'
