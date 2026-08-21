@@ -4,6 +4,7 @@ on:
     branches: [isolated-user-push-recovery]
     paths:
       - '.github/workflows/inspect-live-relay-detail-isolated.yml'
+      - 'deployment/scripts/inspect_relay_assignment_target.py'
   workflow_dispatch: {}
 permissions:
   contents: write
@@ -54,7 +55,6 @@ jobs:
           from pathlib import Path
           p=Path('deployment/status/relay-assignment-target-detail.txt')
           s=p.read_text(encoding='utf-8')
-          # keep only the functions/control flow needed for diagnosis; redact long token/key-like literals
           import re
           s=re.sub(r'([A-Za-z0-9_-]{40,})','__REDACTED_LONG_VALUE__',s)
           p.write_text('run_id=${{ github.run_id }}\nsource=live-relay-read-only\n'+s,encoding='utf-8')
