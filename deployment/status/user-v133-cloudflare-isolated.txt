@@ -1,0 +1,10 @@
+status=success
+branch=isolated-user-push-recovery
+user_web=https://jayuminton-push.web.app/
+apps_script_user_web=disabled
+push_backend=https://jayuminton-user-push.pianopp001.workers.dev
+push_storage=cloudflare-durable-object
+fcm_target_field=targetMemberId
+version=1.3.3
+application_id=com.jayuminton.user
+vibration_groups=8
