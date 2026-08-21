@@ -3,7 +3,6 @@ from pathlib import Path
 import re
 import sys
 
-
 main_path = Path(sys.argv[1])
 push_path = Path(sys.argv[2])
 relay_url = sys.argv[3]
@@ -22,9 +21,12 @@ const JAYUMINTON_STATE_PUSH_RELAY_URL_ = __RELAY_URL__;
 const JAYUMINTON_STATE_PUSH_INTERNAL_KEY_ = __INTERNAL_KEY__;
 
 function shouldCheckStatePush_(actionName) {
-  const name = String(actionName || '');
-  return /(배정|이동|교환|종료|대기|코트)/.test(name) ||
-    /(assign|wait|court|finish|move|swap|updateMember|setMemberStatus|smartAssign|adjust)/i.test(name);
+  /* JAYUMINTON_WAIT1_ALL_MUTATIONS_V1
+   * This is intentionally unconditional. An older working production fix
+   * proved that filtering by action labels misses real wait1 transitions.
+   * Emission still happens only when the before/after state actually changes.
+   */
+  return true;
 }
 
 function captureStatePushSnapshot_() {
@@ -165,13 +167,11 @@ if push_marker not in push:
         raise SystemExit("push handler insertion point missing")
     push = push.replace(old, new, 1)
 
-# Keep action detection current even when the production helper was already
-# installed by an older deployment. Cloudflare admin uses English RPC names,
-# while older admin flows sometimes passed Korean action labels.
+# Restore the historical production behavior that inspected every locked
+# mutation. This fixed missed wait1 transitions on 2026-08-10.
 canonical_should_check = """function shouldCheckStatePush_(actionName) {
-  const name = String(actionName || '');
-  return /(배정|이동|교환|종료|대기|코트)/.test(name) ||
-    /(assign|wait|court|finish|move|swap|updateMember|setMemberStatus|smartAssign|adjust)/i.test(name);
+  /* JAYUMINTON_WAIT1_ALL_MUTATIONS_V1 */
+  return true;
 }"""
 main, should_check_count = re.subn(
     r"function shouldCheckStatePush_\(actionName\) \{.*?\n\}",
@@ -183,8 +183,7 @@ main, should_check_count = re.subn(
 if should_check_count != 1:
     raise SystemExit("production state-push action detector could not be canonicalized")
 
-# Keep the relay URL and authentication key synchronized even when only one
-# side of a previous production deployment survived.
+# Keep the relay URL and authentication key synchronized.
 main, main_url_count = re.subn(
     r"const JAYUMINTON_STATE_PUSH_RELAY_URL_ = .*?;",
     "const JAYUMINTON_STATE_PUSH_RELAY_URL_ = " + repr(relay_url) + ";",
@@ -224,10 +223,44 @@ push, handler_count = re.subn(
 if handler_count != 1:
     raise SystemExit("production main_state_event handler could not be canonicalized")
 
+# Restore the known-good wait1 contract: entering wait1 does not yet have a
+# court number, so expectedCourtNo may be empty/0.
+wait1_old = """  const expectedCourtNo = Number(body.expectedCourtNo);
+  if ([1, 2, 3, 4].indexOf(expectedCourtNo) === -1 ||
+      members.length < 1 || members.length > 4) {
+    throw new Error('Wait-1 notification requires one expected court and one to four members.');
+  }
+  return {
+    type: type,
+    assignmentId: assignmentId,
+    courtNo: 0,
+    expectedCourtNo: expectedCourtNo,
+    members: members
+  };"""
+wait1_new = """  /* JAYUMINTON_WAIT1_NO_COURT_REQUIRED_V1 */
+  const expectedCourtNo = Number(body.expectedCourtNo) || 0;
+  if (members.length < 1 || members.length > 4) {
+    throw new Error('Wait-1 notification requires one to four members.');
+  }
+  return {
+    type: type,
+    assignmentId: assignmentId,
+    courtNo: 0,
+    expectedCourtNo: expectedCourtNo,
+    members: members
+  };"""
+if wait1_old in push:
+    push = push.replace(wait1_old, wait1_new, 1)
+elif "JAYUMINTON_WAIT1_NO_COURT_REQUIRED_V1" not in push and "const expectedCourtNo = Number(body.expectedCourtNo) || 0;" not in push:
+    raise SystemExit("wait1 no-court validation contract not found")
+
 for marker in (
-    main_marker, "sendStateTransitionPushes_", "type: 'wait1_ready'",
-    "type: 'court_assignment'", "UrlFetchApp.fetch",
-    "updateMember", "setMemberStatus", "smartAssign",
+    main_marker,
+    "JAYUMINTON_WAIT1_ALL_MUTATIONS_V1",
+    "sendStateTransitionPushes_",
+    "type: 'wait1_ready'",
+    "type: 'court_assignment'",
+    "UrlFetchApp.fetch",
 ):
     if marker not in main:
         raise SystemExit("missing main marker: " + marker)
@@ -236,10 +269,11 @@ for marker in (
     "action === 'main_state_event'",
     "Invalid main event key",
     "sendAssignmentEvent_(cleanEvent_(body))",
+    "const expectedCourtNo = Number(body.expectedCourtNo) || 0;",
 ):
     if marker not in push:
         raise SystemExit("missing push marker: " + marker)
 
 main_path.write_text(main, encoding="utf-8")
 push_path.write_text(push, encoding="utf-8")
-print("Connected live admin state transitions to authenticated production FCM relay.")
+print("Restored known-good wait1/court transition detection and relay validation contracts.")
