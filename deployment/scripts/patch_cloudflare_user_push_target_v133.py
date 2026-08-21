@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 
-# CI retrigger: 2026-08-21 isolated v1.3.3 recovery
+# PR CI retrigger: 2026-08-21T20:34+09:00
 
 if len(sys.argv) != 2:
     raise SystemExit('usage: patch_cloudflare_user_push_target_v133.py <worker.js>')
