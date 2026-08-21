@@ -143,3 +143,4 @@ jobs:
           git pull --rebase origin main || true
           git push origin main
 # repair+verify trigger 2026-08-21
+# trigger via PR merge 2026-08-21
