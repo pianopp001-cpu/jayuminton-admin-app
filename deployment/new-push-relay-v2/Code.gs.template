@@ -1,0 +1,127 @@
+const RELAY_AUTH_KEY_ = '__RELAY_AUTH_KEY__';
+const FCM_PROJECT_ID_ = '__FCM_PROJECT_ID__';
+const FCM_CLIENT_EMAIL_ = '__FCM_CLIENT_EMAIL__';
+const FCM_PRIVATE_KEY_B64_ = '__FCM_PRIVATE_KEY_B64__';
+const TOKEN_STORE_KEY_ = 'JAYUMINTON_PUSH_TOKENS_V2';
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function readPayload_(e) {
+  var raw = '';
+  try { raw = String((e && e.parameter && e.parameter.payload) || ''); } catch (_) {}
+  if (!raw) {
+    try { raw = String((e && e.postData && e.postData.contents) || ''); } catch (_) {}
+  }
+  try { return JSON.parse(raw || '{}'); } catch (_) { return {}; }
+}
+
+function loadTokens_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(TOKEN_STORE_KEY_) || '{}';
+  try { return JSON.parse(raw); } catch (_) { return {}; }
+}
+
+function saveTokens_(map) {
+  PropertiesService.getScriptProperties().setProperty(TOKEN_STORE_KEY_, JSON.stringify(map || {}));
+}
+
+function doGet() {
+  var map = loadTokens_();
+  return json_({ok:true, service:'jayuminton-push-relay-v2', registeredTokens:Object.keys(map).length});
+}
+
+function doPost(e) {
+  var p = readPayload_(e);
+  var action = String(p.action || '');
+  if (action === 'register_web_token') return registerToken_(p);
+  if (action === 'unregister_web_token') return unregisterToken_(p);
+  if (action === 'token_status') return tokenStatus_(p);
+  if (action === 'main_state_event') return stateEvent_(p);
+  return json_({ok:false, error:'unknown_action'});
+}
+
+function registerToken_(p) {
+  var memberId = String(p.memberId || '').trim();
+  var token = String(p.token || '').trim();
+  if (!memberId || !token) return json_({ok:false,error:'memberId_and_token_required'});
+  var map = loadTokens_();
+  map[token] = {memberId:memberId, memberName:String(p.memberName || ''), token:token, updatedAt:new Date().toISOString()};
+  saveTokens_(map);
+  return json_({ok:true, registered:true, memberId:memberId});
+}
+
+function unregisterToken_(p) {
+  var token = String(p.token || '').trim();
+  var map = loadTokens_();
+  if (token && map[token]) delete map[token];
+  saveTokens_(map);
+  return json_({ok:true});
+}
+
+function tokenStatus_(p) {
+  var memberId = String(p.memberId || '').trim();
+  var token = String(p.token || '').trim();
+  var map = loadTokens_();
+  var r = map[token];
+  return json_({ok:true, registered:!!(r && String(r.memberId) === memberId)});
+}
+
+function stateEvent_(p) {
+  if (String(p.internalKey || '') !== RELAY_AUTH_KEY_) return json_({ok:false,error:'unauthorized'});
+  var type = String(p.type || '');
+  if (type !== 'wait1_ready' && type !== 'court_assignment') return json_({ok:false,error:'invalid_type'});
+  var members = Array.isArray(p.members) ? p.members : [];
+  var ids = {};
+  members.forEach(function(m){ var id=String((m&&m.id)||'').trim(); if(id) ids[id]=String((m&&m.name)||''); });
+  var regs = loadTokens_();
+  var sent = 0, failed = 0;
+  Object.keys(regs).forEach(function(token){
+    var r=regs[token]||{};
+    var memberId=String(r.memberId||'');
+    if (!ids[memberId]) return;
+    try {
+      sendFcm_(token, {
+        type:type,
+        assignmentId:String(p.assignmentId || ''),
+        expectedCourtNo:String(p.expectedCourtNo || p.courtNo || ''),
+        courtNo:String(p.courtNo || p.expectedCourtNo || ''),
+        memberId:memberId,
+        memberName:String(r.memberName || ids[memberId] || ''),
+        title:type === 'wait1_ready' ? '대기 1 안내' : '코트 입장 안내',
+        body:type === 'wait1_ready' ? '대기 1입니다. 라켓 들고 준비해 주세요.' : ((String(p.courtNo || p.expectedCourtNo || '') || '') + '번 코트로 입장해 주세요.'),
+        repeatCount:'1'
+      });
+      sent++;
+    } catch (err) { failed++; }
+  });
+  return json_({ok:true,sent:sent,failed:failed});
+}
+
+function sendFcm_(token, data) {
+  var accessToken = accessToken_();
+  var url = 'https://fcm.googleapis.com/v1/projects/' + encodeURIComponent(FCM_PROJECT_ID_) + '/messages:send';
+  var payload = {message:{token:token,data:{},android:{priority:'high'}}};
+  Object.keys(data || {}).forEach(function(k){ payload.message.data[k]=String(data[k] == null ? '' : data[k]); });
+  var res = UrlFetchApp.fetch(url,{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+accessToken},payload:JSON.stringify(payload),muteHttpExceptions:true});
+  var code=res.getResponseCode();
+  if(code<200 || code>=300) throw new Error('fcm_http_'+code);
+}
+
+function accessToken_() {
+  var now = Math.floor(Date.now()/1000);
+  var header = b64u_(JSON.stringify({alg:'RS256',typ:'JWT'}));
+  var claim = b64u_(JSON.stringify({iss:FCM_CLIENT_EMAIL_,scope:'https://www.googleapis.com/auth/firebase.messaging',aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3500}));
+  var unsigned=header+'.'+claim;
+  var key=Utilities.newBlob(Utilities.base64Decode(FCM_PRIVATE_KEY_B64_)).getDataAsString();
+  var sig=Utilities.computeRsaSha256Signature(unsigned,key);
+  var jwt=unsigned+'.'+Utilities.base64EncodeWebSafe(sig).replace(/=+$/,'');
+  var res=UrlFetchApp.fetch('https://oauth2.googleapis.com/token',{method:'post',payload:{grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion:jwt},muteHttpExceptions:true});
+  var obj=JSON.parse(res.getContentText()||'{}');
+  if(!obj.access_token) throw new Error('oauth_failed');
+  return obj.access_token;
+}
+
+function b64u_(s) {
+  return Utilities.base64EncodeWebSafe(Utilities.newBlob(s).getBytes()).replace(/=+$/,'');
+}
