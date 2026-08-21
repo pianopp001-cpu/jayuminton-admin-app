@@ -1,2 +1,2 @@
-trigger=2026-08-21T20:25:00+09:00
-mode=fresh-new-relay-only
+trigger=2026-08-21T20:29:00+09:00
+mode=fresh-new-relay-v2-create-and-connect
