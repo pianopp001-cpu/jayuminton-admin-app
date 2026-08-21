@@ -7,6 +7,10 @@ on:
       - 'deployment/new-push-relay-v2/**'
       - '.github/workflows/deploy-new-push-relay-v2.yml'
       - 'deploy-triggers/new-push-relay-v2.txt'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy-triggers/new-push-relay-v2.txt'
   workflow_dispatch: {}
 
 permissions:
