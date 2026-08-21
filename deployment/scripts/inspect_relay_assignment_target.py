@@ -41,6 +41,10 @@ def extract_function(name):
 
 names = [
     'sendAssignmentEvent_',
+    'sendAssignmentEventWithoutDiagnostics_',
+    'nativeTokenKind_',
+    'sendNativeUserPush_',
+    'sendFcmHttpV1_',
     'sendFcmMessage_',
     'sendWebPush_',
     'loadWebPushTokens_',
@@ -48,7 +52,7 @@ names = [
     'cleanEvent_',
 ]
 
-print('READ_ONLY_RELAY_ASSIGNMENT_INSPECTION_V1')
+print('READ_ONLY_RELAY_ASSIGNMENT_INSPECTION_V2')
 print('has_targetMemberId=' + str('targetMemberId' in src))
 print('has_memberId=' + str('memberId' in src))
 print('has_wait1_ready=' + str('wait1_ready' in src))
@@ -60,22 +64,27 @@ for name in names:
     if not fn:
         print('NOT_FOUND')
         continue
-    # redact obvious secrets/tokens while preserving control flow and field names
     fn = re.sub(r"(['\"])(?:ya29\.|AIza|eyJ)[^'\"]+\1", "'__REDACTED__'", fn)
     print(fn)
 
 assignment = extract_function('sendAssignmentEvent_')
-if assignment:
-    target_refs = len(re.findall(r'targetMemberId', assignment))
-    member_refs = len(re.findall(r'\.memberId\b|\bmemberId\b', assignment))
-    token_refs = len(re.findall(r'\.token\b|\btoken\b', assignment))
-    print('\nSUMMARY')
-    print('sendAssignmentEvent_targetMemberId_refs=' + str(target_refs))
-    print('sendAssignmentEvent_memberId_refs=' + str(member_refs))
-    print('sendAssignmentEvent_token_refs=' + str(token_refs))
-    if target_refs == 0:
-        print('result=SUSPECT_MISSING_TARGET_MEMBER_ID')
+core = extract_function('sendAssignmentEventWithoutDiagnostics_')
+print('\nSUMMARY')
+for label, fn in [('wrapper', assignment), ('core', core)]:
+    if not fn:
+        print(label + '_found=False')
+        continue
+    print(label + '_found=True')
+    print(label + '_targetMemberId_refs=' + str(len(re.findall(r'targetMemberId', fn))))
+    print(label + '_memberId_refs=' + str(len(re.findall(r'\.memberId\b|\bmemberId\b', fn))))
+    print(label + '_token_refs=' + str(len(re.findall(r'\.token\b|\btoken\b', fn))))
+    print(label + '_fcm_refs=' + str(len(re.findall(r'FCM|fcm|sendNative|sendWeb|UrlFetchApp', fn))))
+if core:
+    if 'targetMemberId' not in core:
+        print('result=CORE_MISSING_TARGET_MEMBER_ID')
+    elif not re.search(r'record\s*\.\s*memberId|memberId', core):
+        print('result=CORE_TARGET_PRESENT_BUT_MEMBER_MAPPING_SUSPECT')
     else:
-        print('result=TARGET_MEMBER_ID_PRESENT_REVIEW_MAPPING')
+        print('result=CORE_TARGET_AND_MEMBER_MAPPING_PRESENT')
 else:
-    print('\nSUMMARY\nresult=SEND_ASSIGNMENT_EVENT_NOT_FOUND')
+    print('result=CORE_FUNCTION_NOT_FOUND')
