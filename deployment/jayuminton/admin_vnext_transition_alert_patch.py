@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-"""Admin-only Script patch: route court/wait transition events through the native alert bridge.
+"""Admin-only Script patch: track transition event ids without showing member alerts.
 
-The live admin source no longer guarantees a showPendingAlertsIfReady() helper, so
-this patch hooks renderState() and consumes the persistent adminVnextEvents contract
-already published by the backend. It intentionally ignores COURT_FINISHED because
-finishCourt() already raises its immediate alert before the server response.
-
-Important: the first render only seeds already-existing event ids. This prevents
-stale persistent transition events from vibrating immediately when the admin app opens.
+Member-device wait1/court notifications are delivered by the push relay. The admin
+screen must never mirror those notifications as a popup or vibration. This hook only
+seeds/records persistent adminVnextEvents so stale events are not replayed on load.
 """
 from pathlib import Path
 import sys
@@ -31,47 +27,12 @@ addon = r'''
   var jmSeenTransitionEvents = {};
   var jmTransitionBaselineReady = false;
   var jmOriginalRenderState = renderState;
-  function jmMemberNameFromState(state,id){
-    var members=(state&&state.members)||[];
-    for(var i=0;i<members.length;i++){
-      if(String(members[i]&&members[i].id)===String(id)){
-        return String(members[i].name||members[i].fullName||'').trim();
-      }
-    }
-    return '';
-  }
-  function jmTransitionMessage(state,event){
-    if(!event)return '';
-    var names=(event.memberIds||[]).map(function(id){return jmMemberNameFromState(state,id);}).filter(Boolean).map(function(name){return name+'님';});
-    if(event.type==='COURT_PROMOTED'){
-      return (names.length?names.join(', ')+'\n':'')+String(event.courtNo||'')+'번 코트로 들어가 주세요.';
-    }
-    if(event.type==='WAIT_ONE_PROMOTED'){
-      return '대기 1번 '+(names.length?names.join(', ')+' ':'')+'준비해 주세요.';
-    }
-    return '';
-  }
-  function jmSeedInitialTransitionEvents(events){
-    (events||[]).forEach(function(event){
+  function jmRecordTransitionEvents(state){
+    var events=(state&&state.adminVnextEvents)||[];
+    events.forEach(function(event){
       if(event&&event.eventId)jmSeenTransitionEvents[event.eventId]=true;
     });
     jmTransitionBaselineReady=true;
-  }
-  function jmDeliverTransitionEvents(state){
-    var events=(state&&state.adminVnextEvents)||[];
-    if(!jmTransitionBaselineReady){
-      jmSeedInitialTransitionEvents(events);
-      return;
-    }
-    events.forEach(function(event){
-      if(!event||!event.eventId||jmSeenTransitionEvents[event.eventId])return;
-      jmSeenTransitionEvents[event.eventId]=true;
-      if(event.type==='COURT_FINISHED')return;
-      var message=jmTransitionMessage(state,event);
-      if(!message)return;
-      if(typeof window.__JAYUMINTON_TRANSITION_ALERT__==='function') window.__JAYUMINTON_TRANSITION_ALERT__(message);
-      else window.alert(message);
-    });
     var ids=Object.keys(jmSeenTransitionEvents);
     if(ids.length>40){
       var keep={};ids.slice(-20).forEach(function(id){keep[id]=true;});jmSeenTransitionEvents=keep;
@@ -79,10 +40,18 @@ addon = r'''
   }
   renderState=function(state){
     var result=jmOriginalRenderState.apply(this,arguments);
-    try{jmDeliverTransitionEvents(state||STATE);}catch(e){}
+    try{jmRecordTransitionEvents(state||STATE);}catch(e){}
     return result;
   };
-  window.__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__=function(){return {renderHook:true,courtPromoted:true,waitOnePromoted:true,finishHandledSeparately:true,initialReplaySuppressed:true};};
+  window.__JAYUMINTON_TRANSITION_ALERT__=function(){return;};
+  window.__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__=function(){return {
+    renderHook:true,
+    memberDeviceOnly:true,
+    adminPopup:false,
+    adminVibration:false,
+    initialReplaySuppressed:true,
+    baselineReady:jmTransitionBaselineReady
+  };};
 })();
 '''
 
@@ -90,17 +59,19 @@ source = source[:close] + addon + '\n' + source[close:]
 
 for required in [
     '__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__',
-    "event.type==='COURT_PROMOTED'",
-    "event.type==='WAIT_ONE_PROMOTED'",
-    "event.type==='COURT_FINISHED'",
-    '__JAYUMINTON_TRANSITION_ALERT__',
+    '__JAYUMINTON_TRANSITION_ALERT__=function(){return;}',
     'renderState=function(state)',
-    'jmTransitionBaselineReady = false',
-    'jmSeedInitialTransitionEvents(events)',
+    'jmRecordTransitionEvents(state||STATE)',
+    'memberDeviceOnly:true',
+    'adminPopup:false',
+    'adminVibration:false',
     'initialReplaySuppressed:true'
 ]:
     if required not in source:
-        raise SystemExit('transition event hook missing: '+required)
+        raise SystemExit('transition event suppression missing: '+required)
+
+if 'window.alert(message)' in addon or 'NativeVoice.vibrate' in addon or 'navigator.vibrate' in addon:
+    raise SystemExit('admin member alert side effect reintroduced')
 
 path.write_text(source, encoding='utf-8')
-print('ADMIN_TRANSITION_ALERT_BRIDGE_OK')
+print('ADMIN_TRANSITION_EVENTS_TRACK_ONLY_OK')
