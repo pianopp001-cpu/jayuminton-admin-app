@@ -79,12 +79,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sleep 5
-          curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$INSTALL_URL/$APK_NAME?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/downloaded.apk"
+          URL="$INSTALL_URL/$APK_NAME"
+          rm -f "$RUNNER_TEMP/downloaded.apk"
+          for i in $(seq 1 18); do
+            code="$(curl --location --silent --show-error --output "$RUNNER_TEMP/downloaded.apk" --write-out '%{http_code}' --max-time 60 "$URL" || true)"
+            if [ "$code" = "200" ] && [ -s "$RUNNER_TEMP/downloaded.apk" ]; then
+              break
+            fi
+            echo "Cloudflare asset not ready yet (attempt $i, HTTP $code); waiting 5s"
+            rm -f "$RUNNER_TEMP/downloaded.apk"
+            sleep 5
+          done
           test -s "$RUNNER_TEMP/downloaded.apk"
           LOCAL_SHA="$(sha256sum "$RUNNER_TEMP/site/$APK_NAME" | awk '{print $1}')"
           LIVE_SHA="$(sha256sum "$RUNNER_TEMP/downloaded.apk" | awk '{print $1}')"
           test "$LOCAL_SHA" = "$LIVE_SHA"
+          curl --fail --location --silent --show-error "$INSTALL_URL/" -o "$RUNNER_TEMP/install-page.html"
+          grep -F '자유민턴 사용자 앱 v1.3.5' "$RUNNER_TEMP/install-page.html" >/dev/null
           echo "INSTALL_PAGE=$INSTALL_URL/"
-          echo "APK_URL=$INSTALL_URL/$APK_NAME"
+          echo "APK_URL=$URL"
           echo "APK_SHA256=$LIVE_SHA"
