@@ -1,0 +1,206 @@
+name: Deploy isolated user Cloudflare web
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-user-cloudflare-web-isolated.yml'
+      - 'deployment/jayuminton/user_cloudflare_web.py'
+      - 'source-snapshot/current-main/Index.html'
+      - 'source-snapshot/current-main/Style.html'
+      - 'source-snapshot/current-main/Script.html'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-user-cloudflare-web-isolated
+  cancel-in-progress: true
+
+jobs:
+  deploy-user-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      USER_WORKER_NAME: jayuminton-user-web
+      USER_WORKER_URL: https://jayuminton-user-web.pianopp001.workers.dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Cloudflare and Apps Script tools
+        run: npm install --global @google/clasp@latest wrangler@latest
+
+      - name: Resolve isolated backend configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
+          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId // empty' "$RUNNER_TEMP/deploy.json")"
+          for value in "$MAIN_SCRIPT_ID" "$MAIN_DEPLOYMENT_ID" "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ACCOUNT_ID"; do test -n "$value"; done
+          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
+          echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+
+      - name: Create isolated user RPC deployment and restore main source
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKUP="$RUNNER_TEMP/user-backup"
+          WORK="$RUNNER_TEMP/user-backend"
+          mkdir -p "$BACKUP" "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
+          (cd "$BACKUP" && clasp pull)
+          cp -a "$BACKUP/." "$WORK/"
+          python3 deployment/jayuminton/user_cloudflare_web.py patch-backend --work "$WORK"
+          grep -F 'function memberCloudflareRpc_(e)' "$WORK/Code.js" >/dev/null
+          grep -F "e.parameter.memberRpc === '1'" "$WORK/Code.js" >/dev/null
+
+          restore_main(){ (cd "$BACKUP" && clasp push --force) >/dev/null; }
+          trap restore_main EXIT
+          (cd "$WORK" && clasp push --force)
+          OUTPUT="$(cd "$WORK" && clasp create-deployment --description "isolated Cloudflare user RPC ${GITHUB_RUN_ID}")"
+          printf '%s\n' "$OUTPUT"
+          USER_DEPLOYMENT_ID="$(printf '%s\n' "$OUTPUT" | sed -n 's/.*\(AKfy[a-zA-Z0-9_-]*\).*/\1/p' | head -1)"
+          test -n "$USER_DEPLOYMENT_ID"
+          test "$USER_DEPLOYMENT_ID" != "$MAIN_DEPLOYMENT_ID"
+          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$USER_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+          echo "USER_DEPLOYMENT_ID=$USER_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          restore_main
+          trap - EXIT
+
+      - name: Build actual user-only Cloudflare frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/user-worker"
+          mkdir -p "$ROOT/public"
+          python3 deployment/jayuminton/user_cloudflare_web.py build-frontend \
+            --snapshot source-snapshot/current-main \
+            --out "$ROOT/public" \
+            --rpc-url "$USER_WORKER_URL"
+          grep -F '자유민턴 코트배정 현황' "$ROOT/public/index.html" >/dev/null
+          grep -F 'const IS_ADMIN = false;' "$ROOT/public/index.html" >/dev/null
+          grep -F 'jayuminton-user-cloudflare-rpc' "$ROOT/public/index.html" >/dev/null
+          grep -F 'NativeUserApp.setMember' "$ROOT/public/index.html" >/dev/null
+          ! grep -F '관리자 화면을 불러오는 중입니다' "$ROOT/public/index.html" >/dev/null
+          ! grep -F 'jayuminton-push.web.app' "$ROOT/public/index.html" >/dev/null
+          ! grep -F 'script.google.com/macros/s/' "$ROOT/public/index.html" >/dev/null
+
+      - name: Create Cloudflare Worker serving user web and member RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/user-worker"
+          python3 - "$ROOT/public/index.html" "$ROOT/worker.js" <<'PY'
+          import json, sys
+          from pathlib import Path
+          html = Path(sys.argv[1]).read_text(encoding='utf-8')
+          worker = '''const USER_HTML = %s;
+          export default {
+            async fetch(request, env) {
+              const url = new URL(request.url);
+              const common = {'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','X-Content-Type-Options':'nosniff'};
+              if (url.searchParams.get('memberRpc') === '1' && url.searchParams.get('rpc')) {
+                const callback = url.searchParams.get('callback') || '';
+                const rpc = url.searchParams.get('rpc') || '';
+                const payload = url.searchParams.get('payload') || 'W10';
+                if (!/^[A-Za-z_$][\\w$]*$/.test(callback) || !/^[A-Za-z_$][\\w$]*$/.test(rpc)) {
+                  return new Response('invalid_request',{status:400,headers:common});
+                }
+                const upstream = new URL(env.USER_RPC_UPSTREAM);
+                upstream.searchParams.set('memberRpc','1');
+                upstream.searchParams.set('rpc',rpc);
+                upstream.searchParams.set('callback',callback);
+                upstream.searchParams.set('payload',payload);
+                upstream.searchParams.set('nonce',url.searchParams.get('nonce') || Date.now().toString());
+                try {
+                  const response = await fetch(upstream.toString(), {redirect:'follow', headers:{'Cache-Control':'no-cache'}});
+                  const text = await response.text();
+                  if (!response.ok || !text.startsWith(callback + '(')) {
+                    return new Response(callback+'('+JSON.stringify({ok:false,error:'user_upstream_failed',status:response.status})+');',{status:502,headers:{...common,'Content-Type':'application/javascript; charset=utf-8'}});
+                  }
+                  return new Response(text,{status:200,headers:{...common,'Content-Type':'application/javascript; charset=utf-8'}});
+                } catch (error) {
+                  return new Response(callback+'('+JSON.stringify({ok:false,error:'user_proxy_exception'})+');',{status:502,headers:{...common,'Content-Type':'application/javascript; charset=utf-8'}});
+                }
+              }
+              if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('method_not_allowed',{status:405,headers:common});
+              return new Response(request.method === 'HEAD' ? null : USER_HTML,{status:200,headers:{...common,'Content-Type':'text/html; charset=utf-8'}});
+            }
+          };
+          ''' % json.dumps(html, ensure_ascii=False)
+          Path(sys.argv[2]).write_text(worker, encoding='utf-8')
+          PY
+          cat > "$ROOT/wrangler.toml" <<EOF
+          name = "$USER_WORKER_NAME"
+          main = "worker.js"
+          compatibility_date = "2026-08-22"
+          workers_dev = true
+
+          [vars]
+          USER_RPC_UPSTREAM = "$USER_RPC_UPSTREAM"
+          EOF
+
+      - name: Deploy user web directly to Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/user-worker"
+          wrangler deploy --config wrangler.toml | tee "$RUNNER_TEMP/user-wrangler.txt"
+          grep -F "$USER_WORKER_URL" "$RUNNER_TEMP/user-wrangler.txt" >/dev/null || true
+
+      - name: Verify live Cloudflare user page and data RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 6
+          curl --fail --location --retry 6 --retry-delay 2 --max-time 60 \
+            "$USER_WORKER_URL/?app=user&mode=user&verify=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/user-live.html"
+          grep -F '자유민턴 코트배정 현황' "$RUNNER_TEMP/user-live.html" >/dev/null
+          grep -F 'const IS_ADMIN = false;' "$RUNNER_TEMP/user-live.html" >/dev/null
+          grep -F 'jayuminton-user-cloudflare-rpc' "$RUNNER_TEMP/user-live.html" >/dev/null
+          grep -F 'NativeUserApp.setMember' "$RUNNER_TEMP/user-live.html" >/dev/null
+          ! grep -F '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/user-live.html" >/dev/null
+          ! grep -F 'jayuminton-push.web.app' "$RUNNER_TEMP/user-live.html" >/dev/null
+
+          CALLBACK="jmUserProbe${GITHUB_RUN_ID}"
+          curl --fail --retry 6 --retry-delay 2 --max-time 60 \
+            "$USER_WORKER_URL/?memberRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/user-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/user-state.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/user-state.js" >/dev/null
+
+          cat > "$RUNNER_TEMP/user-cloudflare-status.txt" <<EOF
+          status=success
+          user_url=$USER_WORKER_URL/
+          user_worker=$USER_WORKER_NAME
+          user_page=user-only
+          admin_loader_absent=yes
+          firebase_user_web_used=no
+          google_user_web_used=no
+          public_state_rpc=success
+          native_user_bridge=yes
+          push_worker=https://jayuminton-user-push.pianopp001.workers.dev
+          main_admin_deployment_modified=no
+          isolated_rpc_deployment=$USER_DEPLOYMENT_ID
+          run_id=$GITHUB_RUN_ID
+          EOF
+          cat "$RUNNER_TEMP/user-cloudflare-status.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: user-cloudflare-web-verified-${{ github.run_id }}
+          path: ${{ runner.temp }}/user-cloudflare-status.txt
+          retention-days: 30
