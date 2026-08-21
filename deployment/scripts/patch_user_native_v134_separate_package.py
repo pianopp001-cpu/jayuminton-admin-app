@@ -33,6 +33,9 @@ repls = (
     ('JayumintonUserNative/1.3.3', 'JayumintonUserNative/1.3.4'),
     ('JayumintonNativeAndroid/1.3.3', 'JayumintonNativeAndroid/1.3.4'),
     ('APP_VERSION = "1.3.3"', 'APP_VERSION = "1.3.4"'),
+    ("versionCode='133' versionName='1.3.3'", "versionCode='134' versionName='1.3.4'"),
+    ('version=1.3.3', 'version=1.3.4'),
+    ('version_code=133', 'version_code=134'),
 )
 for old,new in repls:
     s = s.replace(old,new)
@@ -49,6 +52,7 @@ required = (
     'NativeUserApp',
     'NativePushRegistrar.isCurrentMember(this, targetMemberId)',
     'private static final int MAX_GROUPS = 8;',
+    "versionCode='134' versionName='1.3.4'",
 )
 for marker in required:
     if marker not in s:
@@ -58,9 +62,10 @@ for forbidden in (
     'JAVA_DIR="app/src/main/java/com/jayuminton/admin"',
     "namespace 'com.jayuminton.admin'",
     'package com.jayuminton.admin;',
+    "versionCode='133' versionName='1.3.3'",
 ):
     if forbidden in s:
-        raise SystemExit('admin Android namespace survived: ' + forbidden)
+        raise SystemExit('stale/admin Android marker survived: ' + forbidden)
 
 p.write_text(s, encoding='utf-8')
-print('Prepared v1.3.4 user-only Android namespace, removed checked-in admin Java sources, and preserved Cloudflare user push/vibration contract.')
+print('Prepared v1.3.4 user-only Android namespace, removed checked-in admin Java sources, normalized v1.3.4 verifier identity, and preserved Cloudflare user push/vibration contract.')
