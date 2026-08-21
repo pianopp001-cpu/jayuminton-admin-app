@@ -14,6 +14,15 @@ s = s.replace('JAVA_DIR="app/src/main/java/com/jayuminton/admin"',
 s = s.replace("namespace 'com.jayuminton.admin'", "namespace 'com.jayuminton.user'")
 s = s.replace('package com.jayuminton.admin;', 'package com.jayuminton.user;')
 
+# The repository itself contains the administrator Android sources. A user APK build
+# must remove those checked-in sources before javac runs, otherwise Gradle compiles
+# both the user package and the old administrator MainActivity.
+anchor = 'mkdir -p "$JAVA_DIR" releases deployment/status signing'
+replacement = 'rm -rf app/src/main/java/com/jayuminton/admin\nmkdir -p "$JAVA_DIR" releases deployment/status signing'
+if anchor not in s:
+    raise SystemExit('user build mkdir anchor missing')
+s = s.replace(anchor, replacement, 1)
+
 # v1.3.4 identity.
 repls = (
     ('VERSION="1.3.3"', 'VERSION="1.3.4"'),
@@ -35,6 +44,7 @@ required = (
     "namespace 'com.jayuminton.user'",
     "applicationId 'com.jayuminton.user'",
     'package com.jayuminton.user;',
+    'rm -rf app/src/main/java/com/jayuminton/admin',
     'https://jayuminton-push.web.app/',
     'NativeUserApp',
     'NativePushRegistrar.isCurrentMember(this, targetMemberId)',
@@ -53,4 +63,4 @@ for forbidden in (
         raise SystemExit('admin Android namespace survived: ' + forbidden)
 
 p.write_text(s, encoding='utf-8')
-print('Prepared v1.3.4 user-only Android namespace with Cloudflare user web and existing push/vibration contract.')
+print('Prepared v1.3.4 user-only Android namespace, removed checked-in admin Java sources, and preserved Cloudflare user push/vibration contract.')
