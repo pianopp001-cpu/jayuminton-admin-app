@@ -1,4 +1,4 @@
-run_id=32461544337
+run_id=32463673584
 source=live-relay-read-only
 __REDACTED_LONG_VALUE__
 has_targetMemberId=False
@@ -56,6 +56,104 @@ function sendAssignmentEvent_(event) {
     throw error;
   }
 }
+
+=== sendAssignmentEventWithoutDiagnostics_ ===
+function sendAssignmentEventWithoutDiagnostics_(event) {
+  const records = loadWebPushTokens_();
+  const now = Date.now();
+  const memberIds = {};
+  event.members.forEach(function(member) {
+    memberIds[member.id] = member;
+  });
+
+  const targets = [];
+  const seenTokens = {};
+  records.forEach(function(record) {
+    if (!record || !record.token || seenTokens[record.token]) return;
+    if (now - Number(record.updatedAt || 0) >
+        JAYUMINTON_PUSH_CONFIG.tokenMaxAgeMs) return;
+    const member = memberIds[String(record.memberId || '')];
+    if (!member) return;
+    seenTokens[record.token] = true;
+    targets.push({
+      token: record.token,
+      member: member,
+      userAgent: String(record.userAgent || '')
+    });
+  });
+
+  if (!targets.length) {
+    return {
+      ok: true,
+      assignmentId: event.assignmentId,
+      sent: 0,
+      failed: 0,
+      noRegisteredBrowser: event.members.length
+    };
+  }
+
+  const accessToken = getFcmAccessToken_();
+  const requests = targets.map(function(target) {
+    return makeWebFcmRequest_(
+      event,
+      target.member,
+      target.token,
+      accessToken,
+      target.userAgent
+    );
+  });
+  const responses = UrlFetchApp.fetchAll(requests);
+
+  const failedTokens = [];
+  let sent = 0;
+  responses.forEach(function(response, index) {
+    const status = response.getResponseCode();
+    if (status >= 200 && status < 300) {
+      sent += 1;
+      return;
+    }
+
+    const text = response.getContentText();
+    const target = targets[index];
+    console.error(JSON.stringify({
+      message: 'FCM web send failed',
+      assignmentId: event.assignmentId,
+      memberId: target.member.id,
+      status: status,
+      response: text
+    }));
+
+    if (status === 404 || status === 410 ||
+        /UNREGISTERED|registration-token-not-registered/i.test(text)) {
+      failedTokens.push(target.token);
+    }
+  });
+
+  if (failedTokens.length) {
+    removeInvalidTokens_(failedTokens);
+  }
+
+  return {
+    ok: sent === targets.length,
+    assignmentId: event.assignmentId,
+    sent: sent,
+    failed: targets.length - sent
+  };
+}
+
+=== nativeTokenKind_ ===
+function nativeTokenKind_(userAgent) {
+  const value = String(userAgent || '');
+  if (/JayumintonNativeAndroid\//i.test(value)) return 'nativeUser';
+  if (/JayumintonMemberNative\//i.test(value)) return 'nativeMember';
+  return 'browser';
+}
+
+=== sendNativeUserPush_ ===
+NOT_FOUND
+
+=== sendFcmHttpV1_ ===
+NOT_FOUND
 
 === sendFcmMessage_ ===
 NOT_FOUND
@@ -183,7 +281,14 @@ function cleanEvent_(body) {
 }
 
 SUMMARY
-sendAssignmentEvent_targetMemberId_refs=0
-sendAssignmentEvent_memberId_refs=1
-sendAssignmentEvent_token_refs=0
-result=SUSPECT_MISSING_TARGET_MEMBER_ID
+wrapper_found=True
+wrapper_targetMemberId_refs=0
+wrapper_memberId_refs=1
+wrapper_token_refs=0
+wrapper_fcm_refs=0
+core_found=True
+core_targetMemberId_refs=0
+core_memberId_refs=2
+core_token_refs=8
+core_fcm_refs=2
+result=CORE_MISSING_TARGET_MEMBER_ID
