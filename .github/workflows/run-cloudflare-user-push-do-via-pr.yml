@@ -1,0 +1,147 @@
+name: Run Cloudflare Durable Object user push via PR
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cloudflare/user-push/pr-run-do-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-cloudflare-user-push-do-pr
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      WORKER_NAME: jayuminton-user-push
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.7'}
+      - run: npm install --global wrangler@latest firebase-tools@latest @google/clasp@latest
+      - uses: google-github-actions/auth@v2
+        with: {credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}'}
+
+      - name: Resolve config
+        shell: bash
+        run: |
+          set -euo pipefail
+          for v in "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ACCOUNT_ID" "$FIREBASE_SERVICE_ACCOUNT_JSON" "$JAYUMINTON_PUSH_SHARED_SECRET" "$JAYUMINTON_DEPLOY_CONFIG_JSON" "$CLASPRC_JSON"; do test -n "$v"; done
+          node --check cloudflare/user-push/worker-do.js
+          C="$RUNNER_TEMP/deploy.json"; printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"; printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$C")"; MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId // empty' "$C")"; FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$C")"
+          for v in "$MAIN_SCRIPT_ID" "$MAIN_DEPLOYMENT_ID" "$FIREBASE_PROJECT_ID"; do test -n "$v"; done
+          printf 'MAIN_SCRIPT_ID=%s\nMAIN_DEPLOYMENT_ID=%s\nFIREBASE_PROJECT_ID=%s\n' "$MAIN_SCRIPT_ID" "$MAIN_DEPLOYMENT_ID" "$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Deploy Worker with Durable Object storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/cfpushdo"; mkdir -p "$ROOT"; cp cloudflare/user-push/worker-do.js "$ROOT/worker.js"
+          cat > "$ROOT/wrangler.toml" <<EOF
+          name = "$WORKER_NAME"
+          main = "worker.js"
+          compatibility_date = "2026-08-21"
+          workers_dev = true
+          account_id = "$CLOUDFLARE_ACCOUNT_ID"
+
+          [[durable_objects.bindings]]
+          name = "PUSH_REGISTRY"
+          class_name = "PushRegistry"
+
+          [[migrations]]
+          tag = "v1"
+          new_sqlite_classes = ["PushRegistry"]
+          EOF
+          cd "$ROOT"
+          wrangler deploy --config wrangler.toml | tee "$RUNNER_TEMP/wr1.txt"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" | wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --config wrangler.toml >/dev/null
+          printf '%s' "$JAYUMINTON_PUSH_SHARED_SECRET" | wrangler secret put INTERNAL_KEY --config wrangler.toml >/dev/null
+          wrangler deploy --config wrangler.toml | tee "$RUNNER_TEMP/wr2.txt"
+          URL="$(cat "$RUNNER_TEMP/wr1.txt" "$RUNNER_TEMP/wr2.txt" | grep -Eo 'https://[^ ]+\.workers\.dev' | tail -1)"; test -n "$URL"
+          echo "WORKER_URL=$URL" >> "$GITHUB_ENV"; echo "WORKER_URL=$URL"
+
+      - name: Verify mapping and event contract
+        shell: bash
+        run: |
+          set -euo pipefail; sleep 3
+          curl -fsS "$WORKER_URL/health" | tee "$RUNNER_TEMP/h.json"; jq -e '.ok==true and .storage=="durable-object"' "$RUNNER_TEMP/h.json" >/dev/null
+          TOKEN="cf-do-diag-$(printf '%090d' 0)-$GITHUB_RUN_ID"
+          curl -fsS -X POST "$WORKER_URL/api/push/register" -H 'Content-Type: application/json' --data "$(jq -nc --arg token "$TOKEN" '{memberId:"__diag_cf_do__",memberName:"DIAG",token:$token,userAgent:"JayumintonNativeAndroid/diag"}')" > "$RUNNER_TEMP/r.json"; jq -e '.ok==true' "$RUNNER_TEMP/r.json" >/dev/null
+          curl -fsS -X POST "$WORKER_URL/api/push/status" -H 'Content-Type: application/json' --data "$(jq -nc --arg token "$TOKEN" '{memberId:"__diag_cf_do__",token:$token}')" > "$RUNNER_TEMP/s.json"; jq -e '.registered==true' "$RUNNER_TEMP/s.json" >/dev/null
+          curl -fsS -X POST "$WORKER_URL/api/push/event" -H 'Content-Type: application/json' -H "X-Jayuminton-Key: $JAYUMINTON_PUSH_SHARED_SECRET" --data '{"type":"wait1_ready","assignmentId":"diag-no-target-do-12345678","expectedCourtNo":1,"members":[{"id":"__no_registered_target__","name":"DIAG"}]}' > "$RUNNER_TEMP/e.json"; cat "$RUNNER_TEMP/e.json"; jq -e '.ok==true and .sent==0' "$RUNNER_TEMP/e.json" >/dev/null
+          curl -fsS -X POST "$WORKER_URL/api/push/unregister" -H 'Content-Type: application/json' --data "$(jq -nc --arg token "$TOKEN" '{token:$token}')" >/dev/null
+          echo 'CLOUDFLARE_DURABLE_PUSH_CONTRACT_OK'
+
+      - name: Switch live transition sender to Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/main"; mkdir -p "$W"; printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$W/.clasp.json"; (cd "$W" && clasp pull)
+          python3 - "$W/Code.js" "$WORKER_URL/api/push/event" "$JAYUMINTON_PUSH_SHARED_SECRET" <<'PY'
+          from pathlib import Path
+          import re,sys
+          p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
+          for n,v in [('JAYUMINTON_STATE_PUSH_RELAY_URL_',sys.argv[2]),('JAYUMINTON_STATE_PUSH_INTERNAL_KEY_',sys.argv[3])]:
+              pat=r"((?:const|let|var)\s+"+re.escape(n)+r"\s*=\s*)['\"][^'\"]*['\"]\s*;"
+              s,c=re.subn(pat,lambda m:m.group(1)+repr(v)+';',s,count=1)
+              if c!=1: raise SystemExit('missing '+n)
+          p.write_text(s,encoding='utf-8')
+          PY
+          node --check "$W/Code.js"; grep -F "$WORKER_URL/api/push/event" "$W/Code.js" >/dev/null
+          (cd "$W" && clasp push --force && clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "cloudflare DO push $GITHUB_RUN_ID")
+          echo 'LIVE_TRANSITION_SENDER_CLOUDFLARE_DO_OK'
+
+      - name: Prepare Android Firebase config
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          ID="$(jq -r '[.. | objects | select(((.packageName? == "com.jayuminton.user") or (.package_name? == "com.jayuminton.user") or (.androidClientInfo?.packageName? == "com.jayuminton.user")) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"; test -n "$ID"
+          firebase apps:sdkconfig ANDROID "$ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json; grep -F 'com.jayuminton.user' app/google-services.json >/dev/null
+
+      - name: Build Cloudflare push user APK
+        shell: bash
+        run: |
+          set -euo pipefail; export PUSH_URL="$WORKER_URL"
+          S="$RUNNER_TEMP/build.sh"; cp deployment/scripts/build_user_native_push_fresh_v110.sh "$S"
+          for p in patch_build_user_native_v111.py patch_build_user_native_v112.py patch_build_user_native_v113.py patch_build_user_native_v114.py patch_build_user_native_v115.py patch_build_user_native_v116.py patch_build_user_native_v117.py patch_build_user_native_v118.py patch_build_user_native_v119.py patch_build_user_native_v120_diagnostic.py patch_build_user_native_v121.py patch_build_user_native_v122.py patch_build_user_native_v124_confirmed_overlay.py patch_build_user_native_v126_stop_controller.py patch_build_user_native_v126_raceguard.py patch_build_user_native_v127_member_switch.py patch_build_user_native_v128_repeat_switch.py patch_build_user_native_v129_background_registration.py; do python3 "deployment/scripts/$p" "$S"; done
+          python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$S"; python3 deployment/scripts/patch_user_native_v132_strict_current_member.py "$S"
+          grep -F 'private static final int MAX_GROUPS = 8;' "$S" >/dev/null; grep -F 'NativePushRegistrar.isCurrentMember(this, targetMemberId)' "$S" >/dev/null
+          bash "$S"; SRC='releases/jayuminton-courtstatus-v1.3.2-current-member-only.apk'; test -s "$SRC"; cp "$SRC" "$RUNNER_TEMP/jayuminton-courtstatus-v1.3.2-cloudflare-push.apk"
+
+      - name: Publish APK to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD; git pull --rebase origin main || true
+          APK='releases/jayuminton-courtstatus-v1.3.2-cloudflare-push.apk'; cp "$RUNNER_TEMP/jayuminton-courtstatus-v1.3.2-cloudflare-push.apk" "$APK"
+          sha256sum "$APK" > deployment/status/user-cloudflare-push-v1.3.2.sha256
+          printf 'status=success\npush_backend=cloudflare-worker\nmapping_store=cloudflare-durable-object\nmapping_generation=fresh-v1\nworker_url=%s\nversion=1.3.2\napplication_id=com.jayuminton.user\nvibration_max_groups=8\nassignment_scope=current-selected-member-only\n' "$WORKER_URL" > deployment/status/user-cloudflare-push-v1.3.2.txt
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$APK" deployment/status/user-cloudflare-push-v1.3.2.*; git commit -m 'Publish Cloudflare Durable Object push user APK' || exit 0; git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-user-cloudflare-push-v1.3.2
+          path: ${{ runner.temp }}/jayuminton-courtstatus-v1.3.2-cloudflare-push.apk
+          if-no-files-found: error
+          retention-days: 30
