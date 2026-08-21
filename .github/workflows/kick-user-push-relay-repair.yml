@@ -25,3 +25,4 @@ jobs:
             "https://api.github.com/repos/$REPO/actions/workflows/diagnose-user-wait1-push.yml/dispatches" \
             -d '{"ref":"main"}'
 # first install
+# trigger now 2026-08-21
