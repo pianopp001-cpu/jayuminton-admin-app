@@ -24,31 +24,16 @@ repls = (
 for old,new in repls:
     s=s.replace(old,new)
 
-# Robustly replace the shell-level USER_URL regardless of extra query parameters
-# added by earlier patches. This is safer than depending on one exact historical URL.
-s, n = re.subn(
-    r'(?m)^USER_URL="https://script\.google\.com/macros/s/[^\"]+"\s*$',
-    f'USER_URL="{USER_WEB}"',
-    s,
-    count=1,
-)
+# The generated build script always has exactly one shell USER_URL assignment.
+# Replace that assignment by variable name instead of depending on its exact URL text,
+# because earlier native patches can alter the query string before this patch runs.
+s,n = re.subn(r'^USER_URL=.*$', f'USER_URL="{USER_WEB}"', s, count=1, flags=re.M)
 if n != 1:
-    # Fallback for variants where only the generated Java constant remains.
-    s, n2 = re.subn(
-        r'private static final String USER_URL = "https://script\.google\.com/macros/s/[^\"]+";',
-        f'private static final String USER_URL = "{USER_WEB}";',
-        s,
-        count=1,
-    )
-    if n2 != 1:
-        raise SystemExit('Apps Script USER_URL anchor not found')
+    raise SystemExit('USER_URL assignment not found exactly once')
 
-# Cloudflare/Firebase standalone URL has no query string. Base builder appends &ts=,
-# so make that generated WebView load expression separator-safe.
-s = s.replace(
-    'webView.loadUrl(USER_URL + "&ts=" + System.currentTimeMillis(), headers);',
-    'webView.loadUrl(USER_URL + (USER_URL.contains("?") ? "&ts=" : "?ts=") + System.currentTimeMillis(), headers);'
-)
+# Cloudflare/Firebase web root has no existing query string, so timestamp must start with ?.
+s = s.replace('webView.loadUrl(USER_URL + "&ts=" + System.currentTimeMillis(), headers);',
+              'webView.loadUrl(USER_URL + (USER_URL.contains("?") ? "&ts=" : "?ts=") + System.currentTimeMillis(), headers);')
 
 required = (
     USER_WEB,
@@ -63,8 +48,8 @@ required = (
 for marker in required:
     if marker not in s:
         raise SystemExit('missing v1.3.3 marker: ' + marker)
-if re.search(r'(?m)^USER_URL="https://script\.google\.com/macros/s/', s):
+if 'script.google.com/macros/s/' in re.search(r'^USER_URL=.*$', s, flags=re.M).group(0):
     raise SystemExit('Apps Script USER_URL survived v1.3.3')
 
 p.write_text(s, encoding='utf-8')
-print('Prepared v1.3.3: Cloudflare user web + strict selected-member push + max8 vibration.')
+print('Prepared v1.3.3: Cloudflare/Firebase user web + strict current-member push + max8 vibration.')
