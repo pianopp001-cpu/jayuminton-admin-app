@@ -136,3 +136,4 @@ jobs:
           git pull --rebase origin main || true
           git push origin main
 # final direct repair trigger 2026-08-21 10:33 KST
+# fresh current-workflow trigger 2026-08-21 10:48 KST
