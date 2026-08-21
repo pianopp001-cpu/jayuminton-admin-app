@@ -130,4 +130,4 @@ jobs:
           git commit -m 'Record user push relay repair stage' || exit 0
           git pull --rebase origin main || true
           git push origin main
-# retrigger live repair 2026-08-21
+# retrigger verified live repair 2026-08-21
