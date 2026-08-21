@@ -42,6 +42,7 @@ def extract_function(name):
 names = [
     'sendAssignmentEvent_',
     'sendAssignmentEventWithoutDiagnostics_',
+    'makeWebFcmRequest_',
     'nativeTokenKind_',
     'sendNativeUserPush_',
     'sendFcmHttpV1_',
@@ -52,7 +53,7 @@ names = [
     'cleanEvent_',
 ]
 
-print('READ_ONLY_RELAY_ASSIGNMENT_INSPECTION_V2')
+print('READ_ONLY_RELAY_ASSIGNMENT_INSPECTION_V3')
 print('has_targetMemberId=' + str('targetMemberId' in src))
 print('has_memberId=' + str('memberId' in src))
 print('has_wait1_ready=' + str('wait1_ready' in src))
@@ -69,22 +70,25 @@ for name in names:
 
 assignment = extract_function('sendAssignmentEvent_')
 core = extract_function('sendAssignmentEventWithoutDiagnostics_')
+request = extract_function('makeWebFcmRequest_')
 print('\nSUMMARY')
-for label, fn in [('wrapper', assignment), ('core', core)]:
+for label, fn in [('wrapper', assignment), ('core', core), ('request', request)]:
     if not fn:
         print(label + '_found=False')
         continue
     print(label + '_found=True')
     print(label + '_targetMemberId_refs=' + str(len(re.findall(r'targetMemberId', fn))))
-    print(label + '_memberId_refs=' + str(len(re.findall(r'\.memberId\b|\bmemberId\b', fn))))
+    print(label + '_memberId_refs=' + str(len(re.findall(r'\.memberId\b|\bmemberId\b|member\.id', fn))))
     print(label + '_token_refs=' + str(len(re.findall(r'\.token\b|\btoken\b', fn))))
-    print(label + '_fcm_refs=' + str(len(re.findall(r'FCM|fcm|sendNative|sendWeb|UrlFetchApp', fn))))
-if core:
-    if 'targetMemberId' not in core:
-        print('result=CORE_MISSING_TARGET_MEMBER_ID')
-    elif not re.search(r'record\s*\.\s*memberId|memberId', core):
-        print('result=CORE_TARGET_PRESENT_BUT_MEMBER_MAPPING_SUSPECT')
+    print(label + '_data_refs=' + str(len(re.findall(r'\bdata\b', fn))))
+if request:
+    if 'targetMemberId' not in request:
+        print('result=REQUEST_MISSING_TARGET_MEMBER_ID')
+    elif not re.search(r'targetMemberId\s*:\s*String\([^\n]*member[^\n]*\.id|targetMemberId\s*:\s*member\.id', request):
+        print('result=REQUEST_TARGET_MEMBER_MAPPING_SUSPECT')
     else:
-        print('result=CORE_TARGET_AND_MEMBER_MAPPING_PRESENT')
+        print('result=REQUEST_TARGET_MEMBER_MAPPING_PRESENT')
+elif core:
+    print('result=REQUEST_FUNCTION_NOT_FOUND')
 else:
     print('result=CORE_FUNCTION_NOT_FOUND')
