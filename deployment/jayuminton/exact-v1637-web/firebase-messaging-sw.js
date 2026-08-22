@@ -1,5 +1,5 @@
-const JAYUMINTON_SW_VERSION = '1.6.37-fix1';
-const JAYUMINTON_CACHE = 'jayuminton-shell-v211';
+const JAYUMINTON_SW_VERSION = '1.6.37-fix2-vibration-3x8';
+const JAYUMINTON_CACHE = 'jayuminton-shell-v212';
 const JAYUMINTON_SHELL = [
   '/',
   '/index.html',
@@ -83,6 +83,17 @@ self.addEventListener('notificationclick', (event) => {
   })());
 });
 
+function assignmentVibration3x8() {
+  const pattern = [0];
+  for (let set = 0; set < 8; set += 1) {
+    for (let pulse = 0; pulse < 3; pulse += 1) {
+      pattern.push(320, 180);
+    }
+    if (set < 7) pattern.push(650);
+  }
+  return pattern;
+}
+
 let messaging = null;
 try {
   importScripts('https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js');
@@ -97,47 +108,32 @@ try {
     appId: '1:758697255400:web:7214800018c65b7827045d'
   });
   
-  const messaging = firebase.messaging();
+  messaging = firebase.messaging();
   
   messaging.onBackgroundMessage((payload) => {
     const data = payload && payload.data ? payload.data : {};
-    const vibration = data.type === 'court_assignment'
-      ? [1400,500,1400,500,1400]
-      : [900,450,900,450,900];
-    const repeatCount = Math.max(1, Math.min(3, Number(
-      data.repeatCount || (data.type === 'court_assignment' ? 3 : 1)
-    )));
-  
-    return (async () => {
-      for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex += 1) {
-        const titleBase = data.title || '자유민턴 배정 알림';
-        const shownTitle = data.type === 'court_assignment' && repeatCount > 1
-          ? '🚨 ' + titleBase + ' (' + (repeatIndex + 1) + '/3)'
-          : '🏸 ' + titleBase;
-        await self.registration.showNotification(shownTitle, {
-          body: data.body || '새 배정 안내가 있습니다.',
-          requireInteraction: data.type === 'court_assignment',
-          silent: false,
-          icon: '/icon-198.png',
-          badge: '/badge-96.png',
-          tag: (data.notificationTag || data.assignmentId || 'jayuminton-assignment') + '_' + (repeatIndex + 1),
-          renotify: true,
-          vibrate: vibration,
-          data: {
-            assignmentId: data.assignmentId || ''
-          }
-        });
-        if (repeatIndex + 1 < repeatCount) {
-          await new Promise((resolve) => setTimeout(resolve, 6500));
-        }
+    const vibration = assignmentVibration3x8();
+    const titleBase = data.title || '자유민턴 배정 알림';
+    const shownTitle = '🏸 ' + titleBase;
+
+    return self.registration.showNotification(shownTitle, {
+      body: data.body || '새 배정 안내가 있습니다.',
+      requireInteraction: data.type === 'court_assignment',
+      silent: false,
+      icon: '/icon-198.png',
+      badge: '/badge-96.png',
+      tag: data.notificationTag || data.assignmentId || 'jayuminton-assignment',
+      renotify: true,
+      vibrate: vibration,
+      data: {
+        assignmentId: data.assignmentId || ''
       }
-    })();
+    });
   });
 } catch (error) {
   // PWA installation and basic service-worker control must still work even if the Firebase CDN is temporarily unavailable.
   console.error('[Jayuminton] Firebase messaging worker initialization failed:', error);
 }
-
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'JAYUMINTON_SKIP_WAITING') self.skipWaiting();
