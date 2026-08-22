@@ -51,6 +51,16 @@ if 'JAYUMINTON_ADMIN_FAST_FINISH_RETURN_V1' not in block:
 
     if 'writeWaitGroups_(shifted);' in block:
         block = block.replace('writeWaitGroups_(shifted);', 'waitGroups = shifted;\n    writeWaitGroups_(waitGroups);', 1)
+    else:
+        inline_shift = "writeWaitGroups_([(waitGroups[1]||[]).slice(),(waitGroups[2]||[]).slice(),(waitGroups[3]||[]).slice(),(waitGroups[4]||[]).slice(),[]]);"
+        if inline_shift in block:
+            block = block.replace(
+                inline_shift,
+                "waitGroups = [(waitGroups[1]||[]).slice(),(waitGroups[2]||[]).slice(),(waitGroups[3]||[]).slice(),(waitGroups[4]||[]).slice(),[]];\n    writeWaitGroups_(waitGroups);",
+                1,
+            )
+        elif 'writeWaitGroups_(waitGroups);' not in block:
+            raise SystemExit('finish shifted wait-group write anchor missing')
 
     pos = block.rfind('return getPublicState();')
     if pos < 0:
@@ -61,5 +71,7 @@ if 'JAYUMINTON_ADMIN_FAST_FINISH_RETURN_V1' not in block:
 
 if 'JAYUMINTON_ADMIN_FAST_FINISH_RETURN_V1' not in text:
     raise SystemExit('fast finish marker missing')
+if 'waitGroups = [(waitGroups[1]||[]).slice()' not in block:
+    raise SystemExit('fast finish must return the promoted wait groups')
 path.write_text(text, encoding='utf-8')
 print('ADMIN_FAST_FINISH_RETURN_OK')
