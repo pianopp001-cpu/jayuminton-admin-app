@@ -24,12 +24,14 @@ jobs:
       - uses: actions/checkout@v4
         with: {ref: main, fetch-depth: 0}
 
-      - name: Apply exclusive audio focus to admin native shell
+      - name: Apply non-pausing audio ducking to admin native shell
         shell: bash
         run: |
           set -euo pipefail
           python3 deployment/jayuminton/admin_native_audio_focus_patch.py app/src/main/java/com/jayuminton/admin/MainActivity.java
-          grep -F 'AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
+          grep -F 'AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
+          grep -F 'setWillPauseWhenDucked(false)' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
+          ! grep -F 'AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'MEDIA_DUCK_VOLUME_STEP = 6' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
           grep -F 'setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
           grep -F 'abandonAudioFocusRequest' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
@@ -42,7 +44,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app/src/main/java/com/jayuminton/admin/MainActivity.java
           if ! git diff --cached --quiet; then
-            git commit -m 'Apply exclusive audio focus for admin court voice'
+            git commit -m 'Keep music audible during admin court voice'
             git pull --rebase origin main
             git push origin main
           fi
@@ -78,4 +80,4 @@ jobs:
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
       - name: Done
-        run: echo 'ADMIN_FULL_VOICE_AUDIO_FOCUS_REBUILD_OK'
+        run: echo 'ADMIN_VOICE_MAY_DUCK_REBUILD_OK'
