@@ -1,0 +1,8 @@
+status=success
+version=1.3.4
+version_code=2000134
+application_id=com.jayuminton.user
+push_backend=cloudflare-durable-object
+vibration=3-pulses-x8-groups-until-confirmed
+assignment_scope=current-selected-member-only
+roster_names=up-to-4
