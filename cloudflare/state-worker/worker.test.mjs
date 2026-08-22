@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -47,12 +47,18 @@ function fixture() {
 {
   const created = upsertMemberMutation(fixture(), { id: '18', name: '신규회원', gender: '여', isNew: true });
   assert.equal(created.state.members.find(m => m.id === '18').status, 'active');
+  assert.equal(created.state.members.find(m => m.id === '18').gender, 'female');
   const resting = setMemberStatusMutation(created.state, ['18'], 'rest');
   assert.equal(resting.state.members.find(m => m.id === '18').status, 'rest');
   const counted = adjustGamesMutation(resting.state, ['18'], 1);
   assert.equal(counted.state.members.find(m => m.id === '18').games, 1);
   const away = setMemberStatusMutation(counted.state, ['18'], 'away');
   assert.equal(away.state.members.find(m => m.id === '18').status, 'away');
+}
+{
+  const requested = requestSwapMutation(fixture(), '1', '7', 1000);
+  const cancelled = cancelSwapMutation(requested.state, '1');
+  assert.equal(cancelled.state.swapRequests[0].status, 'cancelled');
 }
 {
   const requested = requestSwapMutation(fixture(), '1', '7', 1000);

@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'cloudflare/state-worker/**'
+      - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
+      - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
       - '.github/workflows/deploy-cloudflare-state-shadow.yml'
   workflow_dispatch: {}
 
@@ -40,10 +42,25 @@ jobs:
           test "${#INTERNAL_KEY}" -ge 32
           node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/worker.test.mjs
+          node --check deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          python3 -m py_compile deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
-          grep -F "rpcVersion: 5" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "rpcVersion: 6" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "'/api/compat/rpc'" cloudflare/state-worker/worker.js >/dev/null
           if grep -R -F 'script.google.com' cloudflare/state-worker; then exit 1; fi
+
+      - name: Verify unchanged rendered screens accept Cloudflare bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rendered"
+          curl --fail --location --retry 5 'https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?bridge-check=admin' -o "$RUNNER_TEMP/rendered/admin.html"
+          curl --fail --location --retry 5 'https://jayuminton-push.web.app/config-v204.js?bridge-check=member' -o "$RUNNER_TEMP/rendered/member.html"
+          python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$RUNNER_TEMP/rendered/admin.html"
+          python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$RUNNER_TEMP/rendered/member.html"
+          test "$(grep -c '__JAYUMINTON_CLOUDFLARE_RPC_V6__' "$RUNNER_TEMP/rendered/admin.html")" -eq 1
+          test "$(grep -c '__JAYUMINTON_CLOUDFLARE_RPC_V6__' "$RUNNER_TEMP/rendered/member.html")" -eq 1
 
       - name: Create or resolve D1 database
         shell: bash
@@ -119,3 +136,6 @@ jobs:
           if actual != expected['digest']: raise SystemExit('state projection digest mismatch')
           print('D1_SHADOW_IMPORT_VERIFIED members=%s sha256=%s'%(expected['memberCount'],actual))
           PY
+          curl --fail --location -X POST "$WORKER_URL/api/compat/rpc" -H 'Content-Type: application/json' --data '{"name":"getPublicState","args":[]}' -o "$RUNNER_TEMP/compat-unauthorized.json"
+          jq -e '.ok==false and .error=="unauthorized"' "$RUNNER_TEMP/compat-unauthorized.json" >/dev/null
+          echo 'COMPAT_RPC_UNAUTHORIZED_STATE_BLOCKED'

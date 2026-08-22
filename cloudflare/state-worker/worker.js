@@ -163,7 +163,7 @@ export function autoAssignMutation(input, candidateIds, destinations) {
 export function upsertMemberMutation(input, member) {
   const state = normalizeState(input); const id = String(member?.id || crypto.randomUUID()); const name = String(member?.name || '').trim();
   if (!name || name.length > 20) throw new Error('invalid_member_name');
-  const clean = { id, name, gender: member.gender === '여' ? '여' : '남', grade: String(member.grade || ''), career: String(member.career || member.experience || ''), publicMemo: String(member.publicMemo || member.memo || ''), isNew: Boolean(member.isNew), isSponsor: Boolean(member.isSponsor), games: Math.max(0, Number(member.games) || 0), status: String(member.status || 'active'), createdAt: String(member.createdAt || new Date().toISOString()) };
+  const clean = { id, name, gender: ['여', 'female'].includes(String(member.gender)) ? 'female' : 'male', grade: String(member.grade || ''), experience: String(member.experience || member.career || ''), career: String(member.career || member.experience || ''), publicMemo: String(member.publicMemo || member.memo || ''), isNew: Boolean(member.isNew), isSponsor: Boolean(member.isSponsor), games: Math.max(0, Number(member.games) || 0), status: String(member.status || 'active'), createdAt: String(member.createdAt || new Date().toISOString()) };
   const index = state.members.findIndex(m => String(m.id) === id);
   if (index >= 0) state.members[index] = { ...state.members[index], ...clean }; else state.members.push(clean);
   return { state, event: { type: index >= 0 ? 'member_updated' : 'member_created', memberId: id } };
@@ -201,6 +201,13 @@ export function respondSwapMutation(input, requestId, responderId, accept, nowMs
   if (accept) state = swapMutation(state, [request.requesterId], [request.targetId]).state;
   const saved = state.swapRequests.find(r => r.id === request.id); if (saved) Object.assign(saved, request);
   return { state, event: { type: accept ? 'swap_accepted' : 'swap_rejected', requestId: request.id } };
+}
+
+export function cancelSwapMutation(input, requesterId) {
+  const state = normalizeState(input); const request = [...state.swapRequests].reverse().find(r => r.status === 'pending' && r.requesterId === String(requesterId));
+  if (!request) throw new Error('swap_request_not_found');
+  request.status = 'cancelled'; request.respondedAt = Date.now();
+  return { state, event: { type: 'swap_cancelled', requestId: request.id } };
 }
 
 async function digest(value) {
@@ -359,6 +366,7 @@ export class StateCoordinator {
       else if (action === 'adjustGames') result = adjustGamesMutation(current, body.memberIds, body.delta, body.reset);
       else if (action === 'requestSwap') result = requestSwapMutation(current, body.requesterId, body.targetId);
       else if (action === 'respondSwap') result = respondSwapMutation(current, body.requestId, body.responderId, body.accept);
+      else if (action === 'cancelSwap') result = cancelSwapMutation(current, body.requesterId);
       else if (action === 'setSettings') {
         result = { state: normalizeState(current), event: { type: 'settings_updated' } };
         if (body.memberPassword !== undefined) { result.state.settings.memberPassword = String(body.memberPassword); result.state.settings.memberPasswordVersion = Number(result.state.settings.memberPasswordVersion || 0) + 1; }
@@ -396,13 +404,104 @@ async function coordinatorAsInternal(request, env, action, body = {}) {
   return env.STATE_COORDINATOR.get(id).fetch(new Request(request.url, { method: 'POST', headers, body: JSON.stringify({ ...body, action }) }));
 }
 
+function bearerRequest(request, token) {
+  const headers = new Headers(request.headers); headers.set('authorization', `Bearer ${String(token || '')}`);
+  return new Request(request.url, { method: request.method, headers });
+}
+
+async function coordinatorPacket(request, env, action, body) {
+  const response = await coordinatorAsInternal(request, env, action, body); const packet = await response.json();
+  if (!packet.ok) throw new Error(packet.error || 'operation_failed');
+  return packet;
+}
+
+function latestSwap(state, predicate) {
+  return [...state.swapRequests].reverse().find(r => r.status === 'pending' && Number(r.expiresAt) > Date.now() && predicate(r)) || null;
+}
+
+export async function legacyRpc(request, env, name, args) {
+  const state = await readState(env.DB); const values = Array.isArray(args) ? args : []; const token = String(values[0] || '');
+  if (name === 'createAdminSession') {
+    if (!state.settings.adminPin || String(values[0] || '') !== String(state.settings.adminPin)) return { ok: false };
+    return { ok: true, token: await issueAdminSession(env, state) };
+  }
+  if (name === 'verifyMemberPassword') {
+    if (!state.settings.memberPassword || String(values[0] || '') !== String(state.settings.memberPassword)) return { ok: false };
+    return { ok: true, version: String(state.settings.memberPasswordVersion || 1), sessionToken: await issueMemberSession(env, state, '') };
+  }
+  if (name === 'getMemberPasswordVersion') return String(state.settings.memberPasswordVersion || 1);
+  if (name === 'resumeAdminSession') { await verifyAdminSession(bearerRequest(request, token), env, state); return true; }
+  if (name === 'resumeMemberSession') {
+    const session = await verifyMemberSession(bearerRequest(request, token), env, state);
+    return { ok: true, version: String(state.settings.memberPasswordVersion || 1), memberId: String(session.memberId || ''), sessionToken: token };
+  }
+  if (name === 'getPublicState') {
+    const headerToken = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+    try { await verifyAdminSession(bearerRequest(request, token || headerToken), env, state); return adminState(state); }
+    catch (_) { const session = await verifyMemberSession(bearerRequest(request, token || headerToken), env, state); return publicState(state, session.memberId); }
+  }
+
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
+  if (adminNames.has(name)) {
+    await verifyAdminSession(bearerRequest(request, token), env, state);
+    if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
+    if (name === 'getSystemStatus') return { updatedAt: state.updatedAt, revision: state.revision };
+    let action; let body = { operationId: `${name}-${Date.now()}-${crypto.randomUUID()}` };
+    if (name === 'addMember') { action = 'upsertMember'; body.member = { name: values[1], gender: values[2], grade: values[3], experience: values[4], ...(values[5] || {}) }; }
+    else if (name === 'updateMemberProfile') { action = 'upsertMember'; body.member = { id: values[1], name: values[2], gender: values[3], grade: values[4], experience: values[5], ...(values[6] || {}) }; }
+    else if (name === 'setMemberStatus') { action = 'setMemberStatus'; body.memberIds = values[1]; body.status = values[2]; }
+    else if (name === 'deleteMembers') { action = 'deleteMembers'; body.memberIds = values[1]; }
+    else if (name === 'assignMembersToCourt') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'court', key: String(values[1]) }; }
+    else if (name === 'assignMembersToWaitGroup') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'wait', key: String(Number(values[1]) + 1) }; }
+    else if (name === 'smartAssignSelected') { action = 'autoAssign'; body.candidateIds = values[1]; body.destinations = [{ type: 'court', key: String(values[2]) }]; }
+    else if (name === 'finishCourt') { action = 'finishCourt'; body.courtNo = values[1]; }
+    else if (name === 'undoLastAction') action = 'undoLast';
+    else if (name === 'adjustMemberGames') { action = 'adjustGames'; body.memberIds = [values[1]]; body.delta = values[2]; }
+    else if (name === 'decreaseSelectedGameCounts') { action = 'adjustGames'; body.memberIds = values[1]; body.delta = -1; }
+    else if (name === 'resetSelectedGameCounts') { action = 'adjustGames'; body.memberIds = values[1]; body.reset = true; }
+    else if (name === 'resetAllOperationData') action = 'resetAll';
+    else if (name === 'createManualBackup') action = 'backup';
+    else if (name === 'restoreManualBackup') action = 'restoreBackup';
+    else if (name === 'changeMemberPassword') { action = 'setSettings'; body.memberPassword = values[1]; }
+    const packet = await coordinatorPacket(request, env, action, body);
+    if (name === 'addMember' || name === 'updateMemberProfile') return { member: packet.state.members.find(m => String(m.id) === String(packet.event.memberId)), updatedAt: packet.state.updatedAt };
+    if (name === 'createManualBackup') return { ok: true, revision: packet.revision };
+    return packet.state || packet;
+  }
+
+  const memberNames = new Set(['memberMoveSelf','memberReturnSelfToWait','memberMoveToWaitGroup','memberLeaveWaitGroup','memberRequestAnywhereSwap','memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap','memberCancelAnywhereSwap','memberAcceptAnywhereSwap','memberRejectAnywhereSwap']);
+  if (memberNames.has(name)) {
+    const session = await verifyMemberSession(bearerRequest(request, token), env, state); const memberId = String(session.memberId || values[1] || '');
+    if (!memberId || (values[1] && String(values[1]) !== memberId)) throw new Error('member_identity_required');
+    if (name === 'memberGetAnywhereSwapRequest') return latestSwap(state, r => r.targetId === memberId);
+    if (name === 'memberGetAnywhereOutgoingSwap') return latestSwap(state, r => r.requesterId === memberId);
+    let action; const body = { operationId: `${name}-${Date.now()}-${crypto.randomUUID()}` };
+    if (name === 'memberMoveSelf') {
+      const destination = values[2] || {};
+      if (destination.type === 'status') { action = 'setMemberStatus'; body.memberIds = [memberId]; body.status = destination.status; }
+      else { action = 'moveMembers'; body.memberIds = [memberId]; body.destination = destination; }
+    } else if (name === 'memberReturnSelfToWait' || name === 'memberLeaveWaitGroup') { action = 'setMemberStatus'; body.memberIds = [memberId]; body.status = 'active'; }
+    else if (name === 'memberMoveToWaitGroup') { action = 'moveMembers'; body.memberIds = [memberId]; body.destination = { type: 'wait', key: String(Number(values[2]) + 1) }; }
+    else if (name === 'memberRequestAnywhereSwap') { action = 'requestSwap'; body.requesterId = memberId; body.targetId = String(values[2]); }
+    else if (name === 'memberCancelAnywhereSwap') { action = 'cancelSwap'; body.requesterId = memberId; }
+    else {
+      const requesterId = String(values[2]); const createdAt = Number(values[3] || 0); const pending = latestSwap(state, r => r.targetId === memberId && r.requesterId === requesterId && (!createdAt || Number(r.createdAt) === createdAt));
+      if (!pending) throw new Error('swap_request_not_found');
+      action = 'respondSwap'; body.requestId = pending.id; body.responderId = memberId; body.accept = name === 'memberAcceptAnywhereSwap';
+    }
+    const packet = await coordinatorPacket(request, env, action, body);
+    return { ok: true, state: publicState(packet.state, memberId), message: '저장되었습니다.' };
+  }
+  throw new Error('unsupported_legacy_rpc');
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: jsonHeaders });
     const url = new URL(request.url);
     if (url.pathname === '/health') {
       let database = false; try { await env.DB.prepare('SELECT 1 AS ok').first(); database = true; } catch (_) {}
-      return reply({ ok: database, backend: 'cloudflare-only', database: 'd1', concurrency: 'durable-object', gas: false, rpcVersion: 5 });
+      return reply({ ok: database, backend: 'cloudflare-only', database: 'd1', concurrency: 'durable-object', gas: false, rpcVersion: 6 });
     }
     if (url.pathname === '/api/internal/state' && request.method === 'GET') {
       try { assertInternal(request, env); } catch (_) { return reply({ ok: false, error: 'unauthorized' }, 401); }
@@ -411,6 +510,10 @@ export default {
     if (url.pathname === '/api/internal/import' && request.method === 'POST') return coordinator(request, env, 'import', await request.json());
     if (url.pathname === '/api/internal/backup' && request.method === 'POST') return coordinator(request, env, 'backup');
     if (url.pathname === '/api/internal/rpc' && request.method === 'POST') { const body = await request.json(); return coordinator(request, env, String(body.action || ''), body); }
+    if (url.pathname === '/api/compat/rpc' && request.method === 'POST') {
+      try { const body = await request.json(); return reply({ ok: true, result: await legacyRpc(request, env, String(body.name || ''), body.args) }); }
+      catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 200); }
+    }
     if (url.pathname === '/api/member/login' && request.method === 'POST') {
       const body = await request.json(); const state = await readState(env.DB);
       if (!state.settings.memberPassword || String(body.password || '') !== String(state.settings.memberPassword)) return reply({ ok: false, error: 'invalid_password' }, 401);
@@ -454,7 +557,7 @@ export default {
     if (url.pathname === '/api/admin/rpc' && request.method === 'POST') {
       try {
         const state = await readState(env.DB); await verifyAdminSession(request, env, state); const body = await request.json();
-        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast']);
+        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
         if (!allowed.has(String(body.action || ''))) return reply({ ok: false, error: 'unsupported_admin_action' }, 400);
         return coordinatorAsInternal(request, env, String(body.action), body);
       } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
