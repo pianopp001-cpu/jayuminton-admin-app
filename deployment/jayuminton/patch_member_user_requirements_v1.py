@@ -153,7 +153,17 @@ ADDON = r'''
 
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
+    apk_url = (
+        "https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/"
+        "releases/jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk"
+    )
+    text = text.replace(
+        "https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/"
+        "releases/jayuminton-user-v1.0.0.apk",
+        apk_url,
+    )
     if MARKER in text:
+        path.write_text(text, encoding="utf-8")
         return
     marker = "</body>"
     if marker not in text:
