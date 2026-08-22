@@ -14,7 +14,7 @@ export function emptyState() {
     courts: { '1': [], '2': [], '3': [], '4': [] },
     courtStartedAt: { '1': '', '2': '', '3': '', '4': '' },
     waitGroups: [[], [], [], [], []],
-    settings: { memberPassword: '', memberPasswordVersion: 1, courtOrientation: 'door-right' },
+    settings: { memberPassword: '', memberPasswordVersion: 1, adminPin: '', adminPinVersion: 1, courtOrientation: 'door-right' },
     swapRequests: [], actionHistory: [], updatedAt: new Date(0).toISOString(),
   };
 }
@@ -248,6 +248,10 @@ async function issueMemberSession(env, state, memberId) {
   const payload = stringToBase64Url(JSON.stringify({ memberId: String(memberId || ''), passwordVersion: Number(state.settings.memberPasswordVersion || 1), expiresAt: Date.now() + 30 * 86400000 }));
   return `${payload}.${await hmac(payload, String(env.INTERNAL_KEY || ''))}`;
 }
+async function issueAdminSession(env, state) {
+  const payload = stringToBase64Url(JSON.stringify({ scope: 'admin', adminPinVersion: Number(state.settings.adminPinVersion || 1), expiresAt: Date.now() + 30 * 86400000 }));
+  return `${payload}.${await hmac(payload, String(env.INTERNAL_KEY || ''))}`;
+}
 async function verifyMemberSession(request, env, state) {
   const auth = String(request.headers.get('authorization') || ''); const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7) : '';
   const [payload, signature] = token.split('.');
@@ -257,12 +261,24 @@ async function verifyMemberSession(request, env, state) {
   if (session.memberId && !state.members.some(m => String(m.id) === String(session.memberId))) throw new Error('member_not_found');
   return session;
 }
+async function verifyAdminSession(request, env, state) {
+  const auth = String(request.headers.get('authorization') || ''); const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7) : '';
+  const [payload, signature] = token.split('.');
+  if (!payload || !signature || signature !== await hmac(payload, String(env.INTERNAL_KEY || ''))) throw new Error('unauthorized');
+  const session = JSON.parse(base64UrlToString(payload));
+  if (session.scope !== 'admin' || Number(session.expiresAt) <= Date.now() || Number(session.adminPinVersion) !== Number(state.settings.adminPinVersion || 1)) throw new Error('session_expired');
+  return session;
+}
 
 export function publicState(state, memberId = '') {
   const safe = normalizeState(state); const me = String(memberId || '');
   safe.settings = { memberPasswordVersion: Number(safe.settings.memberPasswordVersion || 1), courtOrientation: safe.settings.courtOrientation };
   safe.swapRequests = safe.swapRequests.filter(r => r.status === 'pending' && (r.requesterId === me || r.targetId === me));
   delete safe.actionHistory; return safe;
+}
+
+export function adminState(state) {
+  const safe = normalizeState(state); delete safe.settings.adminPin; delete safe.actionHistory; return safe;
 }
 
 function findPrior(state, operationId) { return operationId && state.actionHistory.find(item => item.operationId === operationId); }
@@ -327,6 +343,7 @@ export class StateCoordinator {
       else if (action === 'setSettings') {
         result = { state: normalizeState(current), event: { type: 'settings_updated' } };
         if (body.memberPassword !== undefined) { result.state.settings.memberPassword = String(body.memberPassword); result.state.settings.memberPasswordVersion = Number(result.state.settings.memberPasswordVersion || 0) + 1; }
+        if (body.adminPin !== undefined) { result.state.settings.adminPin = String(body.adminPin); result.state.settings.adminPinVersion = Number(result.state.settings.adminPinVersion || 0) + 1; }
         if (['door-left', 'door-right'].includes(body.courtOrientation)) result.state.settings.courtOrientation = body.courtOrientation;
       }
       else if (action === 'deleteMembers') {
@@ -369,7 +386,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/health') {
       let database = false; try { await env.DB.prepare('SELECT 1 AS ok').first(); database = true; } catch (_) {}
-      return reply({ ok: database, backend: 'cloudflare-only', database: 'd1', concurrency: 'durable-object', gas: false, rpcVersion: 3 });
+      return reply({ ok: database, backend: 'cloudflare-only', database: 'd1', concurrency: 'durable-object', gas: false, rpcVersion: 4 });
     }
     if (url.pathname === '/api/internal/state' && request.method === 'GET') {
       try { assertInternal(request, env); } catch (_) { return reply({ ok: false, error: 'unauthorized' }, 401); }
@@ -407,6 +424,23 @@ export default {
         if (body.action === 'requestSwap') return coordinatorAsInternal(request, env, 'requestSwap', { operationId: body.operationId, requesterId: session.memberId, targetId: body.targetId });
         if (body.action === 'respondSwap') return coordinatorAsInternal(request, env, 'respondSwap', { operationId: body.operationId, requestId: body.requestId, responderId: session.memberId, accept: Boolean(body.accept) });
         return reply({ ok: false, error: 'unsupported_member_action' }, 400);
+      } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
+    }
+    if (url.pathname === '/api/admin/login' && request.method === 'POST') {
+      const body = await request.json(); const state = await readState(env.DB);
+      if (!state.settings.adminPin || String(body.pin || '') !== String(state.settings.adminPin)) return reply({ ok: false, error: 'invalid_admin_pin' }, 401);
+      return reply({ ok: true, token: await issueAdminSession(env, state), state: adminState(state) });
+    }
+    if (url.pathname === '/api/admin/state' && request.method === 'GET') {
+      try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) }); }
+      catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
+    }
+    if (url.pathname === '/api/admin/rpc' && request.method === 'POST') {
+      try {
+        const state = await readState(env.DB); await verifyAdminSession(request, env, state); const body = await request.json();
+        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast']);
+        if (!allowed.has(String(body.action || ''))) return reply({ ok: false, error: 'unsupported_admin_action' }, 400);
+        return coordinatorAsInternal(request, env, String(body.action), body);
       } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
     }
     return reply({ ok: false, error: 'not_found' }, 404);

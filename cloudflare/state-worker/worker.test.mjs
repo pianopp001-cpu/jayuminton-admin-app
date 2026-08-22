@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, publicState } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, publicState, adminState } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -70,5 +70,10 @@ function fixture() {
   const safe = publicState(state, '1');
   assert.equal('memberPassword' in safe.settings, false);
   assert.equal('actionHistory' in safe, false);
+}
+{
+  const state = fixture(); state.settings.adminPin = '1234';
+  const safe = adminState(state);
+  assert.equal('adminPin' in safe.settings, false);
 }
 console.log('STATE_WORKER_CORE_TESTS_OK');
