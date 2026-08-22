@@ -98,7 +98,13 @@ jobs:
           jq -e '.ok==true and .backend=="cloudflare-only" and .database=="d1" and .concurrency=="durable-object" and .gas==false' "$RUNNER_TEMP/health.json" >/dev/null
           code="$(curl --silent --show-error --location -o "$RUNNER_TEMP/import-result.json" -w '%{http_code}' -X POST "$WORKER_URL/api/internal/import" -H 'Content-Type: application/json' -H "X-Jayuminton-Key: $INTERNAL_KEY" --data-binary @"$RUNNER_TEMP/import.json")"
           if [ "$code" != 200 ] && [ "$code" != 409 ]; then cat "$RUNNER_TEMP/import-result.json"; exit 1; fi
-          curl --fail --location --retry 5 "$WORKER_URL/api/internal/state?verify=$GITHUB_RUN_ID" -H "X-Jayuminton-Key: $INTERNAL_KEY" -o "$RUNNER_TEMP/actual.json"
+          state_code=''
+          for attempt in $(seq 1 12); do
+            state_code="$(curl --silent --show-error --location -o "$RUNNER_TEMP/actual.json" -w '%{http_code}' "$WORKER_URL/api/internal/state?verify=$GITHUB_RUN_ID-$attempt" -H "X-Jayuminton-Key: $INTERNAL_KEY")"
+            [ "$state_code" = 200 ] && break
+            sleep 3
+          done
+          if [ "$state_code" != 200 ]; then cat "$RUNNER_TEMP/actual.json"; exit 1; fi
           python3 - "$RUNNER_TEMP/expected.json" "$RUNNER_TEMP/actual.json" <<'PY'
           from pathlib import Path
           import hashlib,json,sys
