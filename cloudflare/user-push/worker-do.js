@@ -120,13 +120,20 @@ function authorized(request, env, body, url) {
 }
 function textFor(event, member) {
   if (event.type === 'wait1_ready') return { title: '대기 1 안내', body: `${member.name || ''}님, 대기 1입니다. 라켓 들고 준비해 주세요.` };
-  return { title: '코트 입장 안내', body: `${member.name || ''}님, ${Number(event.courtNo || 0)}번 코트로 입장해 주세요.` };
+  const roster = String(event.rosterNames || '').trim();
+  return {
+    title: '코트 입장 안내',
+    body: roster
+      ? `${Number(event.courtNo || 0)}번 코트가 나왔습니다. ${roster}님, 코트로 입장해 주세요.`
+      : `${member.name || ''}님, ${Number(event.courtNo || 0)}번 코트로 입장해 주세요.`,
+  };
 }
 async function sendOne(env, accessToken, projectId, event, member, record) {
   const copy = textFor(event, member);
   const data = {
     type: String(event.type), assignmentId: String(event.assignmentId), memberId: String(member.id), memberName: String(member.name || ''),
-    title: copy.title, body: copy.body, courtNo: String(event.courtNo || ''), expectedCourtNo: String(event.expectedCourtNo || ''), repeatCount: '1',
+    title: copy.title, body: copy.body, courtNo: String(event.courtNo || ''), expectedCourtNo: String(event.expectedCourtNo || ''),
+    rosterNames: String(event.rosterNames || ''), repeatCount: '8', vibrationGroups: '8', pulsesPerGroup: '3', stopOnConfirm: 'true',
   };
   const android = { priority: 'high', ttl: '600s' };
   if (/JayumintonNativeAndroid\//i.test(record.userAgent || '')) android.restricted_package_name = 'com.jayuminton.user';
@@ -144,7 +151,13 @@ async function sendEvent(request, env, body, url) {
   if (!['wait1_ready', 'court_assignment'].includes(type)) return responseJson({ ok: false, error: 'invalid_type' }, 400);
   const members = Array.isArray(body.members) ? body.members.map(m => ({ id: clean(m?.id), name: clean(m?.name, 80) })).filter(m => m.id) : [];
   if (!members.length || members.length > 4) return responseJson({ ok: false, error: 'invalid_members' }, 400);
-  const event = { type, assignmentId: clean(body.assignmentId, 500) || `${type}-${Date.now()}`, courtNo: Number(body.courtNo || 0), expectedCourtNo: Number(body.expectedCourtNo || 0) };
+  const event = {
+    type,
+    assignmentId: clean(body.assignmentId, 500) || `${type}-${Date.now()}`,
+    courtNo: Number(body.courtNo || 0),
+    expectedCourtNo: Number(body.expectedCourtNo || 0),
+    rosterNames: members.map(member => member.name).filter(Boolean).join(', '),
+  };
   const targetResponse = await registryCall(env, '/targets', { memberIds: members.map(m => m.id) });
   const targetJson = await targetResponse.json();
   const memberById = Object.fromEntries(members.map(m => [m.id, m]));
