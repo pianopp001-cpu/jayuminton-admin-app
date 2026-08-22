@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, publicState, adminState } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -51,6 +51,8 @@ function fixture() {
   assert.equal(resting.state.members.find(m => m.id === '18').status, 'rest');
   const counted = adjustGamesMutation(resting.state, ['18'], 1);
   assert.equal(counted.state.members.find(m => m.id === '18').games, 1);
+  const away = setMemberStatusMutation(counted.state, ['18'], 'away');
+  assert.equal(away.state.members.find(m => m.id === '18').status, 'away');
 }
 {
   const requested = requestSwapMutation(fixture(), '1', '7', 1000);
@@ -75,5 +77,12 @@ function fixture() {
   const state = fixture(); state.settings.adminPin = '1234';
   const safe = adminState(state);
   assert.equal('adminPin' in safe.settings, false);
+}
+{
+  const before = fixture(); const after = finishCourtMutation(before, 1).state;
+  const transitions = assignmentTransitions(before, after);
+  assert.deepEqual(transitions.courtGroups['1'].map(m => m.id), ['3', '4', '5', '6']);
+  assert.deepEqual(transitions.wait1.map(m => m.id), ['7', '8', '9', '10']);
+  assert.equal(transitions.courtGroups['2'].length, 0);
 }
 console.log('STATE_WORKER_CORE_TESTS_OK');

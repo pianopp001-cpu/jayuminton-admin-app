@@ -74,7 +74,7 @@ function syncMemberStatuses(state) {
     const next = { ...member };
     if (courtIds.has(String(member.id))) next.status = 'playing';
     else if (waitIds.has(String(member.id))) next.status = 'waiting';
-    else if (!['before', 'rest', 'home'].includes(String(member.status))) next.status = 'active';
+    else if (!['before', 'rest', 'away'].includes(String(member.status))) next.status = 'active';
     return next;
   });
   return state;
@@ -171,7 +171,7 @@ export function upsertMemberMutation(input, member) {
 
 export function setMemberStatusMutation(input, memberIds, status) {
   const state = normalizeState(input); const ids = uniqueIds(memberIds, 200);
-  if (!['active', 'before', 'rest', 'home'].includes(String(status))) throw new Error('invalid_member_status');
+  if (!['active', 'before', 'rest', 'away'].includes(String(status))) throw new Error('invalid_member_status');
   removeEverywhere(state, ids); const wanted = new Set(ids);
   state.members = state.members.map(m => wanted.has(String(m.id)) ? { ...m, status: String(status) } : m);
   return { state, event: { type: 'member_status_changed', memberIds: ids, status: String(status) } };
@@ -297,6 +297,25 @@ async function sendPush(env, type, event, members) {
   } catch (error) { return { ok: false, error: String(error?.message || error) }; }
 }
 
+export function assignmentTransitions(beforeInput, afterInput) {
+  const before = normalizeState(beforeInput); const after = normalizeState(afterInput);
+  const courtGroups = { '1': [], '2': [], '3': [], '4': [] }; const wait1 = [];
+  for (const member of after.members) {
+    const id = String(member.id); const oldLocation = locationOf(before, id); const newLocation = locationOf(after, id);
+    if (!newLocation) continue;
+    if (newLocation.type === 'court' && (!oldLocation || oldLocation.type !== 'court' || oldLocation.key !== newLocation.key)) courtGroups[newLocation.key].push({ id, name: String(member.name || '') });
+    if (newLocation.type === 'wait' && newLocation.key === '1' && (!oldLocation || oldLocation.type !== 'wait' || oldLocation.key !== '1')) wait1.push({ id, name: String(member.name || '') });
+  }
+  return { courtGroups, wait1 };
+}
+
+async function publishAssignmentTransitions(env, before, after, event) {
+  const transitions = assignmentTransitions(before, after); const results = [];
+  for (const no of ['1', '2', '3', '4']) if (transitions.courtGroups[no].length) results.push(await sendPush(env, 'court_assignment', { ...event, courtNo: Number(no) }, transitions.courtGroups[no]));
+  if (transitions.wait1.length) results.push(await sendPush(env, 'wait1_ready', event, transitions.wait1));
+  return results;
+}
+
 export class StateCoordinator {
   constructor(state, env) { this.state = state; this.env = env; }
   async fetch(request) {
@@ -347,7 +366,7 @@ export class StateCoordinator {
         if (['door-left', 'door-right'].includes(body.courtOrientation)) result.state.settings.courtOrientation = body.courtOrientation;
       }
       else if (action === 'deleteMembers') {
-        result = setMemberStatusMutation(current, body.memberIds, 'home'); const ids = new Set(uniqueIds(body.memberIds, 200));
+        result = setMemberStatusMutation(current, body.memberIds, 'away'); const ids = new Set(uniqueIds(body.memberIds, 200));
         result.state.members = result.state.members.filter(m => !ids.has(String(m.id))); result.event.type = 'members_deleted';
       }
       else if (action === 'resetAll') {
@@ -356,11 +375,8 @@ export class StateCoordinator {
       }
       else return reply({ ok: false, error: 'unsupported_action' }, 400);
       recordAction(result.state, operationId, action, result.event, current);
-      const saved = await writeState(this.env.DB, result.state); const notifications = [];
-      if (action === 'finishCourt') {
-        notifications.push(await sendPush(this.env, 'court_assignment', result.event, result.event.courtEntrants));
-        notifications.push(await sendPush(this.env, 'wait1_ready', result.event, result.event.wait1Entrants));
-      }
+      const saved = await writeState(this.env.DB, result.state);
+      const notifications = await publishAssignmentTransitions(this.env, current, saved, result.event);
       return reply({ ok: true, state: saved, event: result.event, notifications });
     } catch (error) {
       const message = String(error?.message || error);
@@ -386,7 +402,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/health') {
       let database = false; try { await env.DB.prepare('SELECT 1 AS ok').first(); database = true; } catch (_) {}
-      return reply({ ok: database, backend: 'cloudflare-only', database: 'd1', concurrency: 'durable-object', gas: false, rpcVersion: 4 });
+      return reply({ ok: database, backend: 'cloudflare-only', database: 'd1', concurrency: 'durable-object', gas: false, rpcVersion: 5 });
     }
     if (url.pathname === '/api/internal/state' && request.method === 'GET') {
       try { assertInternal(request, env); } catch (_) { return reply({ ok: false, error: 'unauthorized' }, 401); }

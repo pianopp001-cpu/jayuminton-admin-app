@@ -42,7 +42,7 @@ jobs:
           node cloudflare/state-worker/worker.test.mjs
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
-          grep -F "rpcVersion: 4" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "rpcVersion: 5" cloudflare/state-worker/worker.js >/dev/null
           if grep -R -F 'script.google.com' cloudflare/state-worker; then exit 1; fi
 
       - name: Create or resolve D1 database
