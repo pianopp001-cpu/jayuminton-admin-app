@@ -220,33 +220,16 @@ USER_INTERACTION_PATCH = r'''<script id="jayuminton-user-seat-self-status-v2">
 def patch_backend(work):
     p = Path(work) / 'Code.js'
     text = p.read_text(encoding='utf-8')
+    include_marker = 'function include(filename) {'
+    if include_marker not in text:
+        raise SystemExit('include marker missing')
     if 'function memberSetOwnStatus(' not in text:
-        anchors = [
-            'function memberMoveToWaitGroup(',
-            'function memberLeaveWaitGroup(',
-            'function memberRequestWaitSwap(',
-            'function setMemberStatus(',
-            'function updateMemberStatuses_(',
-            'function getPublicState(',
-        ]
-        pos = -1
-        for anchor in anchors:
-            pos = text.find(anchor)
-            if pos >= 0:
-                break
-        if pos < 0:
-            raise SystemExit('safe member backend insertion anchor missing')
-        text = text[:pos] + SELF_STATUS_BACKEND + '\n' + text[pos:]
+        text = text.replace(include_marker, SELF_STATUS_BACKEND + '\n' + include_marker, 1)
     if 'function memberCloudflareRpc_(e)' not in text:
-        include_marker = 'function include(filename) {'
-        if include_marker not in text:
-            raise SystemExit('include marker missing')
         text = text.replace(include_marker, rpc_helper() + '\n' + include_marker, 1)
     else:
-        # Rebuild an older helper so the newly added memberSetOwnStatus is allowed.
         start = text.find('function memberCloudflareRpc_(e)')
-        end_marker = '\nfunction include(filename) {'
-        end = text.find(end_marker, start)
+        end = text.find('\nfunction include(filename) {', start)
         if start >= 0 and end > start:
             text = text[:start] + rpc_helper() + text[end:]
     branch = "  if (e && e.parameter && e.parameter.memberRpc === '1' && e.parameter.rpc) {\n    return memberCloudflareRpc_(e);\n  }\n"
