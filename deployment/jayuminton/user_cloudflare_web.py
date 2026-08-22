@@ -11,6 +11,7 @@ ALLOWED = [
     'resumeMemberSession',
     'memberMoveToWaitGroup',
     'memberLeaveWaitGroup',
+    'memberSetOwnStatus',
     'memberRequestWaitSwap',
     'memberGetWaitSwapRequest',
     'memberRespondWaitSwap',
@@ -129,15 +130,113 @@ NATIVE_SYNC = r'''<script id="jayuminton-user-native-sync">
 })();
 </script>'''
 
+SELF_STATUS_BACKEND = r'''
+function memberSetOwnStatus(sessionToken,memberId,status){
+  return withDocumentLock_('회원 본인 상태 변경',function(){
+    memberId=memberSessionAuth_(sessionToken,memberId);
+    status=String(status||'');
+    if(['active','rest','away','before'].indexOf(status)<0)throw new Error('지원하지 않는 상태입니다.');
+    const courts=readCourts_(),startedAt=readCourtStartedAt_(),waitGroups=readWaitGroups_();
+    Object.keys(courts).forEach(function(k){
+      const before=(courts[k]||[]).length;
+      courts[k]=(courts[k]||[]).filter(function(id){return String(id)!==memberId;});
+      if(courts[k].length!==before && courts[k].length<GROUP_SIZE)startedAt[k]='';
+    });
+    for(let i=0;i<waitGroups.length;i+=1){
+      waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});
+    }
+    writeCourts_(courts,startedAt);
+    writeWaitGroups_(waitGroups);
+    updateMemberStatuses_([memberId],status);
+    touch_();
+    return getPublicState();
+  });
+}
+'''
+
+USER_INTERACTION_PATCH = r'''<script id="jayuminton-user-seat-self-status-v2">
+(function(){
+  if(window.__JAYUMINTON_USER_SEAT_SELF_STATUS_V2__)return;
+  window.__JAYUMINTON_USER_SEAT_SELF_STATUS_V2__=true;
+
+  window.handleMemberWaitOtherTap=function(groupIndex,targetMemberId,event){
+    if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+    if(event){event.preventDefault();event.stopPropagation();}
+    var a=typeof memberWaitSeatSessionArgs==='function'?memberWaitSeatSessionArgs():null;
+    if(!a||!a.member||!a.member.id)return;
+    if(String(targetMemberId)===String(a.member.id))return;
+    var target=(STATE.members||[]).find(function(item){return item&&String(item.id)===String(targetMemberId);});
+    if(!target)return;
+    if(confirm(String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?')){
+      if(typeof clearMemberWaitSeatPick==='function')clearMemberWaitSeatPick();
+      memberRequestWaitSwap(targetMemberId);
+    }
+  };
+
+  window.memberSetOwnStatus=async function(status){
+    var a=typeof memberWaitSeatSessionArgs==='function'?memberWaitSeatSessionArgs():null;
+    if(!a||!a.member||!a.member.id)return;
+    var labels={active:'배정대기',rest:'휴식',away:'귀가',before:'도착전'};
+    if(!labels[status])return;
+    if(!confirm(labels[status]+' 상태로 이동할까요?'))return;
+    try{
+      var state=await server('memberSetOwnStatus',[a.token,String(a.member.id),status]);
+      if(typeof clearMemberWaitSeatPick==='function')clearMemberWaitSeatPick();
+      renderState(state);
+      if(typeof showMemberSettingMessage==='function')showMemberSettingMessage(labels[status]+' 상태로 이동했어요.');
+    }catch(e){alert((e&&e.message)||String(e));}
+  };
+
+  window.openMemberSelfStatusMenu=function(){
+    var value=prompt('내 상태 이동\n1. 배정대기\n2. 휴식\n3. 귀가\n4. 도착전\n\n번호를 입력하세요.','1');
+    var map={'1':'active','2':'rest','3':'away','4':'before'};
+    if(map[value])memberSetOwnStatus(map[value]);
+  };
+
+  var timer=null,suppressUntil=0;
+  document.addEventListener('pointerdown',function(e){
+    if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+    var card=e.target&&e.target.closest?e.target.closest('.is-self-member'):null;
+    if(!card)return;
+    if(timer)clearTimeout(timer);
+    timer=setTimeout(function(){
+      timer=null;suppressUntil=Date.now()+900;
+      try{if(navigator.vibrate)navigator.vibrate(35);}catch(_e){}
+      openMemberSelfStatusMenu();
+    },650);
+  },true);
+  ['pointerup','pointercancel','pointermove'].forEach(function(type){
+    document.addEventListener(type,function(){if(timer){clearTimeout(timer);timer=null;}},true);
+  });
+  document.addEventListener('click',function(e){
+    if(Date.now()>suppressUntil)return;
+    var card=e.target&&e.target.closest?e.target.closest('.is-self-member'):null;
+    if(card){e.preventDefault();e.stopImmediatePropagation();}
+  },true);
+})();
+</script>'''
+
 
 def patch_backend(work):
     p = Path(work) / 'Code.js'
     text = p.read_text(encoding='utf-8')
+    if 'function memberSetOwnStatus(' not in text:
+        anchor = 'function memberMoveToWaitGroup(sessionToken,memberId,groupIndex)'
+        if anchor not in text:
+            raise SystemExit('memberMoveToWaitGroup anchor missing')
+        text = text.replace(anchor, SELF_STATUS_BACKEND + '\n' + anchor, 1)
     if 'function memberCloudflareRpc_(e)' not in text:
         include_marker = 'function include(filename) {'
         if include_marker not in text:
             raise SystemExit('include marker missing')
         text = text.replace(include_marker, rpc_helper() + '\n' + include_marker, 1)
+    else:
+        # Rebuild an older helper so the newly added memberSetOwnStatus is allowed.
+        start = text.find('function memberCloudflareRpc_(e)')
+        end_marker = '\nfunction include(filename) {'
+        end = text.find(end_marker, start)
+        if start >= 0 and end > start:
+            text = text[:start] + rpc_helper() + text[end:]
     branch = "  if (e && e.parameter && e.parameter.memberRpc === '1' && e.parameter.rpc) {\n    return memberCloudflareRpc_(e);\n  }\n"
     if branch not in text:
         marker = 'function doGet(e) {'
@@ -173,14 +272,13 @@ def build_frontend(snapshot, out, rpc_url):
         raise SystemExit('user IS_ADMIN marker missing')
     index = index.replace(marker, marker + '\n' + bridge, 1)
 
-    # User Cloudflare page is the canonical top-level user page. Remove stale Firebase host coupling.
     script = script.replace("const UNIFIED_MEMBER_APP_URL =\n  'https://jayuminton-push.web.app/';", "const UNIFIED_MEMBER_APP_URL = window.location.origin + '/';")
     script = script.replace("const UNIFIED_MEMBER_APP_ORIGIN = 'https://jayuminton-push.web.app';", "const UNIFIED_MEMBER_APP_ORIGIN = window.location.origin;")
     script = script.replace("const target = 'https://jayuminton-push.web.app/';", "const target = window.location.origin + '/';")
 
     if "<?!= include('Script'); ?>" not in index:
         raise SystemExit('Script include marker missing')
-    index = index.replace("<?!= include('Script'); ?>", script + '\n' + NATIVE_SYNC, 1)
+    index = index.replace("<?!= include('Script'); ?>", script + '\n' + USER_INTERACTION_PATCH + '\n' + NATIVE_SYNC, 1)
 
     forbidden = [
         '<?!=',
@@ -196,6 +294,9 @@ def build_frontend(snapshot, out, rpc_url):
         'const IS_ADMIN = false;',
         'jayuminton-user-cloudflare-rpc',
         'jayuminton-user-native-sync',
+        'jayuminton-user-seat-self-status-v2',
+        'memberSetOwnStatus',
+        'memberRequestWaitSwap(targetMemberId)',
         'NativeUserApp.setMember',
         'getPublicState',
     ]:
