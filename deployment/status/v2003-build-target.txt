@@ -1,0 +1,6 @@
+admin_url=file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.3
+apk_web_build=2003-admin-verified-operations
+frontend=bundled-cloudflare-android-asset
+finish_contract=empty-court-allowed_wait-rotation_auto-refresh
+voice_contract=female-alarm-max_repeat-3_media-duck-6_restore_replay-repeat-stop
+member_alert_contract=cloudflare-to-current-selected-member-native-3x8
