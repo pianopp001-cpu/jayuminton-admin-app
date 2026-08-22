@@ -221,10 +221,22 @@ def patch_backend(work):
     p = Path(work) / 'Code.js'
     text = p.read_text(encoding='utf-8')
     if 'function memberSetOwnStatus(' not in text:
-        anchor = 'function memberMoveToWaitGroup(sessionToken,memberId,groupIndex)'
-        if anchor not in text:
-            raise SystemExit('memberMoveToWaitGroup anchor missing')
-        text = text.replace(anchor, SELF_STATUS_BACKEND + '\n' + anchor, 1)
+        anchors = [
+            'function memberMoveToWaitGroup(',
+            'function memberLeaveWaitGroup(',
+            'function memberRequestWaitSwap(',
+            'function setMemberStatus(',
+            'function updateMemberStatuses_(',
+            'function getPublicState(',
+        ]
+        pos = -1
+        for anchor in anchors:
+            pos = text.find(anchor)
+            if pos >= 0:
+                break
+        if pos < 0:
+            raise SystemExit('safe member backend insertion anchor missing')
+        text = text[:pos] + SELF_STATUS_BACKEND + '\n' + text[pos:]
     if 'function memberCloudflareRpc_(e)' not in text:
         include_marker = 'function include(filename) {'
         if include_marker not in text:
