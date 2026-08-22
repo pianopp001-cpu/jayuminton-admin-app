@@ -1,0 +1,166 @@
+name: Deploy Cloudflare native alerts and user APK v1.3.4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/user-push/worker-do.js'
+      - 'deployment/scripts/patch_user_native_v134_cloudflare_complete.py'
+      - '.github/workflows/deploy-cloudflare-native-alerts-v134.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-cloudflare-native-alert-v134
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      JAYUMINTON_PUSH_SHARED_SECRET: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+      FIREBASE_PROJECT_CONFIG: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      WORKER_NAME: jayuminton-user-push
+      WORKER_URL: https://jayuminton-user-push.pianopp001.workers.dev
+      APK_PATH: releases/jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.7'}
+      - run: npm install --global wrangler@latest firebase-tools@latest
+      - uses: google-github-actions/auth@v2
+        with: {credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}'}
+
+      - name: Validate Cloudflare-only configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for value in "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ACCOUNT_ID" "$FIREBASE_SERVICE_ACCOUNT_JSON" "$JAYUMINTON_PUSH_SHARED_SECRET" "$FIREBASE_PROJECT_CONFIG"; do test -n "$value"; done
+          test "${#JAYUMINTON_PUSH_SHARED_SECRET}" -ge 32
+          node --check cloudflare/user-push/worker-do.js
+          grep -F "repeatCount: '8'" cloudflare/user-push/worker-do.js >/dev/null
+          grep -F "pulsesPerGroup: '3'" cloudflare/user-push/worker-do.js >/dev/null
+          grep -F 'rosterNames' cloudflare/user-push/worker-do.js >/dev/null
+          printf '%s' "$FIREBASE_PROJECT_CONFIG" > "$RUNNER_TEMP/deploy.json"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$RUNNER_TEMP/deploy.json")"
+          test -n "$FIREBASE_PROJECT_ID"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Deploy Durable Object push worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/cfpush-v134"
+          mkdir -p "$ROOT"
+          cp cloudflare/user-push/worker-do.js "$ROOT/worker.js"
+          cat > "$ROOT/wrangler.toml" <<EOF
+          name = "$WORKER_NAME"
+          main = "worker.js"
+          compatibility_date = "2026-08-22"
+          workers_dev = true
+          account_id = "$CLOUDFLARE_ACCOUNT_ID"
+
+          [[durable_objects.bindings]]
+          name = "PUSH_REGISTRY"
+          class_name = "PushRegistry"
+
+          [[migrations]]
+          tag = "v1"
+          new_sqlite_classes = ["PushRegistry"]
+          EOF
+          cd "$ROOT"
+          wrangler deploy --config wrangler.toml
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" | wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --config wrangler.toml >/dev/null
+          printf '%s' "$JAYUMINTON_PUSH_SHARED_SECRET" | wrangler secret put INTERNAL_KEY --config wrangler.toml >/dev/null
+          wrangler deploy --config wrangler.toml
+
+      - name: Verify native alert event contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 4
+          curl -fsS "$WORKER_URL/health" > "$RUNNER_TEMP/health.json"
+          jq -e '.ok==true and .storage=="durable-object"' "$RUNNER_TEMP/health.json" >/dev/null
+          TOKEN="v134-diag-$(printf '%096d' 0)-$GITHUB_RUN_ID"
+          curl -fsS -X POST "$WORKER_URL/api/push/register" -H 'Content-Type: application/json' \
+            --data "$(jq -nc --arg token "$TOKEN" '{memberId:"__v134_diag__",memberName:"진단",token:$token,userAgent:"JayumintonNativeAndroid/1.3.4"}')" > "$RUNNER_TEMP/register.json"
+          jq -e '.ok==true' "$RUNNER_TEMP/register.json" >/dev/null
+          curl -fsS -X POST "$WORKER_URL/api/push/status" -H 'Content-Type: application/json' \
+            --data "$(jq -nc --arg token "$TOKEN" '{memberId:"__v134_diag__",token:$token}')" > "$RUNNER_TEMP/status.json"
+          jq -e '.registered==true' "$RUNNER_TEMP/status.json" >/dev/null
+          curl -fsS -X POST "$WORKER_URL/api/push/event" -H 'Content-Type: application/json' -H "X-Jayuminton-Key: $JAYUMINTON_PUSH_SHARED_SECRET" \
+            --data '{"type":"court_assignment","assignmentId":"v134-no-token-contract","courtNo":2,"members":[{"id":"__no_v134_token_1__","name":"가나다"},{"id":"__no_v134_token_2__","name":"라마바"}]}' > "$RUNNER_TEMP/event.json"
+          jq -e '.ok==true and .sent==0' "$RUNNER_TEMP/event.json" >/dev/null
+          curl -fsS -X POST "$WORKER_URL/api/push/unregister" -H 'Content-Type: application/json' --data "$(jq -nc --arg token "$TOKEN" '{token:$token}')" >/dev/null
+
+      - name: Prepare Firebase Android config
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          APP_ID="$(jq -r '[.. | objects | select(((.packageName? == "com.jayuminton.user") or (.package_name? == "com.jayuminton.user") or (.androidClientInfo?.packageName? == "com.jayuminton.user")) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
+          test -n "$APP_ID"
+          firebase apps:sdkconfig ANDROID "$APP_ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
+
+      - name: Build and verify signed user APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PUSH_URL="$WORKER_URL"
+          BUILD="$RUNNER_TEMP/build-v134.sh"
+          cp deployment/scripts/build_user_native_push_fresh_v110.sh "$BUILD"
+          for patch in patch_build_user_native_v111.py patch_build_user_native_v112.py patch_build_user_native_v113.py patch_build_user_native_v114.py patch_build_user_native_v115.py patch_build_user_native_v116.py patch_build_user_native_v117.py patch_build_user_native_v118.py patch_build_user_native_v119.py patch_build_user_native_v120_diagnostic.py patch_build_user_native_v121.py patch_build_user_native_v122.py patch_build_user_native_v124_confirmed_overlay.py patch_build_user_native_v126_stop_controller.py patch_build_user_native_v126_raceguard.py patch_build_user_native_v127_member_switch.py patch_build_user_native_v128_repeat_switch.py patch_build_user_native_v129_background_registration.py; do python3 "deployment/scripts/$patch" "$BUILD"; done
+          python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_v132_strict_current_member.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_v133_install_safe.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_v134_cloudflare_complete.py "$BUILD"
+          grep -F 'VERSION="1.3.4"' "$BUILD" >/dev/null
+          grep -F 'VERSION_CODE="2000134"' "$BUILD" >/dev/null
+          grep -F 'private static final int MAX_GROUPS = 8;' "$BUILD" >/dev/null
+          grep -F 'NativePushRegistrar.isCurrentMember(this, targetMemberId)' "$BUILD" >/dev/null
+          grep -F 'AlertVibrationController.stop(' "$BUILD" >/dev/null
+          bash "$BUILD"
+          test -s "$APK_PATH"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$AAPT" dump badging "$APK_PATH" | grep -F "package: name='com.jayuminton.user' versionCode='2000134' versionName='1.3.4'"
+          "$APKSIGNER" verify --verbose --print-certs "$APK_PATH" > "$RUNNER_TEMP/signing.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: d47adb93363ff397601e63667e79f27f99ae499aadc1fd0013861809950fc787' "$RUNNER_TEMP/signing.txt" >/dev/null
+          cp "$APK_PATH" "$RUNNER_TEMP/user-v134.apk"
+
+      - name: Publish verified user APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B publish-v134 origin/main
+          cp "$RUNNER_TEMP/user-v134.apk" "$APK_PATH"
+          sha256sum "$APK_PATH" > deployment/status/user-v1.3.4-cloudflare-complete.sha256
+          printf 'status=success\nversion=1.3.4\nversion_code=2000134\napplication_id=com.jayuminton.user\npush_backend=cloudflare-durable-object\nvibration=3-pulses-x8-groups-until-confirmed\nassignment_scope=current-selected-member-only\nroster_names=up-to-4\n' > deployment/status/user-v1.3.4-cloudflare-complete.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$APK_PATH" deployment/status/user-v1.3.4-cloudflare-complete.*
+          git commit -m 'Publish Cloudflare native user APK v1.3.4'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-user-v1.3.4-cloudflare-complete
+          path: ${{ runner.temp }}/user-v134.apk
+          if-no-files-found: error
+          retention-days: 30
