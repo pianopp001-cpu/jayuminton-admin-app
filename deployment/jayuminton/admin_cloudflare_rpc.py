@@ -66,11 +66,16 @@ def patch_backend(work):
     p=Path(work)/'Code.js'; text=p.read_text(encoding='utf-8')
     marker='function doGet(e) {\n  ensureSetup_();'
     repl="function doGet(e) {\n  if (e && e.parameter && e.parameter.adminRpc === '1' && e.parameter.rpc) {\n    return adminCloudflareRpc_(e);\n  }\n  ensureSetup_();"
-    if marker not in text: raise SystemExit('doGet marker missing')
-    text=text.replace(marker,repl,1)
+    already_routed = "e.parameter.adminRpc === '1'" in text and 'return adminCloudflareRpc_(e);' in text
+    if marker in text:
+        text=text.replace(marker,repl,1)
+    elif not already_routed:
+        raise SystemExit('doGet marker missing and existing admin RPC route not found')
     inc='function include(filename) {'
-    if inc not in text: raise SystemExit('include marker missing')
-    text=text.replace(inc,rpc_helper()+'\n'+inc,1);p.write_text(text,encoding='utf-8')
+    if 'function adminCloudflareRpc_(e)' not in text:
+        if inc not in text: raise SystemExit('include marker missing')
+        text=text.replace(inc,rpc_helper()+'\n'+inc,1)
+    p.write_text(text,encoding='utf-8')
 
 def build_frontend(work,out,rpc_url):
     work=Path(work);out=Path(out);out.mkdir(parents=True,exist_ok=True)
