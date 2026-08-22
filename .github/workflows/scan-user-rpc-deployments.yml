@@ -1,0 +1,56 @@
+name: Scan user RPC deployments
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scan-user-rpc-deployments.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Scan deployments
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
+          mkdir -p "$RUNNER_TEMP/probe"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$RUNNER_TEMP/probe/.clasp.json"
+          LIST="$(cd "$RUNNER_TEMP/probe" && clasp list-deployments || true)"
+          printf '%s\n' "$LIST"
+          printf '%s\n' "$LIST" | grep -Eo 'AKfy[a-zA-Z0-9_-]+' | awk '!seen[$0]++' > "$RUNNER_TEMP/ids.txt"
+          n=0
+          while read -r ID; do
+            n=$((n+1))
+            URL="https://script.google.com/macros/s/$ID/exec"
+            cb="scan_${n}_${GITHUB_RUN_ID}"
+            if ! curl -sS --location --max-time 20 "$URL?memberRpc=1&rpc=getPublicState&callback=$cb&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/state-$n.js"; then continue; fi
+            if ! grep -F "$cb(" "$RUNNER_TEMP/state-$n.js" >/dev/null; then continue; fi
+            if ! grep -F '"ok":true' "$RUNNER_TEMP/state-$n.js" >/dev/null; then continue; fi
+            swapcb="swap_${n}_${GITHUB_RUN_ID}"
+            statuscb="status_${n}_${GITHUB_RUN_ID}"
+            curl -sS --location --max-time 20 "$URL?memberRpc=1&rpc=memberRequestWaitSwap&callback=$swapcb&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/swap-$n.js" || true
+            curl -sS --location --max-time 20 "$URL?memberRpc=1&rpc=memberSetOwnStatus&callback=$statuscb&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/status-$n.js" || true
+            swap="unknown"; status="unknown"
+            if grep -F 'memberRequestWaitSwap is not defined' "$RUNNER_TEMP/swap-$n.js" >/dev/null 2>&1; then swap="undefined"; elif grep -F '허용되지 않은 사용자 함수' "$RUNNER_TEMP/swap-$n.js" >/dev/null 2>&1; then swap="forbidden"; elif grep -F "$swapcb(" "$RUNNER_TEMP/swap-$n.js" >/dev/null 2>&1; then swap="supported"; fi
+            if grep -F 'memberSetOwnStatus is not defined' "$RUNNER_TEMP/status-$n.js" >/dev/null 2>&1; then status="undefined"; elif grep -F '허용되지 않은 사용자 함수' "$RUNNER_TEMP/status-$n.js" >/dev/null 2>&1; then status="forbidden"; elif grep -F "$statuscb(" "$RUNNER_TEMP/status-$n.js" >/dev/null 2>&1; then status="supported"; fi
+            echo "CANDIDATE id=$ID swap=$swap status=$status"
+            if [ "$swap" = supported ] && [ "$status" = supported ]; then echo "FULL_MATCH=$ID"; exit 0; fi
+          done < "$RUNNER_TEMP/ids.txt"
+          echo 'FULL_MATCH=none'
