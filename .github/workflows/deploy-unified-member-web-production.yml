@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/deploy-unified-member-web-production.yml'
+      - 'deployment/jayuminton/patch_member_user_requirements_v1.py'
   workflow_dispatch: {}
 
 permissions:
@@ -17,168 +18,91 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     env:
-      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      V3_COMMIT: 1c3aa7a4f77a280805cf43570b3a7f1695998711
-      PREVIEW_DEPLOYMENT_ID: AKfycbyc1igSCIWFWMLp2qgMGxB4lsSVfcZk3TDk-A6cB3OrQm2fIS7ZLnz8b9jeAIXyCMy-cQ
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      LIVE_USER_URL: https://jayuminton-push.web.app/
       CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Install deployment tools
-        run: npm install --global @google/clasp@latest firebase-tools@latest
 
       - name: Authenticate Firebase
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Resolve configuration
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+
+      - name: Resolve Firebase project
         shell: bash
         run: |
           set -euo pipefail
           CONFIG="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId' "$CONFIG")"
-          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$CONFIG")"
-          for value in "$MAIN_SCRIPT_ID" "$FIREBASE_PROJECT_ID"; do
-            test -n "$value"; test "$value" != null
-          done
-          {
-            echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID"
-            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
-          } >> "$GITHUB_ENV"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$CONFIG")"
+          test -n "$FIREBASE_PROJECT_ID"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
 
-      - name: Enforce permanent Cloudflare user lock
-        run: python3 deployment/jayuminton/verify_cloudflare_user_lock.py "$GITHUB_WORKSPACE"
-
-      - name: Prepare unified member backend on isolated RPC deployment
+      - name: Verify Cloudflare RPC before changing frontend
         shell: bash
         run: |
           set -euo pipefail
-          BACKUP="$RUNNER_TEMP/current-head-backup"
-          WORK="$RUNNER_TEMP/v3-production-backend"
-          mkdir -p "$BACKUP" "$WORK"
-
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
-          (cd "$BACKUP" && clasp pull)
-
-          for file in Admin.html appsscript.json Code.js Index.html Script.html Style.html MemberAnywhereSwap.js MemberSwapClient.html MemberSwapAction.html MemberControls.html MemberSwapInbox.html; do
-            git show "$V3_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
-          done
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
-
-          python3 deployment/jayuminton/v3_unified_member_preview_patch.py "$WORK"
-          # Cloudflare user contract only: persisted metadata, member-priority
-          # writes, partial-court finish, and transition events.  These patches
-          # are deployed only to the isolated member RPC deployment below.
-          python3 deployment/jayuminton/admin_vnext_backend_patch.py "$WORK"
-          python3 deployment/jayuminton/admin_vnext_assignment_guard_patch.py "$WORK"
-          python3 deployment/jayuminton/admin_vnext_notification_contract.py "$WORK"
-          python3 deployment/jayuminton/admin_vnext_member_fields_patch.py "$WORK"
-          python3 deployment/jayuminton/v3_member_badges_patch.py "$WORK"
-          python3 deployment/jayuminton/v3_cloudflare_member_preview.py patch-backend --work "$WORK"
-
-          grep -F 'memberFirebasePreviewRpc_' "$WORK/Code.js" >/dev/null
-          grep -F "'IS_NEW', 'PUBLIC_MEMO', 'IS_SPONSOR', 'BUNDLE_ID'" "$WORK/Code.js" >/dev/null
-          grep -F "publicMemo: String(member.publicMemo || '').slice(0, 40)" "$WORK/Code.js" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_ASSIGNMENT_BUSY_V1' "$WORK/Code.js" >/dev/null
-          grep -F "WAIT_ONE_PROMOTED: 'WAIT_ONE_PROMOTED'" "$WORK/Code.js" >/dev/null
-          grep -F "if (!finished.length) throw new Error('비어 있는 코트는 경기 종료할 수 없습니다.');" "$WORK/Code.js" >/dev/null
-          grep -F 'function memberRequestAnywhereSwap' "$WORK/MemberAnywhereSwap.js" >/dev/null
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$WORK/Script.html" >/dev/null
-          grep -F 'courtDestinationFromCard' "$WORK/Script.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V6' "$WORK/Script.html" >/dev/null
-          grep -F "sponsor.textContent='🎁 찬조'" "$WORK/Script.html" >/dev/null
-          grep -F "badge.textContent='NEW 신규'" "$WORK/Script.html" >/dev/null
-          grep -F 'member-status-list' "$WORK/Script.html" >/dev/null
-          grep -F "String(member.publicMemo||'').trim()" "$WORK/Script.html" >/dev/null
-          grep -F 'content:"★"!important' "$WORK/Script.html" >/dev/null
-          grep -F 'color:#ffd84d!important' "$WORK/Script.html" >/dev/null
-          grep -F '#d62828' "$WORK/Script.html" >/dev/null
-          grep -F 'background:transparent!important' "$WORK/Script.html" >/dev/null
-          grep -F 'flex-wrap:nowrap!important' "$WORK/Script.html" >/dev/null
-          grep -F 'width:max-content!important' "$WORK/Script.html" >/dev/null
-          grep -F 'member-anywhere-destination-selected' "$WORK/Script.html" >/dev/null
-          grep -F '네, 저예요' "$WORK/MemberControls.html" >/dev/null
-          grep -F '코트배정대기' "$WORK/MemberControls.html" >/dev/null
-
-          restore_head() {
-            echo 'Restoring Apps Script project HEAD without updating MAIN/ADMIN deployments...'
-            (cd "$BACKUP" && clasp push --force)
-          }
-          trap restore_head EXIT
-
-          (cd "$WORK" && clasp push --force)
-          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "unified member production rpc $GITHUB_RUN_ID")
-
-          restore_head
-          trap - EXIT
-
-      - name: Verify isolated member RPC
-        shell: bash
-        run: |
-          set -euo pipefail
-          sleep 6
-          URL="https://script.google.com/macros/s/$PREVIEW_DEPLOYMENT_ID/exec"
-          CALLBACK="jmProdState$GITHUB_RUN_ID"
+          CALLBACK="jmUserReqPreflight$GITHUB_RUN_ID"
           curl --fail --location --retry 5 --max-time 60 \
-            "$URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
-            -o "$RUNNER_TEMP/member-state.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/member-state.js" >/dev/null
-          grep -F '"ok":true' "$RUNNER_TEMP/member-state.js" >/dev/null
+            "$CLOUDFLARE_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/rpc-preflight.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc-preflight.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/rpc-preflight.js" >/dev/null
 
-      - name: Build production member frontend
+      - name: Preserve and patch current production user page
         shell: bash
         run: |
           set -euo pipefail
-          WORK="$RUNNER_TEMP/v3-production-backend"
-          ROOT="$RUNNER_TEMP/unified-member-production"
+          ROOT="$RUNNER_TEMP/member-user-requirements"
           PUBLIC="$ROOT/public"
           mkdir -p "$PUBLIC"
+          curl --fail --location --retry 5 --max-time 60 \
+            -H 'Cache-Control: no-cache, no-store' \
+            "$LIVE_USER_URL?source=$GITHUB_RUN_ID" \
+            -o "$PUBLIC/index.html"
 
-          python3 deployment/jayuminton/v3_cloudflare_member_preview.py \
-            build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$CLOUDFLARE_RPC_URL"
+          cp "$PUBLIC/index.html" "$RUNNER_TEMP/member-before.html"
+          python3 deployment/jayuminton/patch_member_user_requirements_v1.py "$PUBLIC/index.html"
 
-          grep -F 'jayuminton-v3-cloudflare-member-preview' "$PUBLIC/index.html" >/dev/null
-          grep -F 'showSelfConfirm' "$PUBLIC/index.html" >/dev/null
-          grep -F 'memberAnywhereRequestSelected_' "$PUBLIC/index.html" >/dev/null
-          grep -F 'showIncoming_' "$PUBLIC/index.html" >/dev/null
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$PUBLIC/index.html" >/dev/null
-          grep -F 'courtDestinationFromCard' "$PUBLIC/index.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V6' "$PUBLIC/index.html" >/dev/null
-          grep -F "sponsor.textContent='🎁 찬조'" "$PUBLIC/index.html" >/dev/null
-          grep -F "badge.textContent='NEW 신규'" "$PUBLIC/index.html" >/dev/null
-          grep -F 'member-status-list' "$PUBLIC/index.html" >/dev/null
-          grep -F "String(member.publicMemo||'').trim()" "$PUBLIC/index.html" >/dev/null
-          grep -F 'detectMemberForegroundTransition' "$PUBLIC/index.html" >/dev/null
-          grep -F "'wait1_ready'" "$PUBLIC/index.html" >/dev/null
-          grep -F "'court_assignment'" "$PUBLIC/index.html" >/dev/null
-          grep -F 'content:"★"!important' "$PUBLIC/index.html" >/dev/null
-          grep -F 'color:#ffd84d!important' "$PUBLIC/index.html" >/dev/null
-          grep -F '#d62828' "$PUBLIC/index.html" >/dev/null
-          grep -F 'background:transparent!important' "$PUBLIC/index.html" >/dev/null
-          grep -F 'flex-wrap:nowrap!important' "$PUBLIC/index.html" >/dev/null
-          grep -F 'width:max-content!important' "$PUBLIC/index.html" >/dev/null
-          grep -F 'member-anywhere-destination-selected' "$PUBLIC/index.html" >/dev/null
-          grep -F '#memberApp .v4-court-card .member-info-detail' "$PUBLIC/index.html" >/dev/null
-          grep -F 'cleanMemberLabels' "$PUBLIC/index.html" >/dev/null
-          grep -F -- '-webkit-line-clamp:unset' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F '5 * 60 * 1000' "$PUBLIC/index.html" >/dev/null
+          grep -F 'for (var round = 0; round < 8; round += 1)' "$PUBLIC/index.html" >/dev/null
+          grep -F 'navigator.vibrate(0)' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_STOP_MEMBER_ALERT' "$PUBLIC/index.html" >/dev/null
+          grep -F "names.join(', ')" "$PUBLIC/index.html" >/dev/null
+          grep -F '5분 동안 응답이 없어' "$PUBLIC/index.html" >/dev/null
+          grep -F 'function initialize()' "$PUBLIC/index.html" >/dev/null
+          grep -F 'function refreshMemberState()' "$PUBLIC/index.html" >/dev/null
+          grep -F '↻ 현황 갱신' "$PUBLIC/index.html" >/dev/null
+          grep -F '네, 저예요' "$PUBLIC/index.html" >/dev/null
+          grep -F '🎁 찬조' "$PUBLIC/index.html" >/dev/null
+          grep -F 'NEW 신규' "$PUBLIC/index.html" >/dev/null
+          grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
           ! grep -Eqi '<iframe' "$PUBLIC/index.html"
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
+
+          python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-inline.js" <<'PY'
+          from pathlib import Path
+          import re, sys
+          source = Path(sys.argv[1]).read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>', source, flags=re.I)
+          Path(sys.argv[2]).write_text('\n'.join(scripts), encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/member-inline.js"
 
           cat > "$ROOT/firebase.json" <<'JSON'
           {
@@ -193,50 +117,39 @@ jobs:
           }
           JSON
 
-      - name: Deploy member frontend to production Hosting
+      - name: Deploy only the Cloudflare user frontend
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="$RUNNER_TEMP/unified-member-production"
-          cd "$ROOT"
           firebase deploy --only hosting \
             --project "$FIREBASE_PROJECT_ID" \
-            --config firebase.json \
+            --config "$RUNNER_TEMP/member-user-requirements/firebase.json" \
             --non-interactive
 
-      - name: Verify production member web
+      - name: Verify production user web
         shell: bash
         run: |
           set -euo pipefail
           sleep 5
-          URL='https://jayuminton-push.web.app/'
           curl --fail --location --retry 5 --max-time 60 \
             -H 'Cache-Control: no-cache, no-store' \
-            "$URL?verify=$GITHUB_RUN_ID" \
-            -o "$RUNNER_TEMP/live-production.html"
-          grep -F 'JAYUMINTON_UNIFIED_MEMBER_PICK_PREVIEW_V4' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'courtDestinationFromCard' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'JAYUMINTON_MEMBER_BADGES_V6' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "sponsor.textContent='🎁 찬조'" "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "badge.textContent='NEW 신규'" "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'member-status-list' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "String(member.publicMemo||'').trim()" "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'detectMemberForegroundTransition' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "'wait1_ready'" "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "'court_assignment'" "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'content:"★"!important' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'color:#ffd84d!important' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F '#d62828' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'background:transparent!important' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'flex-wrap:nowrap!important' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'width:max-content!important' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'member-anywhere-destination-selected' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F '#memberApp .v4-court-card .member-info-detail' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F 'cleanMemberLabels' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F -- '-webkit-line-clamp:unset' "$RUNNER_TEMP/live-production.html" >/dev/null
-          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live-production.html" >/dev/null
-          ! grep -Eqi '<iframe' "$RUNNER_TEMP/live-production.html"
-          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live-production.html"
-          echo 'PRODUCTION_MEMBER_WEB_OK'
-          echo 'PLAY_V131_AAB_NOT_CHANGED'
+            "$LIVE_USER_URL?verify=$GITHUB_RUN_ID" \
+            -o "$RUNNER_TEMP/member-live-after.html"
+          for marker in \
+            'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' \
+            '5 * 60 * 1000' \
+            'navigator.vibrate(0)' \
+            'JAYUMINTON_STOP_MEMBER_ALERT' \
+            '5분 동안 응답이 없어' \
+            '↻ 현황 갱신' \
+            '네, 저예요' \
+            '🎁 찬조' \
+            'NEW 신규'; do
+            grep -F "$marker" "$RUNNER_TEMP/member-live-after.html" >/dev/null
+          done
+          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/member-live-after.html" >/dev/null
+          ! grep -Eqi '<iframe' "$RUNNER_TEMP/member-live-after.html"
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/member-live-after.html"
+          echo 'PRODUCTION_MEMBER_USER_REQUIREMENTS_OK'
           echo 'MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED'
+          echo 'USER_APK_BINARY_NOT_REPLACED_WEBVIEW_USES_UPDATED_CLOUDFLARE_PAGE'
