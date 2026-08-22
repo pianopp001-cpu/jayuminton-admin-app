@@ -1,0 +1,103 @@
+name: Deploy user seat HEAD V3
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-user-seat-head-v3.yml'
+      - 'deployment/jayuminton/patch_seat_head.py'
+      - 'deployment/jayuminton/user_cloudflare_web.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      USER_WORKER_NAME: jayuminton-user-web
+      USER_WORKER_URL: https://jayuminton-user-web.pianopp001.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install tools
+        run: npm install --global @google/clasp@latest wrangler@latest
+      - name: Patch Apps Script HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
+          test -n "$MAIN_SCRIPT_ID"
+          WORK="$RUNNER_TEMP/seat-head"
+          mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          (cd "$WORK" && clasp pull)
+          python3 deployment/jayuminton/patch_seat_head.py "$WORK/Code.js"
+          grep -F 'function memberSetOwnStatus(' "$WORK/Code.js" >/dev/null
+          grep -F 'function memberCloudflareRpcV3_(e)' "$WORK/Code.js" >/dev/null
+          grep -F 'return memberCloudflareRpcV3_(e);' "$WORK/Code.js" >/dev/null
+          (cd "$WORK" && clasp push --force)
+          LIST="$(cd "$WORK" && clasp list-deployments || true)"
+          HEAD_DEPLOYMENT_ID="$(printf '%s\n' "$LIST" | awk '/@HEAD/{print $2; exit}')"
+          test -n "$HEAD_DEPLOYMENT_ID"
+          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$HEAD_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+      - name: Verify HEAD RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          CALLBACK="jmHeadV3${GITHUB_RUN_ID}"
+          curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$USER_RPC_UPSTREAM?memberRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/head.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/head.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/head.js" >/dev/null
+      - name: Build Cloudflare user web
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/user-worker"
+          mkdir -p "$ROOT/public"
+          python3 deployment/jayuminton/user_cloudflare_web.py build-frontend --snapshot source-snapshot/current-main --out "$ROOT/public" --rpc-url "$USER_WORKER_URL"
+          grep -F 'jayuminton-user-seat-self-status-v2' "$ROOT/public/index.html" >/dev/null
+          grep -F 'memberRequestWaitSwap(targetMemberId)' "$ROOT/public/index.html" >/dev/null
+          grep -F 'memberSetOwnStatus' "$ROOT/public/index.html" >/dev/null
+          python3 - "$ROOT/public/index.html" "$ROOT/worker.js" <<'PY'
+          import json,sys
+          from pathlib import Path
+          html=Path(sys.argv[1]).read_text(encoding='utf-8')
+          worker='''const USER_HTML=%s; export default { async fetch(request,env){ const url=new URL(request.url); const h={'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','X-Content-Type-Options':'nosniff'}; if(url.searchParams.get('memberRpc')==='1'&&url.searchParams.get('rpc')){ const cb=url.searchParams.get('callback')||''; const rpc=url.searchParams.get('rpc')||''; const payload=url.searchParams.get('payload')||'W10'; const up=new URL(env.USER_RPC_UPSTREAM); for(const [k,v] of [['memberRpc','1'],['rpc',rpc],['callback',cb],['payload',payload],['nonce',url.searchParams.get('nonce')||Date.now().toString()]]) up.searchParams.set(k,v); const r=await fetch(up.toString(),{redirect:'follow'}); return new Response(await r.text(),{status:r.ok?200:502,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}}); } return new Response(request.method==='HEAD'?null:USER_HTML,{status:200,headers:{...h,'Content-Type':'text/html; charset=utf-8'}}); }};''' % json.dumps(html,ensure_ascii=False)
+          Path(sys.argv[2]).write_text(worker,encoding='utf-8')
+          PY
+          cat > "$ROOT/wrangler.toml" <<EOF
+          name = "$USER_WORKER_NAME"
+          main = "worker.js"
+          compatibility_date = "2026-08-21"
+          workers_dev = true
+          [vars]
+          USER_RPC_UPSTREAM = "$USER_RPC_UPSTREAM"
+          EOF
+      - name: Deploy Cloudflare and verify live
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/user-worker"
+          wrangler deploy --config wrangler.toml
+          sleep 6
+          curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F 'jayuminton-user-seat-self-status-v2' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'memberRequestWaitSwap(targetMemberId)' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'memberSetOwnStatus' "$RUNNER_TEMP/live.html" >/dev/null
+          CALLBACK="jmLiveV3${GITHUB_RUN_ID}"
+          curl --fail --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?memberRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/live.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/live.js" >/dev/null
+          echo 'USER_SEAT_HEAD_V3_LIVE=success'
