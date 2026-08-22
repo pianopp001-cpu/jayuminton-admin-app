@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Keep only the administrator controls explicitly required by the operations MD."""
+"""Keep only the administrator controls explicitly required by the operations MD.
+
+The excluded-member roster is relocated by the following always-visible patch.
+"""
 from pathlib import Path
 import re
 import sys
