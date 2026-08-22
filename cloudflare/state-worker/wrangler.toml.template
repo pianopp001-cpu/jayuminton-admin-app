@@ -1,0 +1,18 @@
+name = "jayuminton-state"
+main = "worker.js"
+compatibility_date = "2026-08-22"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "jayuminton-state"
+database_id = "__D1_DATABASE_ID__"
+
+[[durable_objects.bindings]]
+name = "STATE_COORDINATOR"
+class_name = "StateCoordinator"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["StateCoordinator"]
+
