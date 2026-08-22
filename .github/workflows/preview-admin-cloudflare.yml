@@ -1,4 +1,5 @@
 # Admin-only Cloudflare deployment. Never replace member production or GAS admin UI.
+# Trigger: MD wait-rotation and control cleanup verification.
 name: Deploy separate admin web via Cloudflare RPC
 on:
   push:
