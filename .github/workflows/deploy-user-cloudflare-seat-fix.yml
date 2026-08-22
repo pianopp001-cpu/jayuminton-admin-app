@@ -44,69 +44,34 @@ jobs:
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
-          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId // empty' "$RUNNER_TEMP/deploy.json")"
-          FALLBACK_DEPLOYMENT_ID="$(jq -r '.userPreviewDeploymentId // .adminPreviewDeploymentId // .previewDeploymentId // empty' "$RUNNER_TEMP/deploy.json")"
-          for value in "$MAIN_SCRIPT_ID" "$MAIN_DEPLOYMENT_ID" "$FALLBACK_DEPLOYMENT_ID" "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ACCOUNT_ID"; do test -n "$value"; done
+          test -n "$MAIN_SCRIPT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
           echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
-          echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
-          echo "FALLBACK_DEPLOYMENT_ID=$FALLBACK_DEPLOYMENT_ID" >> "$GITHUB_ENV"
-      - name: Patch backend and reuse user RPC deployment
+      - name: Patch Apps Script HEAD for user RPC
         shell: bash
         run: |
           set -euo pipefail
-          BACKUP="$RUNNER_TEMP/user-backup"; WORK="$RUNNER_TEMP/user-backend"
-          mkdir -p "$BACKUP" "$WORK"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
-          (cd "$BACKUP" && clasp pull)
-          cp -a "$BACKUP/." "$WORK/"
+          WORK="$RUNNER_TEMP/user-backend"; mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          (cd "$WORK" && clasp pull)
           python3 deployment/jayuminton/user_cloudflare_web.py patch-backend --work "$WORK"
-          python3 - "$WORK/Code.js" <<'PY'
-          from pathlib import Path
-          import sys
-          p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
-          fn=r'''function memberSetOwnStatus(sessionToken,memberId,status){
-            return withDocumentLock_('회원 본인 상태 변경',function(){
-              memberId=memberSessionAuth_(sessionToken,memberId); status=String(status||'');
-              if(['active','rest','away','before'].indexOf(status)<0)throw new Error('지원하지 않는 상태입니다.');
-              const courts=readCourts_(),startedAt=readCourtStartedAt_(),waitGroups=readWaitGroups_();
-              Object.keys(courts).forEach(function(k){const before=(courts[k]||[]).length; courts[k]=(courts[k]||[]).filter(function(id){return String(id)!==memberId;}); if(courts[k].length!==before&&courts[k].length<GROUP_SIZE)startedAt[k]='';});
-              for(let i=0;i<waitGroups.length;i+=1)waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});
-              writeCourts_(courts,startedAt); writeWaitGroups_(waitGroups); updateMemberStatuses_([memberId],status); touch_(); return getPublicState();
-            });
-          }
-          '''
-          if 'function memberSetOwnStatus(' not in s:
-              marker='function include(filename) {'; i=s.find(marker)
-              if i<0: raise SystemExit('include marker missing')
-              s=s[:i]+fn+'\n'+s[i:]
-          if 'function memberCloudflareRpc_(e)' not in s: raise SystemExit('memberCloudflareRpc missing')
-          if 'memberSetOwnStatus: true' not in s:
-              marker='const allowed = {'; i=s.find(marker)
-              if i<0: raise SystemExit('RPC allowlist marker missing')
-              j=i+len(marker); s=s[:j]+'\n    memberSetOwnStatus: true,'+s[j:]
-          if 'name === "memberSetOwnStatus"' not in s and "name === 'memberSetOwnStatus'" not in s:
-              marker="else throw new Error('허용되지 않은 사용자 함수입니다.');"; i=s.find(marker)
-              if i<0: raise SystemExit('RPC dispatch marker missing')
-              s=s[:i]+'else if (name === "memberSetOwnStatus") result = memberSetOwnStatus.apply(null, args);\n    '+s[i:]
-          p.write_text(s,encoding='utf-8')
-          PY
           grep -F 'function memberSetOwnStatus(' "$WORK/Code.js" >/dev/null
           grep -F 'memberSetOwnStatus: true' "$WORK/Code.js" >/dev/null
-          LIST="$(cd "$BACKUP" && clasp list-deployments || true)"
-          USER_DEPLOYMENT_ID="$(printf '%s\n' "$LIST" | grep -Ei 'user|member|cloudflare' | grep -Eo 'AKfy[a-zA-Z0-9_-]+' | grep -v -F "$MAIN_DEPLOYMENT_ID" | head -1 || true)"
-          if [ -z "$USER_DEPLOYMENT_ID" ]; then USER_DEPLOYMENT_ID="$FALLBACK_DEPLOYMENT_ID"; fi
-          test -n "$USER_DEPLOYMENT_ID"; test "$USER_DEPLOYMENT_ID" != "$MAIN_DEPLOYMENT_ID"
-          restore_main(){ (cd "$BACKUP" && clasp push --force) >/dev/null || true; }
-          trap restore_main EXIT
+          grep -F 'function memberCloudflareRpc_(e)' "$WORK/Code.js" >/dev/null
           (cd "$WORK" && clasp push --force)
-          # Updating an existing deployment still creates a version. If the project is full,
-          # first try deployment update; report the exact blocker instead of failing on a cleanup guess.
-          if ! (cd "$WORK" && clasp create-deployment --deploymentId "$USER_DEPLOYMENT_ID" --description "user seat UX ${GITHUB_RUN_ID}"); then
-            echo 'USER_RPC_DEPLOYMENT_UPDATE_FAILED=version_limit_or_api_error'
-            exit 1
-          fi
-          restore_main; trap - EXIT
-          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$USER_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+          LIST="$(cd "$WORK" && clasp list-deployments || true)"
+          printf '%s\n' "$LIST"
+          HEAD_DEPLOYMENT_ID="$(printf '%s\n' "$LIST" | awk '/@HEAD/{print $2; exit}')"
+          test -n "$HEAD_DEPLOYMENT_ID"
+          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$HEAD_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
+      - name: Probe HEAD RPC before Cloudflare deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 4
+          CALLBACK="jmHeadProbe${GITHUB_RUN_ID}"
+          curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$USER_RPC_UPSTREAM?memberRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/head-state.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/head-state.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/head-state.js" >/dev/null
       - name: Build user frontend and Worker
         shell: bash
         run: |
