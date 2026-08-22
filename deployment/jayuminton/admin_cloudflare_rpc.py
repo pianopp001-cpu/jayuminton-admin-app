@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse, json
+import re
 from pathlib import Path
 
 ALLOWED = [
@@ -70,7 +71,11 @@ def patch_backend(work):
     if marker in text:
         text=text.replace(marker,repl,1)
     elif not already_routed:
-        raise SystemExit('doGet marker missing and existing admin RPC route not found')
+        generic = re.compile(r'(function\s+doGet\s*\(\s*e\s*\)\s*\{)')
+        route = "\n  if (e && e.parameter && e.parameter.adminRpc === '1' && e.parameter.rpc) {\n    return adminCloudflareRpc_(e);\n  }"
+        text, count = generic.subn(r'\1' + route, text, count=1)
+        if count != 1:
+            raise SystemExit('doGet function missing and existing admin RPC route not found')
     inc='function include(filename) {'
     if 'function adminCloudflareRpc_(e)' not in text:
         if inc not in text: raise SystemExit('include marker missing')
