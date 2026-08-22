@@ -29,11 +29,13 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       USER_WORKER_NAME: jayuminton-user-web
       USER_WORKER_URL: https://jayuminton-user-web.pianopp001.workers.dev
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
       - name: Install tools
         run: npm install --global @google/clasp@latest wrangler@latest
 
@@ -46,12 +48,12 @@ jobs:
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
           MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId // empty' "$RUNNER_TEMP/deploy.json")"
           FALLBACK_DEPLOYMENT_ID="$(jq -r '.userPreviewDeploymentId // .adminPreviewDeploymentId // .previewDeploymentId // empty' "$RUNNER_TEMP/deploy.json")"
-          for value in "$MAIN_SCRIPT_ID" "$MAIN_DEPLOYMENT_ID" "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ACCOUNT_ID"; do test -n "$value"; done
+          for value in "$MAIN_SCRIPT_ID" "$MAIN_DEPLOYMENT_ID" "$FALLBACK_DEPLOYMENT_ID" "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ACCOUNT_ID"; do test -n "$value"; done
           echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
           echo "FALLBACK_DEPLOYMENT_ID=$FALLBACK_DEPLOYMENT_ID" >> "$GITHUB_ENV"
 
-      - name: Patch and deploy reusable user RPC backend
+      - name: Patch backend, verify, and reuse user RPC deployment
         shell: bash
         run: |
           set -euo pipefail
@@ -61,29 +63,68 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
           (cd "$BACKUP" && clasp pull)
           cp -a "$BACKUP/." "$WORK/"
+
           python3 deployment/jayuminton/user_cloudflare_web.py patch-backend --work "$WORK"
 
           python3 - "$WORK/Code.js" <<'PY'
           from pathlib import Path
           import sys
-          p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
-          required=['function memberCloudflareRpc_(e)','function memberSetOwnStatus(']
-          for m in required:
-              if m not in s: raise SystemExit('missing backend marker: '+m)
+          p = Path(sys.argv[1])
+          s = p.read_text(encoding='utf-8')
+          fn = r'''
+          function memberSetOwnStatus(sessionToken,memberId,status){
+            return withDocumentLock_('회원 본인 상태 변경',function(){
+              memberId=memberSessionAuth_(sessionToken,memberId);
+              status=String(status||'');
+              if(['active','rest','away','before'].indexOf(status)<0)throw new Error('지원하지 않는 상태입니다.');
+              const courts=readCourts_(),startedAt=readCourtStartedAt_(),waitGroups=readWaitGroups_();
+              Object.keys(courts).forEach(function(k){
+                const before=(courts[k]||[]).length;
+                courts[k]=(courts[k]||[]).filter(function(id){return String(id)!==memberId;});
+                if(courts[k].length!==before && courts[k].length<GROUP_SIZE)startedAt[k]='';
+              });
+              for(let i=0;i<waitGroups.length;i+=1){
+                waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});
+              }
+              writeCourts_(courts,startedAt);
+              writeWaitGroups_(waitGroups);
+              updateMemberStatuses_([memberId],status);
+              touch_();
+              return getPublicState();
+            });
+          }
+          '''
+          if 'function memberSetOwnStatus(' not in s:
+              marker = 'function include(filename) {'
+              i = s.find(marker)
+              if i < 0:
+                  raise SystemExit('include marker missing for direct self-status injection')
+              s = s[:i] + fn + '\n' + s[i:]
+          if 'function memberSetOwnStatus(' not in s:
+              raise SystemExit('memberSetOwnStatus direct injection failed')
+          if 'function memberCloudflareRpc_(e)' not in s:
+              raise SystemExit('memberCloudflareRpc missing after patch-backend')
           if 'memberSetOwnStatus: true' not in s:
-              marker='const allowed = {'
-              i=s.find(marker)
-              if i<0: raise SystemExit('RPC allowlist marker missing')
-              j=i+len(marker)
-              s=s[:j]+'\n    memberSetOwnStatus: true,'+s[j:]
+              marker = 'const allowed = {'
+              i = s.find(marker)
+              if i < 0:
+                  raise SystemExit('RPC allowlist marker missing')
+              j = i + len(marker)
+              s = s[:j] + '\n    memberSetOwnStatus: true,' + s[j:]
           if 'name === "memberSetOwnStatus"' not in s and "name === 'memberSetOwnStatus'" not in s:
-              marker="else throw new Error('허용되지 않은 사용자 함수입니다.');"
-              i=s.find(marker)
-              if i<0: raise SystemExit('RPC dispatch marker missing')
-              s=s[:i]+'else if (name === "memberSetOwnStatus") result = memberSetOwnStatus.apply(null, args);\n    '+s[i:]
-          p.write_text(s,encoding='utf-8')
-          print('RPC_BACKEND_PATCH=ok')
+              marker = "else throw new Error('허용되지 않은 사용자 함수입니다.');"
+              i = s.find(marker)
+              if i < 0:
+                  raise SystemExit('RPC dispatch marker missing')
+              s = s[:i] + 'else if (name === "memberSetOwnStatus") result = memberSetOwnStatus.apply(null, args);\n    ' + s[i:]
+          p.write_text(s, encoding='utf-8')
+          print('SELF_STATUS_BACKEND=present')
+          print('USER_RPC_ALLOWLIST=present')
           PY
+
+          grep -F 'function memberSetOwnStatus(' "$WORK/Code.js" >/dev/null
+          grep -F 'memberSetOwnStatus: true' "$WORK/Code.js" >/dev/null
+          grep -F 'function memberCloudflareRpc_(e)' "$WORK/Code.js" >/dev/null
 
           LIST="$(cd "$BACKUP" && clasp list-deployments || true)"
           printf '%s\n' "$LIST"
@@ -94,28 +135,23 @@ jobs:
 
           USED_VERSIONS="$(printf '%s\n' "$LIST" | sed -n 's/.* @\([0-9][0-9]*\).*/\1/p' | sort -n -u)"
           DELETED=0
-          for v in $(seq 30 140); do
+          for v in $(seq 30 300); do
             if printf '%s\n' "$USED_VERSIONS" | grep -qx "$v"; then continue; fi
-            if (cd "$BACKUP" && clasp delete-version "$v") >/tmp/delete-version.log 2>&1; then
-              echo "deleted unused version $v"; DELETED=$((DELETED+1))
+            if (cd "$BACKUP" && clasp delete-version "$v") >/dev/null 2>&1; then
+              echo "deleted unused version $v"
+              DELETED=$((DELETED+1))
             fi
-            if [ "$DELETED" -ge 4 ]; then break; fi
+            if [ "$DELETED" -ge 8 ]; then break; fi
           done
           echo "DELETED_UNUSED_VERSIONS=$DELETED"
 
           restore_main(){ (cd "$BACKUP" && clasp push --force) >/dev/null || true; }
           trap restore_main EXIT
           (cd "$WORK" && clasp push --force)
-          if ! (cd "$WORK" && clasp create-deployment --deploymentId "$USER_DEPLOYMENT_ID" --description "user seat UX ${GITHUB_RUN_ID}"); then
-            echo 'reuse deployment failed; trying after additional safe version cleanup'
-            for v in $(seq 141 300); do
-              if printf '%s\n' "$USED_VERSIONS" | grep -qx "$v"; then continue; fi
-              (cd "$BACKUP" && clasp delete-version "$v") >/dev/null 2>&1 || true
-            done
-            (cd "$WORK" && clasp create-deployment --deploymentId "$USER_DEPLOYMENT_ID" --description "user seat UX ${GITHUB_RUN_ID}")
-          fi
+          (cd "$WORK" && clasp create-deployment --deploymentId "$USER_DEPLOYMENT_ID" --description "user seat UX direct ${GITHUB_RUN_ID}")
           restore_main
           trap - EXIT
+
           echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$USER_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
 
       - name: Build user frontend and Worker
@@ -125,8 +161,11 @@ jobs:
           ROOT="$RUNNER_TEMP/user-worker"
           mkdir -p "$ROOT/public"
           python3 deployment/jayuminton/user_cloudflare_web.py build-frontend --snapshot source-snapshot/current-main --out "$ROOT/public" --rpc-url "$USER_WORKER_URL"
-          for marker in 'jayuminton-user-seat-self-status-v2' 'memberRequestWaitSwap(targetMemberId)' 'memberSetOwnStatus' 'NativeUserApp.setMember'; do grep -F "$marker" "$ROOT/public/index.html" >/dev/null; done
+          for marker in 'jayuminton-user-seat-self-status-v2' 'memberRequestWaitSwap(targetMemberId)' 'memberSetOwnStatus' 'NativeUserApp.setMember'; do
+            grep -F "$marker" "$ROOT/public/index.html" >/dev/null
+          done
           ! grep -F '관리자 화면을 불러오는 중입니다' "$ROOT/public/index.html" >/dev/null
+
           python3 - "$ROOT/public/index.html" "$ROOT/worker.js" <<'PY'
           import json,sys
           from pathlib import Path
@@ -134,6 +173,7 @@ jobs:
           worker='''const USER_HTML=%s; export default { async fetch(request,env){ const url=new URL(request.url); const h={'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','X-Content-Type-Options':'nosniff'}; if(url.searchParams.get('memberRpc')==='1'&&url.searchParams.get('rpc')){ const cb=url.searchParams.get('callback')||''; const rpc=url.searchParams.get('rpc')||''; const payload=url.searchParams.get('payload')||'W10'; if(!/^[A-Za-z_$][\\w$]*$/.test(cb)||!/^[A-Za-z_$][\\w$]*$/.test(rpc)) return new Response('invalid_request',{status:400,headers:h}); const up=new URL(env.USER_RPC_UPSTREAM); for(const [k,v] of [['memberRpc','1'],['rpc',rpc],['callback',cb],['payload',payload],['nonce',url.searchParams.get('nonce')||Date.now().toString()]]) up.searchParams.set(k,v); try{ const r=await fetch(up.toString(),{redirect:'follow',headers:{'Cache-Control':'no-cache'}}); const t=await r.text(); if(!r.ok||!t.startsWith(cb+'(')) return new Response(cb+'('+JSON.stringify({ok:false,error:'user_upstream_failed',status:r.status})+');',{status:502,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}}); return new Response(t,{status:200,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}});}catch(e){return new Response(cb+'('+JSON.stringify({ok:false,error:'user_proxy_exception'})+');',{status:502,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}});} } if(request.method!=='GET'&&request.method!=='HEAD') return new Response('method_not_allowed',{status:405,headers:h}); return new Response(request.method==='HEAD'?null:USER_HTML,{status:200,headers:{...h,'Content-Type':'text/html; charset=utf-8'}}); }};''' % json.dumps(html,ensure_ascii=False)
           Path(sys.argv[2]).write_text(worker,encoding='utf-8')
           PY
+
           cat > "$ROOT/wrangler.toml" <<EOF
           name = "$USER_WORKER_NAME"
           main = "worker.js"
@@ -151,7 +191,9 @@ jobs:
           wrangler deploy --config wrangler.toml
           sleep 6
           curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          for marker in 'jayuminton-user-seat-self-status-v2' 'memberRequestWaitSwap(targetMemberId)' 'memberSetOwnStatus' 'NativeUserApp.setMember'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
+          for marker in 'jayuminton-user-seat-self-status-v2' 'memberRequestWaitSwap(targetMemberId)' 'memberSetOwnStatus' 'NativeUserApp.setMember'; do
+            grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null
+          done
           CALLBACK="jmSeatProbe${GITHUB_RUN_ID}"
           curl --fail --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?memberRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/state.js"
           grep -F "$CALLBACK(" "$RUNNER_TEMP/state.js" >/dev/null
