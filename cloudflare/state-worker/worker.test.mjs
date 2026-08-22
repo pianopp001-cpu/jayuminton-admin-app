@@ -21,7 +21,12 @@ function fixture() {
 }
 {
   const state = fixture(); state.courts['2'] = [];
-  assert.deepEqual(finishCourtMutation(state, 2).state.courts['2'], ['3', '4', '5', '6']);
+  const { state: finished, event } = finishCourtMutation(state, 2);
+  assert.deepEqual(finished.courts['2'], ['3', '4', '5', '6']);
+  assert.deepEqual(finished.waitGroups, [['7', '8', '9', '10'], ['11'], ['12'], ['13'], []]);
+  assert.deepEqual(event.finished, []);
+  assert.deepEqual(event.courtEntrants.map(x => x.id), ['3', '4', '5', '6']);
+  assert.deepEqual(event.wait1Entrants.map(x => x.id), ['7', '8', '9', '10']);
 }
 {
   const result = moveMutation(fixture(), ['7'], { type: 'court', key: '3' });
@@ -43,6 +48,14 @@ function fixture() {
   const result = autoAssignMutation(fixture(), ['14', '15', '16', '17'], [{ type: 'court', key: '2' }]);
   assert.deepEqual(result.state.courts['2'], ['14', '15', '16', '17']);
   assert.equal(result.event.assigned[0].memberIds.length, 4);
+}
+{
+  // 사용자 자기배정이 먼저 저장된 경우, 관리자의 오래된 자동배정 후보 목록이 그 자리를 덮어쓰면 안 된다.
+  const userFirst = moveMutation(fixture(), ['14'], { type: 'wait', key: '5' }).state;
+  const adminAfter = autoAssignMutation(userFirst, ['14', '15', '16', '17'], [{ type: 'court', key: '2' }]);
+  assert.deepEqual(adminAfter.state.waitGroups[4], ['13', '14']);
+  assert.deepEqual(adminAfter.state.courts['2'], ['15', '16', '17']);
+  assert.equal(adminAfter.state.members.find(x => x.id === '14').games, 0);
 }
 {
   const created = upsertMemberMutation(fixture(), { id: '18', name: '신규회원', gender: '여', isNew: true });
