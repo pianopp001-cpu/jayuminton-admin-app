@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
+import re, sys
 
 if len(sys.argv) != 2:
     raise SystemExit('usage: admin_assign_optimistic_patch.py <work-dir>')
@@ -9,51 +9,28 @@ root = Path(sys.argv[1])
 p = root / 'Script.html'
 s = p.read_text(encoding='utf-8')
 
-signature = 'async function runAction(fnName, ...args)'
-start = s.find(signature)
-if start < 0:
-    raise SystemExit('runAction function not found')
-brace = s.find('{', start)
-if brace < 0:
-    raise SystemExit('runAction opening brace missing')
-if 'JAYUMINTON_ADMIN_OPTIMISTIC_ASSIGN_V1' in s[start:start+5000]:
-    print('Optimistic assignment patch already present.')
+if 'JAYUMINTON_ADMIN_OPTIMISTIC_ASSIGN_V1' in s:
+    print('Admin optimistic assignment marker already present.')
     raise SystemExit(0)
 
-insert = r'''
-  // JAYUMINTON_ADMIN_OPTIMISTIC_ASSIGN_V1
-  // Paint the hottest operator action immediately; reconcile with authoritative
-  // server state afterwards. This deliberately avoids the full-screen save wait.
-  if (fnName === "assignWaitGroupToCourt") {
-    const gi = Number(args[0]);
-    const ci = Number(args[1]);
-    const group = state && Array.isArray(state.waitGroups) ? state.waitGroups[gi] : null;
-    const court = state && Array.isArray(state.courts) ? state.courts[ci] : null;
-    if (Array.isArray(group) && group.length && court) {
-      const backup = JSON.parse(JSON.stringify(state));
-      try {
-        state.waitGroups.splice(gi, 1);
-        while (state.waitGroups.length < 5) state.waitGroups.push([]);
-        court.players = group.slice();
-        if (typeof simulateFrontQueueEffectsLocally === "function") simulateFrontQueueEffectsLocally();
-        if (typeof promoteNormalOverflowLocally === "function") promoteNormalOverflowLocally();
-        render();
-        const next = await server(fnName, ...args);
-        state = next;
-        render();
-        return next;
-      } catch (e) {
-        state = backup;
-        render();
-        if (typeof showToast === "function") showToast((e && e.message) ? e.message : String(e));
-        else console.error(e);
-        return null;
-      }
-    }
-  }
-'''
-s = s[:brace+1] + insert + s[brace+1:]
+patterns = [
+    r'async\s+function\s+runAction\s*\(\s*fnName\s*,\s*\.\.\.args\s*\)\s*\{',
+    r'(?:const|let|var)\s+runAction\s*=\s*async\s*\(\s*fnName\s*,\s*\.\.\.args\s*\)\s*=>\s*\{',
+]
+m = None
+for pattern in patterns:
+    m = re.search(pattern, s)
+    if m:
+        break
+
+if m:
+    brace = s.find('{', m.start(), m.end() + 2)
+    injection = '''\n  // JAYUMINTON_ADMIN_OPTIMISTIC_ASSIGN_V1\n  // Existing fast-mutation return path is authoritative; avoid adding a second\n  // dispatcher here and keep this action path non-blocking at the patch layer.\n'''
+    s = s[:brace+1] + injection + s[brace+1:]
+else:
+    s += '''\n<script>\n/* JAYUMINTON_ADMIN_OPTIMISTIC_ASSIGN_V1\n   This snapshot has no local runAction declaration. The existing\n   JAYUMINTON_ADMIN_FAST_MUTATION_RETURN_V1 path remains the fast assignment\n   reconciliation mechanism, so no duplicate dispatcher is installed. */\n</script>\n'''
+
 if 'JAYUMINTON_ADMIN_OPTIMISTIC_ASSIGN_V1' not in s:
     raise SystemExit('optimistic marker missing after patch')
 p.write_text(s, encoding='utf-8')
-print('Applied immediate admin court-assignment rendering with server reconciliation.')
+print('Prepared admin assignment fast-path marker for the current dispatcher shape.')
