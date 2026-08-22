@@ -48,8 +48,9 @@ jobs:
           wrangler d1 list --json > "$RUNNER_TEMP/d1-list.json"
           D1_ID="$(jq -r '.[] | select(.name=="jayuminton-state") | .uuid' "$RUNNER_TEMP/d1-list.json" | head -1)"
           if [ -z "$D1_ID" ]; then
-            wrangler d1 create jayuminton-state --json > "$RUNNER_TEMP/d1-create.json"
-            D1_ID="$(jq -r '.uuid // .d1_databases[0].uuid // empty' "$RUNNER_TEMP/d1-create.json")"
+            wrangler d1 create jayuminton-state
+            wrangler d1 list --json > "$RUNNER_TEMP/d1-list-after-create.json"
+            D1_ID="$(jq -r '.[] | select(.name=="jayuminton-state") | .uuid' "$RUNNER_TEMP/d1-list-after-create.json" | head -1)"
           fi
           test -n "$D1_ID"
           sed "s/__D1_DATABASE_ID__/$D1_ID/g" cloudflare/state-worker/wrangler.toml.template > "$RUNNER_TEMP/wrangler.toml"
