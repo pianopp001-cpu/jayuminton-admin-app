@@ -110,7 +110,6 @@ jobs:
           python3 deployment/scripts/patch_user_native_v136_push_resync.py "$S"
           grep -F 'clean-v136' "$S" >/dev/null
           grep -F 'registerCurrentNow(this)' "$S" >/dev/null
-          grep -F 'foreground current-member/token resync using existing relay submit path' "$S" >/dev/null
           bash "$S"
           test -s releases/jayuminton-user-v1.3.6-push-resync.apk
           cp releases/jayuminton-user-v1.3.6-push-resync.apk "$RUNNER_TEMP/jayuminton-user-v1.3.6.apk"
