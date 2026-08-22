@@ -33,20 +33,35 @@ jobs:
           node-version: '22'
       - name: Install tools
         run: npm install --global @google/clasp@latest wrangler@latest
-      - name: Resolve existing user RPC
+      - name: Resolve verified production user RPC
         shell: bash
         run: |
           set -euo pipefail
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          MAIN_SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
-          test -n "$MAIN_SCRIPT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
+          SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
+          test -n "$SCRIPT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
           WORK="$RUNNER_TEMP/rpc"; mkdir -p "$WORK"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
           LIST="$(cd "$WORK" && clasp list-deployments || true)"
-          HEAD_ID="$(printf '%s\n' "$LIST" | awk '/@HEAD/{print $2; exit}')"
-          test -n "$HEAD_ID"
-          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$HEAD_ID/exec" >> "$GITHUB_ENV"
+          ID="$(printf '%s\n' "$LIST" | grep -F 'unified member production rpc' | grep -Eo 'AKfy[a-zA-Z0-9_-]+' | head -1)"
+          test -n "$ID"
+          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+      - name: Verify RPC capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          cb="state_${GITHUB_RUN_ID}"
+          curl --fail --location --retry 4 --max-time 60 "$USER_RPC_UPSTREAM?memberRpc=1&rpc=getPublicState&callback=$cb&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/state.js"
+          grep -F "$cb(" "$RUNNER_TEMP/state.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/state.js" >/dev/null
+          for rpc in memberRequestWaitSwap memberSetOwnStatus; do
+            c="probe_${rpc}_${GITHUB_RUN_ID}"
+            curl --fail --location --retry 4 --max-time 60 "$USER_RPC_UPSTREAM?memberRpc=1&rpc=$rpc&callback=$c&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/$rpc.js"
+            grep -F "$c(" "$RUNNER_TEMP/$rpc.js" >/dev/null
+            ! grep -F '허용되지 않은 사용자 함수' "$RUNNER_TEMP/$rpc.js" >/dev/null
+            ! grep -F 'is not defined' "$RUNNER_TEMP/$rpc.js" >/dev/null
+          done
       - name: Build patched user frontend
         shell: bash
         run: |
@@ -80,8 +95,8 @@ jobs:
           sleep 6
           curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
           for marker in 'jayuminton-user-native-dialog-v3' 'selectMemberSelf(id)' 'openMemberSelfStatusMenu' '코트배정대기' '자리 바꾸기'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
-          CALLBACK="jmV3Probe${GITHUB_RUN_ID}"
-          curl --fail --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?memberRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/state.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/state.js" >/dev/null
-          grep -F '"ok":true' "$RUNNER_TEMP/state.js" >/dev/null
+          cb="live_${GITHUB_RUN_ID}"
+          curl --fail --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?memberRpc=1&rpc=getPublicState&callback=$cb&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.js"
+          grep -F "$cb(" "$RUNNER_TEMP/live.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/live.js" >/dev/null
           echo USER_NATIVE_DIALOG_V3_LIVE=success
