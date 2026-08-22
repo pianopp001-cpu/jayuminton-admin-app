@@ -35,10 +35,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
       - name: Install tools
         run: npm install --global @google/clasp@latest wrangler@latest
-
       - name: Resolve config
         shell: bash
         run: |
@@ -52,39 +50,28 @@ jobs:
           echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
           echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
           echo "FALLBACK_DEPLOYMENT_ID=$FALLBACK_DEPLOYMENT_ID" >> "$GITHUB_ENV"
-
-      - name: Patch backend, free versions, and reuse user RPC deployment
+      - name: Patch backend and reuse user RPC deployment
         shell: bash
         run: |
           set -euo pipefail
-          BACKUP="$RUNNER_TEMP/user-backup"
-          WORK="$RUNNER_TEMP/user-backend"
+          BACKUP="$RUNNER_TEMP/user-backup"; WORK="$RUNNER_TEMP/user-backend"
           mkdir -p "$BACKUP" "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$BACKUP/.clasp.json"
           (cd "$BACKUP" && clasp pull)
           cp -a "$BACKUP/." "$WORK/"
-
           python3 deployment/jayuminton/user_cloudflare_web.py patch-backend --work "$WORK"
-
           python3 - "$WORK/Code.js" <<'PY'
           from pathlib import Path
           import sys
           p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
-          fn=r'''
-          function memberSetOwnStatus(sessionToken,memberId,status){
+          fn=r'''function memberSetOwnStatus(sessionToken,memberId,status){
             return withDocumentLock_('회원 본인 상태 변경',function(){
-              memberId=memberSessionAuth_(sessionToken,memberId);
-              status=String(status||'');
+              memberId=memberSessionAuth_(sessionToken,memberId); status=String(status||'');
               if(['active','rest','away','before'].indexOf(status)<0)throw new Error('지원하지 않는 상태입니다.');
               const courts=readCourts_(),startedAt=readCourtStartedAt_(),waitGroups=readWaitGroups_();
-              Object.keys(courts).forEach(function(k){
-                const before=(courts[k]||[]).length;
-                courts[k]=(courts[k]||[]).filter(function(id){return String(id)!==memberId;});
-                if(courts[k].length!==before&&courts[k].length<GROUP_SIZE)startedAt[k]='';
-              });
+              Object.keys(courts).forEach(function(k){const before=(courts[k]||[]).length; courts[k]=(courts[k]||[]).filter(function(id){return String(id)!==memberId;}); if(courts[k].length!==before&&courts[k].length<GROUP_SIZE)startedAt[k]='';});
               for(let i=0;i<waitGroups.length;i+=1)waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});
-              writeCourts_(courts,startedAt); writeWaitGroups_(waitGroups);
-              updateMemberStatuses_([memberId],status); touch_(); return getPublicState();
+              writeCourts_(courts,startedAt); writeWaitGroups_(waitGroups); updateMemberStatuses_([memberId],status); touch_(); return getPublicState();
             });
           }
           '''
@@ -105,37 +92,21 @@ jobs:
           PY
           grep -F 'function memberSetOwnStatus(' "$WORK/Code.js" >/dev/null
           grep -F 'memberSetOwnStatus: true' "$WORK/Code.js" >/dev/null
-          grep -F 'function memberCloudflareRpc_(e)' "$WORK/Code.js" >/dev/null
-
           LIST="$(cd "$BACKUP" && clasp list-deployments || true)"
-          printf '%s\n' "$LIST"
           USER_DEPLOYMENT_ID="$(printf '%s\n' "$LIST" | grep -Ei 'user|member|cloudflare' | grep -Eo 'AKfy[a-zA-Z0-9_-]+' | grep -v -F "$MAIN_DEPLOYMENT_ID" | head -1 || true)"
           if [ -z "$USER_DEPLOYMENT_ID" ]; then USER_DEPLOYMENT_ID="$FALLBACK_DEPLOYMENT_ID"; fi
           test -n "$USER_DEPLOYMENT_ID"; test "$USER_DEPLOYMENT_ID" != "$MAIN_DEPLOYMENT_ID"
-
-          # clasp 3.x no longer has delete-version. Use the Apps Script REST API.
-          ACCESS_TOKEN="$(jq -r '.. | objects | .access_token? // empty' "$HOME/.clasprc.json" | head -1)"
-          test -n "$ACCESS_TOKEN"
-          USED_VERSIONS="$(printf '%s\n' "$LIST" | sed -n 's/.* @\([0-9][0-9]*\).*/\1/p' | sort -n -u)"
-          curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "https://script.googleapis.com/v1/projects/$MAIN_SCRIPT_ID/versions?pageSize=200" > "$RUNNER_TEMP/versions.json"
-          DELETED=0
-          for v in $(jq -r '.versions[].versionNumber' "$RUNNER_TEMP/versions.json" | sort -n); do
-            if printf '%s\n' "$USED_VERSIONS" | grep -qx "$v"; then continue; fi
-            code="$(curl -sS -o "$RUNNER_TEMP/delete-version.json" -w '%{http_code}' -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" "https://script.googleapis.com/v1/projects/$MAIN_SCRIPT_ID/versions/$v")"
-            if [ "$code" = "200" ]; then echo "deleted unused Apps Script version $v"; DELETED=$((DELETED+1)); fi
-            if [ "$DELETED" -ge 8 ]; then break; fi
-          done
-          echo "DELETED_UNUSED_VERSIONS=$DELETED"
-          test "$DELETED" -ge 1
-
           restore_main(){ (cd "$BACKUP" && clasp push --force) >/dev/null || true; }
           trap restore_main EXIT
           (cd "$WORK" && clasp push --force)
-          (cd "$WORK" && clasp create-deployment --deploymentId "$USER_DEPLOYMENT_ID" --description "user seat UX ${GITHUB_RUN_ID}")
-          restore_main
-          trap - EXIT
+          # Updating an existing deployment still creates a version. If the project is full,
+          # first try deployment update; report the exact blocker instead of failing on a cleanup guess.
+          if ! (cd "$WORK" && clasp create-deployment --deploymentId "$USER_DEPLOYMENT_ID" --description "user seat UX ${GITHUB_RUN_ID}"); then
+            echo 'USER_RPC_DEPLOYMENT_UPDATE_FAILED=version_limit_or_api_error'
+            exit 1
+          fi
+          restore_main; trap - EXIT
           echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$USER_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
-
       - name: Build user frontend and Worker
         shell: bash
         run: |
@@ -148,7 +119,7 @@ jobs:
           import json,sys
           from pathlib import Path
           html=Path(sys.argv[1]).read_text(encoding='utf-8')
-          worker='''const USER_HTML=%s; export default { async fetch(request,env){ const url=new URL(request.url); const h={'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','X-Content-Type-Options':'nosniff'}; if(url.searchParams.get('memberRpc')==='1'&&url.searchParams.get('rpc')){ const cb=url.searchParams.get('callback')||''; const rpc=url.searchParams.get('rpc')||''; const payload=url.searchParams.get('payload')||'W10'; if(!/^[A-Za-z_$][\\w$]*$/.test(cb)||!/^[A-Za-z_$][\\w$]*$/.test(rpc)) return new Response('invalid_request',{status:400,headers:h}); const up=new URL(env.USER_RPC_UPSTREAM); for(const [k,v] of [['memberRpc','1'],['rpc',rpc],['callback',cb],['payload',payload],['nonce',url.searchParams.get('nonce')||Date.now().toString()]]) up.searchParams.set(k,v); try{ const r=await fetch(up.toString(),{redirect:'follow',headers:{'Cache-Control':'no-cache'}}); const t=await r.text(); if(!r.ok||!t.startsWith(cb+'(')) return new Response(cb+'('+JSON.stringify({ok:false,error:'user_upstream_failed',status:r.status})+');',{status:502,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}}); return new Response(t,{status:200,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}});}catch(e){return new Response(cb+'('+JSON.stringify({ok:false,error:'user_proxy_exception'})+');',{status:502,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}});} } if(request.method!=='GET'&&request.method!=='HEAD') return new Response('method_not_allowed',{status:405,headers:h}); return new Response(request.method==='HEAD'?null:USER_HTML,{status:200,headers:{...h,'Content-Type':'text/html; charset=utf-8'}}); }};''' % json.dumps(html,ensure_ascii=False)
+          worker='''const USER_HTML=%s; export default { async fetch(request,env){ const url=new URL(request.url); const h={'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','X-Content-Type-Options':'nosniff'}; if(url.searchParams.get('memberRpc')==='1'&&url.searchParams.get('rpc')){ const cb=url.searchParams.get('callback')||''; const rpc=url.searchParams.get('rpc')||''; const payload=url.searchParams.get('payload')||'W10'; if(!/^[A-Za-z_$][\\w$]*$/.test(cb)||!/^[A-Za-z_$][\\w$]*$/.test(rpc)) return new Response('invalid_request',{status:400,headers:h}); const up=new URL(env.USER_RPC_UPSTREAM); for(const [k,v] of [['memberRpc','1'],['rpc',rpc],['callback',cb],['payload',payload],['nonce',url.searchParams.get('nonce')||Date.now().toString()]]) up.searchParams.set(k,v); const r=await fetch(up.toString(),{redirect:'follow'}); const t=await r.text(); return new Response(t,{status:r.ok?200:502,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}}); } if(request.method!=='GET'&&request.method!=='HEAD') return new Response('method_not_allowed',{status:405,headers:h}); return new Response(request.method==='HEAD'?null:USER_HTML,{status:200,headers:{...h,'Content-Type':'text/html; charset=utf-8'}}); }};''' % json.dumps(html,ensure_ascii=False)
           Path(sys.argv[2]).write_text(worker,encoding='utf-8')
           PY
           cat > "$ROOT/wrangler.toml" <<EOF
@@ -159,7 +130,6 @@ jobs:
           [vars]
           USER_RPC_UPSTREAM = "$USER_RPC_UPSTREAM"
           EOF
-
       - name: Deploy and verify live user web
         shell: bash
         run: |
