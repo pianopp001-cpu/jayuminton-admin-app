@@ -1,27 +1,24 @@
 name: Deploy user Cloudflare seat UX fix
-
 on:
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/deploy-user-cloudflare-seat-fix.yml'
+      - 'deployment/jayuminton/user_cloudflare_native_dialog_patch.py'
       - 'deployment/jayuminton/user_cloudflare_web.py'
       - 'source-snapshot/current-main/Index.html'
       - 'source-snapshot/current-main/Style.html'
       - 'source-snapshot/current-main/Script.html'
   workflow_dispatch: {}
-
 permissions:
   contents: read
-
 concurrency:
   group: jayuminton-user-cloudflare-seat-fix
   cancel-in-progress: true
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
@@ -36,7 +33,7 @@ jobs:
           node-version: '22'
       - name: Install tools
         run: npm install --global @google/clasp@latest wrangler@latest
-      - name: Resolve config
+      - name: Resolve existing user RPC
         shell: bash
         run: |
           set -euo pipefail
@@ -44,102 +41,20 @@ jobs:
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           MAIN_SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
           test -n "$MAIN_SCRIPT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
-          echo "MAIN_SCRIPT_ID=$MAIN_SCRIPT_ID" >> "$GITHUB_ENV"
-      - name: Patch Apps Script HEAD for user RPC V2
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/user-backend"; mkdir -p "$WORK"
+          WORK="$RUNNER_TEMP/rpc"; mkdir -p "$WORK"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
-          (cd "$WORK" && clasp pull)
-          python3 - "$WORK/Code.js" <<'PY'
-          from pathlib import Path
-          import sys
-          p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
-          include='function include(filename) {'
-          if include not in s: raise SystemExit('include marker missing')
-          if 'function memberSetOwnStatus(' not in s:
-              self_fn=r'''
-function memberSetOwnStatus(sessionToken,memberId,status){
-  return withDocumentLock_('회원 본인 상태 변경',function(){
-    memberId=memberSessionAuth_(sessionToken,memberId);
-    status=String(status||'');
-    if(['active','rest','away','before'].indexOf(status)<0)throw new Error('지원하지 않는 상태입니다.');
-    const courts=readCourts_(),startedAt=readCourtStartedAt_(),waitGroups=readWaitGroups_();
-    Object.keys(courts).forEach(function(k){
-      const before=(courts[k]||[]).length;
-      courts[k]=(courts[k]||[]).filter(function(id){return String(id)!==memberId;});
-      if(courts[k].length!==before&&courts[k].length<GROUP_SIZE)startedAt[k]='';
-    });
-    for(let i=0;i<waitGroups.length;i+=1)waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});
-    writeCourts_(courts,startedAt);writeWaitGroups_(waitGroups);updateMemberStatuses_([memberId],status);touch_();return getPublicState();
-  });
-}
-'''
-              s=s.replace(include,self_fn+'\n'+include,1)
-          if 'function memberCloudflareRpcV2_(e)' not in s:
-              rpc=r'''
-function memberCloudflareRpcV2_(e){
-  ensureSetup_();
-  const p=e&&e.parameter?e.parameter:{};
-  const callback=String(p.callback||'');
-  const name=String(p.rpc||'');
-  const allowed={getPublicState:true,getMemberPasswordVersion:true,verifyMemberPassword:true,resumeMemberSession:true,memberMoveToWaitGroup:true,memberLeaveWaitGroup:true,memberSetOwnStatus:true,memberRequestWaitSwap:true,memberGetWaitSwapRequest:true,memberRespondWaitSwap:true};
-  if(!/^[A-Za-z_$][A-Za-z0-9_$]{0,80}$/.test(callback))throw new Error('잘못된 callback입니다.');
-  if(!allowed[name])return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:false,error:'허용되지 않은 사용자 함수입니다.'})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  let args=[];
-  try{const encoded=String(p.payload||'');if(encoded){const normalized=encoded.replace(/-/g,'+').replace(/_/g,'/');const pad='='.repeat((4-normalized.length%4)%4);args=JSON.parse(Utilities.newBlob(Utilities.base64Decode(normalized+pad)).getDataAsString('UTF-8'));}if(!Array.isArray(args))throw new Error('args');}
-  catch(error){return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:false,error:'요청 데이터를 읽을 수 없습니다.'})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);}
-  try{
-    let result;
-    if(name==='getPublicState')result=getPublicState.apply(null,args);
-    else if(name==='getMemberPasswordVersion')result=getMemberPasswordVersion.apply(null,args);
-    else if(name==='verifyMemberPassword')result=verifyMemberPassword.apply(null,args);
-    else if(name==='resumeMemberSession')result=resumeMemberSession.apply(null,args);
-    else if(name==='memberMoveToWaitGroup')result=memberMoveToWaitGroup.apply(null,args);
-    else if(name==='memberLeaveWaitGroup')result=memberLeaveWaitGroup.apply(null,args);
-    else if(name==='memberSetOwnStatus')result=memberSetOwnStatus.apply(null,args);
-    else if(name==='memberRequestWaitSwap')result=memberRequestWaitSwap.apply(null,args);
-    else if(name==='memberGetWaitSwapRequest')result=memberGetWaitSwapRequest.apply(null,args);
-    else if(name==='memberRespondWaitSwap')result=memberRespondWaitSwap.apply(null,args);
-    else throw new Error('허용되지 않은 사용자 함수입니다.');
-    return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:true,result:result})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }catch(error){return ContentService.createTextOutput(callback+'('+JSON.stringify({ok:false,error:String(error&&error.message||error||'서버 오류')})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);}
-}
-'''
-              s=s.replace(include,rpc+'\n'+include,1)
-          branch="  if (e && e.parameter && e.parameter.memberRpc === '1' && e.parameter.rpc) {\n    return memberCloudflareRpcV2_(e);\n  }\n"
-          if branch not in s:
-              marker='function doGet(e) {'
-              if marker not in s: raise SystemExit('doGet marker missing')
-              s=s.replace(marker,marker+'\n'+branch,1)
-          p.write_text(s,encoding='utf-8')
-          PY
-          grep -F 'function memberSetOwnStatus(' "$WORK/Code.js" >/dev/null
-          grep -F 'function memberCloudflareRpcV2_(e)' "$WORK/Code.js" >/dev/null
-          grep -F 'return memberCloudflareRpcV2_(e);' "$WORK/Code.js" >/dev/null
-          (cd "$WORK" && clasp push --force)
           LIST="$(cd "$WORK" && clasp list-deployments || true)"
-          printf '%s\n' "$LIST"
-          HEAD_DEPLOYMENT_ID="$(printf '%s\n' "$LIST" | awk '/@HEAD/{print $2; exit}')"
-          test -n "$HEAD_DEPLOYMENT_ID"
-          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$HEAD_DEPLOYMENT_ID/exec" >> "$GITHUB_ENV"
-      - name: Probe HEAD RPC before Cloudflare deploy
-        shell: bash
-        run: |
-          set -euo pipefail
-          sleep 4
-          CALLBACK="jmHeadProbe${GITHUB_RUN_ID}"
-          curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$USER_RPC_UPSTREAM?memberRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/head-state.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/head-state.js" >/dev/null
-          grep -F '"ok":true' "$RUNNER_TEMP/head-state.js" >/dev/null
-      - name: Build user frontend and Worker
+          HEAD_ID="$(printf '%s\n' "$LIST" | awk '/@HEAD/{print $2; exit}')"
+          test -n "$HEAD_ID"
+          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$HEAD_ID/exec" >> "$GITHUB_ENV"
+      - name: Build patched user frontend
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/user-worker"; mkdir -p "$ROOT/public"
           python3 deployment/jayuminton/user_cloudflare_web.py build-frontend --snapshot source-snapshot/current-main --out "$ROOT/public" --rpc-url "$USER_WORKER_URL"
-          for marker in 'jayuminton-user-seat-self-status-v2' 'memberRequestWaitSwap(targetMemberId)' 'memberSetOwnStatus' 'NativeUserApp.setMember'; do grep -F "$marker" "$ROOT/public/index.html" >/dev/null; done
+          python3 deployment/jayuminton/user_cloudflare_native_dialog_patch.py "$ROOT/public/index.html"
+          for marker in 'jayuminton-user-native-dialog-v3' 'selectMemberSelf(id)' 'openMemberSelfStatusMenu' '코트배정대기' '자리 바꾸기'; do grep -F "$marker" "$ROOT/public/index.html" >/dev/null; done
           ! grep -F '관리자 화면을 불러오는 중입니다' "$ROOT/public/index.html" >/dev/null
           python3 - "$ROOT/public/index.html" "$ROOT/worker.js" <<'PY'
           import json,sys
@@ -164,9 +79,9 @@ function memberCloudflareRpcV2_(e){
           wrangler deploy --config wrangler.toml
           sleep 6
           curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          for marker in 'jayuminton-user-seat-self-status-v2' 'memberRequestWaitSwap(targetMemberId)' 'memberSetOwnStatus' 'NativeUserApp.setMember'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
-          CALLBACK="jmSeatProbe${GITHUB_RUN_ID}"
+          for marker in 'jayuminton-user-native-dialog-v3' 'selectMemberSelf(id)' 'openMemberSelfStatusMenu' '코트배정대기' '자리 바꾸기'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
+          CALLBACK="jmV3Probe${GITHUB_RUN_ID}"
           curl --fail --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?memberRpc=1&rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/state.js"
           grep -F "$CALLBACK(" "$RUNNER_TEMP/state.js" >/dev/null
           grep -F '"ok":true' "$RUNNER_TEMP/state.js" >/dev/null
-          echo 'USER_SEAT_UX_LIVE=success'
+          echo USER_NATIVE_DIALOG_V3_LIVE=success
