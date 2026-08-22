@@ -1,0 +1,102 @@
+name: Deploy user Cloudflare seat UX fix
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-user-cloudflare-seat-fix.yml'
+      - 'deployment/jayuminton/user_cloudflare_native_dialog_patch.py'
+      - 'deployment/jayuminton/user_cloudflare_web.py'
+      - 'source-snapshot/current-main/Index.html'
+      - 'source-snapshot/current-main/Style.html'
+      - 'source-snapshot/current-main/Script.html'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: jayuminton-user-cloudflare-seat-fix
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      USER_WORKER_NAME: jayuminton-user-web
+      USER_WORKER_URL: https://jayuminton-user-web.pianopp001.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install tools
+        run: npm install --global @google/clasp@latest wrangler@latest
+      - name: Resolve verified production user RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
+          test -n "$SCRIPT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
+          WORK="$RUNNER_TEMP/rpc"; mkdir -p "$WORK"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$WORK/.clasp.json"
+          LIST="$(cd "$WORK" && clasp list-deployments || true)"
+          ID="$(printf '%s\n' "$LIST" | grep -F 'unified member production rpc' | grep -Eo 'AKfy[a-zA-Z0-9_-]+' | head -1)"
+          test -n "$ID"
+          echo "USER_RPC_UPSTREAM=https://script.google.com/macros/s/$ID/exec" >> "$GITHUB_ENV"
+      - name: Verify RPC capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          cb="state_${GITHUB_RUN_ID}"
+          curl --fail --location --retry 4 --max-time 60 "$USER_RPC_UPSTREAM?memberRpc=1&rpc=getPublicState&callback=$cb&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/state.js"
+          grep -F "$cb(" "$RUNNER_TEMP/state.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/state.js" >/dev/null
+          for rpc in memberRequestWaitSwap memberSetOwnStatus; do
+            c="probe_${rpc}_${GITHUB_RUN_ID}"
+            curl --fail --location --retry 4 --max-time 60 "$USER_RPC_UPSTREAM?memberRpc=1&rpc=$rpc&callback=$c&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/$rpc.js"
+            grep -F "$c(" "$RUNNER_TEMP/$rpc.js" >/dev/null
+            ! grep -F '허용되지 않은 사용자 함수' "$RUNNER_TEMP/$rpc.js" >/dev/null
+            ! grep -F 'is not defined' "$RUNNER_TEMP/$rpc.js" >/dev/null
+          done
+      - name: Build patched user frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/user-worker"; mkdir -p "$ROOT/public"
+          python3 deployment/jayuminton/user_cloudflare_web.py build-frontend --snapshot source-snapshot/current-main --out "$ROOT/public" --rpc-url "$USER_WORKER_URL"
+          python3 deployment/jayuminton/user_cloudflare_native_dialog_patch.py "$ROOT/public/index.html"
+          for marker in 'jayuminton-user-native-dialog-v3' 'selectMemberSelf(id)' 'openMemberSelfStatusMenu' '코트배정대기' '자리 바꾸기'; do grep -F "$marker" "$ROOT/public/index.html" >/dev/null; done
+          ! grep -F '관리자 화면을 불러오는 중입니다' "$ROOT/public/index.html" >/dev/null
+          python3 - "$ROOT/public/index.html" "$ROOT/worker.js" <<'PY'
+          import json,sys
+          from pathlib import Path
+          html=Path(sys.argv[1]).read_text(encoding='utf-8')
+          worker='''const USER_HTML=%s; export default { async fetch(request,env){ const url=new URL(request.url); const h={'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','X-Content-Type-Options':'nosniff'}; if(url.searchParams.get('memberRpc')==='1'&&url.searchParams.get('rpc')){ const cb=url.searchParams.get('callback')||''; const rpc=url.searchParams.get('rpc')||''; const payload=url.searchParams.get('payload')||'W10'; if(!/^[A-Za-z_$][\\w$]*$/.test(cb)||!/^[A-Za-z_$][\\w$]*$/.test(rpc)) return new Response('invalid_request',{status:400,headers:h}); const up=new URL(env.USER_RPC_UPSTREAM); for(const [k,v] of [['memberRpc','1'],['rpc',rpc],['callback',cb],['payload',payload],['nonce',url.searchParams.get('nonce')||Date.now().toString()]]) up.searchParams.set(k,v); const r=await fetch(up.toString(),{redirect:'follow'}); const t=await r.text(); return new Response(t,{status:r.ok?200:502,headers:{...h,'Content-Type':'application/javascript; charset=utf-8'}}); } if(request.method!=='GET'&&request.method!=='HEAD') return new Response('method_not_allowed',{status:405,headers:h}); return new Response(request.method==='HEAD'?null:USER_HTML,{status:200,headers:{...h,'Content-Type':'text/html; charset=utf-8'}}); }};''' % json.dumps(html,ensure_ascii=False)
+          Path(sys.argv[2]).write_text(worker,encoding='utf-8')
+          PY
+          cat > "$ROOT/wrangler.toml" <<EOF
+          name = "$USER_WORKER_NAME"
+          main = "worker.js"
+          compatibility_date = "2026-08-21"
+          workers_dev = true
+          [vars]
+          USER_RPC_UPSTREAM = "$USER_RPC_UPSTREAM"
+          EOF
+      - name: Deploy and verify live user web
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/user-worker"
+          wrangler deploy --config wrangler.toml
+          sleep 6
+          curl --fail --location --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          for marker in 'jayuminton-user-native-dialog-v3' 'selectMemberSelf(id)' 'openMemberSelfStatusMenu' '코트배정대기' '자리 바꾸기'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
+          cb="live_${GITHUB_RUN_ID}"
+          curl --fail --retry 6 --retry-delay 2 --max-time 60 "$USER_WORKER_URL/?memberRpc=1&rpc=getPublicState&callback=$cb&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.js"
+          grep -F "$cb(" "$RUNNER_TEMP/live.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/live.js" >/dev/null
+          echo USER_NATIVE_DIALOG_V3_LIVE=success

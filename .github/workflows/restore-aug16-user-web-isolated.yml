@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/restore-aug16-user-web-isolated.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-aug16-user-web-isolated.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -57,7 +61,7 @@ jobs:
           sleep 7
           CODE="$(curl -L -sS --retry 5 --retry-delay 2 --max-time 60 -o "$RUNNER_TEMP/live.html" -w '%{http_code}' "$URL?mode=user&app=user&restore=aug16" || true)"
           test "$CODE" = 200
-          ! grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open' "$RUNNER_TEMP/live.html"
+          ! grep -Eqi 'Google Drive|unable to open|파일을 열 수|요청한 파일|Sorry, unable to open|관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/live.html"
           {
             echo "KNOWN_WORKING_VERSION=$SAFE_VERSION"
             echo "USER_DEPLOYMENT_ID=$USER_ID"

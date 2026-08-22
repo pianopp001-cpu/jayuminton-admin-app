@@ -1,0 +1,181 @@
+name: Restore user one-tap seat swap and self status
+
+on:
+  push:
+    branches: [fix/user-native-separate-package-v1]
+    paths:
+      - '.github/workflows/restore-user-seat-swap-self-status.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-user-seat-swap-self-status.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-seat-swap-self-status
+  cancel-in-progress: false
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/user-native-separate-package-v1
+          fetch-depth: 0
+
+      - name: Restore user-only interactions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          sp=Path('source-snapshot/current-main/Script.html')
+          cp=Path('source-snapshot/current-main/Code.js')
+          s=sp.read_text(encoding='utf-8')
+          c=cp.read_text(encoding='utf-8')
+
+          marker='JAYUMINTON_USER_ONE_TAP_SWAP_SELF_STATUS_V1'
+          if marker not in s:
+              insert = r'''
+// JAYUMINTON_USER_ONE_TAP_SWAP_SELF_STATUS_V1
+(function installUserOneTapSwapAndSelfStatus(){
+  if (typeof window === 'undefined' || window.__JAYUMINTON_USER_ONE_TAP_SWAP_SELF_STATUS_V1__) return;
+  window.__JAYUMINTON_USER_ONE_TAP_SWAP_SELF_STATUS_V1__ = true;
+
+  window.handleMemberWaitOtherTap = function(groupIndex,targetMemberId,event){
+    if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN) return;
+    if(event){event.preventDefault();event.stopPropagation();}
+    const a=typeof memberWaitSeatSessionArgs==='function' ? memberWaitSeatSessionArgs() : null;
+    if(!a||!a.member||!a.member.id)return;
+    if(String(targetMemberId)===String(a.member.id))return;
+    const target=(STATE.members||[]).find(function(item){return item&&String(item.id)===String(targetMemberId);});
+    if(!target)return;
+    if(confirm(String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?')){
+      if(typeof clearMemberWaitSeatPick==='function') clearMemberWaitSeatPick();
+      memberRequestWaitSwap(targetMemberId);
+    }
+  };
+
+  window.memberSetOwnStatus = async function(status){
+    const a=typeof memberWaitSeatSessionArgs==='function' ? memberWaitSeatSessionArgs() : null;
+    if(!a||!a.member||!a.member.id)return;
+    const labels={active:'배정대기',rest:'휴식',away:'귀가',before:'도착전'};
+    if(!labels[status])return;
+    if(!confirm(labels[status]+' 상태로 이동할까요?'))return;
+    try{
+      const state=await server('memberSetOwnStatus',[a.token,String(a.member.id),status]);
+      if(typeof clearMemberWaitSeatPick==='function') clearMemberWaitSeatPick();
+      renderState(state);
+      if(typeof showMemberSettingMessage==='function') showMemberSettingMessage(labels[status]+' 상태로 이동했어요.');
+    }catch(e){alert((e&&e.message)||String(e));}
+  };
+
+  window.openMemberSelfStatusMenu = function(){
+    const value=prompt('내 상태 이동\n1. 배정대기\n2. 휴식\n3. 귀가\n4. 도착전\n\n번호를 입력하세요.','1');
+    const map={'1':'active','2':'rest','3':'away','4':'before'};
+    if(map[value]) memberSetOwnStatus(map[value]);
+  };
+
+  let timer=null, longFired=false, suppressUntil=0;
+  document.addEventListener('pointerdown',function(e){
+    if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+    const card=e.target&&e.target.closest?e.target.closest('.is-self-member'):null;
+    if(!card)return;
+    longFired=false;
+    timer=setTimeout(function(){
+      longFired=true;suppressUntil=Date.now()+900;
+      if(navigator.vibrate)try{navigator.vibrate(35);}catch(_e){}
+      openMemberSelfStatusMenu();
+    },650);
+  },true);
+  ['pointerup','pointercancel','pointermove'].forEach(function(type){
+    document.addEventListener(type,function(){if(timer){clearTimeout(timer);timer=null;}},true);
+  });
+  document.addEventListener('click',function(e){
+    if(Date.now()>suppressUntil&&!longFired)return;
+    const card=e.target&&e.target.closest?e.target.closest('.is-self-member'):null;
+    if(card){e.preventDefault();e.stopImmediatePropagation();longFired=false;}
+  },true);
+})();
+'''
+              idx=s.rfind('</script>')
+              if idx<0: raise SystemExit('Script closing tag missing')
+              s=s[:idx]+insert+s[idx:]
+
+          if 'function memberSetOwnStatus(' not in c:
+              anchor='function memberMoveToWaitGroup(sessionToken,memberId,groupIndex)'
+              pos=c.find(anchor)
+              if pos<0: raise SystemExit('memberMoveToWaitGroup anchor missing')
+              backend=r'''function memberSetOwnStatus(sessionToken,memberId,status){
+  return withDocumentLock_('회원 본인 상태 변경',function(){
+    memberId=memberSessionAuth_(sessionToken,memberId);
+    status=String(status||'');
+    if(['active','rest','away','before'].indexOf(status)<0)throw new Error('지원하지 않는 상태입니다.');
+    const courts=readCourts_(),startedAt=readCourtStartedAt_(),waitGroups=readWaitGroups_();
+    Object.keys(courts).forEach(function(k){
+      const before=(courts[k]||[]).length;
+      courts[k]=(courts[k]||[]).filter(function(id){return String(id)!==memberId;});
+      if(courts[k].length!==before && courts[k].length<GROUP_SIZE)startedAt[k]='';
+    });
+    for(let i=0;i<waitGroups.length;i+=1){
+      waitGroups[i]=(waitGroups[i]||[]).filter(function(id){return String(id)!==memberId;});
+    }
+    writeCourts_(courts,startedAt);
+    writeWaitGroups_(waitGroups);
+    updateMemberStatuses_([memberId],status);
+    touch_();
+    return getPublicState();
+  });
+}
+
+'''
+              c=c[:pos]+backend+c[pos:]
+
+          if "'memberSetOwnStatus'" not in s:
+              old="'memberMoveToWaitGroup','memberLeaveWaitGroup',\n    'memberRequestWaitSwap','memberRespondWaitSwap',"
+              new="'memberMoveToWaitGroup','memberLeaveWaitGroup','memberSetOwnStatus',\n    'memberRequestWaitSwap','memberRespondWaitSwap',"
+              if old not in s: raise SystemExit('mutation list anchor missing')
+              s=s.replace(old,new,1)
+
+          sp.write_text(s,encoding='utf-8')
+          cp.write_text(c,encoding='utf-8')
+          PY
+
+      - name: Verify syntax and exact behavior markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'JAYUMINTON_USER_ONE_TAP_SWAP_SELF_STATUS_V1' source-snapshot/current-main/Script.html
+          grep -Fq "memberRequestWaitSwap(targetMemberId)" source-snapshot/current-main/Script.html
+          grep -Fq "650);" source-snapshot/current-main/Script.html
+          grep -Fq "배정대기" source-snapshot/current-main/Script.html
+          grep -Fq "휴식" source-snapshot/current-main/Script.html
+          grep -Fq "귀가" source-snapshot/current-main/Script.html
+          grep -Fq "도착전" source-snapshot/current-main/Script.html
+          grep -Fq 'function memberSetOwnStatus(' source-snapshot/current-main/Code.js
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('source-snapshot/current-main/Script.html').read_text(encoding='utf-8')
+          a=s.find('<script>'); b=s.rfind('</script>')
+          if a<0 or b<=a: raise SystemExit('script wrapper missing')
+          Path('/tmp/user-seat-status.js').write_text(s[a+8:b],encoding='utf-8')
+          PY
+          node --check /tmp/user-seat-status.js
+          git diff --check
+
+      - name: Commit restored user interactions
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source-snapshot/current-main/Script.html source-snapshot/current-main/Code.js
+          git commit -m 'fix(user): one-tap swap and long-press self status'
+          git push origin HEAD:fix/user-native-separate-package-v1

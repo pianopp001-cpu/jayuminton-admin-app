@@ -1,0 +1,47 @@
+name: Probe existing user RPC
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/probe-existing-user-rpc.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@latest
+      - name: Probe existing versioned user RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          SCRIPT_ID="$(jq -r '.mainScriptId // empty' "$RUNNER_TEMP/deploy.json")"
+          mkdir -p "$RUNNER_TEMP/probe"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > "$RUNNER_TEMP/probe/.clasp.json"
+          LIST="$(cd "$RUNNER_TEMP/probe" && clasp list-deployments || true)"
+          printf '%s\n' "$LIST"
+          ID="$(printf '%s\n' "$LIST" | grep -F 'Cloudflare user RPC reused' | grep -Eo 'AKfy[a-zA-Z0-9_-]+' | head -1)"
+          test -n "$ID"
+          URL="https://script.google.com/macros/s/$ID/exec"
+          for rpc in getPublicState memberRequestWaitSwap memberSetOwnStatus; do
+            cb="probe_${rpc}_${GITHUB_RUN_ID}"
+            curl --fail --location --retry 3 --max-time 60 "$URL?memberRpc=1&rpc=$rpc&callback=$cb&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/$rpc.js"
+            echo "=== $rpc ==="
+            head -c 1200 "$RUNNER_TEMP/$rpc.js" || true
+            echo
+            grep -F "$cb(" "$RUNNER_TEMP/$rpc.js" >/dev/null
+          done

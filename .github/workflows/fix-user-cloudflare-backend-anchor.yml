@@ -1,0 +1,46 @@
+name: Fix user Cloudflare backend anchor
+
+on:
+  push:
+    branches: [fix/user-native-separate-package-v1]
+    paths:
+      - '.github/workflows/fix-user-cloudflare-backend-anchor.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/user-native-separate-package-v1
+          fetch-depth: 0
+      - name: Make backend injection anchor robust
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deployment/jayuminton/user_cloudflare_web.py')
+          s=p.read_text(encoding='utf-8')
+          old="""    if 'function memberSetOwnStatus(' not in text:\n        anchor = 'function memberMoveToWaitGroup(sessionToken,memberId,groupIndex)'\n        if anchor not in text:\n            raise SystemExit('memberMoveToWaitGroup anchor missing')\n        text = text.replace(anchor, SELF_STATUS_BACKEND + '\\n' + anchor, 1)\n"""
+          new="""    if 'function memberSetOwnStatus(' not in text:\n        anchors = [\n            'function memberMoveToWaitGroup(',\n            'function memberLeaveWaitGroup(',\n            'function memberRequestWaitSwap(',\n            'function setMemberStatus(',\n            'function updateMemberStatuses_(',\n            'function getPublicState(',\n        ]\n        pos = -1\n        for anchor in anchors:\n            pos = text.find(anchor)\n            if pos >= 0:\n                break\n        if pos < 0:\n            raise SystemExit('safe member backend insertion anchor missing')\n        text = text[:pos] + SELF_STATUS_BACKEND + '\\n' + text[pos:]\n"""
+          if old not in s:
+              raise SystemExit('old backend anchor block not found')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          python3 -m py_compile deployment/jayuminton/user_cloudflare_web.py
+          git diff --check
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/user_cloudflare_web.py
+          git commit -m 'fix(user): robust Cloudflare backend status anchor'
+          git push origin HEAD:fix/user-native-separate-package-v1
