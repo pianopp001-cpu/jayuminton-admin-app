@@ -21,7 +21,7 @@ concurrency:
 jobs:
   deploy-user-web:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     env:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
@@ -52,7 +52,7 @@ jobs:
           echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID" >> "$GITHUB_ENV"
           echo "FALLBACK_DEPLOYMENT_ID=$FALLBACK_DEPLOYMENT_ID" >> "$GITHUB_ENV"
 
-      - name: Patch isolated backend and reuse an existing deployment
+      - name: Patch isolated backend and safely free unused Apps Script versions
         shell: bash
         run: |
           set -euo pipefail
@@ -64,6 +64,8 @@ jobs:
           cp -a "$BACKUP/." "$WORK/"
           python3 deployment/jayuminton/user_cloudflare_web.py patch-backend --work "$WORK"
           grep -F 'function memberCloudflareRpc_(e)' "$WORK/Code.js" >/dev/null
+          grep -F 'function memberSetOwnStatus(' "$WORK/Code.js" >/dev/null
+          grep -F 'memberSetOwnStatus: true' "$WORK/Code.js" >/dev/null
           grep -F "e.parameter.memberRpc === '1'" "$WORK/Code.js" >/dev/null
 
           LIST="$(cd "$BACKUP" && clasp list-deployments || true)"
@@ -72,6 +74,29 @@ jobs:
           if [ -z "$USER_DEPLOYMENT_ID" ]; then USER_DEPLOYMENT_ID="$FALLBACK_DEPLOYMENT_ID"; fi
           test -n "$USER_DEPLOYMENT_ID"
           test "$USER_DEPLOYMENT_ID" != "$MAIN_DEPLOYMENT_ID"
+
+          # The project hit Google's 200-version ceiling. Remove only versions that are
+          # not referenced by any current deployment. Versions 30..60 are checked
+          # against the live deployment list before deletion, so active deployments
+          # are never touched.
+          USED_VERSIONS="$(printf '%s\n' "$LIST" | sed -n 's/.* @\([0-9][0-9]*\).*/\1/p' | sort -n -u)"
+          echo "USED_VERSIONS=$USED_VERSIONS"
+          DELETED=0
+          for v in $(seq 30 60); do
+            if printf '%s\n' "$USED_VERSIONS" | grep -qx "$v"; then
+              echo "keep deployed version $v"
+              continue
+            fi
+            if (cd "$BACKUP" && clasp delete-version "$v") >/tmp/delete-version.log 2>&1; then
+              echo "deleted unused version $v"
+              DELETED=$((DELETED+1))
+            else
+              cat /tmp/delete-version.log || true
+            fi
+            if [ "$DELETED" -ge 8 ]; then break; fi
+          done
+          echo "DELETED_UNUSED_VERSIONS=$DELETED"
+          test "$DELETED" -ge 1
 
           restore_main(){ (cd "$BACKUP" && clasp push --force) >/dev/null; }
           trap restore_main EXIT
@@ -96,6 +121,9 @@ jobs:
           grep -F '자유민턴 코트배정 현황' "$ROOT/public/index.html" >/dev/null
           grep -F 'const IS_ADMIN = false;' "$ROOT/public/index.html" >/dev/null
           grep -F 'jayuminton-user-cloudflare-rpc' "$ROOT/public/index.html" >/dev/null
+          grep -F 'jayuminton-user-seat-self-status-v2' "$ROOT/public/index.html" >/dev/null
+          grep -F 'memberRequestWaitSwap(targetMemberId)' "$ROOT/public/index.html" >/dev/null
+          grep -F 'memberSetOwnStatus' "$ROOT/public/index.html" >/dev/null
           grep -F 'NativeUserApp.setMember' "$ROOT/public/index.html" >/dev/null
           ! grep -F '관리자 화면을 불러오는 중입니다' "$ROOT/public/index.html" >/dev/null
           ! grep -F 'jayuminton-push.web.app' "$ROOT/public/index.html" >/dev/null
@@ -166,6 +194,9 @@ jobs:
           grep -F '자유민턴 코트배정 현황' "$RUNNER_TEMP/user-live.html" >/dev/null
           grep -F 'const IS_ADMIN = false;' "$RUNNER_TEMP/user-live.html" >/dev/null
           grep -F 'jayuminton-user-cloudflare-rpc' "$RUNNER_TEMP/user-live.html" >/dev/null
+          grep -F 'jayuminton-user-seat-self-status-v2' "$RUNNER_TEMP/user-live.html" >/dev/null
+          grep -F 'memberRequestWaitSwap(targetMemberId)' "$RUNNER_TEMP/user-live.html" >/dev/null
+          grep -F 'memberSetOwnStatus' "$RUNNER_TEMP/user-live.html" >/dev/null
           grep -F 'NativeUserApp.setMember' "$RUNNER_TEMP/user-live.html" >/dev/null
           ! grep -F '관리자 화면을 불러오는 중입니다' "$RUNNER_TEMP/user-live.html" >/dev/null
           ! grep -F 'jayuminton-push.web.app' "$RUNNER_TEMP/user-live.html" >/dev/null
@@ -175,4 +206,6 @@ jobs:
           grep -F '"ok":true' "$RUNNER_TEMP/user-state.js" >/dev/null
           echo "USER_CLOUDFLARE_URL=$USER_WORKER_URL/"
           echo "PUBLIC_STATE_RPC=success"
+          echo "ONE_TAP_SWAP_MARKER=present"
+          echo "SELF_LONG_PRESS_STATUS_MARKER=present"
           echo "ADMIN_LOADER_ABSENT=yes"
