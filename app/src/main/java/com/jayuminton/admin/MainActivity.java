@@ -398,14 +398,14 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                                 .setUsage(AudioAttributes.USAGE_ALARM)
                                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                                 .build();
-                        voiceFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                        voiceFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                                 .setAudioAttributes(attrs)
                                 .setAcceptsDelayedFocusGain(false)
-                                .setWillPauseWhenDucked(true)
+                                .setWillPauseWhenDucked(false)
                                 .build();
                         audioManager.requestAudioFocus(voiceFocusRequest);
                     } else {
-                        audioManager.requestAudioFocus(null, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+                        audioManager.requestAudioFocus(null, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
                     }
                 } catch (Exception ignored) {}
                 int maxMedia = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
