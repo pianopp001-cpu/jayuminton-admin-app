@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Apply admin-vNext patches in fixed fail-fast order. Never deploys user production."""
+"""Apply admin-vNext patches in fixed fail-fast order. Never deploys user production.
+
+Operations MD sync: immediate promoted-wait return and MD-only controls v1.
+"""
 from pathlib import Path
 import subprocess,sys
 HERE=Path(__file__).resolve().parent
