@@ -133,13 +133,16 @@ jobs:
           grep -F 'private static final int MAX_GROUPS = 8;' "$BUILD" >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember(this, targetMemberId)' "$BUILD" >/dev/null
           grep -F 'AlertVibrationController.stop(' "$BUILD" >/dev/null
+          grep -F 'USER_URL="https://jayuminton-push.web.app/' "$BUILD" >/dev/null
+          ! grep -F 'script.google.com' "$BUILD"
+          ! grep -F 'MAIN_DEPLOYMENT_ID' "$BUILD"
           bash "$BUILD"
           test -s "$APK_PATH"
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           "$AAPT" dump badging "$APK_PATH" | grep -F "package: name='com.jayuminton.user' versionCode='2000134' versionName='1.3.4'"
           "$APKSIGNER" verify --verbose --print-certs "$APK_PATH" > "$RUNNER_TEMP/signing.txt"
-          grep -Fi 'Signer #1 certificate SHA-256 digest: d47adb93363ff397601e63667e79f27f99ae499aadc1fd0013861809950fc787' "$RUNNER_TEMP/signing.txt" >/dev/null
+          tr -d ':' < "$RUNNER_TEMP/signing.txt" | grep -Fi 'd47adb93363ff397601e63667e79f27f99ae499aadc1fd0013861809950fc787' >/dev/null
           cp "$APK_PATH" "$RUNNER_TEMP/user-v134.apk"
 
       - name: Publish verified user APK
