@@ -6,6 +6,7 @@ on:
     paths:
       - 'cloudflare/state-worker/**'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
+      - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs'
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
       - '.github/workflows/deploy-cloudflare-state-shadow.yml'
   workflow_dispatch: {}
@@ -43,6 +44,7 @@ jobs:
           node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/worker.test.mjs
           node --check deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          node deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs
           python3 -m py_compile deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null

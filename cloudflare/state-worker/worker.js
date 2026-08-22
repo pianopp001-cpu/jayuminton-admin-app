@@ -420,7 +420,11 @@ function latestSwap(state, predicate) {
 }
 
 export async function legacyRpc(request, env, name, args) {
-  const state = await readState(env.DB); const values = Array.isArray(args) ? args : []; const token = String(values[0] || '');
+  const state = await readState(env.DB); const values = Array.isArray(args) ? args : [];
+  const headerToken = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  // v6 브리지는 기존 인수 배열을 그대로 보존하고 세션은 Authorization 헤더로 보낸다.
+  // 구형 호출과의 호환을 위해 헤더가 없을 때만 첫 번째 인수를 토큰으로 사용한다.
+  const token = String(headerToken || values[0] || '');
   if (name === 'createAdminSession') {
     if (!state.settings.adminPin || String(values[0] || '') !== String(state.settings.adminPin)) return { ok: false };
     return { ok: true, token: await issueAdminSession(env, state) };
@@ -436,9 +440,8 @@ export async function legacyRpc(request, env, name, args) {
     return { ok: true, version: String(state.settings.memberPasswordVersion || 1), memberId: String(session.memberId || ''), sessionToken: token };
   }
   if (name === 'getPublicState') {
-    const headerToken = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
-    try { await verifyAdminSession(bearerRequest(request, token || headerToken), env, state); return adminState(state); }
-    catch (_) { const session = await verifyMemberSession(bearerRequest(request, token || headerToken), env, state); return publicState(state, session.memberId); }
+    try { await verifyAdminSession(bearerRequest(request, token), env, state); return adminState(state); }
+    catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
   const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);

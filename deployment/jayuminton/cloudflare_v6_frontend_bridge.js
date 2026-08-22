@@ -9,7 +9,9 @@
   }
   function invoke(name,args,success,failure){
     var values=Array.prototype.slice.call(args||[]); var token='';
-    if(name!=='createAdminSession'&&name!=='verifyMemberPassword'&&name!=='getMemberPasswordVersion') token=String(values[0]||storedToken());
+    // 기존 화면의 첫 번째 인수는 관리자 PIN 또는 회원 ID일 수 있다.
+    // 인증은 반드시 로그인 때 저장한 Cloudflare 세션으로만 보낸다.
+    if(name!=='createAdminSession'&&name!=='verifyMemberPassword'&&name!=='getMemberPasswordVersion') token=storedToken();
     fetch(ENDPOINT,{
       method:'POST',cache:'no-store',credentials:'omit',
       headers:Object.assign({'content-type':'application/json'},token?{'authorization':'Bearer '+token}:{}),
