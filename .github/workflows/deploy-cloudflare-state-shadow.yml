@@ -39,8 +39,10 @@ jobs:
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test "${#INTERNAL_KEY}" -ge 32
           node --check cloudflare/state-worker/worker.js
+          node cloudflare/state-worker/worker.test.mjs
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
+          grep -F "rpcVersion: 2" cloudflare/state-worker/worker.js >/dev/null
           if grep -R -F 'script.google.com' cloudflare/state-worker; then exit 1; fi
 
       - name: Create or resolve D1 database
