@@ -1,5 +1,5 @@
-const JAYUMINTON_SW_VERSION = '1.6.37-fix2-vibration-3x8';
-const JAYUMINTON_CACHE = 'jayuminton-shell-v212';
+const JAYUMINTON_SW_VERSION = '1.6.37-fix3-assignment-vibration-only';
+const JAYUMINTON_CACHE = 'jayuminton-shell-v213';
 const JAYUMINTON_SHELL = [
   '/',
   '/index.html',
@@ -98,7 +98,7 @@ let messaging = null;
 try {
   importScripts('https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js');
   importScripts('https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging-compat.js');
-  
+
   firebase.initializeApp({
     apiKey: 'AIzaSyCS8MJsLHfjsiaQymEyEn-qqp_05WSW1cI',
     authDomain: 'jayuminton-push.firebaseapp.com',
@@ -107,16 +107,15 @@ try {
     messagingSenderId: '758697255400',
     appId: '1:758697255400:web:7214800018c65b7827045d'
   });
-  
+
   messaging = firebase.messaging();
-  
+
   messaging.onBackgroundMessage((payload) => {
     const data = payload && payload.data ? payload.data : {};
-    const vibration = assignmentVibration3x8();
+    const isAssignmentAlert = data.type === 'court_assignment' || data.type === 'wait1_ready';
     const titleBase = data.title || '자유민턴 배정 알림';
     const shownTitle = '🏸 ' + titleBase;
-
-    return self.registration.showNotification(shownTitle, {
+    const options = {
       body: data.body || '새 배정 안내가 있습니다.',
       requireInteraction: data.type === 'court_assignment',
       silent: false,
@@ -124,11 +123,13 @@ try {
       badge: '/badge-96.png',
       tag: data.notificationTag || data.assignmentId || 'jayuminton-assignment',
       renotify: true,
-      vibrate: vibration,
       data: {
         assignmentId: data.assignmentId || ''
       }
-    });
+    };
+
+    if (isAssignmentAlert) options.vibrate = assignmentVibration3x8();
+    return self.registration.showNotification(shownTitle, options);
   });
 } catch (error) {
   // PWA installation and basic service-worker control must still work even if the Firebase CDN is temporarily unavailable.
