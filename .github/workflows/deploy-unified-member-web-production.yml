@@ -91,6 +91,7 @@ jobs:
           grep -F '네, 저예요' "$PUBLIC/index.html" >/dev/null
           grep -F '🎁 찬조' "$PUBLIC/index.html" >/dev/null
           grep -F 'NEW 신규' "$PUBLIC/index.html" >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk' "$PUBLIC/index.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
           ! grep -Eqi '<iframe' "$PUBLIC/index.html"
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
@@ -147,6 +148,7 @@ jobs:
             'NEW 신규'; do
             grep -F "$marker" "$RUNNER_TEMP/member-live-after.html" >/dev/null
           done
+          grep -F 'jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk' "$RUNNER_TEMP/member-live-after.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/member-live-after.html" >/dev/null
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/member-live-after.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/member-live-after.html"
