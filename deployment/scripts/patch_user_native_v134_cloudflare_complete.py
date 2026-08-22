@@ -20,6 +20,16 @@ for old, new in replacements:
         raise SystemExit('v134 version anchor missing: ' + old)
     source = source.replace(old, new)
 
+# v1.3.4 is Cloudflare/Firebase Hosting only. The historical native builder
+# required a Google Apps Script deployment id. Earlier patches already replace
+# the WebView URL; remove the stale runtime guard and reject any GAS residue.
+for old, new in (
+    (': "${MAIN_DEPLOYMENT_ID:?MAIN_DEPLOYMENT_ID required}"\n', ''),
+):
+    if old not in source:
+        raise SystemExit('v134 Cloudflare URL anchor missing: ' + old)
+    source = source.replace(old, new)
+
 for old, new in (
     ("versionCode='2000133'", "versionCode='2000134'"),
     ("versionName='1.3.3'", "versionName='1.3.4'"),
@@ -45,10 +55,14 @@ required = (
     'AssignmentOverlay',
     'AlertVibrationController.stop(',
     'stopPreviousMemberAlert(app);',
+    'USER_URL="https://jayuminton-push.web.app/',
 )
 for marker in required:
     if marker not in source:
         raise SystemExit('v134 alert contract missing: ' + marker)
+
+if 'script.google.com' in source or 'MAIN_DEPLOYMENT_ID' in source:
+    raise SystemExit('v134 must not retain a Google Apps Script dependency')
 
 path.write_text(source, encoding='utf-8')
 print('Prepared v1.3.4 Cloudflare native user APK with current-member-only 3x8 vibration and confirm stop.')
