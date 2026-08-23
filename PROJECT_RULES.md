@@ -1,29 +1,46 @@
 # Jayuminton Project Rules
 
-## Golden Rule
-Base everything on jayuminton-v199(5).apk.
+## 최우선 기준
+현재 프로젝트의 기능·배포·UI 판단 기준은 사용자가 제공한 최신 문서 `자유민턴_관리자APK_사용자웹_사용자 APK(4).md`이다.
 
-## Never change
-- CSS
-- HTML
-- Layout
-- Existing v199 CSS protection logic
-- WebView rendering behavior
+서로 충돌하는 과거 규칙, GAS snapshot, 이전 APK 버전 메모, 이전 대화의 완료 주장은 최신 MD(4)보다 우선할 수 없다.
 
-## Only allowed change
-- PIN/session token delivery for admin actions.
+재감사 현황은 `MD4_AUDIT_20260823.md`에서 관리한다.
 
-## Apps Script
-Keep existing deployment unchanged unless explicitly requested.
+## 운영 구조
+- Google Apps Script를 운영 런타임으로 사용하지 않는다.
+- 과거 GAS 코드는 기능 참고/이식용으로만 사용할 수 있다.
+- 로그인, 배정, 경기 종료, 자리교환과 상태 변경은 Cloudflare Worker를 사용한다.
+- 회원·코트·대기열·게임횟수·설정·백업은 D1을 기준 저장소로 사용한다.
+- 사용자와 관리자의 동시 변경 충돌은 Durable Objects를 통해 직렬화한다.
+- 사용자 APK 알림·진동은 Firebase FCM을 사용한다.
+- 앱 미설치 사용자는 현재 사용자 웹 화면에서 팝업·진동을 제공한다.
 
-## Android
-Acts only as a WebView wrapper. Do not redesign the UI.
+## 관리자 APK
+- 관리자 APK는 Cloudflare 운영 경로에 직접 연결되어야 한다.
+- `script.google.com`, Apps Script deployment ID, `clasp`를 최종 APK 운영 의존성으로 넣지 않는다.
+- 관리자가 사용자로 본인 설정된 경우에만 관리자 폰에서도 본인의 대기1/코트 알림·진동을 받을 수 있어야 한다.
 
-## Before every build
-1. Compare against v199(5).
-2. Verify no CSS/HTML changes.
-3. Apply PIN-only patch.
-4. Build.
-5. Compare UI again.
+## 사용자 APK
+- 사용자 APK는 Cloudflare 사용자 화면/상태 경로를 사용한다.
+- 사용자 APK는 실제 FCM token을 발급하고 선택된 본인 memberId와 연결해야 한다.
+- 백그라운드/화면 꺼짐 상태를 포함해 대기1 및 코트배정 알림을 받을 수 있어야 한다.
+- 알림 진동은 MD(4)의 3회 × 8회 규칙과 확인 즉시 중지 규칙을 따른다.
 
-If UI differs, discard the build.
+## UI/기능 변경 원칙
+- 최신 MD(4)에 명시된 UI·기능은 기존 화면과 다르더라도 MD(4)에 맞게 구현한다.
+- MD(4)에 없는 불필요한 디자인 변경은 하지 않는다.
+- 사용자 웹/앱의 기존 정상 기능을 깨지 않도록 기능 단위로 변경하고 회귀검증한다.
+- 백엔드 함수 존재만으로 완료 처리하지 않는다. 실제 관리자 UI, 사용자 UI, APK, 배포 경로까지 연결되어야 PASS이다.
+
+## 완료 판정
+완료라고 말하기 전에 현재 `main`에서 다음을 확인한다.
+1. 최신 MD(4) 요구사항과 1:1 대조.
+2. 실제 소스/워크플로/배포 경로 존재 확인.
+3. Cloudflare-only 운영 경로 확인.
+4. 상태전이 회귀테스트 확인.
+5. 사용자 FCM token 등록 및 알림 경로 확인.
+6. 관리자/사용자 APK 빌드 검증.
+7. 생성·수정했다고 말한 파일을 다시 fetch하여 실제 main 반영 확인.
+
+확인되지 않은 항목은 PASS로 기록하지 않는다.
