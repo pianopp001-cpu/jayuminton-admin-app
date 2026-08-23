@@ -79,6 +79,12 @@ jobs:
           python3 deployment/jayuminton/patch_member_user_requirements_v1.py "$PUBLIC/index.html"
 
           grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.NativeUserApp.setMember(memberId, memberName)' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.NativeUserApp.clearMember()' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.NativeUserApp.setPushEnabled' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.NativeUserApp.setVibrationEnabled' "$PUBLIC/index.html" >/dev/null
+          grep -F 'typeof selectedWebPushMember' "$PUBLIC/index.html" >/dev/null
           grep -F '5 * 60 * 1000' "$PUBLIC/index.html" >/dev/null
           grep -F 'for (var round = 0; round < 8; round += 1)' "$PUBLIC/index.html" >/dev/null
           grep -F 'navigator.vibrate(0)' "$PUBLIC/index.html" >/dev/null
@@ -138,6 +144,11 @@ jobs:
             -o "$RUNNER_TEMP/member-live-after.html"
           for marker in \
             'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' \
+            'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' \
+            'window.NativeUserApp.setMember(memberId, memberName)' \
+            'window.NativeUserApp.clearMember()' \
+            'window.NativeUserApp.setPushEnabled' \
+            'window.NativeUserApp.setVibrationEnabled' \
             '5 * 60 * 1000' \
             'navigator.vibrate(0)' \
             'JAYUMINTON_STOP_MEMBER_ALERT' \
@@ -152,6 +163,6 @@ jobs:
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/member-live-after.html" >/dev/null
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/member-live-after.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/member-live-after.html"
-          echo 'PRODUCTION_MEMBER_USER_REQUIREMENTS_OK'
+          echo 'PRODUCTION_MEMBER_USER_REQUIREMENTS_AND_NATIVE_IDENTITY_SYNC_OK'
           echo 'MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED'
           echo 'USER_APK_BINARY_NOT_REPLACED_WEBVIEW_USES_UPDATED_CLOUDFLARE_PAGE'
