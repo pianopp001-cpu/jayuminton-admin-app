@@ -1,4 +1,4 @@
-# trigger: 2026-08-23 md4 re-audit
+# trigger: 2026-08-24 md4 autoassign apply
 name: Apply MD4 autoassign composition
 
 on:
