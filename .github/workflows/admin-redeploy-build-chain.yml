@@ -39,15 +39,15 @@ jobs:
           test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
-      - name: Rebuild verified admin APK and wait
+      - name: Build final verified admin v200.4 APK and wait
         shell: bash
         run: |
           set -euo pipefail
-          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v1995-direct.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-          gh workflow run build-v1995-direct.yml --repo "$GITHUB_REPOSITORY" --ref main
+          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2004-final.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run build-v2004-final.yml --repo "$GITHUB_REPOSITORY" --ref main
           run_id=''
           for i in $(seq 1 60); do
-            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v1995-direct.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2004-final.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
             if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
             sleep 2
           done
@@ -55,6 +55,6 @@ jobs:
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
       - name: Chain completed
-        run: echo 'ADMIN_REDEPLOY_AND_APK_REBUILD_CHAIN_OK'
+        run: echo 'ADMIN_REDEPLOY_AND_FINAL_V2004_APK_BUILD_OK'
 
-# force-trigger: 2026-08-23-clean-v2004-chain-after-legacy-disable
+# force-trigger: 2026-08-23-final-v2004-chain
