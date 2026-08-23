@@ -7,9 +7,8 @@ if len(sys.argv) != 2:
 path=Path(sys.argv[1])
 html=path.read_text(encoding='utf-8')
 marker='__JAYUMINTON_ADMIN_MD_FINAL_FORM_V2__'
+compat_marker='__JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__'
 
-# Gender: keep the original select as a compatibility data control, but present
-# the MD-requested male/female radio buttons to the administrator.
 if 'name="mdNewGender"' not in html:
     select_pattern=re.compile(r'<select\s+id=["\']newGender["\'][^>]*>.*?</select>',re.S)
     m=select_pattern.search(html)
@@ -21,8 +20,6 @@ if 'name="mdNewGender"' not in html:
     </span>\n''' + original.replace('<select ', '<select class="md-gender-compat-select" aria-hidden="true" tabindex="-1" ')
     html=html[:m.start()]+replacement+html[m.end():]
 
-# Long press: MD requires active/before/rest/away/delete/cancel. Preserve edit as
-# an extra convenience, but do not omit any MD operation.
 if 'mdQuickMoveStatus(\'before\')' not in html:
     quick_start=html.find('id="quickMoveBar"')
     if quick_start < 0: raise SystemExit('quickMoveBar missing')
@@ -40,15 +37,13 @@ if 'mdQuickMoveStatus(\'before\')' not in html:
     '''
     html=html[:delete_pos]+extra+html[delete_pos:]
 
-# Drop an older version of this addon if it exists in an input assembled from a
-# previous final build.
 for old_style in ('jayuminton-admin-md-final-form-style-v1','jayuminton-admin-md-final-form-style-v2'):
     start=html.find('<style id="'+old_style+'">')
     if start>=0:
         end=html.find('</script>',start)
         if end>=0: html=html[:start]+html[end+len('</script>'):]
-html=html.replace('<!-- __JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__ -->','')
-html=html.replace('<!-- __JAYUMINTON_ADMIN_MD_FINAL_FORM_V2__ -->','')
+html=html.replace('<!-- '+compat_marker+' -->','')
+html=html.replace('<!-- '+marker+' -->','')
 
 addon=r'''
 <style id="jayuminton-admin-md-final-form-style-v2">
@@ -98,14 +93,15 @@ addon=r'''
   }
   syncFromSelect(); refreshSummary();
   window.setInterval(refreshSummary,500);
+  window.__JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__=true;
   window.__JAYUMINTON_ADMIN_MD_FINAL_FORM_V2__=true;
 })();
 </script>
 '''
 if '</body>' not in html: raise SystemExit('body marker missing')
-html=html.replace('</body>',addon+'\n<!-- '+marker+' -->\n</body>',1)
+html=html.replace('</body>',addon+'\n<!-- '+compat_marker+' -->\n<!-- '+marker+' -->\n</body>',1)
 for required in (
-    marker,'md-gender-radio','name="mdNewGender"','value="male"','value="female"',
+    compat_marker,marker,'md-gender-radio','name="mdNewGender"','value="male"','value="female"',
     'mdMemberGenderSummary','총인원 ','남: ','여: ',
     "mdQuickMoveStatus('before')","mdQuickMoveStatus('rest')","mdQuickMoveStatus('away')",
     '>도착전</button>','>휴식</button>','>귀가</button>','deleteQuickPickedMembers()','closeMemberActionBar()'
