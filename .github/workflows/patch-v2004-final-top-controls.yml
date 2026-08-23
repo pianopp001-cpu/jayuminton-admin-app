@@ -26,7 +26,6 @@ jobs:
           if 'admin_top_controls_final_patch.py "$RUNNER_TEMP/admin-final.html"' not in s:
               if needle not in s: raise SystemExit('final workflow download anchor missing')
               s=s.replace(needle,repl,1)
-          # Make any future marker failure explicit in logs.
           old='''            grep -F "$marker" "$RUNNER_TEMP/admin-final.html" >/dev/null\n'''
           new='''            if ! grep -F "$marker" "$RUNNER_TEMP/admin-final.html" >/dev/null; then echo "MISSING_FINAL_HTML_MARKER=$marker" >&2; exit 1; fi\n'''
           if old in s: s=s.replace(old,new,1)
@@ -43,3 +42,4 @@ jobs:
           git commit -m 'Apply final top controls patch before v200.4 HTML verification'
           git pull --rebase origin main
           git push origin main
+# retrigger: 2026-08-23T10:05+09:00
