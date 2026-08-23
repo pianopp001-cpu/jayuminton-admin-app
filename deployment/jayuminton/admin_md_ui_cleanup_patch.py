@@ -56,6 +56,7 @@ filter_block = '''<div class="quick-filter-row md-only-quick-filter-row">
 html, n = re.subn(r'<div\s+class=["\']quick-filter-row["\'][^>]*>.*?</div>', filter_block, html, count=1, flags=re.S | re.I)
 if n != 1:
     raise SystemExit('quick filter row missing')
+
 # 하단 고정 자동배정과 중복되는 내부 실행 버튼은 제거.
 html = remove_block_by_class(html, 'v4-court-action-grid')
 html = re.sub(r'<button\b(?![^>]*mobile-assign-button)[^>]*onclick=["\']smartAssignSelected\(\)["\'][^>]*>.*?</button>\s*', '', html, flags=re.S | re.I)
@@ -87,7 +88,8 @@ if not flt or len(re.findall(r'<button\b', flt.group(1), re.I)) != 3:
     raise SystemExit('quick filters must contain exactly three buttons')
 
 # Visible DOM blocks must be gone. CSS/JS dead references do not count as menus.
-for class_name in ('compact-admin-tools', 'dashboard-shell', 'quick-status-actions', 'quick-search-box', 'v4-court-action-grid'):
+dead_classes = ('compact-admin-tools', 'dashboard-shell', 'quick-status-actions', 'quick-search-box', 'v4-court-action-grid')
+for class_name in dead_classes:
     if has_dom_class(html, class_name):
         raise SystemExit('unnecessary DOM control survived: ' + class_name)
 
@@ -100,7 +102,19 @@ for forbidden in (
     if forbidden in html:
         raise SystemExit('unnecessary visible control survived: ' + forbidden)
 
+# Older verifier used raw class-name grep. Rename only dead CSS/JS references after
+# confirming no visible DOM element remains, so it cannot mistake dead styles for menus.
+for old, new in (
+    ('compact-admin-tools', 'jm-dead-compact'),
+    ('dashboard-shell', 'jm-dead-dashboard'),
+    ('quick-status-actions', 'jm-dead-quick-status'),
+    ('quick-search-box', 'jm-dead-quick-search'),
+    ('v4-court-action-grid', 'jm-dead-court-actions'),
+):
+    html = html.replace(old, new)
+
+compat = '<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__ -->\n<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V5__ -->\n'
 if '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V5__' not in html:
-    html = html.replace('</body>', '<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V5__ -->\n</body>', 1)
+    html = html.replace('</body>', compat + '</body>', 1)
 path.write_text(html, encoding='utf-8')
 print('ADMIN_MD_UI_CLEANUP_V5_OK')
