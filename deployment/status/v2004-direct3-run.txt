@@ -1,0 +1,15 @@
+run_id=32610026973
+conclusion=failure
+failed_steps=Build signed release APK
+markers=build	Prepare final admin HTML with post contract	2026-08-23T01:18:51.9086920Z ^[[36;1m  '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__'^[[0m
+build	Prepare final admin HTML with post contract	2026-08-23T01:18:51.9094418Z ^[[36;1m  '__JAYUMINTON_ADMIN_TOP_CONTROLS_FINAL_V1__'^[[0m
+build	Prepare final admin HTML with post contract	2026-08-23T01:18:51.9096606Z ^[[36;1m    echo "MISSING_ADMIN_MARKER=$marker" >&2^[[0m
+build	Prepare final admin HTML with post contract	2026-08-23T01:18:51.9098336Z ^[[36;1mif grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin.html" >/dev/null; then echo 'LEGACY_VOICE_TEST_SURVIVED' >&2; exit 1; fi^[[0m
+build	Prepare final admin HTML with post contract	2026-08-23T01:18:51.9099201Z ^[[36;1mif grep -F '>음성테스트<' "$RUNNER_TEMP/admin.html" >/dev/null; then echo 'VOICE_TEST_TEXT_SURVIVED' >&2; exit 1; fi^[[0m
+build	Prepare final admin HTML with post contract	2026-08-23T01:18:51.9100090Z ^[[36;1mif grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin.html" >/dev/null; then echo 'DIRECT_APPS_SCRIPT_URL_SURVIVED' >&2; exit 1; fi^[[0m
+build	Prepare final admin HTML with post contract	2026-08-23T01:18:52.2257635Z ADMIN_POST_CONTRACT_V21_OK
+build	Prepare final admin HTML with post contract	2026-08-23T01:18:52.2565723Z ADMIN_TOP_CONTROLS_FINAL_V1_OK
+build	Prepare v200.4 native voice and vibration shell	2026-08-23T01:18:52.3063353Z ^[[36;1mif n != 1: raise SystemExit('ADMIN_URL replacement failed')^[[0m
+build	Prepare v200.4 native voice and vibration shell	2026-08-23T01:18:52.3064959Z ^[[36;1mif n != 1: raise SystemExit('APK_WEB_BUILD replacement failed')^[[0m
+build	Prepare v200.4 native voice and vibration shell	2026-08-23T01:18:52.3076725Z ^[[36;1m    if anchor not in s: raise SystemExit('VoiceBridge anchor missing')^[[0m
+html_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32610026973
