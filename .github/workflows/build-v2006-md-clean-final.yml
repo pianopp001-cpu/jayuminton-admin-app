@@ -42,7 +42,7 @@ jobs:
             '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__'
             '__JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__'
             '__JAYUMINTON_ADMIN_MD_FINAL_FORM_V2__'
-            '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V3__'
+            '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__'
             '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__'
             'position:fixed!important'
             'bottom:0!important'
@@ -57,9 +57,14 @@ jobs:
             "mdQuickMoveStatus('before')"
             "mdQuickMoveStatus('rest')"
             "mdQuickMoveStatus('away')"
+            'onclick="selectAllMembers()"'
             'onclick="increaseSelectedGames()"'
             'onclick="decreaseSelectedGames()"'
             'onclick="resetSelectedGames()"'
+            'md-only-quick-filter-row'
+            "setQuickFilter('all')"
+            "setQuickFilter('male')"
+            "setQuickFilter('female')"
             'id="replayVoiceButton"'
             'id="repeatVoiceButton"'
             'onclick="stopVoiceAnnouncement()"'
@@ -72,20 +77,21 @@ jobs:
           done
           forbidden=(
             '음성 테스트' '음성 안내 켜짐' '묶음 지정' '묶음 해제' '오늘의 운영 현황'
-            'compact-admin-tools' 'dashboard-shell' 'quick-status-actions' 'quick-search-box' 'quick-filter-row' 'v4-court-action-grid'
-            '선택 위치 자동배정' '위치 자동배정' 'id="undoButton"' 'onclick="testVoiceGuide()"' 'onclick="toggleVoiceGuide()"'
+            'compact-admin-tools' 'dashboard-shell' 'quick-status-actions' 'quick-search-box' 'v4-court-action-grid'
+            '선택 위치 자동배정' '위치 자동배정' '선택 해제' 'id="undoButton"' 'onclick="testVoiceGuide()"' 'onclick="toggleVoiceGuide()"'
           )
           for marker in "${forbidden[@]}"; do
             if grep -F "$marker" "$RUNNER_TEMP/admin.html" >/dev/null; then echo "FORBIDDEN_MD_MENU_SURVIVED=$marker" >&2; exit 1; fi
           done
-          TOP_COUNT=$(python3 - "$RUNNER_TEMP/admin.html" <<'PY'
+          COUNTS=$(python3 - "$RUNNER_TEMP/admin.html" <<'PY'
           import re,sys
           s=open(sys.argv[1],encoding='utf-8').read()
-          m=re.search(r'<div\s+class=["\']top-actions md-only-top-actions["\'][^>]*>(.*?)</div>',s,re.S|re.I)
-          print(len(re.findall(r'<button\b',m.group(1),re.I)) if m else -1)
+          top=re.search(r'<div\s+class=["\']top-actions md-only-top-actions["\'][^>]*>(.*?)</div>',s,re.S|re.I)
+          flt=re.search(r'<div\s+class=["\']quick-filter-row md-only-quick-filter-row["\'][^>]*>(.*?)</div>',s,re.S|re.I)
+          print((len(re.findall(r'<button\b',top.group(1),re.I)) if top else -1), (len(re.findall(r'<button\b',flt.group(1),re.I)) if flt else -1))
           PY
           )
-          test "$TOP_COUNT" = 4 || { echo "MANAGEMENT_MENU_COUNT=$TOP_COUNT" >&2; exit 1; }
+          test "$COUNTS" = "4 3" || { echo "MENU_COUNTS=$COUNTS" >&2; exit 1; }
           mkdir -p app/src/main/assets/admin
           cp "$RUNNER_TEMP/admin.html" app/src/main/assets/admin/index.html
 
@@ -137,10 +143,10 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
-          for marker in '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V3__' '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' 'position:fixed!important' 'bottom:0!important' 'md-only-top-actions' '>함께 경기통계</button>' '>백업 저장</button>' '>백업 복원</button>' '>전체 초기화</button>' 'name="mdNewGender"' 'mdMemberGenderSummary' '실행취소' '새로고침' '자동배정'; do
+          for marker in '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__' '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' 'position:fixed!important' 'bottom:0!important' 'md-only-top-actions' '>함께 경기통계</button>' '>백업 저장</button>' '>백업 복원</button>' '>전체 초기화</button>' 'name="mdNewGender"' 'mdMemberGenderSummary' 'md-only-quick-filter-row' "setQuickFilter('all')" "setQuickFilter('male')" "setQuickFilter('female')" 'onclick="selectAllMembers()"' 'onclick="increaseSelectedGames()"' 'onclick="decreaseSelectedGames()"' 'onclick="resetSelectedGames()"' '실행취소' '새로고침' '자동배정'; do
             grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null || { echo "MISSING_APK_MD_ONLY=$marker" >&2; exit 1; }
           done
-          for marker in '음성 테스트' '음성 안내 켜짐' '오늘의 운영 현황' 'compact-admin-tools' 'dashboard-shell' 'quick-status-actions' 'quick-search-box' 'quick-filter-row' 'v4-court-action-grid' '선택 위치 자동배정' '위치 자동배정'; do
+          for marker in '음성 테스트' '음성 안내 켜짐' '오늘의 운영 현황' 'compact-admin-tools' 'dashboard-shell' 'quick-status-actions' 'quick-search-box' 'v4-court-action-grid' '선택 위치 자동배정' '위치 자동배정' '선택 해제'; do
             if grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo "FORBIDDEN_APK_MENU=$marker" >&2; exit 1; fi
           done
 
