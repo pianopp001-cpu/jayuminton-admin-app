@@ -36,7 +36,7 @@ jobs:
           CONCLUSION=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')
           FAILED=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json jobs --jq '[.jobs[].steps[] | select(.conclusion=="failure") | .name] | join(",")')
           gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/run.log" || true
-          DETAIL=$(grep -E 'MISSING_|MD_|POST_CONTRACT|BOTTOM_CONTROLS|FINAL_FORM|FAILURE:|error:|BUILD SUCCESSFUL|apksigner|anchor missing|replacement failed' "$RUNNER_TEMP/run.log" | tail -60 | tr '\n' '|' || true)
+          DETAIL=$(grep -E 'MISSING_|MD_|POST_CONTRACT|BOTTOM_CONTROLS|FINAL_FORM|EXCLUDED_ALWAYS|FAILURE:|error:|BUILD SUCCESSFUL|apksigner|anchor missing|replacement failed' "$RUNNER_TEMP/run.log" | tail -60 | tr '\n' '|' || true)
           mkdir -p deployment/status
           printf 'run_id=%s\nconclusion=%s\nfailed_steps=%s\ndetail=%s\nworkflow_url=https://github.com/%s/actions/runs/%s\n' "$RUN" "$CONCLUSION" "$FAILED" "$DETAIL" "$GITHUB_REPOSITORY" "$RUN" > deployment/status/v2005-md-watch.txt
           git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -46,4 +46,4 @@ jobs:
           git pull --rebase origin main
           git push origin main
           exit $RC
-# latest-md-form-v2: 2026-08-23T10:58+09:00
+# latest-md-excluded-final: 2026-08-23T11:03+09:00
