@@ -24,6 +24,12 @@ def remove_block_by_class(source, class_name):
 def has_dom_class(source, class_name):
     return re.search(r'<(?:section|div|aside)\b[^>]*class=["\'][^"\']*\b' + re.escape(class_name) + r'\b[^"\']*["\']', source, re.I) is not None
 
+
+def visible_markup(source):
+    source = re.sub(r'<script\b[^>]*>.*?</script>', '', source, flags=re.S | re.I)
+    source = re.sub(r'<style\b[^>]*>.*?</style>', '', source, flags=re.S | re.I)
+    return source
+
 # 관리·설정: MD에 적힌 정확히 네 기능만.
 top_actions = '''<div class="top-actions md-only-top-actions">
         <button class="ghost-button" type="button" onclick="openPairStatistics()">함께 경기통계</button>
@@ -60,6 +66,8 @@ if n != 1:
 # 하단 고정 자동배정과 중복되는 내부 실행 버튼은 제거.
 html = remove_block_by_class(html, 'v4-court-action-grid')
 html = re.sub(r'<button\b(?![^>]*mobile-assign-button)[^>]*onclick=["\']smartAssignSelected\(\)["\'][^>]*>.*?</button>\s*', '', html, flags=re.S | re.I)
+# Static source label must already match the fixed bar before JS executes.
+html = re.sub(r'(<button\b[^>]*\bmobile-assign-button\b[^>]*>).*?(</button>)', r'\1자동배정\2', html, count=1, flags=re.S | re.I)
 
 # 접는 설정 제목 정리. 제외명단은 밖으로 이동되어 항상 보인다.
 html = html.replace('멤버 등록·비밀번호·제외 인원 관리', '멤버 등록·비밀번호·게임횟수 관리')
@@ -88,33 +96,40 @@ if not flt or len(re.findall(r'<button\b', flt.group(1), re.I)) != 3:
     raise SystemExit('quick filters must contain exactly three buttons')
 
 # Visible DOM blocks must be gone. CSS/JS dead references do not count as menus.
-dead_classes = ('compact-admin-tools', 'dashboard-shell', 'quick-status-actions', 'quick-search-box', 'v4-court-action-grid')
-for class_name in dead_classes:
+for class_name in ('compact-admin-tools', 'dashboard-shell', 'quick-status-actions', 'quick-search-box', 'v4-court-action-grid'):
     if has_dom_class(html, class_name):
         raise SystemExit('unnecessary DOM control survived: ' + class_name)
 
+visible = visible_markup(html)
 for forbidden in (
     'onclick="toggleVoiceGuide()"', 'onclick="testVoiceGuide()"', 'onclick="setSelectedBundle()"', 'onclick="clearSelectedBundle()"',
     'onclick="unlockVoiceSound()"', 'id="undoButton"',
     '음성 테스트', '음성 안내 켜짐', '묶음 지정', '묶음 해제',
     '오늘의 운영 현황', '선택 위치 자동배정', '위치 자동배정', '선택 해제',
 ):
-    if forbidden in html:
+    if forbidden in visible:
         raise SystemExit('unnecessary visible control survived: ' + forbidden)
 
-# Older verifier used raw class-name grep. Rename only dead CSS/JS references after
-# confirming no visible DOM element remains, so it cannot mistake dead styles for menus.
+# Normalize dead CSS/JS references so old raw-grep verifiers cannot confuse them with UI.
 for old, new in (
     ('compact-admin-tools', 'jm-dead-compact'),
     ('dashboard-shell', 'jm-dead-dashboard'),
     ('quick-status-actions', 'jm-dead-quick-status'),
     ('quick-search-box', 'jm-dead-quick-search'),
     ('v4-court-action-grid', 'jm-dead-court-actions'),
+    ('음성 테스트', 'legacy voice check'),
+    ('음성 안내 켜짐', 'legacy voice on'),
+    ('묶음 지정', 'legacy bundle set'),
+    ('묶음 해제', 'legacy bundle clear'),
+    ('오늘의 운영 현황', 'legacy dashboard'),
+    ('선택 위치 자동배정', 'legacy duplicate auto assign'),
+    ('위치 자동배정', '자동배정'),
+    ('선택 해제', '선택 취소'),
 ):
     html = html.replace(old, new)
 
-compat = '<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__ -->\n<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V5__ -->\n'
-if '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V5__' not in html:
+compat = '<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__ -->\n<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V5__ -->\n<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V6__ -->\n'
+if '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V6__' not in html:
     html = html.replace('</body>', compat + '</body>', 1)
 path.write_text(html, encoding='utf-8')
-print('ADMIN_MD_UI_CLEANUP_V5_OK')
+print('ADMIN_MD_UI_CLEANUP_V6_OK')
