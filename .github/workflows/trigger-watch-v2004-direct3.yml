@@ -36,7 +36,7 @@ jobs:
           CONCLUSION=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')
           FAILED=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json jobs --jq '[.jobs[].steps[] | select(.conclusion=="failure") | .name] | join(",")')
           gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/build.log" || true
-          DETAIL=$(grep -E 'MISSING_|POST_CONTRACT|TOP_CONTROLS|replacement failed|anchor missing|FAILURE:|error:' "$RUNNER_TEMP/build.log" | tail -30 | tr '\n' '|' || true)
+          DETAIL=$(grep -E 'MISSING_|POST_CONTRACT|TOP_CONTROLS|replacement failed|anchor missing|FAILURE:|error:|BUILD SUCCESSFUL|apksigner' "$RUNNER_TEMP/build.log" | tail -40 | tr '\n' '|' || true)
           mkdir -p deployment/status
           printf 'run_id=%s\nconclusion=%s\nfailed_steps=%s\ndetail=%s\nworkflow_url=https://github.com/%s/actions/runs/%s\n' "$RUN" "$CONCLUSION" "$FAILED" "$DETAIL" "$GITHUB_REPOSITORY" "$RUN" > deployment/status/v2004-direct3-watch.txt
           git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -45,3 +45,4 @@ jobs:
           git pull --rebase origin main
           git push origin main
           exit $RC
+# resource-merge-fix-watch: 2026-08-23T10:22+09:00
