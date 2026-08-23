@@ -1,0 +1,64 @@
+name: Apply MD5 Cloudflare pair statistics
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/apply-md5-pair-statistics.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Patch Cloudflare pair statistics
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare/state-worker/worker.js')
+          s=p.read_text()
+          s=s.replace("    swapRequests: [], actionHistory: [], updatedAt: new Date(0).toISOString(),", "    swapRequests: [], actionHistory: [], pairCounts: {}, updatedAt: new Date(0).toISOString(),", 1)
+          s=s.replace("  state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory.slice(-50) : [];", "  state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory.slice(-50) : [];\n  state.pairCounts = state.pairCounts && typeof state.pairCounts === 'object' ? state.pairCounts : {};", 1)
+          anchor="function addGames(state, ids, delta = 1) {\n  const wanted = new Set(ids.map(String));\n  state.members = state.members.map(m => wanted.has(String(m.id)) ? { ...m, games: Math.max(0, (Number(m.games) || 0) + delta) } : m);\n}\n"
+          helper=anchor+"\nfunction addPairCounts(state, ids) {\n  const unique = [...new Set((ids || []).map(String).filter(Boolean))];\n  state.pairCounts = state.pairCounts && typeof state.pairCounts === 'object' ? state.pairCounts : {};\n  for (let i = 0; i < unique.length; i += 1) for (let j = i + 1; j < unique.length; j += 1) {\n    const key = [unique[i], unique[j]].sort().join('::');\n    state.pairCounts[key] = Math.max(0, Number(state.pairCounts[key]) || 0) + 1;\n  }\n}\n\nexport function pairStatistics(stateInput) {\n  const state = normalizeState(stateInput);\n  const names = new Map(state.members.map(m => [String(m.id), String(m.name || '')]));\n  const partners = new Map(state.members.map(m => [String(m.id), []]));\n  for (const [key, rawCount] of Object.entries(state.pairCounts || {})) {\n    const ids = String(key).split('::');\n    if (ids.length !== 2 || !names.has(ids[0]) || !names.has(ids[1])) continue;\n    const count = Math.max(0, Number(rawCount) || 0);\n    partners.get(ids[0]).push({ name: names.get(ids[1]), count });\n    partners.get(ids[1]).push({ name: names.get(ids[0]), count });\n  }\n  return state.members.map(m => ({ id: String(m.id), name: String(m.name || ''), games: Number(m.games) || 0, partners: (partners.get(String(m.id)) || []).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name)) })).sort((a,b) => b.games-a.games || a.name.localeCompare(b.name));\n}\n"
+          if 'function addPairCounts(state, ids)' not in s:
+            if anchor not in s: raise SystemExit('addGames anchor missing')
+            s=s.replace(anchor,helper,1)
+          s=s.replace("  addGames(state, entrants, 1);", "  addGames(state, entrants, 1);\n  addPairCounts(state, entrants);", 1)
+          s=s.replace("    addGames(state, enteringCourt, 1);", "    addGames(state, enteringCourt, 1);\n    addPairCounts(state, container(state, destination));", 1)
+          s=s.replace("  const adminNames = new Set(['getCurrentMemberPassword'", "  if (name === 'getPairStatistics') { await verifyAdminSession(bearerRequest(request, token), env, state); return pairStatistics(state); }\n\n  const adminNames = new Set(['getCurrentMemberPassword'", 1)
+          p.write_text(s)
+          PY
+      - name: Add regression tests
+        run: |
+          cat >> cloudflare/state-worker/worker.test.mjs <<'EOF'
+
+// MD5 pair statistics contract
+{
+  const { pairStatistics, moveMutation, emptyState } = await import('./worker.js');
+  const s = emptyState();
+  s.members = [
+    {id:'a',name:'A',gender:'male',games:0,status:'active'},
+    {id:'b',name:'B',gender:'male',games:0,status:'active'},
+    {id:'c',name:'C',gender:'female',games:0,status:'active'},
+    {id:'d',name:'D',gender:'female',games:0,status:'active'},
+  ];
+  const moved = moveMutation(s,['a','b','c','d'],{type:'court',key:'1'}).state;
+  const rows = pairStatistics(moved);
+  const a = rows.find(r => r.id === 'a');
+  if (!a || a.games !== 1 || a.partners.length !== 3 || !a.partners.every(p => p.count === 1)) throw new Error('MD5_PAIR_STATS_FAILED');
+}
+EOF
+          node cloudflare/state-worker/worker.test.mjs
+          node cloudflare/state-worker/md4-autoassign.test.mjs
+      - name: Commit actual source
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add cloudflare/state-worker/worker.js cloudflare/state-worker/worker.test.mjs
+          git commit -m 'fix(md5): restore Cloudflare pair statistics contract'
+          git push origin main
