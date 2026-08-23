@@ -1,3 +1,4 @@
+# trigger: 2026-08-23 md4 re-audit
 name: Apply MD4 autoassign composition
 
 on:
@@ -68,15 +69,12 @@ jobs:
 
     const existingMen = target.filter(isMale).length;
     const existingWomen = target.length - existingMen;
-
-    // When a full four-person team can be formed, MD4 allows only 4M, 4F, or 2M+2F.
     if (target.length + pool.length >= 4) {
       const needs = [
         [2 - existingMen, 2 - existingWomen],
         [4 - existingMen, 0 - existingWomen],
         [0 - existingMen, 4 - existingWomen],
       ].filter(([m, w]) => m >= 0 && w >= 0 && m + w === free);
-
       for (const [needMen, needWomen] of needs) {
         const men = pool.filter(isMale);
         const women = pool.filter(id => !isMale(id));
@@ -87,8 +85,6 @@ jobs:
         return selected;
       }
     }
-
-    // Only the final remainder may relax the doubles composition rule; fill as many as possible.
     return pool.splice(0, Math.min(free, pool.length));
   }
 
@@ -117,14 +113,14 @@ jobs:
   const out = autoAssignMutation(state, ['m1','m2','m3','f1','f2','f3'], [{type:'court',key:'1'}]).state;
   const ids = out.courts['1'];
   assert.equal(ids.length, 4);
-  assert.equal(ids.filter(id => id.startsWith('m')).length, 2, '3M+1F must not be used when a valid 2M+2F team is available');
+  assert.equal(ids.filter(id => id.startsWith('m')).length, 2);
   assert.equal(ids.filter(id => id.startsWith('f')).length, 2);
 }
 
 {
   const state = base([member('m1','male'),member('m2','male'),member('m3','male'),member('f1','female')]);
   const out = autoAssignMutation(state, ['m1','m2','m3','f1'], [{type:'court',key:'1'}]).state;
-  assert.equal(out.courts['1'].length, 4, 'when only an invalid four-person remainder exists, MD4 says to relax the composition rule and fill it');
+  assert.equal(out.courts['1'].length, 4);
 }
 
 '''
