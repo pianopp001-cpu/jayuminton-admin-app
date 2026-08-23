@@ -1,0 +1,30 @@
+name: Watch wait1 final NOW
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/watch-wait1-final-now-20260823.yml']
+permissions:
+  actions: read
+  contents: write
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for current main final build and record
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sleep 15
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2006-md-clean-final.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+          echo "run=$run_id"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status || true
+          conclusion=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')
+          mkdir -p deployment/status
+          printf 'run_id=%s\nconclusion=%s\n' "$run_id" "$conclusion" > deployment/status/wait1-final-now.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add deployment/status/wait1-final-now.txt
+          git commit -m "Record wait1 final build result $run_id" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
