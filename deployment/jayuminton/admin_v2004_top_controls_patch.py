@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
+import re,sys
 p=Path(sys.argv[1])
 s=p.read_text(encoding='utf-8')
 if 'data-jm-top-controls' in s:
     print('V2004_TOP_CONTROLS_ALREADY_PRESENT')
     raise SystemExit(0)
-marker='</body>'
-if marker not in s:
-    raise SystemExit('body marker missing')
+m=re.search(r'<body(?:\s[^>]*)?>',s,re.I)
+if not m:
+    raise SystemExit('body start marker missing')
 patch=r'''<style id="jayuminton-v2004-top-controls-style">
 [data-jm-top-controls]{position:sticky;top:0;z-index:99990;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:7px 8px;background:rgba(255,255,255,.97);box-shadow:0 2px 8px rgba(0,0,0,.08)}
 [data-jm-top-controls] button{min-height:38px;border:0;border-radius:10px;font-weight:800;font-size:14px;white-space:nowrap}
@@ -32,7 +32,8 @@ patch=r'''<style id="jayuminton-v2004-top-controls-style">
  window.__JAYUMINTON_ADMIN_TOP_CONTROLS_V2004__=true;
 })();
 </script>'''
-s=s.replace(marker,patch+'\n'+marker,1)
+pos=m.end()
+s=s[:pos]+'\n'+patch+'\n'+s[pos:]
 for x in ['data-jm-top-controls','data-jm-top-refresh','data-jm-top-auto','data-jm-top-undo','__JAYUMINTON_ADMIN_TOP_CONTROLS_V2004__']:
     if x not in s: raise SystemExit('missing '+x)
 p.write_text(s,encoding='utf-8')
