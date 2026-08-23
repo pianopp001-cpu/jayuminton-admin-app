@@ -1,0 +1,5 @@
+run_id=32609600409
+head_sha=71ac6f058ee574c91b86e5781039702e31d5371a
+conclusion=failure
+failed_steps=Apply final top controls and verify admin contract:failure
+recorded_at=2026-08-23T01:08:59Z
