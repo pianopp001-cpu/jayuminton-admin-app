@@ -1,0 +1,39 @@
+name: Keep only latest admin preview running
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-preview-latest-only.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Enable latest-only preview concurrency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/preview-admin-cloudflare.yml')
+          s=p.read_text(encoding='utf-8')
+          old='''concurrency:\n  group: jayuminton-admin-cloudflare-preview\n  cancel-in-progress: false\n'''
+          new='''concurrency:\n  group: jayuminton-admin-cloudflare-preview\n  cancel-in-progress: true\n'''
+          if old in s:
+              s=s.replace(old,new,1)
+          elif 'cancel-in-progress: true' not in s:
+              raise SystemExit('preview concurrency anchor missing')
+          p.write_text(s,encoding='utf-8')
+          PY
+          grep -F 'cancel-in-progress: true' .github/workflows/preview-admin-cloudflare.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/preview-admin-cloudflare.yml
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Run only latest admin Cloudflare preview'
+          git pull --rebase origin main
+          git push origin main
