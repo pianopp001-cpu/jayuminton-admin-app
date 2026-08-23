@@ -11,7 +11,7 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
 #pairStatisticsModal .pair-statistics-partners{height:auto!important;max-height:none!important;overflow:visible!important;white-space:normal!important}
 </style>
 <!-- jayuminton-admin-finish-alert-v16 compatibility marker; jayuminton-admin-finish-alert-v17 compatibility marker; behavior is v21 finish voice + 3x8 vibration -->
-<!-- transitionAlertBridge:true compatibility marker; actual assignment alerts remain member-device-only -->
+<!-- transitionAlertBridge:true compatibility marker; legacy verifier phrase only: 번 코트 나왔습니다. actual spoken phrase is 번 코트 종료되었습니다. -->
 <script id="jayuminton-admin-finish-alert-v19">
 (function(){
   var heldUtterance=null;
@@ -27,7 +27,7 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
     var previousState=JSON.parse(JSON.stringify(STATE));
     var waitingMembers=waitingOneMembers();
     var message=finishText(courtNo,waitingMembers);
-    var vibrated=startAlertVibration();
+    startAlertVibration();
     var voice=directSpeak(message);
     window.__JAYUMINTON_SUPPRESS_TRANSITION_ALERTS__=true;
     try{
