@@ -1,18 +1,16 @@
-# trigger: 2026-08-24 md4 autoassign apply
 name: Apply MD4 autoassign composition
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/apply-md4-autoassign-composition.yml'
   workflow_dispatch:
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[MD4-AUTOASSIGN]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +64,6 @@ jobs:
     const target = container(state, destination);
     const free = Math.max(0, 4 - target.length);
     if (!free || !pool.length) return [];
-
     const existingMen = target.filter(isMale).length;
     const existingWomen = target.length - existingMen;
     if (target.length + pool.length >= 4) {
