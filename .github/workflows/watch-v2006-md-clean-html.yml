@@ -1,0 +1,45 @@
+name: Watch v200.6 MD-only HTML
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/watch-v2006-md-clean-html.yml']
+  workflow_dispatch: {}
+permissions:
+  actions: write
+  contents: write
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Run and watch diagnostic
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          OLD=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow diag-v2006-md-clean-html.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+          gh workflow run diag-v2006-md-clean-html.yml --repo "$GITHUB_REPOSITORY" --ref main
+          RUN=0
+          for i in $(seq 1 40); do
+            RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow diag-v2006-md-clean-html.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+            if [ "$RUN" != 0 ] && [ "$RUN" != "$OLD" ]; then break; fi
+            sleep 2
+          done
+          set +e
+          gh run watch "$RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+          RC=$?
+          set -e
+          gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/diag.log" || true
+          CONCLUSION=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')
+          DETAIL=$(grep -E 'MD_ONLY_HTML_OK|required MD|unnecessary|missing |visible forbidden|DOM forbidden|top menu|quick filters|ADMIN_.*_OK|AssertionError' "$RUNNER_TEMP/diag.log" | tail -80 | tr '\n' '|')
+          mkdir -p deployment/status
+          printf 'run_id=%s\nconclusion=%s\ndetail=%s\nurl=https://github.com/%s/actions/runs/%s\n' "$RUN" "$CONCLUSION" "$DETAIL" "$GITHUB_REPOSITORY" "$RUN" > deployment/status/v2006-md-clean-html-watch.txt
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2006-md-clean-html-watch.txt
+          git commit -m "Record v200.6 HTML diagnostic $RUN" || true
+          git reset --hard HEAD
+          git pull --rebase origin main
+          git push origin main
+          exit $RC
