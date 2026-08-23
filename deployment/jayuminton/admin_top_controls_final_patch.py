@@ -14,9 +14,12 @@ marker='__JAYUMINTON_ADMIN_TOP_CONTROLS_FINAL_V1__'
 if marker not in html:
     addon=r'''
 <style id="jayuminton-admin-top-controls-final-v1">
+#adminApp>header .header-undo-button{display:none!important}
 #adminApp>header .admin-vnext-bottom-bar{position:static!important;left:auto!important;right:auto!important;bottom:auto!important;top:auto!important;z-index:auto!important;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;align-items:stretch!important;width:100%!important;max-width:1180px!important;margin:0 auto!important;padding:6px 12px 10px!important;box-sizing:border-box!important;background:transparent!important;border:0!important;box-shadow:none!important}
 #adminApp>header .admin-vnext-bottom-bar>span{display:none!important}
 #adminApp>header .admin-vnext-bottom-bar>button{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-width:0!important;min-height:44px!important;height:44px!important;margin:0!important;padding:7px 4px!important;font-size:14px!important;line-height:1.05!important;font-weight:900!important;text-align:center!important;white-space:nowrap!important;overflow:hidden!important}
+.admin-save-notice{z-index:2147483647!important;touch-action:none!important;overscroll-behavior:none!important}
+.admin-save-notice.is-visible{pointer-events:all!important}
 @media(max-width:620px){body{padding-bottom:0!important}#adminApp>header .admin-vnext-bottom-bar{padding:5px 8px 8px!important}}
 @media(max-width:380px){#adminApp>header .admin-vnext-bottom-bar{gap:5px!important}#adminApp>header .admin-vnext-bottom-bar>button{font-size:12px!important;padding:6px 2px!important}}
 </style>
@@ -48,7 +51,7 @@ if marker not in html:
 '''
     html=html.replace('</body>',addon+'\n</body>',1)
 
-required=['admin-vnext-bottom-bar','data-jm-top-controls','실행취소','새로고침','자동배정',marker]
+required=['admin-vnext-bottom-bar','data-jm-top-controls','실행취소','새로고침','자동배정','z-index:2147483647',marker]
 for item in required:
     if item not in html:
         raise SystemExit('top controls final patch missing: '+item)
