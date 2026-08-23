@@ -46,4 +46,4 @@ jobs:
           git pull --rebase origin main
           git push origin main
           exit $RC
-# latest-md-excluded-final: 2026-08-23T11:03+09:00
+# latest-md-game-count-preserved: 2026-08-23T11:06+09:00
