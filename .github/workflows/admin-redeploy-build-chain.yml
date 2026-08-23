@@ -57,4 +57,4 @@ jobs:
       - name: Chain completed
         run: echo 'ADMIN_REDEPLOY_AND_APK_REBUILD_CHAIN_OK'
 
-# force-trigger: 2026-08-23-v2004-after-preview-wording-fix
+# force-trigger: 2026-08-23-clean-v2004-chain-after-legacy-disable
