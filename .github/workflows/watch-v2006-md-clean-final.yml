@@ -1,0 +1,48 @@
+name: Watch clean MD-only v200.6
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/watch-v2006-md-clean-final.yml']
+  workflow_dispatch: {}
+permissions:
+  actions: write
+  contents: write
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Dispatch and watch v200.6
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OLD=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2006-md-clean-final.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+          gh workflow run build-v2006-md-clean-final.yml --repo "$GITHUB_REPOSITORY" --ref main
+          RUN=0
+          for i in $(seq 1 80); do
+            RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2006-md-clean-final.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+            if [ "$RUN" != "0" ] && [ "$RUN" != "$OLD" ]; then break; fi
+            sleep 2
+          done
+          test "$RUN" != "0"; test "$RUN" != "$OLD"
+          set +e
+          gh run watch "$RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+          RC=$?
+          set -e
+          CONCLUSION=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')
+          FAILED=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json jobs --jq '[.jobs[].steps[] | select(.conclusion=="failure") | .name] | join(",")')
+          gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/run.log" || true
+          DETAIL=$(grep -E 'MISSING_MD_ONLY|FORBIDDEN_|MANAGEMENT_MENU_COUNT|MD_UI_CLEANUP|BOTTOM_CONTROLS|FINAL_FORM|EXCLUDED_ALWAYS|FAILURE:|error:|BUILD SUCCESSFUL|apksigner|anchor missing' "$RUNNER_TEMP/run.log" | tail -80 | tr '\n' '|' || true)
+          mkdir -p deployment/status
+          printf 'run_id=%s\nconclusion=%s\nfailed_steps=%s\ndetail=%s\nworkflow_url=https://github.com/%s/actions/runs/%s\n' "$RUN" "$CONCLUSION" "$FAILED" "$DETAIL" "$GITHUB_REPOSITORY" "$RUN" > deployment/status/v2006-md-clean-watch.txt
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2006-md-clean-watch.txt
+          git commit -m "Record v200.6 clean MD build $RUN" || true
+          git reset --hard HEAD
+          git pull --rebase origin main
+          git push origin main
+          exit $RC
