@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/build-v2006-md-clean-final.yml'
       - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
+      - 'deployment/jayuminton/admin_finish_fast_return_patch.py'
       - 'deployment/jayuminton/admin_top_controls_final_patch.py'
       - 'deployment/jayuminton/admin_md_final_form_patch.py'
       - 'deployment/jayuminton/admin_excluded_final_html_patch.py'
@@ -33,17 +34,20 @@ jobs:
           set -euo pipefail
           curl --fail --location --retry 8 --retry-delay 2 "https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?v2006=${GITHUB_RUN_ID}" -o "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_finish_fast_return_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_final_form_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_ui_cleanup_patch.py "$RUNNER_TEMP/admin.html"
           required=(
             'JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1'
+            'JAYUMINTON_ADMIN_FAST_FINISH_RETURN_V1'
             '__JAYUMINTON_ADMIN_BLOCKING_SAVE__'
             '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__'
             '__JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__'
             '__JAYUMINTON_ADMIN_MD_FINAL_FORM_V2__'
             '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__'
             '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__'
+            'waitGroups = [(waitGroups[1]||[]).slice()'
             'position:fixed!important'
             'bottom:0!important'
             'data-jm-bottom-controls'
@@ -135,7 +139,7 @@ jobs:
       - name: Build signed APK
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Verify final APK UI contract
+      - name: Verify final APK UI and wait-state contract
         shell: bash
         run: |
           set -euo pipefail
@@ -143,7 +147,7 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
-          for marker in '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__' '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' 'position:fixed!important' 'bottom:0!important' 'md-only-top-actions' '>함께 경기통계</button>' '>백업 저장</button>' '>백업 복원</button>' '>전체 초기화</button>' 'name="mdNewGender"' 'mdMemberGenderSummary' 'md-only-quick-filter-row' "setQuickFilter('all')" "setQuickFilter('male')" "setQuickFilter('female')" 'onclick="selectAllMembers()"' 'onclick="increaseSelectedGames()"' 'onclick="decreaseSelectedGames()"' 'onclick="resetSelectedGames()"' '실행취소' '새로고침' '자동배정'; do
+          for marker in 'JAYUMINTON_ADMIN_FAST_FINISH_RETURN_V1' 'waitGroups = [(waitGroups[1]||[]).slice()' '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__' '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' 'position:fixed!important' 'bottom:0!important' 'md-only-top-actions' '>함께 경기통계</button>' '>백업 저장</button>' '>백업 복원</button>' '>전체 초기화</button>' 'name="mdNewGender"' 'mdMemberGenderSummary' 'md-only-quick-filter-row' "setQuickFilter('all')" "setQuickFilter('male')" "setQuickFilter('female')" 'onclick="selectAllMembers()"' 'onclick="increaseSelectedGames()"' 'onclick="decreaseSelectedGames()"' 'onclick="resetSelectedGames()"' '실행취소' '새로고침' '자동배정'; do
             grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null || { echo "MISSING_APK_MD_ONLY=$marker" >&2; exit 1; }
           done
           for marker in '음성 테스트' '음성 안내 켜짐' '오늘의 운영 현황' 'compact-admin-tools' 'dashboard-shell' 'quick-status-actions' 'quick-search-box' 'v4-court-action-grid' '선택 위치 자동배정' '위치 자동배정' '선택 해제'; do
@@ -165,7 +169,7 @@ jobs:
             git clean -fd
             mkdir -p releases deployment/status
             cp "$APK_TMP" releases/jayuminton-admin-v200.6-md-clean-final.apk
-            printf 'status=success\nversion=200.6\nrun_id=%s\nsha256=%s\nbuild=md-only-clean-fixed-bottom\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2006-md-clean-final.txt
+            printf 'status=success\nversion=200.6\nrun_id=%s\nsha256=%s\nbuild=md-only-clean-fixed-bottom-wait1-promote\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2006-md-clean-final.txt
             git add releases/jayuminton-admin-v200.6-md-clean-final.apk deployment/status/v2006-md-clean-final.txt
             git commit -m 'Publish MD-only clean Jayuminton admin v200.6 APK' || true
             if git push origin HEAD:main; then exit 0; fi
