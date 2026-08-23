@@ -119,6 +119,8 @@ jobs:
           set -euo pipefail
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
           test "$(sha256sum app/src/main/res/drawable/icon.png | awk '{print $1}')" = 'a64eaa06107cd20478fe49ab7c10b5b2afd2347533b95c383a439f8705d4a58e'
+          rm -f app/src/main/res/drawable/icon_from_library.b64
+          test ! -e app/src/main/res/drawable/icon_from_library.b64
           mkdir -p signing
           base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
           keytool -list -keystore signing/jayuminton-release.jks -storepass 'JayuMinton14!' -alias jayuminton >/dev/null
