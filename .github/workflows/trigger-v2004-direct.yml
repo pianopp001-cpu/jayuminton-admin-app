@@ -1,0 +1,19 @@
+name: Trigger final v200.4 direct build
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/admin_v2004_top_controls_patch.py'
+      - '.github/workflows/trigger-v2004-direct.yml'
+  workflow_dispatch: {}
+permissions:
+  actions: write
+  contents: read
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch final direct build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build-v2004-final-direct.yml --repo "$GITHUB_REPOSITORY" --ref main
