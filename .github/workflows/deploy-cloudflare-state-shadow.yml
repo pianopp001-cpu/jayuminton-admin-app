@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'cloudflare/state-worker/**'
+      - 'deployment/jayuminton/patch_state_worker_md4_autoassign.py'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs'
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
@@ -34,15 +35,17 @@ jobs:
         with: {node-version: '22'}
       - run: npm install --global wrangler@latest
 
-      - name: Verify Cloudflare-only source
+      - name: Apply MD4 state-worker rules and verify Cloudflare-only source
         shell: bash
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test "${#INTERNAL_KEY}" -ge 32
+          python3 deployment/jayuminton/patch_state_worker_md4_autoassign.py cloudflare/state-worker/worker.js
           node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/worker.test.mjs
+          node cloudflare/state-worker/md4-autoassign.test.mjs
           node --check deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           node deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs
           python3 -m py_compile deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py
@@ -50,6 +53,7 @@ jobs:
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
           grep -F "rpcVersion: 6" cloudflare/state-worker/worker.js >/dev/null
           grep -F "'/api/compat/rpc'" cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'MD(4): when a four-person group can be completed' cloudflare/state-worker/worker.js >/dev/null
           if grep -R -F 'script.google.com' cloudflare/state-worker; then exit 1; fi
 
       - name: Verify unchanged rendered screens accept Cloudflare bridge
