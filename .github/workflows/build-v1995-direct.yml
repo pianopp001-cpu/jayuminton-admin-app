@@ -67,7 +67,6 @@ jobs:
           java.write_text(text,encoding='utf-8')
           manifest=Path('app/src/main/AndroidManifest.xml'); m=manifest.read_text(encoding='utf-8')
           if 'android.permission.VIBRATE' not in m:
-              m=m.replace('<manifest ', '<manifest ', 1)
               manifest_end=m.find('>')
               if manifest_end < 0: raise SystemExit('manifest tag missing')
               m=m[:manifest_end+1]+'\n    <uses-permission android:name="android.permission.VIBRATE" />'+m[manifest_end+1:]
@@ -124,7 +123,7 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "$APK_OUTPUT"
           sha256sum "$APK_OUTPUT" | tee deployment/status/v2004-admin-verified-operations-apk.sha256
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.email '418982588+github-actions[bot]@users.noreply.github.com'
           git add "$APK_OUTPUT" deployment/status/v2004-admin-verified-operations-apk.sha256 deployment/status/v2004-build-target.txt deployment/status/v1996-dog-icon-source.txt
           git commit -m 'Add Jayuminton admin v200.4 verified operations APK'
           git stash push --include-untracked --keep-index --message 'v2004-build-only-source-mutations' || true
@@ -133,4 +132,4 @@ jobs:
       - name: Upload verified APK artifact
         uses: actions/upload-artifact@v4
         with: {name: jayuminton-admin-v200.4-verified-operations, path: releases/jayuminton-admin-v200.4-verified-operations.apk, if-no-files-found: error, retention-days: 30}
-# trigger: 2026-08-23 restore-admin-finish-vibration
+# trigger: 2026-08-23 direct-v2004-build-after-preview-fix
