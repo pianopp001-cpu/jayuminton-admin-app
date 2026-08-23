@@ -43,4 +43,4 @@ jobs:
           git pull --rebase origin main
           git push origin main
           exit $RC
-# visible-menu-v6
+# visible-menu-v6-rerun
