@@ -18,6 +18,7 @@ jobs:
         run: |
           set -euo pipefail
           node cloudflare/state-worker/worker.test.mjs
+          node cloudflare/state-worker/md4-autoassign.test.mjs
           grep -F "result = finishCourtMutation(current, body.courtNo)" cloudflare/state-worker/worker.js >/dev/null
           grep -F "publishAssignmentTransitions(this.env, current, saved, result.event)" cloudflare/state-worker/worker.js >/dev/null
           grep -F "sendPush(env, 'court_assignment'" cloudflare/state-worker/worker.js >/dev/null
@@ -42,13 +43,22 @@ jobs:
           python3 deployment/jayuminton/admin_md_final_form_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_ui_cleanup_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_bulk_delete_autosync_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_md_card_timer_patch.py "$RUNNER_TEMP/admin.html"
           grep -F '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'position:fixed!important' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'bottom:0!important' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_BULK_DELETE_AUTOSYNC_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '선택 멤버 삭제' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'setInterval(autoSyncAdmin,1500)' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'new 신규' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '🎁 찬조' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F "group.length>0&&!STATE.courtStartedAt[no]" "$RUNNER_TEMP/admin.html" >/dev/null
+          if grep -F '급수·구력 미입력' "$RUNNER_TEMP/admin.html" >/dev/null; then
+            echo 'legacy missing-value label survived' >&2
+            exit 1
+          fi
           if grep -F 'script.google.com' "$RUNNER_TEMP/admin.html" >/dev/null; then
             echo 'GAS dependency survived in Cloudflare admin HTML' >&2
             exit 1
@@ -67,7 +77,7 @@ jobs:
           s=java.read_text(encoding='utf-8')
           s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.6";', s, count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
-          s,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";', 'private static final String APK_WEB_BUILD = "2006-md4-cloudflare-audited";', s, count=1)
+          s,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";', 'private static final String APK_WEB_BUILD = "2006-md5-cloudflare-audited";', s, count=1)
           if n!=1: raise SystemExit('APK_WEB_BUILD replacement failed')
           s=re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+','JayumintonNative/200.6 CloudflareAdmin/2006',s,count=1)
           java.write_text(s,encoding='utf-8')
@@ -91,7 +101,7 @@ jobs:
       - name: Build signed APK
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Verify MD4 Cloudflare APK contract
+      - name: Verify MD5 Cloudflare APK contract
         shell: bash
         run: |
           set -euo pipefail
@@ -100,18 +110,20 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
           grep -F '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'position:fixed!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'bottom:0!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_BULK_DELETE_AUTOSYNC_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '선택 멤버 삭제' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'setInterval(autoSyncAdmin,1500)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'new 신규' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '🎁 찬조' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          if grep -F '급수·구력 미입력' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then exit 1; fi
           if grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then exit 1; fi
 
       - name: Publish audited v200.6
         shell: bash
         run: |
           set -euo pipefail
-          APK_TMP="$RUNNER_TEMP/jayuminton-admin-v200.6-md4-cloudflare-audited.apk"
+          APK_TMP="$RUNNER_TEMP/jayuminton-admin-v200.6-md5-cloudflare-audited.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK_TMP"
           SHA=$(sha256sum "$APK_TMP" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -121,10 +133,10 @@ jobs:
             git reset --hard origin/main
             git clean -fd
             mkdir -p releases deployment/status
-            cp "$APK_TMP" releases/jayuminton-admin-v200.6-md4-cloudflare-audited.apk
-            printf 'status=success\nversion=200.6\nrun_id=%s\nsha256=%s\nbuild=md4-cloudflare-audited\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2006-md4-cloudflare-audited.txt
-            git add releases/jayuminton-admin-v200.6-md4-cloudflare-audited.apk deployment/status/v2006-md4-cloudflare-audited.txt
-            git commit -m 'Publish MD4 Cloudflare-audited Jayuminton admin v200.6 APK' || true
+            cp "$APK_TMP" releases/jayuminton-admin-v200.6-md5-cloudflare-audited.apk
+            printf 'status=success\nversion=200.6\nrun_id=%s\nsha256=%s\nbuild=md5-cloudflare-audited\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2006-md5-cloudflare-audited.txt
+            git add releases/jayuminton-admin-v200.6-md5-cloudflare-audited.apk deployment/status/v2006-md5-cloudflare-audited.txt
+            git commit -m 'Publish MD5 Cloudflare-audited Jayuminton admin v200.6 APK' || true
             if git push origin HEAD:main; then exit 0; fi
             sleep 2
           done
