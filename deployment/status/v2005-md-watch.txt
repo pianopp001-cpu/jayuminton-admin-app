@@ -1,5 +1,5 @@
-run_id=32611292095
+run_id=32611396806
 conclusion=failure
 failed_steps=Prepare MD-aligned admin HTML
-detail=build	Run actions/checkout@v4	2026-08-23T01:49:34.6998683Z  * [new branch]      fix/v199-apksigner-final -> origin/fix/v199-apksigner-final|build	Prepare MD-aligned admin HTML	2026-08-23T01:50:02.8747187Z ^[[36;1m  '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__'^[[0m|build	Prepare MD-aligned admin HTML	2026-08-23T01:50:02.8750915Z ^[[36;1m    echo "MISSING_MD_MARKER=$marker" >&2^[[0m|build	Prepare MD-aligned admin HTML	2026-08-23T01:50:03.1597864Z admin finishText anchor missing|build	Post Run gradle/actions/setup-gradle@v4	2026-08-23T01:50:10.9168957Z BUILD SUCCESSFUL in 4s|
-workflow_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32611292095
+detail=build	Run actions/checkout@v4	2026-08-23T01:52:10.4260432Z  * [new branch]      fix/v199-apksigner-final -> origin/fix/v199-apksigner-final|build	Prepare MD-aligned admin HTML	2026-08-23T01:52:46.6176725Z ^[[36;1m  '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__'^[[0m|build	Prepare MD-aligned admin HTML	2026-08-23T01:52:46.6181768Z ^[[36;1m    echo "MISSING_MD_MARKER=$marker" >&2^[[0m|build	Prepare MD-aligned admin HTML	2026-08-23T01:52:46.9338899Z ADMIN_POST_CONTRACT_V22_OK|build	Prepare MD-aligned admin HTML	2026-08-23T01:52:46.9633969Z ADMIN_BOTTOM_CONTROLS_FINAL_V2_OK|build	Prepare MD-aligned admin HTML	2026-08-23T01:52:46.9815705Z MISSING_MD_MARKER=__JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__|build	Post Run gradle/actions/setup-gradle@v4	2026-08-23T01:52:56.9008650Z BUILD SUCCESSFUL in 5s|
+workflow_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32611396806
