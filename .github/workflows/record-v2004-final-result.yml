@@ -1,0 +1,42 @@
+name: Record final v200.4 build result
+
+on:
+  workflow_run:
+    workflows: ["Build final Jayuminton admin v200.4 APK"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Record final build result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          JOBS="$RUNNER_TEMP/jobs.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" > "$JOBS"
+          FAILED="$(jq -r '[.jobs[].steps[]? | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != null) | (.name + ":" + .conclusion)] | join(" | ")' "$JOBS")"
+          printf 'run_id=%s\nhead_sha=%s\nconclusion=%s\nfailed_steps=%s\nrecorded_at=%s\n' \
+            "$RUN_ID" "$RUN_HEAD_SHA" "$RUN_CONCLUSION" "$FAILED" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > deployment/status/v2004-final-run.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2004-final-run.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Record final v200.4 build result $RUN_ID"
+          git pull --rebase origin main
+          git push origin main
