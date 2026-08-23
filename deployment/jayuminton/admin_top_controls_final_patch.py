@@ -23,23 +23,26 @@ if marker not in html:
 <script id="jayuminton-admin-top-controls-final-script-v1">
 (function(){
   'use strict';
+  var scheduled=false;
   function apply(){
+    scheduled=false;
     var app=document.getElementById('adminApp'); if(!app)return;
     var header=app.querySelector(':scope>header');
     var bar=app.querySelector('.admin-vnext-bottom-bar');
     if(!header||!bar)return;
     if(bar.parentElement!==header)header.appendChild(bar);
-    bar.setAttribute('data-jm-top-controls','1');
+    if(bar.getAttribute('data-jm-top-controls')!=='1')bar.setAttribute('data-jm-top-controls','1');
     var buttons=bar.querySelectorAll(':scope>button');
     if(buttons.length===3){
-      buttons[0].textContent='실행취소';
-      if(!buttons[1].disabled)buttons[1].textContent='새로고침';
-      buttons[2].textContent='자동배정';
+      if(buttons[0].textContent!=='실행취소')buttons[0].textContent='실행취소';
+      if(!buttons[1].disabled&&buttons[1].textContent!=='새로고침')buttons[1].textContent='새로고침';
+      if(buttons[2].textContent!=='자동배정')buttons[2].textContent='자동배정';
     }
     window.__JAYUMINTON_ADMIN_TOP_CONTROLS_FINAL_V1__=true;
   }
+  function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(apply);}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
-  new MutationObserver(apply).observe(document.documentElement,{childList:true,subtree:true});
+  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
 })();
 </script>
 '''
