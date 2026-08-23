@@ -1,0 +1,30 @@
+curl_rc=0
+ADMIN_POST_CONTRACT_V21_OK
+post_contract_rc=0
+ADMIN_TOP_CONTROLS_FINAL_V1_OK
+top_controls_rc=0
+OK=JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1
+OK=__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__
+OK=__JAYUMINTON_ADMIN_NEW_BADGE_KO__
+OK=__JAYUMINTON_ADMIN_REFRESH_BOUND__
+OK=__JAYUMINTON_ADMIN_BLOCKING_SAVE__
+OK=__JAYUMINTON_ADMIN_FINISH_ALERT_V19__
+OK=__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__
+OK=__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__
+OK=__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__
+OK=__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__
+OK=memberWaitAlert:'member-device-only'
+OK=memberCourtAlert:'member-device-only'
+OK=adminTransitionVibration:true
+OK=adminCourtVoice:true
+OK=emptyCourtAllowed:true
+OK=vibrationSets:8
+OK=vibrationsPerSet:3
+OK=번 코트 종료되었습니다.
+OK=대기 1번 
+OK=번 코트로 들어가 주세요.
+OK=data-jm-top-controls
+OK=__JAYUMINTON_ADMIN_TOP_CONTROLS_FINAL_V1__
+OK=z-index:2147483647
+OK=no-adminVoiceTestButton
+OK=no-voice-test-text
