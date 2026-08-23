@@ -1,0 +1,46 @@
+name: Diagnose v200.6 MD-only admin HTML
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/diag-v2006-md-clean-html.yml','deployment/jayuminton/admin_md_ui_cleanup_patch.py','deployment/jayuminton/admin_top_controls_final_patch.py']
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Patch and inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 'https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?diag=v2006' -o "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_md_final_form_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_md_ui_cleanup_patch.py "$RUNNER_TEMP/admin.html"
+          python3 - "$RUNNER_TEMP/admin.html" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding='utf-8').read()
+          top=re.search(r'<div\s+class=["\']top-actions md-only-top-actions["\'][^>]*>(.*?)</div>',s,re.S|re.I)
+          flt=re.search(r'<div\s+class=["\']quick-filter-row md-only-quick-filter-row["\'][^>]*>(.*?)</div>',s,re.S|re.I)
+          assert top and len(re.findall(r'<button\b',top.group(1),re.I))==4, 'top menu not exactly 4'
+          assert flt and len(re.findall(r'<button\b',flt.group(1),re.I))==3, 'quick filters not exactly 3'
+          required=['함께 경기통계','백업 저장','백업 복원','전체 초기화','전체</button>','남자</button>','여자</button>','selectAllMembers()','increaseSelectedGames()','decreaseSelectedGames()','resetSelectedGames()','실행취소','새로고침','자동배정','position:fixed!important','bottom:0!important']
+          for x in required: assert x in s, 'missing '+x
+          forbidden=['음성 테스트','음성 안내 켜짐','묶음 지정','묶음 해제','오늘의 운영 현황','선택 위치 자동배정','위치 자동배정','선택 해제']
+          for x in forbidden: assert x not in s, 'visible forbidden '+x
+          for c in ['compact-admin-tools','dashboard-shell','quick-status-actions','quick-search-box','v4-court-action-grid']:
+              assert not re.search(r'<(?:section|div|aside)\b[^>]*class=["\'][^"\']*\b'+re.escape(c)+r'\b',s,re.I), 'DOM forbidden '+c
+          print('MD_ONLY_HTML_OK')
+          PY
+          mkdir -p deployment/status
+          printf 'status=success\ncommit=%s\nfixed_bottom=true\nmanagement_buttons=4\nquick_filters=3\nvisible_unnecessary_menus=0\n' "$GITHUB_SHA" > deployment/status/v2006-md-clean-html.txt
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2006-md-clean-html.txt
+          git commit -m 'Record v200.6 MD-only HTML diagnostic' || true
+          git reset --hard HEAD
+          git pull --rebase origin main
+          git push origin main
