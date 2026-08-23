@@ -57,4 +57,4 @@ jobs:
       - name: Chain completed
         run: echo 'ADMIN_REDEPLOY_AND_APK_REBUILD_CHAIN_OK'
 
-# force-trigger: 2026-08-23-admin-vnext-all-patches-and-blocking-save-overlay
+# force-trigger: 2026-08-23-v2004-finish-vibration-redeploy-rebuild
