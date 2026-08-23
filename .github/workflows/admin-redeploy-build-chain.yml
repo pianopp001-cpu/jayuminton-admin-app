@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'deployment/jayuminton/admin_vnext_transition_alert_patch.py'
+      - 'deployment/jayuminton/apply_admin_vnext_patches.py'
+      - 'deployment/jayuminton/v3_admin_overlay_guarantee.py'
+      - 'deployment/jayuminton/admin_vnext_*.py'
       - 'deployment/jayuminton/admin_finish_alert_v12_patch.py'
       - 'deployment/jayuminton/admin_cloudflare_final_contract.py'
       - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
@@ -55,4 +57,4 @@ jobs:
       - name: Chain completed
         run: echo 'ADMIN_REDEPLOY_AND_APK_REBUILD_CHAIN_OK'
 
-# force-trigger: 2026-08-21-admin-voice-only-full-set-fast-finish-v2
+# force-trigger: 2026-08-23-admin-vnext-all-patches-and-blocking-save-overlay
