@@ -1,0 +1,99 @@
+name: Build final Jayuminton admin v200.4 direct
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v2004-final-direct.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager --licenses >/dev/null || true
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Fetch verified admin HTML and apply latest top controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?v2004direct='
+          curl --fail --location --retry 8 --retry-delay 2 "${URL}${GITHUB_RUN_ID}" -o "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_v2004_top_controls_patch.py "$RUNNER_TEMP/admin.html"
+          for m in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ 'emptyCourtAllowed:true' 'vibrationSets:8' 'vibrationsPerSet:3' '번 코트 종료되었습니다.' '번 코트로 들어가 주세요.' 'data-jm-top-controls' 'data-jm-top-refresh' 'data-jm-top-auto' 'data-jm-top-undo'; do grep -F "$m" "$RUNNER_TEMP/admin.html" >/dev/null; done
+          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin.html" >/dev/null; then exit 1; fi
+          mkdir -p app/src/main/assets/admin
+          cp "$RUNNER_TEMP/admin.html" app/src/main/assets/admin/index.html
+      - name: Patch native shell for v200.4 and vibration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
+          s=p.read_text(encoding='utf-8')
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.4";', s, count=1)
+          if n != 1: raise SystemExit('ADMIN_URL patch failed')
+          s=re.sub(r'private static final String APK_WEB_BUILD = "[^"]+";', 'private static final String APK_WEB_BUILD = "2004-final-direct";', s, count=1)
+          if 'import android.os.VibrationEffect;' not in s:
+              s=s.replace('import android.os.Bundle;\n','import android.os.Bundle;\nimport android.os.VibrationEffect;\nimport android.os.Vibrator;\n')
+          anchor='''        @JavascriptInterface\n        public boolean isSpeaking() {\n            return speaking.get() || (tts != null && tts.isSpeaking());\n        }\n'''
+          add='''        @JavascriptInterface\n        public boolean isSpeaking() {\n            return speaking.get() || (tts != null && tts.isSpeaking());\n        }\n\n        @JavascriptInterface\n        public void vibrate() {\n            runOnUiThread(() -> {\n                Vibrator v=(Vibrator)getSystemService(VIBRATOR_SERVICE);\n                if(v==null||!v.hasVibrator()) return;\n                long[] p=new long[]{0,360,150,360,150,360,520,360,150,360,150,360,520,360,150,360,150,360,520,360,150,360,150,360,520,360,150,360,150,360,520,360,150,360,150,360,520,360,150,360,150,360,520,360,150,360,150,360};\n                if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)v.vibrate(VibrationEffect.createWaveform(p,-1));else v.vibrate(p,-1);\n            });\n        }\n\n        @JavascriptInterface\n        public void cancelVibration() {\n            runOnUiThread(() -> { Vibrator v=(Vibrator)getSystemService(VIBRATOR_SERVICE); if(v!=null)v.cancel(); });\n        }\n'''
+          if 'public void vibrate()' not in s:
+              if anchor not in s: raise SystemExit('voice bridge anchor missing')
+              s=s.replace(anchor,add,1)
+          p.write_text(s,encoding='utf-8')
+          m=Path('app/src/main/AndroidManifest.xml'); x=m.read_text(encoding='utf-8')
+          if 'android.permission.VIBRATE' not in x:
+              i=x.find('<manifest'); j=x.find('>',i); x=x[:j+1]+'\n    <uses-permission android:name="android.permission.VIBRATE" />'+x[j+1:]
+          m.write_text(x,encoding='utf-8')
+          g=Path('app/build.gradle'); y=g.read_text(encoding='utf-8')
+          y=re.sub(r'versionCode\s+\d+','versionCode 2004',y,count=1)
+          y=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '200.4'",y,count=1)
+          g.write_text(y,encoding='utf-8')
+          PY
+          grep -F 'public void vibrate()' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'public void cancelVibration()' app/src/main/java/com/jayuminton/admin/MainActivity.java
+          grep -F 'android.permission.VIBRATE' app/src/main/AndroidManifest.xml
+      - name: Restore signing and icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
+          mkdir -p signing
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          keytool -list -keystore signing/jayuminton-release.jks -storepass 'JayuMinton14!' -alias jayuminton >/dev/null
+      - name: Build release
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Verify and publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
+          for m in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ 'vibrationSets:8' 'vibrationsPerSet:3' '번 코트 종료되었습니다.' 'data-jm-top-controls'; do grep -F "$m" "$RUNNER_TEMP/apk-admin.html" >/dev/null; done
+          mkdir -p releases deployment/status
+          cp "$APK" releases/jayuminton-admin-v200.4-final.apk
+          SHA=$(sha256sum releases/jayuminton-admin-v200.4-final.apk | awk '{print $1}')
+          printf 'status=success\nversion=200.4\nworkflow_run=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2004-final.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/jayuminton-admin-v200.4-final.apk deployment/status/v2004-final.txt
+          git commit -m 'Publish final Jayuminton admin v200.4 APK'
+          git pull --rebase origin main
+          git push origin main
