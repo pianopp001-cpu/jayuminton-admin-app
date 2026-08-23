@@ -6,6 +6,7 @@ import sys
 
 
 MARKER = "JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1"
+NATIVE_SYNC_MARKER = "JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2"
 
 ADDON = r'''
 <script>
@@ -106,7 +107,7 @@ ADDON = r'''
       var callout = names.length ? ' 대기1: ' + names.join(', ') + '님' : '';
       showMemberForegroundAlert(
         '코트 배정 안내',
-        courtNo + '번 코트 나왔습니다.' + callout + ' 라켓 들고 이동해주세요.',
+        courtNo + '번 코트 나왔습니다.' + callout + ' ' + courtNo + '번 코트로 들어가주세요.',
         'court_' + courtNo + '_' + member.id + '_' + updatedAt,
         'court_assignment'
       );
@@ -150,6 +151,85 @@ ADDON = r'''
 </script>
 '''
 
+NATIVE_SYNC_ADDON = r'''
+<script>
+/* JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2
+   Keep the native APK FCM token bound to the currently selected self member.
+   This is intentionally independent of visual rendering and repeats safely.
+*/
+(function installMemberNativeIdentitySyncV2(){
+  if (window.__JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2__) return;
+  window.__JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2__ = true;
+  var lastIdentityKey = null;
+
+  function currentSelfForNative(){
+    try {
+      if (typeof selectedWebPushMember === 'function') {
+        var selected = selectedWebPushMember();
+        if (selected && selected.id) return selected;
+      }
+    } catch (error) {}
+    try {
+      if (typeof currentStoredWebPushMember === 'function') {
+        var stored = currentStoredWebPushMember();
+        if (stored && stored.id) return stored;
+      }
+    } catch (error) {}
+    return null;
+  }
+
+  window.syncNativeUserPushBridge = function(){
+    if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN) return;
+    if (!window.NativeUserApp) return;
+    var member = currentSelfForNative();
+    try {
+      if (typeof window.NativeUserApp.setPushEnabled === 'function' && typeof memberAlertEnabled === 'function') {
+        window.NativeUserApp.setPushEnabled(!!memberAlertEnabled());
+      }
+    } catch (error) {}
+    try {
+      if (typeof window.NativeUserApp.setVibrationEnabled === 'function' && typeof memberVibrationEnabled === 'function') {
+        window.NativeUserApp.setVibrationEnabled(!!memberVibrationEnabled());
+      }
+    } catch (error) {}
+
+    if (member && member.id) {
+      var memberId = String(member.id);
+      var memberName = String(member.name || '');
+      var nextKey = memberId + '\n' + memberName;
+      try {
+        if (lastIdentityKey !== nextKey && typeof window.NativeUserApp.setMember === 'function') {
+          window.NativeUserApp.setMember(memberId, memberName);
+          lastIdentityKey = nextKey;
+        }
+      } catch (error) {
+        lastIdentityKey = null;
+      }
+    } else {
+      try {
+        if (lastIdentityKey !== '' && typeof window.NativeUserApp.clearMember === 'function') {
+          window.NativeUserApp.clearMember();
+          lastIdentityKey = '';
+        }
+      } catch (error) {}
+    }
+  };
+
+  function syncSoon(delay){ setTimeout(function(){ try { window.syncNativeUserPushBridge(); } catch (error) {} }, delay); }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){ syncSoon(0); syncSoon(300); syncSoon(1500); }, {once:true});
+  } else {
+    syncSoon(0); syncSoon(300); syncSoon(1500);
+  }
+  window.addEventListener('load', function(){ syncSoon(100); syncSoon(1000); });
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) syncSoon(50); });
+  document.addEventListener('click', function(){ syncSoon(80); }, true);
+  document.addEventListener('change', function(){ syncSoon(80); }, true);
+  setInterval(function(){ try { window.syncNativeUserPushBridge(); } catch (error) {} }, 15000);
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -166,6 +246,21 @@ def assert_alert_contract(text: str) -> None:
             raise SystemExit(f"member alert 3x8 contract missing: {needle}")
 
 
+def assert_native_sync_contract(text: str) -> None:
+    required = [
+        NATIVE_SYNC_MARKER,
+        "window.syncNativeUserPushBridge = function()",
+        "window.NativeUserApp.setMember(memberId, memberName)",
+        "window.NativeUserApp.clearMember()",
+        "window.NativeUserApp.setPushEnabled",
+        "window.NativeUserApp.setVibrationEnabled",
+        "typeof selectedWebPushMember === 'function'",
+    ]
+    for needle in required:
+        if needle not in text:
+            raise SystemExit(f"native identity sync contract missing: {needle}")
+
+
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     apk_url = (
@@ -177,28 +272,31 @@ def patch(path: Path) -> None:
         "releases/jayuminton-user-v1.0.0.apk",
         apk_url,
     )
-    if MARKER in text:
-        assert_alert_contract(text)
-        path.write_text(text, encoding="utf-8")
-        return
     marker = "</body>"
     if marker not in text:
         raise SystemExit("member page closing body tag missing")
-    required = [
-        "function initialize()",
-        "function refreshMemberState()",
-        "function memberAnywhereStartOutgoingSync_",
-        "function detectMemberForegroundTransition",
-        "memberAnywhereCancelOutgoingServer_",
-        "↻ 현황 갱신",
-        "네, 저예요",
-    ]
-    for needle in required:
-        if needle not in text:
-            raise SystemExit(f"protected live member feature missing: {needle}")
-    patched = text.replace(marker, ADDON + "\n" + marker, 1)
-    assert_alert_contract(patched)
-    path.write_text(patched, encoding="utf-8")
+
+    if MARKER not in text:
+        required = [
+            "function initialize()",
+            "function refreshMemberState()",
+            "function memberAnywhereStartOutgoingSync_",
+            "function detectMemberForegroundTransition",
+            "memberAnywhereCancelOutgoingServer_",
+            "↻ 현황 갱신",
+            "네, 저예요",
+        ]
+        for needle in required:
+            if needle not in text:
+                raise SystemExit(f"protected live member feature missing: {needle}")
+        text = text.replace(marker, ADDON + "\n" + marker, 1)
+
+    if NATIVE_SYNC_MARKER not in text:
+        text = text.replace(marker, NATIVE_SYNC_ADDON + "\n" + marker, 1)
+
+    assert_alert_contract(text)
+    assert_native_sync_contract(text)
+    path.write_text(text, encoding="utf-8")
 
 
 if __name__ == "__main__":
