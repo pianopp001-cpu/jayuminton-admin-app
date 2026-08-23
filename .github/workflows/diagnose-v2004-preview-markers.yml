@@ -1,0 +1,65 @@
+name: Diagnose v200.4 preview markers
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-v2004-preview-markers.yml'
+  workflow_dispatch: {}
+permissions:
+  actions: read
+  contents: write
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Diagnose markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow preview-admin-cloudflare.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          test "$RUN_ID" != 0
+          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/preview.log"
+          URL="$(grep -Eo 'ADMIN_TEST_URL=https://[^ ]+' "$RUNNER_TEMP/preview.log" | tail -1 | sed 's/^ADMIN_TEST_URL=//')"
+          test -n "$URL"
+          curl --fail --location "$URL/?diag=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin.html"
+          : > "$RUNNER_TEMP/missing.txt"
+          while IFS= read -r marker; do
+            [ -z "$marker" ] && continue
+            if ! grep -F "$marker" "$RUNNER_TEMP/admin.html" >/dev/null; then printf '%s\n' "$marker" >> "$RUNNER_TEMP/missing.txt"; fi
+          done <<'EOF'
+JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1
+__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__
+__JAYUMINTON_ADMIN_NEW_BADGE_KO__
+__JAYUMINTON_ADMIN_REFRESH_BOUND__
+__JAYUMINTON_ADMIN_BLOCKING_SAVE__
+jayuminton-admin-finish-alert-v19
+__JAYUMINTON_ADMIN_FINISH_ALERT_V19__
+__JAYUMINTON_TRANSITION_ALERT__
+emptyCourtAllowed:true
+__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__
+__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__
+__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__
+__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__
+memberWaitAlert:'member-device-only'
+memberCourtAlert:'member-device-only'
+adminTransitionVibration:true
+adminCourtVoice:true
+vibrationSets:8
+vibrationsPerSet:3
+번 코트 종료되었습니다.
+번 코트로 들어가 주세요.
+data-jm-top-controls
+EOF
+          mkdir -p deployment/status
+          MISSING="$(paste -sd '|' "$RUNNER_TEMP/missing.txt")"
+          printf 'preview_run=%s\npreview_url=%s\nmissing=%s\nchecked_at=%s\n' "$RUN_ID" "$URL" "$MISSING" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > deployment/status/v2004-preview-marker-diagnosis.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2004-preview-marker-diagnosis.txt
+          git commit -m 'Record v200.4 preview marker diagnosis'
+          git pull --rebase origin main
+          git push origin main
