@@ -7,6 +7,7 @@ on:
       - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
       - 'deployment/jayuminton/admin_top_controls_final_patch.py'
       - 'deployment/jayuminton/admin_md_final_form_patch.py'
+      - 'deployment/jayuminton/admin_excluded_final_html_patch.py'
   workflow_dispatch: {}
 permissions:
   contents: write
@@ -45,6 +46,7 @@ jobs:
             '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__'
             '__JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__'
             '__JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__'
+            '__JAYUMINTON_ADMIN_MD_FINAL_FORM_V2__'
             "memberWaitAlert:'member-device-only'"
             "memberCourtAlert:'member-device-only'"
             'adminTransitionVibration:false'
@@ -60,6 +62,11 @@ jobs:
             '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__'
             'name="mdNewGender"'
             'mdMemberGenderSummary'
+            "mdQuickMoveStatus('before')"
+            "mdQuickMoveStatus('rest')"
+            "mdQuickMoveStatus('away')"
+            'admin-game-count-panel'
+            '게임횟수 카운트 조정'
             '실행취소'
             '새로고침'
             '자동배정'
@@ -129,7 +136,37 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
-          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ __JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__ __JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__ 'adminTransitionVibration:false' 'voiceRepeatCount:3' 'vibrationSets:8' 'vibrationsPerSet:3' '번 코트 나왔습니다.' '대기 1번 ' '번 코트로 들어가 주세요.' 'data-jm-bottom-controls' '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__' 'name="mdNewGender"' 'mdMemberGenderSummary' '실행취소' '새로고침' '자동배정' 'z-index:2147483647'; do
+          required=(
+            'JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1'
+            '__JAYUMINTON_ADMIN_BLOCKING_SAVE__'
+            '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__'
+            '__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__'
+            '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__'
+            '__JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__'
+            '__JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__'
+            '__JAYUMINTON_ADMIN_MD_FINAL_FORM_V2__'
+            'adminTransitionVibration:false'
+            'voiceRepeatCount:3'
+            'vibrationSets:8'
+            'vibrationsPerSet:3'
+            '번 코트 나왔습니다.'
+            '대기 1번 '
+            '번 코트로 들어가 주세요.'
+            'data-jm-bottom-controls'
+            '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__'
+            'name="mdNewGender"'
+            'mdMemberGenderSummary'
+            "mdQuickMoveStatus('before')"
+            "mdQuickMoveStatus('rest')"
+            "mdQuickMoveStatus('away')"
+            'admin-game-count-panel'
+            '게임횟수 카운트 조정'
+            '실행취소'
+            '새로고침'
+            '자동배정'
+            'z-index:2147483647'
+          )
+          for marker in "${required[@]}"; do
             if ! grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo "MISSING_APK_MD_MARKER=$marker" >&2; exit 1; fi
           done
 
@@ -137,15 +174,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p releases deployment/status
-          cp app/build/outputs/apk/release/app-release.apk releases/jayuminton-admin-v200.5-md-final.apk
-          SHA=$(sha256sum releases/jayuminton-admin-v200.5-md-final.apk | awk '{print $1}')
-          printf 'status=success\nversion=200.5\nrun_id=%s\nsha256=%s\nbuild=md-final\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2005-md-final.txt
+          APK_TMP="$RUNNER_TEMP/jayuminton-admin-v200.5-md-final.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK_TMP"
+          SHA=$(sha256sum "$APK_TMP" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/jayuminton-admin-v200.5-md-final.apk deployment/status/v2005-md-final.txt
-          git commit -m 'Publish MD-aligned Jayuminton admin v200.5 APK'
-          git reset --hard HEAD
-          git clean -fd
-          git pull --rebase origin main
-          git push origin main
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+            mkdir -p releases deployment/status
+            cp "$APK_TMP" releases/jayuminton-admin-v200.5-md-final.apk
+            printf 'status=success\nversion=200.5\nrun_id=%s\nsha256=%s\nbuild=md-final-race-safe\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2005-md-final.txt
+            git add releases/jayuminton-admin-v200.5-md-final.apk deployment/status/v2005-md-final.txt
+            git commit -m 'Publish MD-aligned Jayuminton admin v200.5 APK' || true
+            if git push origin HEAD:main; then
+              echo "V2005_PUBLISH_OK attempt=$attempt sha256=$SHA"
+              exit 0
+            fi
+            echo "Publish raced with another commit; retrying ($attempt/5)" >&2
+            sleep 2
+          done
+          echo 'V2005_PUBLISH_FAILED_AFTER_RETRIES' >&2
+          exit 1
