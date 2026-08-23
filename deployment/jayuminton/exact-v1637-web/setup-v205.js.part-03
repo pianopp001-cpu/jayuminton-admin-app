@@ -251,9 +251,13 @@
   }
   function validRelayUrl(value) { return validMemberPageUrl(value); }
   function vibrationPattern(type) {
-    return type === 'court_assignment'
-      ? [1400,500,1400,500,1400]
-      : [900,450,900,450,900];
+    if (type !== 'court_assignment' && type !== 'wait1_ready') return [];
+    const pattern = [0];
+    for (let set = 0; set < 8; set += 1) {
+      for (let pulse = 0; pulse < 3; pulse += 1) pattern.push(320, 180);
+      if (set < 7) pattern.push(650);
+    }
+    return pattern;
   }
   function notificationRepeatGap(type) {
     return type === 'court_assignment' ? 6500 : 0;
