@@ -1,0 +1,33 @@
+name: Record v200.4 post-contract build result
+on:
+  workflow_run:
+    workflows: ['Build v200.4 post-contract final APK']
+    types: [completed]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Record result and failed markers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN='${{ github.event.workflow_run.id }}'
+          CONCLUSION='${{ github.event.workflow_run.conclusion }}'
+          mkdir -p deployment/status
+          FAILED=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json jobs --jq '[.jobs[].steps[] | select(.conclusion=="failure") | .name] | join(",")' || true)
+          gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/run.log" || true
+          MARKERS=$(grep -E 'MISSING_(ADMIN|APK)_MARKER=|POST_CONTRACT|TOP_CONTROLS|anchor missing|replacement failed|LEGACY_VOICE|VOICE_TEST|DIRECT_APPS' "$RUNNER_TEMP/run.log" | tail -30 | sed 's/%/%25/g;s/\r//g' || true)
+          printf 'run_id=%s\nconclusion=%s\nfailed_steps=%s\nmarkers=%s\nhtml_url=%s\n' "$RUN" "$CONCLUSION" "$FAILED" "$MARKERS" '${{ github.event.workflow_run.html_url }}' > deployment/status/v2004-direct3-run.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2004-direct3-run.txt
+          git commit -m "Record v200.4 post-contract run $RUN"
+          git pull --rebase origin main
+          git push origin main
