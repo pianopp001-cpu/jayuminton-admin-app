@@ -151,6 +151,21 @@ ADDON = r'''
 '''
 
 
+def assert_alert_contract(text: str) -> None:
+    required = [
+        MARKER,
+        "function strongThreeByEightPattern()",
+        "for (var round = 0; round < 8; round += 1)",
+        "for (var pulse = 0; pulse < 3; pulse += 1)",
+        "'wait1_ready'",
+        "'court_assignment'",
+        "window.memberAlertRepeatCount = function(){ return 1; };",
+    ]
+    for needle in required:
+        if needle not in text:
+            raise SystemExit(f"member alert 3x8 contract missing: {needle}")
+
+
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     apk_url = (
@@ -163,6 +178,7 @@ def patch(path: Path) -> None:
         apk_url,
     )
     if MARKER in text:
+        assert_alert_contract(text)
         path.write_text(text, encoding="utf-8")
         return
     marker = "</body>"
@@ -180,7 +196,9 @@ def patch(path: Path) -> None:
     for needle in required:
         if needle not in text:
             raise SystemExit(f"protected live member feature missing: {needle}")
-    path.write_text(text.replace(marker, ADDON + "\n" + marker, 1), encoding="utf-8")
+    patched = text.replace(marker, ADDON + "\n" + marker, 1)
+    assert_alert_contract(patched)
+    path.write_text(patched, encoding="utf-8")
 
 
 if __name__ == "__main__":
