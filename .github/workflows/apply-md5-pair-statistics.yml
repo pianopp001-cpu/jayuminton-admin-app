@@ -1,13 +1,13 @@
 name: Apply MD5 Cloudflare pair statistics
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/apply-md5-pair-statistics.yml']
   workflow_dispatch:
+  issues:
+    types: [opened]
 permissions:
   contents: write
 jobs:
   patch:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[MD5-PAIR-STATS]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,8 @@ jobs:
           PY
       - name: Add regression tests
         run: |
-          cat >> cloudflare/state-worker/worker.test.mjs <<'EOF'
+          if ! grep -F 'MD5_PAIR_STATS_FAILED' cloudflare/state-worker/worker.test.mjs >/dev/null; then
+            cat >> cloudflare/state-worker/worker.test.mjs <<'EOF'
 
 // MD5 pair statistics contract
 {
@@ -52,6 +53,7 @@ jobs:
   if (!a || a.games !== 1 || a.partners.length !== 3 || !a.partners.every(p => p.count === 1)) throw new Error('MD5_PAIR_STATS_FAILED');
 }
 EOF
+          fi
           node cloudflare/state-worker/worker.test.mjs
           node cloudflare/state-worker/md4-autoassign.test.mjs
       - name: Commit actual source
