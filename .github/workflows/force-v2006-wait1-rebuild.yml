@@ -16,5 +16,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          echo "force_generation=2"
           gh workflow run build-v2006-md-clean-final.yml --repo "$GITHUB_REPOSITORY" --ref main
           echo "WAIT1_FIXED_BUILD_DISPATCHED=1"
