@@ -18,17 +18,25 @@ if MARKER not in html:
     match=re.search(r'<(?P<tag>section|div)\b[^>]*class=["\'][^"\']*\bexcluded-panel\b[^"\']*["\'][^>]*>',html,re.I)
     if not match: raise SystemExit('excluded-panel section missing')
     excluded,excluded_end=balanced_element(html,match.start(),match.group('tag'))
-    # Keep only the return-to-active control with the excluded roster. Game count
-    # controls remain in the collapsible settings area.
-    for handler in ('decreaseSelectedGames()','increaseSelectedGames()','resetSelectedGames()','selectAllMembers()'):
-        excluded=re.sub(r'<button\b[^>]*onclick=["\']'+re.escape(handler)+r'["\'][^>]*>.*?</button>\s*','',excluded,count=1,flags=re.S|re.I)
+    handlers=('selectAllMembers()','resetSelectedGames()','increaseSelectedGames()','decreaseSelectedGames()')
+    game_buttons=[]
+    for handler in handlers:
+        bm=re.search(r'<button\b[^>]*onclick=["\']'+re.escape(handler)+r'["\'][^>]*>.*?</button>',excluded,re.S|re.I)
+        if not bm: raise SystemExit('game-count control missing: '+handler)
+        game_buttons.append(bm.group(0))
+        excluded=excluded.replace(bm.group(0),'',1)
     if 'setSelectedStatus' not in excluded or 'active' not in excluded:
         raise SystemExit('return-to-active control missing')
     excluded,n=re.subn(r'class=(["\'])([^"\']*\bexcluded-panel\b[^"\']*)\1',lambda m:'class='+m.group(1)+m.group(2).strip()+' admin-excluded-always-visible'+m.group(1),excluded,count=1,flags=re.I)
     if n!=1: raise SystemExit('excluded class update failed')
-    # Remove original location first.
-    html=html[:match.start()]+html[excluded_end:]
-    # Place directly under Quick Assign, before wait summary.
+    game_panel='''<div class="card admin-game-count-panel" style="box-shadow:none;margin-top:12px">
+  <h2>게임횟수 카운트 조정</h2>
+  <div class="toolbar section">\n%s\n  </div>
+</div>''' % '\n'.join(game_buttons)
+    # The original excluded panel sits in collapsible settings; replace it with
+    # the game-count panel so those controls remain there.
+    html=html[:match.start()]+game_panel+html[excluded_end:]
+    # Move only the excluded roster to Quick Assign, immediately before wait summary.
     anchor=re.search(r'<section\b[^>]*class=["\'][^"\']*\bv4-wait-summary\b[^"\']*["\'][^>]*>',html,re.I)
     if not anchor: raise SystemExit('quick assignment wait-summary anchor missing')
     html=html[:anchor.start()]+excluded+'\n'+html[anchor.start():]
@@ -45,7 +53,10 @@ visible_pos=html.find('admin-excluded-always-visible')
 if details_start>=0 and details_end>=0 and details_start<visible_pos<details_end:
     raise SystemExit('excluded roster still collapsible')
 if html.count('id="excludedMembers"')!=1: raise SystemExit('excluded roster must exist exactly once')
-for required in (MARKER,'admin-excluded-always-visible','id="excludedMembers"','코트배정 대기로 복귀'):
+for required in (
+    MARKER,'admin-excluded-always-visible','id="excludedMembers"','코트배정 대기로 복귀',
+    'admin-game-count-panel','게임횟수 카운트 조정','selectAllMembers()','resetSelectedGames()','increaseSelectedGames()','decreaseSelectedGames()'
+):
     if required not in html: raise SystemExit('excluded final marker missing: '+required)
 path.write_text(html,encoding='utf-8')
 print('ADMIN_EXCLUDED_ALWAYS_VISIBLE_FINAL_OK')
