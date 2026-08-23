@@ -1,5 +1,5 @@
 status=success
-commit=f5803572660659f5a5d1fc1e563c3b389b050116
+commit=2c7f21e15273214d65d724f857a6629a002520a4
 fixed_bottom=true
 management_buttons=4
 quick_filters=3
