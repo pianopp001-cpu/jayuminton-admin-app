@@ -1,0 +1,20 @@
+name: Force v200.6 wait1 fixed rebuild
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/force-v2006-wait1-rebuild.yml']
+  workflow_dispatch: {}
+permissions:
+  actions: write
+  contents: read
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch fixed v200.6 build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run build-v2006-md-clean-final.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "WAIT1_FIXED_BUILD_DISPATCHED=1"
