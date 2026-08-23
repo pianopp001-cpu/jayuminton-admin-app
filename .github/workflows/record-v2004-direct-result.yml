@@ -1,0 +1,36 @@
+name: Record v200.4 direct build result
+on:
+  workflow_run:
+    workflows: ['Build final Jayuminton admin v200.4 direct']
+    types: [completed]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Record result
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          printf 'run_id=%s\nhead_sha=%s\nconclusion=%s\nhtml_url=%s\ncompleted_at=%s\n' \
+            '${{ github.event.workflow_run.id }}' '${{ github.event.workflow_run.head_sha }}' '${{ github.event.workflow_run.conclusion }}' '${{ github.event.workflow_run.html_url }}' '$(date -u +%Y-%m-%dT%H:%M:%SZ)' > deployment/status/v2004-direct-run.txt
+          if [ '${{ github.event.workflow_run.conclusion }}' != 'success' ]; then
+            gh run view '${{ github.event.workflow_run.id }}' --repo "$GITHUB_REPOSITORY" --json jobs --jq '[.jobs[].steps[] | select(.conclusion=="failure") | .name] | join(",")' > deployment/status/v2004-direct-failed-steps.txt || true
+          else
+            rm -f deployment/status/v2004-direct-failed-steps.txt
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2004-direct-run.txt deployment/status/v2004-direct-failed-steps.txt 2>/dev/null || git add deployment/status/v2004-direct-run.txt
+          git commit -m 'Record v200.4 direct build result ${{ github.event.workflow_run.id }}'
+          git pull --rebase origin main
+          git push origin main
+        env:
+          GH_TOKEN: ${{ github.token }}
