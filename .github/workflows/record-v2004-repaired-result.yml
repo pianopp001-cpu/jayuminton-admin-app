@@ -1,0 +1,26 @@
+name: Record repaired v200.4 build result
+on:
+  workflow_run:
+    workflows: ['Build repaired final Jayuminton admin v200.4']
+    types: [completed]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Save result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p deployment/status
+          printf 'run_id=%s\nconclusion=%s\nhtml_url=%s\n' '${{ github.event.workflow_run.id }}' '${{ github.event.workflow_run.conclusion }}' '${{ github.event.workflow_run.html_url }}' > deployment/status/v2004-repaired-run.txt
+          gh run view '${{ github.event.workflow_run.id }}' --repo "$GITHUB_REPOSITORY" --json jobs --jq '[.jobs[].steps[] | select(.conclusion=="failure") | .name] | join(",")' > deployment/status/v2004-repaired-failed-steps.txt || true
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2004-repaired-run.txt deployment/status/v2004-repaired-failed-steps.txt
+          git commit -m 'Record repaired v200.4 build result ${{ github.event.workflow_run.id }}'
+          git pull --rebase origin main
+          git push origin main
