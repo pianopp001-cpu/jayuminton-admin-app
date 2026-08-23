@@ -51,6 +51,8 @@ function locationOf(state, memberId) {
   const id = String(memberId);
   for (const no of ['1', '2', '3', '4']) if (state.courts[no].includes(id)) return { type: 'court', key: no };
   for (let i = 0; i < 5; i += 1) if (state.waitGroups[i].includes(id)) return { type: 'wait', key: String(i + 1) };
+  const member = state.members.find(m => String(m.id) === id);
+  if (member && String(member.status) === 'active') return { type: 'active', key: 'active' };
   return null;
 }
 
@@ -132,12 +134,22 @@ export function swapMutation(input, leftIds, rightIds) {
   const aLoc = locationOf(state, a[0]); const bLoc = locationOf(state, b[0]);
   if (!aLoc || !bLoc || a.some(id => JSON.stringify(locationOf(state, id)) !== JSON.stringify(aLoc)) || b.some(id => JSON.stringify(locationOf(state, id)) !== JSON.stringify(bLoc))) throw new Error('invalid_swap_groups');
   if (JSON.stringify(aLoc) === JSON.stringify(bLoc)) throw new Error('same_location');
-  const aTarget = container(state, aLoc); const bTarget = container(state, bLoc);
-  a.forEach((id, i) => { aTarget[aTarget.indexOf(id)] = b[i]; });
-  b.forEach((id, i) => { bTarget[bTarget.indexOf(id)] = a[i]; });
   const enteringCourt = [];
-  if (aLoc.type === 'court' && bLoc.type !== 'court') enteringCourt.push(...b);
-  if (bLoc.type === 'court' && aLoc.type !== 'court') enteringCourt.push(...a);
+  if (aLoc.type === 'active' || bLoc.type === 'active') {
+    if (aLoc.type === 'active' && bLoc.type === 'active') throw new Error('same_location');
+    const activeIds = aLoc.type === 'active' ? a : b;
+    const placedIds = aLoc.type === 'active' ? b : a;
+    const placedLoc = aLoc.type === 'active' ? bLoc : aLoc;
+    const placedTarget = container(state, placedLoc);
+    placedIds.forEach((id, i) => { placedTarget[placedTarget.indexOf(id)] = activeIds[i]; });
+    if (placedLoc.type === 'court') enteringCourt.push(...activeIds);
+  } else {
+    const aTarget = container(state, aLoc); const bTarget = container(state, bLoc);
+    a.forEach((id, i) => { aTarget[aTarget.indexOf(id)] = b[i]; });
+    b.forEach((id, i) => { bTarget[bTarget.indexOf(id)] = a[i]; });
+    if (aLoc.type === 'court' && bLoc.type !== 'court') enteringCourt.push(...b);
+    if (bLoc.type === 'court' && aLoc.type !== 'court') enteringCourt.push(...a);
+  }
   addGames(state, enteringCourt, 1);
   syncMemberStatuses(state);
   return { state, event: { type: 'members_swapped', leftIds: a, rightIds: b } };
@@ -339,8 +351,15 @@ export class StateCoordinator {
       }
       if (action === 'backup') {
         const current = await readState(this.env.DB);
+        const backupState = normalizeState(structuredClone(current));
+        backupState.courts = { '1': [], '2': [], '3': [], '4': [] };
+        backupState.courtStartedAt = { '1': '', '2': '', '3': '', '4': '' };
+        backupState.waitGroups = [[], [], [], [], []];
+        backupState.swapRequests = [];
+        backupState.actionHistory = [];
+        backupState.members = backupState.members.map(member => ({ ...member, status: 'active' }));
         await this.env.DB.prepare('DELETE FROM state_backups').run();
-        await this.env.DB.prepare('INSERT INTO state_backups(revision,state_json,created_at) VALUES(?,?,?)').bind(current.revision, JSON.stringify(current), new Date().toISOString()).run();
+        await this.env.DB.prepare('INSERT INTO state_backups(revision,state_json,created_at) VALUES(?,?,?)').bind(current.revision, JSON.stringify(backupState), new Date().toISOString()).run();
         return reply({ ok: true, revision: current.revision });
       }
       if (action === 'restoreBackup') {

@@ -1218,7 +1218,7 @@ function memberCard(
       : '';
 
   const selfStar = isSelfMember(member)
-    ? '<span class="member-self-star" aria-label="내 이름">나</span>'
+    ? '<span class="member-self-star" aria-label="내 이름">★ 나</span>'
     : '';
 
   const selfClass = isSelfMember(member) ? ' is-self-member' : '';
@@ -2776,8 +2776,8 @@ function mostElapsedCourtNoForState(state) {
 }
 
 function memberAlertRepeatCount(type) {
-  if (type === 'court_assignment') return 4;
-  if (type === 'wait1_ready') return 2;
+  if (type === 'court_assignment') return 8;
+  if (type === 'wait1_ready') return 8;
   return 1;
 }
 
@@ -4216,7 +4216,7 @@ function renderWaitGroups() {
 
               if (!IS_ADMIN) {
                 if (isSelfMember(member)) {
-                  return '<div class="person member-info-card ' + genderClass(member) + ' is-self-member' + (MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'?' selected':'') + '" data-member-id="' + member.id + '" onclick="handleMemberWaitSelfTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="member-self-star" aria-label="내 이름">나</span><span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
+                  return '<div class="person member-info-card ' + genderClass(member) + ' is-self-member' + (MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'?' selected':'') + '" data-member-id="' + member.id + '" onclick="handleMemberWaitSelfTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="member-self-star" aria-label="내 이름">★ 나</span><span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
                 }
                 return '<div class="person member-info-card ' + genderClass(member) + (MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='other'&&String(MEMBER_WAIT_SEAT_PICK.memberId)===String(member.id)?' selected':'') + '" data-member-id="' + member.id + '" onclick="handleMemberWaitOtherTap(' + groupIndex + ',\'' + member.id + '\',event)">' + '<span class="name">' + escapeMemberInfo(member.name) + '</span>' + memberInfoDetailHtml(member) + '</div>';
               }
