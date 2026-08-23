@@ -1,0 +1,5 @@
+run_id=32609771558
+head_sha=0026ff7764af67e38cdabd1d012bd5fca690dbb6
+conclusion=failure
+html_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32609771558
+completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
