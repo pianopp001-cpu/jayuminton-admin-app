@@ -1,0 +1,62 @@
+name: Diagnose v200.4 HTML post contract
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/diag-v2004-html-contract.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Fetch patch and report every contract marker
+        shell: bash
+        run: |
+          set +e
+          mkdir -p deployment/status
+          OUT=deployment/status/v2004-html-contract-diag.txt
+          : > "$OUT"
+          URL="https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?diag=${GITHUB_RUN_ID}"
+          curl --fail --location "$URL" -o "$RUNNER_TEMP/admin.html"
+          echo "curl_rc=$?" >> "$OUT"
+          python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html" >> "$OUT" 2>&1
+          echo "post_contract_rc=$?" >> "$OUT"
+          python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html" >> "$OUT" 2>&1
+          echo "top_controls_rc=$?" >> "$OUT"
+          for marker in \
+            JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 \
+            __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ \
+            __JAYUMINTON_ADMIN_NEW_BADGE_KO__ \
+            __JAYUMINTON_ADMIN_REFRESH_BOUND__ \
+            __JAYUMINTON_ADMIN_BLOCKING_SAVE__ \
+            __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ \
+            __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ \
+            __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ \
+            __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ \
+            __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ \
+            "memberWaitAlert:'member-device-only'" \
+            "memberCourtAlert:'member-device-only'" \
+            'adminTransitionVibration:true' \
+            'adminCourtVoice:true' \
+            'emptyCourtAllowed:true' \
+            'vibrationSets:8' \
+            'vibrationsPerSet:3' \
+            '번 코트 종료되었습니다.' \
+            '대기 1번 ' \
+            '번 코트로 들어가 주세요.' \
+            'data-jm-top-controls' \
+            '__JAYUMINTON_ADMIN_TOP_CONTROLS_FINAL_V1__' \
+            'z-index:2147483647'; do
+            if grep -F "$marker" "$RUNNER_TEMP/admin.html" >/dev/null; then echo "OK=$marker" >> "$OUT"; else echo "MISSING=$marker" >> "$OUT"; fi
+          done
+          if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin.html" >/dev/null; then echo 'BAD=adminVoiceTestButton' >> "$OUT"; else echo 'OK=no-adminVoiceTestButton' >> "$OUT"; fi
+          if grep -F '>음성테스트<' "$RUNNER_TEMP/admin.html" >/dev/null; then echo 'BAD=voice-test-text' >> "$OUT"; else echo 'OK=no-voice-test-text' >> "$OUT"; fi
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$OUT"
+          git commit -m "Record v200.4 HTML contract diagnostic $GITHUB_RUN_ID"
+          git pull --rebase origin main
+          git push origin main
+          exit 0
