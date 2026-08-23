@@ -85,13 +85,42 @@ jobs:
           grep -F 'MEDIA_DUCK_VOLUME_STEP = 6' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'VOICE_REPEAT_COUNT = 3' app/src/main/java/com/jayuminton/admin/MainActivity.java
           grep -F 'setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)' app/src/main/java/com/jayuminton/admin/MainActivity.java
-      - name: Bundle verified Cloudflare admin frontend
+      - name: Wait for and bundle verified Cloudflare admin frontend
         shell: bash
         run: |
           set -euo pipefail
           URL='https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?apkVerify=${{ github.run_id }}'
-          curl --fail --location --retry 8 "$URL" -o "$RUNNER_TEMP/admin-cloudflare.html"
-          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__ __JAYUMINTON_ADMIN_NEW_BADGE_KO__ __JAYUMINTON_ADMIN_REFRESH_BOUND__ __JAYUMINTON_ADMIN_BLOCKING_SAVE__ jayuminton-admin-finish-alert-v19 __JAYUMINTON_ADMIN_FINISH_ALERT_V19__ __JAYUMINTON_TRANSITION_ALERT__ 'emptyCourtAllowed:true' __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ "memberWaitAlert:'member-device-only'" "memberCourtAlert:'member-device-only'" 'adminTransitionVibration:true' 'adminCourtVoice:true' '번 코트 종료되었습니다.'; do grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; done
+          MARKERS=(
+            'JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1'
+            '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__'
+            '__JAYUMINTON_ADMIN_NEW_BADGE_KO__'
+            '__JAYUMINTON_ADMIN_REFRESH_BOUND__'
+            '__JAYUMINTON_ADMIN_BLOCKING_SAVE__'
+            'jayuminton-admin-finish-alert-v19'
+            '__JAYUMINTON_ADMIN_FINISH_ALERT_V19__'
+            '__JAYUMINTON_TRANSITION_ALERT__'
+            'emptyCourtAllowed:true'
+            '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__'
+            '__JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__'
+            '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__'
+            '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__'
+            "memberWaitAlert:'member-device-only'"
+            "memberCourtAlert:'member-device-only'"
+            'adminTransitionVibration:true'
+            'adminCourtVoice:true'
+            '번 코트 종료되었습니다.'
+          )
+          ready=0
+          for attempt in $(seq 1 30); do
+            curl --fail --location --retry 3 --connect-timeout 10 "$URL&attempt=$attempt" -o "$RUNNER_TEMP/admin-cloudflare.html" || true
+            ready=1
+            for marker in "${MARKERS[@]}"; do
+              if ! grep -F "$marker" "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null 2>&1; then ready=0; break; fi
+            done
+            if [ "$ready" = "1" ]; then break; fi
+            sleep 10
+          done
+          test "$ready" = "1"
           if grep -F 'adminVoiceTestButton' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
           if grep -F '>음성테스트<' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
           if grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin-cloudflare.html" >/dev/null; then exit 1; fi
@@ -123,7 +152,7 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "$APK_OUTPUT"
           sha256sum "$APK_OUTPUT" | tee deployment/status/v2004-admin-verified-operations-apk.sha256
           git config user.name 'github-actions[bot]'
-          git config user.email '418982588+github-actions[bot]@users.noreply.github.com'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_OUTPUT" deployment/status/v2004-admin-verified-operations-apk.sha256 deployment/status/v2004-build-target.txt deployment/status/v1996-dog-icon-source.txt
           git commit -m 'Add Jayuminton admin v200.4 verified operations APK'
           git stash push --include-untracked --keep-index --message 'v2004-build-only-source-mutations' || true
@@ -132,4 +161,4 @@ jobs:
       - name: Upload verified APK artifact
         uses: actions/upload-artifact@v4
         with: {name: jayuminton-admin-v200.4-verified-operations, path: releases/jayuminton-admin-v200.4-verified-operations.apk, if-no-files-found: error, retention-days: 30}
-# trigger: 2026-08-23 direct-v2004-build-after-preview-fix
+# trigger: 2026-08-23 wait-for-live-v2004-contract-before-build
