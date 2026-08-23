@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re, sys
+import re, subprocess, sys
 
 if len(sys.argv) != 2:
     raise SystemExit('usage: admin_md_final_form_patch.py INDEX_HTML')
 path=Path(sys.argv[1])
+helper=Path(__file__).with_name('admin_excluded_final_html_patch.py')
+if not helper.exists(): raise SystemExit('excluded final helper missing')
+subprocess.run([sys.executable,str(helper),str(path)],check=True)
 html=path.read_text(encoding='utf-8')
 marker='__JAYUMINTON_ADMIN_MD_FINAL_FORM_V2__'
 compat_marker='__JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__'
@@ -101,7 +104,8 @@ addon=r'''
 if '</body>' not in html: raise SystemExit('body marker missing')
 html=html.replace('</body>',addon+'\n<!-- '+compat_marker+' -->\n<!-- '+marker+' -->\n</body>',1)
 for required in (
-    compat_marker,marker,'md-gender-radio','name="mdNewGender"','value="male"','value="female"',
+    compat_marker,marker,'__JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__',
+    'admin-excluded-always-visible','md-gender-radio','name="mdNewGender"','value="male"','value="female"',
     'mdMemberGenderSummary','총인원 ','남: ','여: ',
     "mdQuickMoveStatus('before')","mdQuickMoveStatus('rest')","mdQuickMoveStatus('away')",
     '>도착전</button>','>휴식</button>','>귀가</button>','deleteQuickPickedMembers()','closeMemberActionBar()'
