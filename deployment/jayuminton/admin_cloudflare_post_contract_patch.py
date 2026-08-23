@@ -9,19 +9,43 @@ marker = '</body>'
 if marker not in html:
     raise SystemExit('body end marker missing')
 
-candidates = (
-    "function finishText(courtNo,members){var calls=(members||[]).map(cleanName).filter(Boolean).map(function(n){return n+'님';});var base=Number(courtNo)+'번 코트 경기가 종료되었습니다.';return calls.length?base+'\\n대기 1번 '+calls.join(', ')+'\\n'+Number(courtNo)+'번 코트로 들어가 주세요.':base+'\\n대기 1번에 입장할 인원이 없습니다.';}",
-    "function finishText(courtNo,members){var calls=(members||[]).map(cleanName).filter(Boolean).map(function(n){return n+' 님';});var base=Number(courtNo)+'번 코트 종료되었습니다.';return calls.length?base+'\\n대기 1번 '+calls.join(', ')+'\\n'+Number(courtNo)+'번 코트로 들어가 주세요.':base+'\\n대기 1번에 입장할 인원이 없습니다.';}",
-    "function finishText(courtNo,members){var calls=(members||[]).map(cleanName).filter(Boolean).map(function(n){return n+' 님';});var base=Number(courtNo)+'번 코트 나왔습니다.';return calls.length?base+'\\n'+calls.join(', ')+'\\n'+Number(courtNo)+'번 코트로 들어가세요.':base+'\\n입장할 대기 1번 인원이 없습니다.';}",
-    "function finishText(courtNo,members){var calls=(members||[]).map(cleanName).filter(Boolean).map(function(n){return n+' 님';});var base=Number(courtNo)+'번 코트 나왔습니다.';return calls.length?base+'\\n'+calls.join(', ')+'\\n'+Number(courtNo)+'번 코트로 입장해 주세요.':base+'\\n입장할 대기 1번 인원이 없습니다.';}",
-)
+def matching_brace(text, open_pos):
+    depth = 0
+    quote = ''
+    escape = False
+    for i in range(open_pos, len(text)):
+        ch = text[i]
+        if quote:
+            if escape:
+                escape = False
+            elif ch == '\\':
+                escape = True
+            elif ch == quote:
+                quote = ''
+            continue
+        if ch in ('\"', "'", '`'):
+            quote = ch
+        elif ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
 md_finish = "function finishText(courtNo,members){var calls=(members||[]).map(cleanName).filter(Boolean).map(function(n){return n+' 님';});var base=Number(courtNo)+'번 코트 나왔습니다.';return calls.length?base+'\\n대기 1번 '+calls.join(', ')+'\\n'+Number(courtNo)+'번 코트로 들어가 주세요.':base+'\\n대기 1번에 입장할 인원이 없습니다.';}"
-for candidate in candidates:
-    if candidate in html:
-        html = html.replace(candidate, md_finish, 1)
-        break
+finish_start = html.find('function finishText(courtNo,members)')
+if finish_start < 0:
+    finish_start = html.find('function finishText(courtNo, members)')
+if finish_start < 0:
+    raise SystemExit('admin finishText function missing')
+open_brace = html.find('{', finish_start)
+close_brace = matching_brace(html, open_brace)
+if open_brace < 0 or close_brace < 0:
+    raise SystemExit('admin finishText function boundary missing')
+html = html[:finish_start] + md_finish + html[close_brace + 1:]
 if md_finish not in html:
-    raise SystemExit('admin finishText anchor missing')
+    raise SystemExit('admin finishText replacement failed')
 html = html.replace("window.NativeVoice.speak('court_finish_'+Date.now(),text,.88,1,'')", "window.NativeVoice.speak('court_finish_'+Date.now(),text,.82,1,'')", 1)
 html = html.replace('heldUtterance.rate=.88', 'heldUtterance.rate=.82', 1)
 
@@ -54,12 +78,13 @@ addon = r'''
 })();
 </script>
 '''
-# Remove the previous post-contract addon if a prior build already contains it.
-start = html.find('<style id="jayuminton-admin-post-contract-v21">')
-if start >= 0:
-    end = html.find('</script>', start)
-    if end >= 0:
-        html = html[:start] + html[end + len('</script>'):]
+# Remove any previous final post-contract addon before installing v22.
+for old_id in ('jayuminton-admin-post-contract-v21', 'jayuminton-admin-post-contract-v22'):
+    start = html.find('<style id="' + old_id + '">')
+    if start >= 0:
+        end = html.find('</script>', start)
+        if end >= 0:
+            html = html[:start] + html[end + len('</script>'):]
 if 'jayuminton-admin-post-contract-v22' not in html:
     html = html.replace(marker, addon + '\n' + marker, 1)
 for required in (
