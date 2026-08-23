@@ -45,4 +45,4 @@ jobs:
           git pull --rebase origin main
           git push origin main
           exit $RC
-# resource-merge-fix-watch: 2026-08-23T10:22+09:00
+# publish-fix-watch: 2026-08-23T10:26+09:00
