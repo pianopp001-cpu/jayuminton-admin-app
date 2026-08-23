@@ -36,7 +36,7 @@ jobs:
           CONCLUSION=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')
           FAILED=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json jobs --jq '[.jobs[].steps[] | select(.conclusion=="failure") | .name] | join(",")')
           gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/run.log" || true
-          DETAIL=$(grep -E 'MISSING_MD_ONLY|FORBIDDEN_|MANAGEMENT_MENU_COUNT|MD_UI_CLEANUP|BOTTOM_CONTROLS|FINAL_FORM|EXCLUDED_ALWAYS|FAILURE:|error:|BUILD SUCCESSFUL|apksigner|anchor missing' "$RUNNER_TEMP/run.log" | tail -80 | tr '\n' '|' || true)
+          DETAIL=$(grep -E 'MISSING_MD_ONLY|FORBIDDEN_|MENU_COUNTS|MD_UI_CLEANUP|BOTTOM_CONTROLS|FINAL_FORM|EXCLUDED_ALWAYS|FAILURE:|error:|BUILD SUCCESSFUL|apksigner|anchor missing' "$RUNNER_TEMP/run.log" | tail -80 | tr '\n' '|' || true)
           mkdir -p deployment/status
           printf 'run_id=%s\nconclusion=%s\nfailed_steps=%s\ndetail=%s\nworkflow_url=https://github.com/%s/actions/runs/%s\n' "$RUN" "$CONCLUSION" "$FAILED" "$DETAIL" "$GITHUB_REPOSITORY" "$RUN" > deployment/status/v2006-md-clean-watch.txt
           git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -46,3 +46,4 @@ jobs:
           git pull --rebase origin main
           git push origin main
           exit $RC
+# exact-md-menu-v4
