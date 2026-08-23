@@ -1,0 +1,48 @@
+name: Apply MD4 core v3 corrections
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/scripts/patch_md4_core_v3.py'
+      - '.github/workflows/apply-md4-core-v3.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Apply deterministic MD4 patch
+        run: python3 deployment/scripts/patch_md4_core_v3.py
+      - name: Verify core corrections
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "return { type: 'active', key: 'active' };" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "backupState.members = backupState.members.map(member => ({ ...member, status: 'active' }));" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "if (type === 'court_assignment') return 8;" source-snapshot/current-main/Script.html >/dev/null
+          grep -F "if (type === 'wait1_ready') return 8;" source-snapshot/current-main/Script.html >/dev/null
+          grep -F '★ 나</span>' source-snapshot/current-main/Script.html >/dev/null
+          cp cloudflare/state-worker/worker.js /tmp/worker-check.mjs
+          node --check /tmp/worker-check.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('source-snapshot/current-main/Script.html').read_text(encoding='utf-8')
+          a=s.find('<script>'); b=s.rfind('</script>')
+          assert a>=0 and b>a
+          Path('/tmp/script-check.js').write_text(s[a+8:b],encoding='utf-8')
+          PY
+          node --check /tmp/script-check.js
+      - name: Commit corrected sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add cloudflare/state-worker/worker.js source-snapshot/current-main/Script.html
+          git commit -m 'Apply MD4 core v3 corrections' || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
