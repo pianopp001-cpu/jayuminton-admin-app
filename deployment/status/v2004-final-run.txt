@@ -1,0 +1,5 @@
+run_id=32609157520
+head_sha=72e240faef974515d6011d765bc09a25e0a18eb6
+conclusion=failure
+failed_steps=Download and verify final admin frontend:failure
+recorded_at=2026-08-23T00:58:30Z
