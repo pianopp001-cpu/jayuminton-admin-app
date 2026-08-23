@@ -1,0 +1,21 @@
+name: Run wait1 fixed final NOW
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/run-wait1-final-now-20260823.yml']
+  workflow_dispatch: {}
+permissions:
+  actions: write
+  contents: read
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch current main final build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          gh workflow run build-v2006-md-clean-final.yml --repo "$GITHUB_REPOSITORY" --ref main
+          sleep 5
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2006-md-clean-final.yml --limit 3
