@@ -1,0 +1,5 @@
+run_id=32611292095
+conclusion=failure
+failed_steps=Prepare MD-aligned admin HTML
+detail=build	Run actions/checkout@v4	2026-08-23T01:49:34.6998683Z  * [new branch]      fix/v199-apksigner-final -> origin/fix/v199-apksigner-final|build	Prepare MD-aligned admin HTML	2026-08-23T01:50:02.8747187Z ^[[36;1m  '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__'^[[0m|build	Prepare MD-aligned admin HTML	2026-08-23T01:50:02.8750915Z ^[[36;1m    echo "MISSING_MD_MARKER=$marker" >&2^[[0m|build	Prepare MD-aligned admin HTML	2026-08-23T01:50:03.1597864Z admin finishText anchor missing|build	Post Run gradle/actions/setup-gradle@v4	2026-08-23T01:50:10.9168957Z BUILD SUCCESSFUL in 4s|
+workflow_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32611292095
