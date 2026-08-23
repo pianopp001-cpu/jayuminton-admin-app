@@ -1,0 +1,38 @@
+name: Harden fast final v200.4 contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-v2004-fast-final-contract.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Apply latest admin contract before fast-final verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/build-v2004-fast-final.yml')
+          s=p.read_text(encoding='utf-8')
+          old='''          python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html"\n'''
+          new='''          python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html"\n          python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html"\n'''
+          if 'admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html"' not in s:
+              if old not in s: raise SystemExit('fast-final top patch anchor missing')
+              s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          grep -F 'admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html"' .github/workflows/build-v2004-fast-final.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/build-v2004-fast-final.yml
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Apply latest admin contract in fast v200.4 build'
+          git pull --rebase origin main
+          git push origin main
