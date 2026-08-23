@@ -13,7 +13,7 @@ jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch final direct build
+      - name: Dispatch repaired final direct build
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run build-v2004-final-direct.yml --repo "$GITHUB_REPOSITORY" --ref main
+        run: gh workflow run build-v2004-final-direct2.yml --repo "$GITHUB_REPOSITORY" --ref main
