@@ -1,0 +1,6 @@
+status=success
+commit=a7ce8e268ee9bb73beb67661a5e86b80bfcc2a1f
+fixed_bottom=true
+management_buttons=4
+quick_filters=3
+visible_unnecessary_menus=0
