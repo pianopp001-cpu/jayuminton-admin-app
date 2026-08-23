@@ -1,0 +1,33 @@
+name: Record fast final v200.4 result
+on:
+  workflow_run:
+    workflows: ["Build fast final Jayuminton admin v200.4 APK"]
+    types: [completed]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Record run result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" > "$RUNNER_TEMP/jobs.json"
+          FAILED="$(jq -r '[.jobs[].steps[]? | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != null) | (.name + ":" + .conclusion)] | join(" | ")' "$RUNNER_TEMP/jobs.json")"
+          printf 'run_id=%s\nhead_sha=%s\nconclusion=%s\nfailed_steps=%s\nrecorded_at=%s\n' "$RUN_ID" "$RUN_HEAD_SHA" "$RUN_CONCLUSION" "$FAILED" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > deployment/status/v2004-fast-final-run.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/v2004-fast-final-run.txt
+          git commit -m "Record fast final v200.4 result $RUN_ID"
+          git pull --rebase origin main
+          git push origin main
