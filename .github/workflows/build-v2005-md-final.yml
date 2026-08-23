@@ -6,6 +6,7 @@ on:
       - '.github/workflows/build-v2005-md-final.yml'
       - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
       - 'deployment/jayuminton/admin_top_controls_final_patch.py'
+      - 'deployment/jayuminton/admin_md_final_form_patch.py'
   workflow_dispatch: {}
 permissions:
   contents: write
@@ -31,6 +32,7 @@ jobs:
           curl --fail --location --retry 8 --retry-delay 2 "https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?v2005=${GITHUB_RUN_ID}" -o "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_md_final_form_patch.py "$RUNNER_TEMP/admin.html"
           required=(
             'JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1'
             '__JAYUMINTON_ADMIN_VOICE_TEST_REMOVED__'
@@ -42,6 +44,7 @@ jobs:
             '__JAYUMINTON_ADMIN_FAST_SAVE_CLIENT_V1__'
             '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__'
             '__JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__'
+            '__JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__'
             "memberWaitAlert:'member-device-only'"
             "memberCourtAlert:'member-device-only'"
             'adminTransitionVibration:false'
@@ -55,6 +58,8 @@ jobs:
             '번 코트로 들어가 주세요.'
             'data-jm-bottom-controls'
             '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__'
+            'name="mdNewGender"'
+            'mdMemberGenderSummary'
             '실행취소'
             '새로고침'
             '자동배정'
@@ -124,7 +129,7 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
-          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ __JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__ 'adminTransitionVibration:false' 'voiceRepeatCount:3' 'vibrationSets:8' 'vibrationsPerSet:3' '번 코트 나왔습니다.' '대기 1번 ' '번 코트로 들어가 주세요.' 'data-jm-bottom-controls' '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__' '실행취소' '새로고침' '자동배정' 'z-index:2147483647'; do
+          for marker in JAYUMINTON_ADMIN_CLOUDFLARE_FINAL_V1 __JAYUMINTON_ADMIN_BLOCKING_SAVE__ __JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_V1__ __JAYUMINTON_ADMIN_TRANSITION_ALERT_BRIDGE_V1__ __JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__ __JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__ __JAYUMINTON_ADMIN_MD_FINAL_FORM_V1__ 'adminTransitionVibration:false' 'voiceRepeatCount:3' 'vibrationSets:8' 'vibrationsPerSet:3' '번 코트 나왔습니다.' '대기 1번 ' '번 코트로 들어가 주세요.' 'data-jm-bottom-controls' '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FINAL_V2__' 'name="mdNewGender"' 'mdMemberGenderSummary' '실행취소' '새로고침' '자동배정' 'z-index:2147483647'; do
             if ! grep -F "$marker" "$RUNNER_TEMP/apk-admin.html" >/dev/null; then echo "MISSING_APK_MD_MARKER=$marker" >&2; exit 1; fi
           done
 
