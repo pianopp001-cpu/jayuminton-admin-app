@@ -20,6 +20,10 @@ def remove_block_by_class(source, class_name):
     pat = re.compile(r'<(?P<tag>section|div)\b[^>]*class=["\'][^"\']*\b' + re.escape(class_name) + r'\b[^"\']*["\'][^>]*>.*?</(?P=tag)>\s*', re.S | re.I)
     return pat.sub('', source, count=1)
 
+
+def has_dom_class(source, class_name):
+    return re.search(r'<(?:section|div|aside)\b[^>]*class=["\'][^"\']*\b' + re.escape(class_name) + r'\b[^"\']*["\']', source, re.I) is not None
+
 # 관리·설정: MD에 적힌 정확히 네 기능만.
 top_actions = '''<div class="top-actions md-only-top-actions">
         <button class="ghost-button" type="button" onclick="openPairStatistics()">함께 경기통계</button>
@@ -82,16 +86,21 @@ flt = re.search(r'<div\s+class=["\']quick-filter-row md-only-quick-filter-row["\
 if not flt or len(re.findall(r'<button\b', flt.group(1), re.I)) != 3:
     raise SystemExit('quick filters must contain exactly three buttons')
 
+# Visible DOM blocks must be gone. CSS/JS dead references do not count as menus.
+for class_name in ('compact-admin-tools', 'dashboard-shell', 'quick-status-actions', 'quick-search-box', 'v4-court-action-grid'):
+    if has_dom_class(html, class_name):
+        raise SystemExit('unnecessary DOM control survived: ' + class_name)
+
 for forbidden in (
     'onclick="toggleVoiceGuide()"', 'onclick="testVoiceGuide()"', 'onclick="setSelectedBundle()"', 'onclick="clearSelectedBundle()"',
-    'onclick="unlockVoiceSound()"', 'id="undoButton"', 'compact-admin-tools', 'dashboard-shell', 'quick-status-actions',
-    'quick-search-box', 'v4-court-action-grid', '음성 테스트', '음성 안내 켜짐', '묶음 지정', '묶음 해제',
+    'onclick="unlockVoiceSound()"', 'id="undoButton"',
+    '음성 테스트', '음성 안내 켜짐', '묶음 지정', '묶음 해제',
     '오늘의 운영 현황', '선택 위치 자동배정', '위치 자동배정', '선택 해제',
 ):
     if forbidden in html:
-        raise SystemExit('unnecessary control survived: ' + forbidden)
+        raise SystemExit('unnecessary visible control survived: ' + forbidden)
 
-if '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__' not in html:
-    html = html.replace('</body>', '<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__ -->\n</body>', 1)
+if '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V5__' not in html:
+    html = html.replace('</body>', '<!-- __JAYUMINTON_ADMIN_MD_UI_CLEANUP_V5__ -->\n</body>', 1)
 path.write_text(html, encoding='utf-8')
-print('ADMIN_MD_UI_CLEANUP_V4_OK')
+print('ADMIN_MD_UI_CLEANUP_V5_OK')
