@@ -1,0 +1,11 @@
+status=success
+check=canonical-release-binaries
+admin_version=203.0
+admin_sha256=41b662147b5f3f12f309e2786eba2d9f92ec2666295fda92084a28fde83e11d6
+admin_v24_bundled=verified
+user_version=1.6.42
+user_sha256=0488981581537a869ec5cedc0a2b44e0a40d9da9f28e77d64afe7ad031a4880b
+user_cloudflare_fcm_contract=verified
+run_id=32764819844
+head_sha=6a5f57989660edbc54c65ca228be11474368165a
+updated_at=2026-08-24T18:52:05Z
