@@ -47,8 +47,10 @@ duplicate_fields = '''      <textarea id="mdPublicMemo" maxlength="120" rows="2"
       <label class="member-flag-check"><input id="newIsNew" type="checkbox"> 신규</label>
       <label class="member-flag-check"><input id="newIsSponsor" type="checkbox"> 🎁 찬조</label>'''
 canonical_fields = '''      <textarea id="newPublicMemo" maxlength="120" rows="2" placeholder="메모 · 생일 · 특이사항 · 부상 등 (선택)"></textarea>
-      <label class="md-member-check"><input id="newIsNew" type="checkbox"> new 아이콘 · 신규</label>
-      <label class="md-member-check"><input id="newIsSponsor" type="checkbox"> 🎁 아이콘 · 찬조</label>'''
+      <input id="newTeam" maxlength="20" placeholder="팀 설정 (선택, 같은 팀명은 같은 색 띠로 표시)">
+      <label class="md-member-check"><input id="newIsNew" type="checkbox"> 신규</label>
+      <label class="md-member-check"><input id="newIsDuplicate" type="checkbox"> 동명이인</label>
+      <label class="md-member-check"><input id="newIsSponsor" type="checkbox"> 찬조</label>'''
 if html.count(duplicate_fields) != 1:
     raise SystemExit('duplicate member fields block mismatch')
 html = html.replace(duplicate_fields, canonical_fields, 1)
@@ -56,6 +58,105 @@ html = html.replace("document.getElementById('mdPublicMemo')", "document.getElem
 html = html.replace("document.getElementById('mdIsNew')", "document.getElementById('newIsNew')")
 html = html.replace("document.getElementById('mdIsSponsor')", "document.getElementById('newIsSponsor')")
 html = html.replace('#mdPublicMemo', '#newPublicMemo')
+
+# Extend the existing central metadata wrapper so add and edit use exactly the
+# same duplicate-name and team values. This also loads and clears those fields
+# when the edit target changes.
+old_meta_tail = """    var sponsor=document.getElementById('newIsSponsor');
+    return {
+      publicMemo:String(memo&&memo.value||'').trim(),
+      isNew:!!(isNew&&isNew.checked),
+      isSponsor:!!(sponsor&&sponsor.checked)
+    };"""
+new_meta_tail = """    var sponsor=document.getElementById('newIsSponsor');
+    var duplicate=document.getElementById('newIsDuplicate');
+    var team=document.getElementById('newTeam');
+    return {
+      publicMemo:String(memo&&memo.value||'').trim(),
+      isNew:!!(isNew&&isNew.checked),
+      isDuplicate:!!(duplicate&&duplicate.checked),
+      isSponsor:!!(sponsor&&sponsor.checked),
+      team:String(team&&team.value||'').trim().slice(0,20)
+    };"""
+if html.count(old_meta_tail) != 1:
+    raise SystemExit('member metadata wrapper mismatch')
+html = html.replace(old_meta_tail, new_meta_tail, 1)
+old_clear_tail = """    var isNew=document.getElementById('newIsNew'); if(isNew)isNew.checked=false;
+    var sponsor=document.getElementById('newIsSponsor'); if(sponsor)sponsor.checked=false;"""
+new_clear_tail = old_clear_tail + """
+    var duplicate=document.getElementById('newIsDuplicate'); if(duplicate)duplicate.checked=false;
+    var team=document.getElementById('newTeam'); if(team)team.value='';"""
+if html.count(old_clear_tail) != 1:
+    raise SystemExit('member metadata clear mismatch')
+html = html.replace(old_clear_tail, new_clear_tail, 1)
+old_load_tail = """    var isNew=document.getElementById('newIsNew'); if(isNew)isNew.checked=!!member.isNew;
+    var sponsor=document.getElementById('newIsSponsor'); if(sponsor)sponsor.checked=!!member.isSponsor;"""
+new_load_tail = old_load_tail + """
+    var duplicate=document.getElementById('newIsDuplicate'); if(duplicate)duplicate.checked=!!member.isDuplicate;
+    var team=document.getElementById('newTeam'); if(team)team.value=String(member.team||'');"""
+if html.count(old_load_tail) != 1:
+    raise SystemExit('member metadata load mismatch')
+html = html.replace(old_load_tail, new_load_tail, 1)
+
+# The proven registration function still invokes google.script.run directly,
+# bypassing the central server() wrapper. Add both new fields to its explicit
+# metadata object and to the optimistic card as well.
+explicit_sponsor = "isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)"
+explicit_extended = explicit_sponsor + ",\n        isDuplicate: !!(document.getElementById('newIsDuplicate') && document.getElementById('newIsDuplicate').checked),\n        team: String(document.getElementById('newTeam') && document.getElementById('newTeam').value || '').trim().slice(0, 20)"
+explicit_count = html.count(explicit_sponsor)
+if explicit_count != 3:
+    raise SystemExit(f'explicit member metadata object mismatch ({explicit_count})')
+html = html.replace(explicit_sponsor, explicit_extended)
+
+# New members and explicitly marked same-name members always show the complete
+# stored name. Other administrator cards show only the first two base-name
+# characters. The later card timer must follow the same rule.
+old_new_predicate = """  function isAdminNewMember(member) {
+    return !!member && (member.isNew === true || ['1','true'].indexOf(String(member.isNew || '').toLowerCase()) >= 0);
+  }"""
+new_new_predicate = """  function isAdminNewMember(member) {
+    return !!member && (member.isNew === true || ['1','true'].indexOf(String(member.isNew || '').toLowerCase()) >= 0);
+  }
+  function isAdminDuplicateMember(member) {
+    return !!member && (member.isDuplicate === true || ['1','true'].indexOf(String(member.isDuplicate || '').toLowerCase()) >= 0);
+  }
+  function usesAdminFullName(member) {
+    return isAdminNewMember(member) || isAdminDuplicateMember(member);
+  }
+  function adminTeamColor(team) {
+    var colors=['#5b21b6','#0f766e','#b45309','#0369a1','#be123c','#4338ca','#15803d','#a21caf'];
+    var hash=0; String(team||'').split('').forEach(function(ch){hash=((hash*31)+ch.charCodeAt(0))>>>0;});
+    return colors[hash%colors.length];
+  }"""
+if html.count(old_new_predicate) != 1:
+    raise SystemExit('administrator full-name predicate mismatch')
+html = html.replace(old_new_predicate, new_new_predicate, 1)
+html = html.replace('if (isAdminNewMember(member)) {', 'if (usesAdminFullName(member)) {', 1)
+html = html.replace('member && isAdminNewMember(member) ? String(member.name || \'\') : \'\'',
+                    'member && usesAdminFullName(member) ? String(member.name || \'\') : \'\'', 1)
+html = html.replace("if(IS_ADMIN&&!member.isNew&&typeof compactMemberName==='function')displayName=compactMemberName(displayName);",
+                    "if(IS_ADMIN&&!member.isNew&&!member.isDuplicate&&typeof compactMemberName==='function')displayName=compactMemberName(displayName);", 1)
+
+# Apply a stable team stripe and team label without changing the existing male
+# blue / female pink card background. Same team name always maps to same color.
+team_decorator_anchor = """      var name = card.querySelector('.quick-member-name,.name');
+      if (!name) return;"""
+team_decorator = team_decorator_anchor + """
+      var team=String(member.team||'').trim();
+      card.classList.toggle('has-member-team',!!team);
+      if(team){
+        card.style.setProperty('--member-team-color',adminTeamColor(team));
+        var badge=card.querySelector('.member-team-badge');
+        if(!badge){badge=document.createElement('span');badge.className='member-team-badge';card.appendChild(badge);}
+        if(badge.textContent!==team)badge.textContent=team;
+        badge.title='팀 '+team;
+      }else{
+        card.style.removeProperty('--member-team-color');
+        var oldBadge=card.querySelector('.member-team-badge');if(oldBadge)oldBadge.remove();
+      }"""
+if html.count(team_decorator_anchor) != 1:
+    raise SystemExit('member team decorator anchor mismatch')
+html = html.replace(team_decorator_anchor, team_decorator, 1)
 
 old_summary = '<summary>멤버 등록·비밀번호·게임횟수 관리</summary>'
 new_summary = '<summary>멤버등록·비밀번호·게임횟수·제외인원 관리</summary>'
@@ -156,6 +257,7 @@ management_patch = r'''
 .admin-setup-details>summary{display:inline-flex!important;align-items:center!important;user-select:none!important}
 .admin-setup-details[open]>summary{background:#eaf1ff!important;border-color:#315efb!important;color:#1746b0!important}
 #newPublicMemo{min-width:220px;min-height:52px;resize:vertical}
+#newTeam{min-width:220px}
 .md-game-actions{align-items:center!important}
 .md-bulk-member-actions{display:flex!important;flex-flow:row nowrap!important;gap:5px!important;overflow-x:auto!important;padding:4px 0 6px!important;scrollbar-width:thin}
 .md-bulk-member-actions button{flex:1 0 auto!important;min-width:72px!important;min-height:38px!important;padding:6px 8px!important;white-space:nowrap!important;font-size:11px!important;font-weight:900!important}
@@ -163,6 +265,8 @@ management_patch = r'''
 #adminApp .member.male,#adminApp .person.male,#adminApp .quick-member.male{background:#e4f1ff!important;color:#0756b6!important;font-weight:900!important}
 #adminApp .member.female,#adminApp .person.female,#adminApp .quick-member.female{background:#ffe7f0!important;color:#c51b4f!important;font-weight:900!important}
 #adminApp .member .name,#adminApp .person .name,#adminApp .quick-member-name{font-weight:950!important}
+#adminApp .has-member-team{position:relative!important;box-shadow:inset 5px 0 0 var(--member-team-color)!important;padding-left:10px!important}
+#adminApp .member-team-badge{display:inline-flex!important;align-items:center!important;max-width:96px!important;margin-left:5px!important;padding:2px 6px!important;border:1px solid var(--member-team-color)!important;border-radius:999px!important;background:#fff!important;color:var(--member-team-color)!important;font-size:10px!important;font-weight:950!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;vertical-align:middle!important}
 @media(max-width:620px){.admin-setup-details>summary{width:100%!important;box-sizing:border-box!important;justify-content:center!important}.admin-panel{padding:10px!important}.admin-panel h2{font-size:15px!important}.md-game-actions{gap:5px!important}.md-game-actions button{font-size:10px!important;padding:5px 7px!important}.md-bulk-member-actions button{min-width:64px!important;font-size:10px!important;padding:5px!important}}
 </style>
 <style id="jayuminton-announcement-controls-v2021">
@@ -248,6 +352,15 @@ management_patch = r'''
     }
     document.documentElement.classList.toggle('jm-save-locked',locked);
   }
+  function blockSaveInteraction(event){
+    if(!isSaveOverlayVisible())return;
+    var allowed=event.target&&event.target.closest&&event.target.closest('#voiceSaveEmergency');
+    if(allowed)return;
+    event.preventDefault();event.stopImmediatePropagation();event.stopPropagation();
+  }
+  ['pointerdown','touchstart','click','keydown'].forEach(function(type){
+    document.addEventListener(type,blockSaveInteraction,true);
+  });
   var originalUpdateVoiceGuideButton=window.updateVoiceGuideButton;
   window.updateVoiceGuideButton=function(){
     if(typeof originalUpdateVoiceGuideButton==='function')originalUpdateVoiceGuideButton();
@@ -293,6 +406,10 @@ for required_voice_marker in [
     'backdrop-filter:none!important',
     "if(locked)app.setAttribute('inert','')",
     'filter:none!important;backdrop-filter:none!important',
+    'id="newIsDuplicate"',
+    'id="newTeam"',
+    'function usesAdminFullName(member)',
+    "event.target.closest('#voiceSaveEmergency')",
 ]:
     if required_voice_marker not in html:
         raise SystemExit('announcement voice control missing: ' + required_voice_marker)
