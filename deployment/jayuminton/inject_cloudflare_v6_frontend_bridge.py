@@ -47,7 +47,6 @@ duplicate_fields = '''      <textarea id="mdPublicMemo" maxlength="120" rows="2"
       <label class="member-flag-check"><input id="newIsNew" type="checkbox"> 신규</label>
       <label class="member-flag-check"><input id="newIsSponsor" type="checkbox"> 🎁 찬조</label>'''
 canonical_fields = '''      <textarea id="newPublicMemo" maxlength="120" rows="2" placeholder="메모 · 생일 · 특이사항 · 부상 등 (선택)"></textarea>
-      <input id="newTeam" maxlength="20" placeholder="팀 설정 (선택, 같은 팀명은 같은 색 띠로 표시)">
       <label class="md-member-check"><input id="newIsNew" type="checkbox"> 신규</label>
       <label class="md-member-check"><input id="newIsDuplicate" type="checkbox"> 동명이인</label>
       <label class="md-member-check"><input id="newIsSponsor" type="checkbox"> 찬조</label>'''
@@ -70,13 +69,11 @@ old_meta_tail = """    var sponsor=document.getElementById('newIsSponsor');
     };"""
 new_meta_tail = """    var sponsor=document.getElementById('newIsSponsor');
     var duplicate=document.getElementById('newIsDuplicate');
-    var team=document.getElementById('newTeam');
     return {
       publicMemo:String(memo&&memo.value||'').trim(),
       isNew:!!(isNew&&isNew.checked),
       isDuplicate:!!(duplicate&&duplicate.checked),
-      isSponsor:!!(sponsor&&sponsor.checked),
-      team:String(team&&team.value||'').trim().slice(0,20)
+      isSponsor:!!(sponsor&&sponsor.checked)
     };"""
 if html.count(old_meta_tail) != 1:
     raise SystemExit('member metadata wrapper mismatch')
@@ -84,16 +81,14 @@ html = html.replace(old_meta_tail, new_meta_tail, 1)
 old_clear_tail = """    var isNew=document.getElementById('newIsNew'); if(isNew)isNew.checked=false;
     var sponsor=document.getElementById('newIsSponsor'); if(sponsor)sponsor.checked=false;"""
 new_clear_tail = old_clear_tail + """
-    var duplicate=document.getElementById('newIsDuplicate'); if(duplicate)duplicate.checked=false;
-    var team=document.getElementById('newTeam'); if(team)team.value='';"""
+    var duplicate=document.getElementById('newIsDuplicate'); if(duplicate)duplicate.checked=false;"""
 if html.count(old_clear_tail) != 1:
     raise SystemExit('member metadata clear mismatch')
 html = html.replace(old_clear_tail, new_clear_tail, 1)
 old_load_tail = """    var isNew=document.getElementById('newIsNew'); if(isNew)isNew.checked=!!member.isNew;
     var sponsor=document.getElementById('newIsSponsor'); if(sponsor)sponsor.checked=!!member.isSponsor;"""
 new_load_tail = old_load_tail + """
-    var duplicate=document.getElementById('newIsDuplicate'); if(duplicate)duplicate.checked=!!member.isDuplicate;
-    var team=document.getElementById('newTeam'); if(team)team.value=String(member.team||'');"""
+    var duplicate=document.getElementById('newIsDuplicate'); if(duplicate)duplicate.checked=!!member.isDuplicate;"""
 if html.count(old_load_tail) != 1:
     raise SystemExit('member metadata load mismatch')
 html = html.replace(old_load_tail, new_load_tail, 1)
@@ -102,7 +97,7 @@ html = html.replace(old_load_tail, new_load_tail, 1)
 # bypassing the central server() wrapper. Add both new fields to its explicit
 # metadata object and to the optimistic card as well.
 explicit_sponsor = "isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked)"
-explicit_extended = explicit_sponsor + ",\n        isDuplicate: !!(document.getElementById('newIsDuplicate') && document.getElementById('newIsDuplicate').checked),\n        team: String(document.getElementById('newTeam') && document.getElementById('newTeam').value || '').trim().slice(0, 20)"
+explicit_extended = explicit_sponsor + ",\n        isDuplicate: !!(document.getElementById('newIsDuplicate') && document.getElementById('newIsDuplicate').checked)"
 explicit_count = html.count(explicit_sponsor)
 if explicit_count != 3:
     raise SystemExit(f'explicit member metadata object mismatch ({explicit_count})')
@@ -142,7 +137,7 @@ html = html.replace("if(IS_ADMIN&&!member.isNew&&typeof compactMemberName==='fun
 team_decorator_anchor = """      var name = card.querySelector('.quick-member-name,.name');
       if (!name) return;"""
 team_decorator = team_decorator_anchor + """
-      var team=String(member.team||'').trim();
+      var team=String(member.teamLabel||'').trim();
       card.classList.toggle('has-member-team',!!team);
       if(team){
         card.style.setProperty('--member-team-color',adminTeamColor(team));
@@ -191,10 +186,11 @@ new_game_panel = '''    <div class="card admin-game-count-panel" style="box-shad
       <h2>멤버 선택·상태 변경·회원 삭제</h2>
       <div class="md-bulk-member-actions" id="mdBulkDeleteRow">
         <button type="button" onclick="selectAllMembers()">모두선택</button>
-        <button type="button" onclick="applyMdSelectedStatus('active')">코트배정</button>
+        <button type="button" onclick="applyMdSelectedStatus('active')">코트배정대기</button>
         <button type="button" onclick="applyMdSelectedStatus('before')">도착전</button>
         <button type="button" onclick="applyMdSelectedStatus('rest')">휴식</button>
         <button type="button" onclick="applyMdSelectedStatus('away')">귀가</button>
+        <button type="button" onclick="setMdSelectedTeam()">같은 팀</button>
         <button id="mdBulkDeleteButton" class="danger" type="button" onclick="deleteMdSelectedMembers()" disabled>삭제</button>
       </div>
       <span id="mdBulkDeleteCount" class="meta">0명 선택</span>
@@ -257,7 +253,6 @@ management_patch = r'''
 .admin-setup-details>summary{display:inline-flex!important;align-items:center!important;user-select:none!important}
 .admin-setup-details[open]>summary{background:#eaf1ff!important;border-color:#315efb!important;color:#1746b0!important}
 #newPublicMemo{min-width:220px;min-height:52px;resize:vertical}
-#newTeam{min-width:220px}
 .md-game-actions{align-items:center!important}
 .md-bulk-member-actions{display:flex!important;flex-flow:row nowrap!important;gap:5px!important;overflow-x:auto!important;padding:4px 0 6px!important;scrollbar-width:thin}
 .md-bulk-member-actions button{flex:1 0 auto!important;min-width:72px!important;min-height:38px!important;padding:6px 8px!important;white-space:nowrap!important;font-size:11px!important;font-weight:900!important}
@@ -291,6 +286,11 @@ management_patch = r'''
     var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
     if(!ids.length){alert('먼저 멤버 카드를 선택해 주세요.');return;}
     return runAction('setMemberStatus',[ADMIN_PIN_VALUE,ids,status]);
+  };
+  window.setMdSelectedTeam=function(){
+    var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
+    if(ids.length<2){alert('같은 팀으로 묶을 멤버를 2명 이상 선택해 주세요.');return;}
+    return runAction('setBundle',[ADMIN_PIN_VALUE,ids]);
   };
   // Administrator cards always show the game count. Optional profile rows are
   // still rendered only when a value exists.
@@ -407,8 +407,8 @@ for required_voice_marker in [
     "if(locked)app.setAttribute('inert','')",
     'filter:none!important;backdrop-filter:none!important',
     'id="newIsDuplicate"',
-    'id="newTeam"',
     'function usesAdminFullName(member)',
+    'window.setMdSelectedTeam=function()',
     "event.target.closest('#voiceSaveEmergency')",
 ]:
     if required_voice_marker not in html:
