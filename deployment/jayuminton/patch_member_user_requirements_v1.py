@@ -13,7 +13,7 @@ MEMBER_MESSAGE_MARKER = "JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1"
 SELF_PROFILE_MARKER = "JAYUMINTON_MEMBER_SELF_PROFILE_EDIT_V1"
 TEAM_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2"
 SELF_MEMO_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2"
-TEAM_CARD_LAYOUT_V3_MARKER = "JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V4"
+TEAM_CARD_LAYOUT_V3_MARKER = "JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5"
 
 ADDON = r'''
 <script>
@@ -355,20 +355,21 @@ TEAM_ONLY_V2_ADDON = r'''
 '''
 
 TEAM_CARD_LAYOUT_V3_ADDON = r'''
-<style id="jayuminton-member-team-card-layout-v4">
-/* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V4 */
-[data-member-id]{box-sizing:border-box!important;max-width:100%!important}
-[data-member-id].jm-has-team{height:auto!important;min-height:0!important;max-height:none!important;overflow:hidden!important;box-shadow:inset 5px 0 0 var(--jm-team-color)!important}
-[data-member-id] .name,[data-member-id] .member-name,[data-member-id] .quick-member-name{position:relative!important;max-width:100%!important;box-sizing:border-box!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
-[data-member-id]>.jm-member-badges{display:none!important}
-[data-member-id]>.jm-member-badges .jm-team-badge{display:none!important}
+<style id="jayuminton-member-team-card-layout-v5">
+/* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5 */
+#memberApp [data-member-id]{position:relative!important;inset:auto!important;transform:none!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:center!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:52px!important;max-height:none!important;box-sizing:border-box!important;overflow:hidden!important;contain:paint!important}
+#memberApp [data-member-id].jm-has-team{box-shadow:inset 4px 0 0 var(--jm-team-color)!important}
+#memberApp [data-member-id]>.name,#memberApp [data-member-id]>.member-name,#memberApp [data-member-id]>.quick-member-name,#memberApp [data-member-id]>.member-info-detail,#memberApp [data-member-id]>.member-public-memo,#memberApp [data-member-id]>.jm-public-memo,#memberApp [data-member-id]>.member-status-list{position:static!important;inset:auto!important;transform:none!important;display:block!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;max-height:none!important;box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;text-align:center!important;white-space:normal!important;overflow:hidden!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
+#memberApp [data-member-id]>.member-self-star{top:2px!important;right:2px!important}
+#memberApp [data-member-id]>.jm-member-badges{position:static!important;inset:auto!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:center!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;box-sizing:border-box!important;margin:2px 0 0!important;padding:0!important;overflow:hidden!important}
+#memberApp [data-member-id]>.jm-member-badges .jm-team-badge{position:static!important;inset:auto!important;transform:none!important;display:inline-flex!important;width:auto!important;max-width:100%!important;height:auto!important;min-height:0!important;box-sizing:border-box!important;margin:0!important;padding:1px 3px!important;border-radius:4px!important;font-size:6px!important;line-height:1.1!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 .jm-self-edit{display:none!important}
 #jmSelfCardAction{position:fixed;z-index:2147483647;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);width:min(90vw,360px);padding:10px;border-radius:14px;background:#fff;box-shadow:0 18px 55px rgba(15,23,42,.35)}
 #jmSelfCardAction.hidden{display:none!important}#jmSelfCardAction button{width:100%;min-height:44px;border:0;border-radius:10px;background:#315efb;color:#fff;font-weight:900}#jmSelfCardAction .jm-close{margin-top:6px;background:#e2e8f0;color:#334155}
 </style>
 <div id="jmSelfCardAction" class="hidden"><button type="button" onclick="openJmSelfProfile(event);closeJmSelfCardAction()">카드 내용 수정</button><button class="jm-close" type="button" onclick="closeJmSelfCardAction()">닫기</button></div>
 <script>
-(function installMemberTeamCardLayoutV4(){
+(function installMemberTeamCardLayoutV5(){
   function mine(card){try{var me=typeof selectedWebPushMember==='function'?selectedWebPushMember():null;return !!(me&&card&&String(card.getAttribute('data-member-id'))===String(me.id));}catch(e){return false;}}
   function normalize(){document.querySelectorAll('.jm-self-edit').forEach(function(x){x.remove();});document.querySelectorAll('[data-member-id]').forEach(function(card){var wrap=card.querySelector('.jm-member-badges'),team=wrap&&wrap.querySelector('.jm-team-badge'),color=team&&team.style&&team.style.getPropertyValue('--jm-team-color');card.classList.toggle('jm-has-team',!!team);if(color)card.style.setProperty('--jm-team-color',color);else card.style.removeProperty('--jm-team-color');if(wrap&&wrap.parentElement!==card)card.appendChild(wrap);});}
   window.closeJmSelfCardAction=function(){var box=document.getElementById('jmSelfCardAction');if(box)box.classList.add('hidden');};
