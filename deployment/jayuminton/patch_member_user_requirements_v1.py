@@ -358,10 +358,10 @@ TEAM_CARD_LAYOUT_V3_ADDON = r'''
 <style id="jayuminton-member-team-card-layout-v4">
 /* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V4 */
 [data-member-id]{box-sizing:border-box!important;max-width:100%!important}
-[data-member-id].jm-has-team{height:auto!important;min-height:0!important;max-height:none!important;overflow:hidden!important}
+[data-member-id].jm-has-team{height:auto!important;min-height:0!important;max-height:none!important;overflow:hidden!important;box-shadow:inset 5px 0 0 var(--jm-team-color)!important}
 [data-member-id] .name,[data-member-id] .member-name,[data-member-id] .quick-member-name{position:relative!important;max-width:100%!important;box-sizing:border-box!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
-[data-member-id]>.jm-member-badges{position:static!important;inset:auto!important;transform:none!important;z-index:auto!important;display:block!important;clear:both!important;float:none!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin:5px 0 0!important;padding:0!important;overflow:hidden!important}
-[data-member-id]>.jm-member-badges .jm-team-badge{position:static!important;inset:auto!important;transform:none!important;display:inline-flex!important;width:auto!important;max-width:100%!important;box-sizing:border-box!important;margin:0!important;border-radius:6px!important;white-space:normal!important;overflow:hidden!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
+[data-member-id]>.jm-member-badges{display:none!important}
+[data-member-id]>.jm-member-badges .jm-team-badge{display:none!important}
 .jm-self-edit{display:none!important}
 #jmSelfCardAction{position:fixed;z-index:2147483647;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);width:min(90vw,360px);padding:10px;border-radius:14px;background:#fff;box-shadow:0 18px 55px rgba(15,23,42,.35)}
 #jmSelfCardAction.hidden{display:none!important}#jmSelfCardAction button{width:100%;min-height:44px;border:0;border-radius:10px;background:#315efb;color:#fff;font-weight:900}#jmSelfCardAction .jm-close{margin-top:6px;background:#e2e8f0;color:#334155}
@@ -370,7 +370,7 @@ TEAM_CARD_LAYOUT_V3_ADDON = r'''
 <script>
 (function installMemberTeamCardLayoutV4(){
   function mine(card){try{var me=typeof selectedWebPushMember==='function'?selectedWebPushMember():null;return !!(me&&card&&String(card.getAttribute('data-member-id'))===String(me.id));}catch(e){return false;}}
-  function normalize(){document.querySelectorAll('.jm-self-edit').forEach(function(x){x.remove();});document.querySelectorAll('[data-member-id]').forEach(function(card){var wrap=card.querySelector('.jm-member-badges'),team=wrap&&wrap.querySelector('.jm-team-badge');card.classList.toggle('jm-has-team',!!team);if(wrap&&wrap.parentElement!==card)card.appendChild(wrap);});}
+  function normalize(){document.querySelectorAll('.jm-self-edit').forEach(function(x){x.remove();});document.querySelectorAll('[data-member-id]').forEach(function(card){var wrap=card.querySelector('.jm-member-badges'),team=wrap&&wrap.querySelector('.jm-team-badge'),color=team&&team.style&&team.style.getPropertyValue('--jm-team-color');card.classList.toggle('jm-has-team',!!team);if(color)card.style.setProperty('--jm-team-color',color);else card.style.removeProperty('--jm-team-color');if(wrap&&wrap.parentElement!==card)card.appendChild(wrap);});}
   window.closeJmSelfCardAction=function(){var box=document.getElementById('jmSelfCardAction');if(box)box.classList.add('hidden');};
   var timer=0,startCard=null;document.addEventListener('pointerdown',function(e){var card=e.target&&e.target.closest&&e.target.closest('[data-member-id]');if(!mine(card))return;startCard=card;clearTimeout(timer);timer=setTimeout(function(){if(startCard===card){var box=document.getElementById('jmSelfCardAction');if(box)box.classList.remove('hidden');}},650);},true);['pointerup','pointercancel','pointermove'].forEach(function(type){document.addEventListener(type,function(){clearTimeout(timer);timer=0;startCard=null;},true);});
   var queued=false;function schedule(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;normalize();});}
