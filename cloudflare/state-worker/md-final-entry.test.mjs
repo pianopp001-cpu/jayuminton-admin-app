@@ -29,6 +29,12 @@ assert.ok(mdEntry.includes("body.name === 'getPairStatistics'"), 'pair statistic
 assert.ok(mdEntry.includes('pool.length <= free'), 'MD last-remainder autoassign rule missing');
 assert.ok(mdEntry.includes('[[2, 2], [4, 0], [0, 4]]'), 'MD doubles composition rules missing');
 
+const moveOneBlock = mdEntry.slice(mdEntry.indexOf('async function moveOne('), mdEntry.indexOf('async function mdAutoAssign('));
+assert.ok(moveOneBlock.includes("action: 'moveMembers'"), 'autoassign moveOne action missing');
+assert.equal(moveOneBlock.includes('recordPairTransitions('), false, 'autoassign pair statistics would be recorded twice');
+const outerPairWrites = (mdEntry.match(/if \(before && out\?\.state\) await recordPairTransitions\(env, before, out\.state\);/g) || []).length;
+assert.equal(outerPairWrites, 2, 'admin and compat autoassign must each record pair statistics exactly once');
+
 // Administrator selected members from an older screen. If member 14 has since
 // moved themself away, the live server group no longer contains 14 and the
 // partial swap must skip that stale selection while retaining valid member 15.
