@@ -1,88 +1,17 @@
-name: Build true-fresh known-GAS user APK v1.4.3
+name: DISABLED known-GAS user APK v1.4.3
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'deployment/scripts/build_user_v143_known_gas_entry.sh'
-      - '.github/workflows/build-user-v143-known-gas-entry.yml'
-      - 'deployment/scripts/build_user_lite_fresh_v140.sh'
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: jayuminton-user-v143-known-gas
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  build:
+  blocked:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      MAIN_DEPLOYMENT_ID: known-hardcoded
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
-      - uses: actions/checkout@v4
-        with: {ref: main, fetch-depth: 0}
-      - uses: actions/setup-java@v4
-        with: {distribution: temurin, java-version: '17'}
-      - uses: gradle/actions/setup-gradle@v4
-        with: {gradle-version: '8.7'}
-      - id: build_apk
-        name: Build known-GAS fresh APK
-        shell: bash
+      - name: Block known-GAS user APK rollback
         run: |
-          set -euo pipefail
-          bash deployment/scripts/build_user_v143_known_gas_entry.sh 2>&1 | tee "$RUNNER_TEMP/v143.log"
-          APK=releases/jayuminton-courtstatus-v1.4.3-known-gas-fresh.apk
-          STATUS=deployment/status/user-lite-v1.4.3-known-gas-fresh.txt
-          test -s "$APK"
-          grep -F 'status=success' "$STATUS" >/dev/null
-          grep -F 'application_id=com.jayuminton.courtstatus.fresh143' "$STATUS" >/dev/null
-          grep -F 'launch_contract=known-working-gas-user-route' "$STATUS" >/dev/null
-          cp "$APK" "$RUNNER_TEMP/v143.apk"
-          cp "$STATUS" "$RUNNER_TEMP/v143-status.txt"
-      - id: publish
-        name: Publish v1.4.3
-        shell: bash
-        run: |
-          set -euo pipefail
-          git reset --hard HEAD
-          git fetch origin main
-          git checkout -B main origin/main
-          cp "$RUNNER_TEMP/v143.apk" releases/jayuminton-courtstatus-v1.4.3-known-gas-fresh.apk
-          cp "$RUNNER_TEMP/v143-status.txt" deployment/status/user-lite-v1.4.3-known-gas-fresh.txt
-          sha256sum releases/jayuminton-courtstatus-v1.4.3-known-gas-fresh.apk > deployment/status/user-lite-v1.4.3-known-gas-fresh.sha256
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/jayuminton-courtstatus-v1.4.3-known-gas-fresh.apk deployment/status/user-lite-v1.4.3-known-gas-fresh.txt deployment/status/user-lite-v1.4.3-known-gas-fresh.sha256
-          git commit -m 'Publish known-GAS fresh user APK v1.4.3'
-          git pull --rebase origin main
-          git push origin main
-      - name: Record evidence
-        if: ${{ always() }}
-        shell: bash
-        env:
-          BUILD: ${{ steps.build_apk.outcome }}
-          PUBLISH: ${{ steps.publish.outcome }}
-        run: |
-          set -euo pipefail
-          git reset --hard HEAD || true
-          git fetch origin main || true
-          git checkout -B main origin/main || true
-          mkdir -p deployment/status
-          {
-            echo "source_sha=${GITHUB_SHA}"
-            echo "build_apk=${BUILD:-not_run}"
-            echo "publish=${PUBLISH:-not_run}"
-            [ -f "$RUNNER_TEMP/v143.log" ] && { echo build_log_tail_begin; tail -40 "$RUNNER_TEMP/v143.log" | tr '\n' ' '; echo; echo build_log_tail_end; }
-          } > deployment/status/user-v1.4.3-known-gas-build-evidence.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/user-v1.4.3-known-gas-build-evidence.txt
-          git commit -m 'Record v1.4.3 known-GAS build evidence' || exit 0
-          git pull --rebase origin main
-          git push origin main
+          echo 'DISABLED: this workflow hardcodes a script.google.com user route, removes Firebase messaging, and builds obsolete v1.4.3.'
+          echo 'Production user APK is Cloudflare-only v1.6.42 (com.jayuminton.user) with native FCM.'
+          exit 1
