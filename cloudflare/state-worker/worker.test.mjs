@@ -60,7 +60,7 @@ function fixture() {
   assert.deepEqual(result.state.waitGroups[2], ['3', '4', '5', '6']);
 }
 {
-  assert.throws(() => swapMutation(fixture(), ['1', '2'], ['7']), /equal_swap_size_required/);
+  assert.throws(() => swapMutation(fixture(), ['1', '2'], ['7']), /equal_swap_groups_required/);
 }
 {
   const state = fixture(); state.waitGroups[0].push('1');
