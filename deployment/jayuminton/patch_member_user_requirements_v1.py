@@ -13,6 +13,7 @@ MEMBER_MESSAGE_MARKER = "JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1"
 SELF_PROFILE_MARKER = "JAYUMINTON_MEMBER_SELF_PROFILE_EDIT_V1"
 TEAM_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2"
 SELF_MEMO_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2"
+TEAM_CARD_LAYOUT_V3_MARKER = "JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V3"
 
 ADDON = r'''
 <script>
@@ -353,6 +354,22 @@ TEAM_ONLY_V2_ADDON = r'''
 </style>
 '''
 
+TEAM_CARD_LAYOUT_V3_ADDON = r'''
+<style id="jayuminton-member-team-card-layout-v3">
+/* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V3 */
+[data-member-id].jm-has-team{height:auto!important;min-height:0!important;overflow:visible!important}
+[data-member-id]>.jm-member-badges{position:static!important;inset:auto!important;transform:none!important;z-index:auto!important;display:flex!important;flex-wrap:wrap!important;clear:both!important;float:none!important;width:100%!important;box-sizing:border-box!important;order:99!important;flex:0 0 100%!important;margin:5px 0 0!important;padding:0!important;overflow:visible!important}
+[data-member-id]>.jm-member-badges .jm-team-badge{position:static!important;inset:auto!important;transform:none!important;display:inline-flex!important;max-width:100%!important;box-sizing:border-box!important;margin:0!important;border-radius:6px!important;white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
+</style>
+<script>
+(function installMemberTeamCardLayoutV3(){
+  function normalize(){document.querySelectorAll('[data-member-id]').forEach(function(card){var wrap=card.querySelector('.jm-member-badges'),team=wrap&&wrap.querySelector('.jm-team-badge');card.classList.toggle('jm-has-team',!!team);if(wrap&&wrap.parentElement!==card)card.appendChild(wrap);});}
+  var queued=false;function schedule(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;normalize();});}
+  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('DOMContentLoaded',schedule,{once:true});setInterval(schedule,1800);schedule();
+})();
+</script>
+'''
+
 SELF_MEMO_ONLY_V2_ADDON = r'''
 <script>
 /* JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2 */
@@ -441,7 +458,7 @@ def assert_auto_sync_contract(text: str) -> None:
 
 
 def assert_team_status_contract(text: str) -> None:
-    for needle in [TEAM_STATUS_MARKER, "member.teamLabel", "jm-team-badge"]:
+    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team"]:
         if needle not in text:
             raise SystemExit(f"member team/status contract missing: {needle}")
 
@@ -502,6 +519,8 @@ def patch(path: Path) -> None:
         text = text.replace(marker, TEAM_ONLY_V2_ADDON + "\n" + marker, 1)
     if SELF_MEMO_ONLY_V2_MARKER not in text:
         text = text.replace(marker, SELF_MEMO_ONLY_V2_ADDON + "\n" + marker, 1)
+    if TEAM_CARD_LAYOUT_V3_MARKER not in text:
+        text = text.replace(marker, TEAM_CARD_LAYOUT_V3_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
