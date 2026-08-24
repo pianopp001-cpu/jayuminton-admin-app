@@ -9,6 +9,7 @@ MARKER = "JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1"
 NATIVE_SYNC_MARKER = "JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2"
 AUTO_SYNC_MARKER = "JAYUMINTON_MEMBER_REVISION_AUTOSYNC_V1"
 TEAM_STATUS_MARKER = "JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1"
+MEMBER_MESSAGE_MARKER = "JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1"
 
 ADDON = r'''
 <script>
@@ -322,6 +323,36 @@ TEAM_STATUS_ADDON = r'''
 </script>
 '''
 
+MEMBER_MESSAGE_ADDON = r'''
+<style id="jayuminton-member-direct-message-alert-v1">
+#jmDirectMessageAlert{position:fixed;z-index:2147483647;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + 16px) 14px 14px;background:rgba(15,23,42,.58)}
+#jmDirectMessageAlert.hidden{display:none!important}.jm-direct-message-card{width:min(94vw,480px);padding:18px;border-radius:17px;background:#fff;box-shadow:0 20px 65px rgba(0,0,0,.4);text-align:center}
+.jm-direct-message-card h2{margin:0 0 10px;font-size:20px}.jm-direct-message-card p{margin:0 0 16px;font-size:16px;font-weight:800;line-height:1.55;white-space:pre-wrap;word-break:break-word}.jm-direct-message-card button{width:100%;min-height:48px;border:0;border-radius:12px;background:#315efb;color:#fff;font-size:16px;font-weight:950}
+</style>
+<div id="jmDirectMessageAlert" class="hidden" role="alertdialog" aria-modal="true" aria-labelledby="jmDirectMessageTitle">
+  <div class="jm-direct-message-card"><h2 id="jmDirectMessageTitle">관리자 메시지</h2><p id="jmDirectMessageBody"></p><button type="button" onclick="confirmJmDirectMessage()">확인</button></div>
+</div>
+<script>
+/* JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1 */
+(function installMemberDirectMessageAlertV1(){
+  if(window.__JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1__)return;
+  window.__JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1__=true;
+  var activeId='',vibrationTimer=0,seenKey='jayuminton_seen_direct_messages_v1';
+  function selected(){try{return typeof selectedWebPushMember==='function'?selectedWebPushMember():null;}catch(e){return null;}}
+  function state(){try{return window.STATE||(typeof STATE!=='undefined'?STATE:null);}catch(e){return null;}}
+  function seen(){try{return JSON.parse(localStorage.getItem(seenKey)||'[]');}catch(e){return [];}}
+  function remember(id){var list=seen().filter(function(x){return x!==id;});list.push(id);try{localStorage.setItem(seenKey,JSON.stringify(list.slice(-100)));}catch(e){}}
+  function pattern(){if(typeof strongThreeByEightPattern==='function')return strongThreeByEightPattern();var p=[];for(var r=0;r<8;r++)for(var n=0;n<3;n++){p.push(360);if(!(r===7&&n===2))p.push(n===2?520:150);}return p;}
+  function stop(){if(vibrationTimer)clearInterval(vibrationTimer);vibrationTimer=0;try{if(navigator.vibrate)navigator.vibrate(0);}catch(e){}try{if(window.JayumintonNative&&typeof window.JayumintonNative.stopVibration==='function')window.JayumintonNative.stopVibration();}catch(e){}try{postUnifiedMemberMessage('JAYUMINTON_STOP_MEMBER_ALERT',{});}catch(e){}}
+  function vibrate(){try{if(navigator.vibrate)navigator.vibrate(pattern());}catch(e){}try{postUnifiedMemberMessage('JAYUMINTON_MEMBER_MESSAGE_ALERT',{messageId:activeId});}catch(e){}}
+  function show(item){activeId=String(item.id||'');var box=document.getElementById('jmDirectMessageAlert'),body=document.getElementById('jmDirectMessageBody');if(body)body.textContent=String(item.text||'');if(box)box.classList.remove('hidden');stop();vibrate();vibrationTimer=setInterval(vibrate,14500);}
+  window.confirmJmDirectMessage=function(){if(activeId)remember(activeId);activeId='';stop();var box=document.getElementById('jmDirectMessageAlert');if(box)box.classList.add('hidden');};
+  function check(){var me=selected(),s=state();if(!me||!s||!Array.isArray(s.memberMessages)||activeId)return;var done=seen();var next=s.memberMessages.filter(function(item){return item&&done.indexOf(String(item.id||''))<0;}).slice(-1)[0];if(next)show(next);}
+  setInterval(check,1200);document.addEventListener('visibilitychange',function(){if(document.hidden)stop();else check();});window.addEventListener('pagehide',stop);setTimeout(check,300);
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -372,6 +403,12 @@ def assert_team_status_contract(text: str) -> None:
             raise SystemExit(f"member team/status contract missing: {needle}")
 
 
+def assert_member_message_contract(text: str) -> None:
+    for needle in [MEMBER_MESSAGE_MARKER, "window.confirmJmDirectMessage=function()", "vibrationTimer=setInterval(vibrate,14500)", "JAYUMINTON_MEMBER_MESSAGE_ALERT", "navigator.vibrate(0)"]:
+        if needle not in text:
+            raise SystemExit(f"member direct-message contract missing: {needle}")
+
+
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     apk_url = (
@@ -408,11 +445,14 @@ def patch(path: Path) -> None:
         text = text.replace(marker, AUTO_SYNC_ADDON + "\n" + marker, 1)
     if TEAM_STATUS_MARKER not in text:
         text = text.replace(marker, TEAM_STATUS_ADDON + "\n" + marker, 1)
+    if MEMBER_MESSAGE_MARKER not in text:
+        text = text.replace(marker, MEMBER_MESSAGE_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
     assert_auto_sync_contract(text)
     assert_team_status_contract(text)
+    assert_member_message_contract(text)
     path.write_text(text, encoding="utf-8")
 
 
