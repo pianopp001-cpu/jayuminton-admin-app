@@ -287,8 +287,8 @@ management_patch = r'''
 #adminApp .member.male,#adminApp .person.male,#adminApp .quick-member.male{background:#e4f1ff!important;color:#0756b6!important;font-weight:900!important}
 #adminApp .member.female,#adminApp .person.female,#adminApp .quick-member.female{background:#ffe7f0!important;color:#c51b4f!important;font-weight:900!important}
 #adminApp .member .name,#adminApp .person .name,#adminApp .quick-member-name{font-weight:950!important}
-#adminApp .has-member-team{position:relative!important;box-shadow:inset 5px 0 0 var(--member-team-color)!important;padding-left:10px!important}
-#adminApp .member-team-badge{display:inline-flex!important;align-items:center!important;max-width:96px!important;margin-left:5px!important;padding:2px 6px!important;border:1px solid var(--member-team-color)!important;border-radius:999px!important;background:#fff!important;color:var(--member-team-color)!important;font-size:10px!important;font-weight:950!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;vertical-align:middle!important}
+#adminApp .has-member-team{position:relative!important;box-shadow:inset 5px 0 0 var(--member-team-color)!important;padding-left:10px!important;height:auto!important;min-height:0!important;overflow:visible!important}
+#adminApp .member-team-badge{position:static!important;inset:auto!important;transform:none!important;z-index:auto!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;order:99!important;flex:0 0 100%!important;width:max-content!important;max-width:100%!important;box-sizing:border-box!important;margin:5px 0 0!important;padding:2px 6px!important;border:1px solid var(--member-team-color)!important;border-radius:6px!important;background:#fff!important;color:var(--member-team-color)!important;font-size:10px!important;font-weight:950!important;line-height:1.3!important;white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important;vertical-align:middle!important}
 @media(max-width:620px){.admin-setup-details>summary{width:100%!important;box-sizing:border-box!important;justify-content:center!important}.admin-panel{padding:10px!important}.admin-panel h2{font-size:15px!important}.md-game-actions{gap:5px!important}.md-game-actions button{font-size:10px!important;padding:5px 7px!important}.md-bulk-member-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important}.md-bulk-member-actions button{min-width:0!important;font-size:10px!important;padding:5px 2px!important}}
 </style>
 <style id="jayuminton-announcement-controls-v2021">
@@ -318,7 +318,10 @@ management_patch = r'''
 (function(){
   'use strict';
   function upgrade(root){
-    (root||document).querySelectorAll('.pair-statistics-row:not([data-jm-disclosure-ready])').forEach(function(row){
+    root=root||document;var selector='.pair-statistics-row:not([data-jm-disclosure-ready])',rows=[];
+    if(root.matches&&root.matches(selector))rows.push(root);
+    if(root.querySelectorAll)rows=rows.concat(Array.from(root.querySelectorAll(selector)));
+    rows.forEach(function(row){
       row.setAttribute('data-jm-disclosure-ready','1');
       var head=row.querySelector('.pair-statistics-head,.md-pair-head');
       var partners=row.querySelector('.pair-statistics-partners,.md-pair-partners');
