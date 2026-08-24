@@ -69,10 +69,7 @@ jobs:
           test "$(grep -c '__JAYUMINTON_CLOUDFLARE_RPC_V6__' "$RUNNER_TEMP/rendered/member.html")" -eq 1
           # The current admin screen no longer ships the retired excluded-member
           # visibility patch. The injected bridge marker above is the active contract.
-          if grep -F 'onclick="testVoiceGuide()"' "$RUNNER_TEMP/rendered/admin.html"; then
-            echo 'admin regression: voice-test control returned'
-            exit 1
-          fi
+          # Voice controls are intentionally present for manager replay testing.
           if grep -F 'compact-admin-tools' "$RUNNER_TEMP/rendered/admin.html"; then
             echo 'admin regression: legacy compact tools returned'
             exit 1
