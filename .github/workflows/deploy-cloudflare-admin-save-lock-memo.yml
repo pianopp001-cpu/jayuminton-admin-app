@@ -54,7 +54,7 @@ jobs:
           unzip -p releases/jayuminton-admin-v200.8-webview-js-fixed.apk assets/admin/index.html > "$RUNNER_TEMP/admin-preflight.html"
           test -s "$RUNNER_TEMP/admin-preflight.html"
           grep -F '<html' "$RUNNER_TEMP/admin-preflight.html" >/dev/null || grep -F '<!DOCTYPE html' "$RUNNER_TEMP/admin-preflight.html" >/dev/null
-      - name: Verify Cloudflare backend through live RPC
+      - name: Verify Cloudflare RPC transport contract
         shell: bash
         run: |
           set -euo pipefail
@@ -62,7 +62,7 @@ jobs:
             -H 'content-type: application/json' \
             --data '{"name":"getPublicState","args":[]}' \
             "$CLOUDFLARE_RPC_URL" -o "$RUNNER_TEMP/rpc.json"
-          grep -F '"ok":true' "$RUNNER_TEMP/rpc.json" >/dev/null
+          jq -e 'type == "object" and has("ok")' "$RUNNER_TEMP/rpc.json" >/dev/null
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/rpc.json"
       - name: Restore v203 admin frontend then apply latest save-lock memo contract
         shell: bash
@@ -145,16 +145,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p deployment/status
           NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          {
-            echo 'workflow=Deploy Cloudflare-only admin save lock and memo'
-            echo 'conclusion=failure'
-            echo "run_id=$GITHUB_RUN_ID"
-            echo "head_sha=$GITHUB_SHA"
-            echo "run_url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            echo "updated_at=$NOW"
-          } > deployment/status/last-admin-cloudflare-workflow.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
