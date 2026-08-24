@@ -51,13 +51,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          BRIDGE=deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py
+          POST=deployment/jayuminton/admin_cloudflare_post_contract_patch.py
           test -s .github/workflows/deploy-cloudflare-admin-save-lock-memo.yml
           test -s .github/workflows/build-v2015-known-good-shell.yml
-          grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
-          grep -F 'CLOUDFLARE_V6_FRONTEND_BRIDGE_OK' deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' "$POST" >/dev/null
+          grep -F 'CLOUDFLARE_V6_FRONTEND_BRIDGE_OK' "$BRIDGE" >/dev/null
           grep -F 'build-v2015-known-good-shell.yml' PROJECT_RULES.md >/dev/null
           grep -F '32752264629' PROJECT_RULES.md >/dev/null
           grep -F '32756280670' PROJECT_RULES.md >/dev/null
+
+      - name: Verify exact restored admin UI contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRIDGE=deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py
+          POST=deployment/jayuminton/admin_cloudflare_post_contract_patch.py
+          # Team: no giant team text; same team is a stable left color stripe.
+          grep -F '>같은 팀 설정</button>' "$BRIDGE" >/dev/null
+          grep -F '>팀 해제</button>' "$BRIDGE" >/dev/null
+          grep -F '#adminApp .member-team-badge{display:none!important}' "$BRIDGE" >/dev/null
+          grep -F 'box-shadow:inset 5px 0 0 var(--member-team-color)!important' "$BRIDGE" >/dev/null
+          # Pair statistics: disclosure plus fully un-clipped partner list.
+          grep -F 'id="jayuminton-pair-statistics-disclosure-v2028"' "$BRIDGE" >/dev/null
+          grep -F 'max-height:none!important;height:auto!important' "$POST" >/dev/null
+          grep -F 'overflow:visible!important;white-space:normal!important' "$POST" >/dev/null
+          # Voice: one-shot, repeat, stop and announcement-only mute all survive.
+          grep -F '>▶ 1회 재생</button>' "$BRIDGE" >/dev/null
+          grep -F '>🔁 반복재생</button>' "$BRIDGE" >/dev/null
+          grep -F 'onclick="stopVoiceAnnouncement()">■ 멈춤</button>' "$BRIDGE" >/dev/null
+          grep -F '>🔇 멘트 음소거</button>' "$BRIDGE" >/dev/null
+          # Save lock blocks ordinary interactions while voice controls stay usable.
+          grep -F '__JAYUMINTON_ADMIN_SAVING__' "$POST" >/dev/null
+          grep -F "['pointerdown','click','dblclick','contextmenu']" "$POST" >/dev/null
+          grep -F 'if(!window.__JAYUMINTON_ADMIN_SAVING__||isVoice(e.target))return;' "$POST" >/dev/null
+          grep -F '.court-voice-controls,.admin-voice-controls,[data-voice-control]' "$POST" >/dev/null
+          # User-authored public memo must be shown on admin cards at compact size.
+          grep -F 'member-public-memo' "$POST" >/dev/null
+          grep -F 'publicMemo' "$POST" >/dev/null
+          grep -F 'font-size:9px!important' "$POST" >/dev/null
 
       - name: Verify user v1.6.42 canonical paths
         shell: bash
@@ -71,6 +103,9 @@ jobs:
           grep -F 'NativePushRegistrar.isCurrentMember' .github/workflows/build-user-md-final-v1642.yml >/dev/null
           grep -F 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
           grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)!important' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
+          grep -F 'publicMemo' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
+          grep -F "server('memberMoveSelf'" .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
+          grep -F "server('updateMyProfile'" .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
           grep -F '32752854990' PROJECT_RULES.md >/dev/null
           grep -F '32753455501' PROJECT_RULES.md >/dev/null
 
@@ -102,6 +137,7 @@ jobs:
           {
             echo 'status=success'
             echo 'guard=canonical-production-v203-v1642'
+            echo 'exact_ui_contract=verified'
             echo 'admin_web_run=32756280670'
             echo 'admin_apk_run=32752264629'
             echo 'user_web_run=32753455501'
