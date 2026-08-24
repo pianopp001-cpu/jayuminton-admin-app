@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -39,6 +39,28 @@ function fixture() {
   assert.deepEqual(result.state.courts['1'], ['7', '8']);
   assert.deepEqual(result.state.waitGroups[1], ['1', '2', '9', '10']);
   assert.equal(result.state.members.find(x => x.id === '7').games, 1);
+}
+{
+  const state = fixture();
+  state.courts['1'] = ['1', '2', '14'];
+  const result = swapMutation(state, ['1', '2', '14'], ['7', '8', '9']);
+  assert.deepEqual(result.state.courts['1'], ['7', '8', '9']);
+  assert.deepEqual(result.state.waitGroups[1], ['1', '2', '14', '10']);
+}
+{
+  const state = fixture();
+  state.courts['2'] = ['14', '15', '16', '17'];
+  const result = swapLocationsMutation(state, { type: 'court', key: '1' }, { type: 'court', key: '2' });
+  assert.deepEqual(result.state.courts['1'], ['14', '15', '16', '17']);
+  assert.deepEqual(result.state.courts['2'], ['1', '2']);
+}
+{
+  const result = swapLocationsMutation(fixture(), { type: 'wait', key: '1' }, { type: 'wait', key: '3' });
+  assert.deepEqual(result.state.waitGroups[0], ['11']);
+  assert.deepEqual(result.state.waitGroups[2], ['3', '4', '5', '6']);
+}
+{
+  assert.throws(() => swapMutation(fixture(), ['1', '2'], ['7']), /equal_swap_size_required/);
 }
 {
   const state = fixture(); state.waitGroups[0].push('1');
