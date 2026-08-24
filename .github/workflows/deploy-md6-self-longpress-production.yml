@@ -11,7 +11,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jayuminton-md6-self-longpress-production
@@ -89,3 +89,27 @@ jobs:
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live.html" >/dev/null
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live.html"
           echo 'CLOUDFLARE_USER_SELF_CARD_V2_TEAM_STRIPE_OK'
+      - name: Record verified Cloudflare user status
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          {
+            echo 'status=success'
+            echo 'backend=cloudflare-only'
+            echo 'gas=absent'
+            echo 'self_longpress=verified'
+            echo 'self_status_actions=verified'
+            echo 'self_profile_edit=verified'
+            echo 'public_memo=verified'
+            echo 'team_stripe=verified'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "user_url=$LIVE_USER_URL"
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > deployment/status/cloudflare-user-v203.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/cloudflare-user-v203.txt
+          git commit -m 'status: verify Cloudflare user v203 deployment' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
