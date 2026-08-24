@@ -1,5 +1,6 @@
 JAYUMINTON_LATEST_INSTALL_FILES
 updated=2026-08-25
+binary_verification_workflow=.github/workflows/verify-canonical-release-binaries.yml
 
 [admin_apk]
 status=verified
