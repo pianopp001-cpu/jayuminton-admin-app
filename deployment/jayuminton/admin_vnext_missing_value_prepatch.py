@@ -10,25 +10,17 @@ path = root / 'Script.html'
 s = path.read_text(encoding='utf-8')
 original = s
 
-# The snapshot has accumulated several formatting variants over time.  The
-# downstream vNext patch only cares that blank fields stay blank, so normalize
-# the user-visible placeholder literals first instead of failing on whitespace
-# or formatting differences in an old block.
-replacements = {
-    "'급수·구력 미입력'": "''",
-    '"급수·구력 미입력"': '""',
-    "'급수 미입력'": "''",
-    '"급수 미입력"': '""',
-    "'구력 미입력'": "''",
-    '"구력 미입력"': '""',
-}
-for old, new in replacements.items():
-    s = s.replace(old, new)
+# Normalize every historical quoting/template variant. The downstream patch
+# treats the mere presence of these legacy labels as a hard failure, so remove
+# the literal text regardless of quote style.
+for legacy in ('급수·구력 미입력', '급수 미입력', '구력 미입력'):
+    s = s.replace(legacy, '')
 
-# Remove the legacy prefix where the snapshot still builds experience text as
-# "구력 X".  The current MD contract shows the stored experience itself.
+# Remove historical "구력 " prefixes. The current MD contract shows the
+# stored experience value itself.
 s = s.replace("'구력 ' + experience", "experience")
 s = s.replace('"구력 " + experience', 'experience')
+s = s.replace('`구력 ${experience}`', 'experience')
 
 if s != original:
     path.write_text(s, encoding='utf-8')
