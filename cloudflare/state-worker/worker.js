@@ -196,8 +196,9 @@ export function autoAssignMutation(input, candidateIds, destinations) {
 export function upsertMemberMutation(input, member) {
   const state = normalizeState(input); const id = String(member?.id || crypto.randomUUID()); const name = String(member?.name || '').trim();
   if (!name || name.length > 20) throw new Error('invalid_member_name');
-  const clean = { id, name, gender: ['여', 'female'].includes(String(member.gender)) ? 'female' : 'male', grade: String(member.grade || ''), experience: String(member.experience || member.career || ''), career: String(member.career || member.experience || ''), publicMemo: String(member.publicMemo || member.memo || ''), isNew: Boolean(member.isNew), isDuplicate: Boolean(member.isDuplicate), isSponsor: Boolean(member.isSponsor), bundleId: String(member.bundleId || ''), teamLabel: String(member.teamLabel || ''), games: Math.max(0, Number(member.games) || 0), status: String(member.status || 'active'), createdAt: String(member.createdAt || new Date().toISOString()) };
   const index = state.members.findIndex(m => String(m.id) === id);
+  const previous = index >= 0 ? state.members[index] : null;
+  const clean = { id, name, gender: ['여', 'female'].includes(String(member.gender)) ? 'female' : 'male', grade: String(member.grade || ''), experience: String(member.experience || member.career || ''), career: String(member.career || member.experience || ''), publicMemo: String(member.publicMemo || member.memo || ''), isNew: Boolean(member.isNew), isDuplicate: Boolean(member.isDuplicate), isSponsor: Boolean(member.isSponsor), bundleId: member.bundleId === undefined ? String(previous?.bundleId || '') : String(member.bundleId || ''), teamLabel: member.teamLabel === undefined ? String(previous?.teamLabel || '') : String(member.teamLabel || ''), games: member.games === undefined ? Math.max(0, Number(previous?.games) || 0) : Math.max(0, Number(member.games) || 0), status: String(member.status || previous?.status || 'active'), createdAt: String(member.createdAt || previous?.createdAt || new Date().toISOString()) };
   if (index >= 0) state.members[index] = { ...state.members[index], ...clean }; else state.members.push(clean);
   return { state, event: { type: index >= 0 ? 'member_updated' : 'member_created', memberId: id } };
 }
@@ -205,12 +206,22 @@ export function upsertMemberMutation(input, member) {
 export function setBundleMutation(input, memberIds) {
   const state = normalizeState(input); const ids = uniqueIds(memberIds, 200);
   if (ids.length < 2) throw new Error('team_requires_two_members');
+  if (ids.some(id => locationOf(state, id)?.type !== 'active')) throw new Error('team_requires_assignment_wait');
   const existing = new Set(state.members.map(m => String(m.teamLabel || '')).filter(Boolean));
   let number = 1; while (existing.has(`팀 ${number}`)) number += 1;
   const bundleId = `team-${crypto.randomUUID()}`; const teamLabel = `팀 ${number}`;
   const wanted = new Set(ids);
   state.members = state.members.map(m => wanted.has(String(m.id)) ? { ...m, bundleId, teamLabel } : m);
   return { state, event: { type: 'team_set', memberIds: ids, bundleId, teamLabel } };
+}
+
+export function clearBundleMutation(input, memberIds) {
+  const state = normalizeState(input); const ids = uniqueIds(memberIds, 200);
+  if (!ids.length) throw new Error('members_required');
+  const selectedTeams = new Set();
+  state.members.forEach(m => { if (ids.includes(String(m.id)) && m.bundleId) selectedTeams.add(String(m.bundleId)); });
+  state.members = state.members.map(m => selectedTeams.has(String(m.bundleId || '')) ? { ...m, bundleId: '', teamLabel: '' } : m);
+  return { state, event: { type: 'team_cleared', memberIds: ids } };
 }
 
 export function sendMemberMessageMutation(input, memberIds, message) {
@@ -313,6 +324,8 @@ async function issueMemberSession(env, state, memberId) {
   return `${payload}.${await hmac(payload, String(env.INTERNAL_KEY || ''))}`;
 }
 async function issueAdminSession(env, state) {
+  // Reuse the verified session across app restarts without storing the raw PIN.
+  // PIN changes invalidate it immediately; normal sessions expire after 30 days.
   const payload = stringToBase64Url(JSON.stringify({ scope: 'admin', adminPinVersion: Number(state.settings.adminPinVersion || 1), expiresAt: Date.now() + 30 * 86400000 }));
   return `${payload}.${await hmac(payload, String(env.INTERNAL_KEY || ''))}`;
 }
@@ -430,6 +443,7 @@ export class StateCoordinator {
       else if (action === 'upsertMember') result = upsertMemberMutation(current, body.member);
       else if (action === 'setMemberStatus') result = setMemberStatusMutation(current, body.memberIds, body.status);
       else if (action === 'setBundle') result = setBundleMutation(current, body.memberIds);
+      else if (action === 'clearBundle') result = clearBundleMutation(current, body.memberIds);
       else if (action === 'sendMemberMessage') result = sendMemberMessageMutation(current, body.memberIds, body.message);
       else if (action === 'adjustGames') result = adjustGamesMutation(current, body.memberIds, body.delta, body.reset);
       else if (action === 'requestSwap') result = requestSwapMutation(current, body.requesterId, body.targetId);
@@ -512,7 +526,7 @@ export async function legacyRpc(request, env, name, args) {
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
-  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','sendMemberMessage','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','sendMemberMessage','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
   if (adminNames.has(name)) {
     await verifyAdminSession(bearerRequest(request, token), env, state);
     if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
@@ -522,6 +536,7 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'updateMemberProfile') { action = 'upsertMember'; body.member = { id: values[1], name: values[2], gender: values[3], grade: values[4], experience: values[5], ...(values[6] || {}) }; }
     else if (name === 'setMemberStatus') { action = 'setMemberStatus'; body.memberIds = values[1]; body.status = values[2]; }
     else if (name === 'setBundle') { action = 'setBundle'; body.memberIds = values[1]; }
+    else if (name === 'clearBundle') { action = 'clearBundle'; body.memberIds = values[1]; }
     else if (name === 'sendMemberMessage') { action = 'sendMemberMessage'; body.memberIds = values[1]; body.message = values[2]; }
     else if (name === 'deleteMembers') { action = 'deleteMembers'; body.memberIds = values[1]; }
     else if (name === 'assignMembersToCourt') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'court', key: String(values[1]) }; }
@@ -650,7 +665,7 @@ export default {
     if (url.pathname === '/api/admin/rpc' && request.method === 'POST') {
       try {
         const state = await readState(env.DB); await verifyAdminSession(request, env, state); const body = await request.json();
-        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','setBundle','sendMemberMessage','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
+        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','setBundle','clearBundle','sendMemberMessage','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
         if (!allowed.has(String(body.action || ''))) return reply({ ok: false, error: 'unsupported_admin_action' }, 400);
         return coordinatorAsInternal(request, env, String(body.action), body);
       } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
