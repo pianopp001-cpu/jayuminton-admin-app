@@ -1,4 +1,4 @@
-name: Build MD-only clean admin v200.6 APK
+name: Build WebView loader fixed admin v200.7 APK
 on:
   workflow_dispatch: {}
   push:
@@ -19,6 +19,7 @@ on:
       - 'deployment/jayuminton/admin_native_tts3_patch.py'
       - 'deployment/jayuminton/admin_native_audio_focus_patch.py'
       - '.github/workflows/build-v2006-md-clean-final.yml'
+      - 'app/src/main/java/com/jayuminton/admin/MainActivity.java'
 permissions:
   contents: write
 jobs:
@@ -126,7 +127,7 @@ jobs:
           mkdir -p app/src/main/assets/admin
           cp "$RUNNER_TEMP/admin.html" app/src/main/assets/admin/index.html
 
-      - name: Prepare v200.6 native shell
+      - name: Prepare v200.7 native shell
         shell: bash
         run: |
           set -euo pipefail
@@ -138,19 +139,19 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.6";', s, count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=200.7";', s, count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
-          s,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";', 'private static final String APK_WEB_BUILD = "2006-md5-cloudflare-audited";', s, count=1)
+          s,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";', 'private static final String APK_WEB_BUILD = "2007-webview-loader-fixed";', s, count=1)
           if n!=1: raise SystemExit('APK_WEB_BUILD replacement failed')
-          s=re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+','JayumintonNative/200.6 CloudflareAdmin/2006',s,count=1)
+          s=re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+','JayumintonNative/200.7 CloudflareAdmin/2007',s,count=1)
           for needle in ('JAYUMINTON_ADMIN_SELF_ALERT_NATIVE_V1','NativeMemberAlert','vibrateThreeByEight()','VOICE_REPEAT_COUNT = 3','AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK'):
             if needle not in s: raise SystemExit('native self-alert contract missing: '+needle)
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
           g=re.sub(r"applicationId\s+['\"][^'\"]+['\"]", "applicationId 'com.jayuminton.admin'", g, count=1)
-          g=re.sub(r'versionCode\s+\d+', 'versionCode 2006', g, count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '200.6'", g, count=1)
+          g=re.sub(r'versionCode\s+\d+', 'versionCode 2007', g, count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '200.7'", g, count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
 
@@ -196,11 +197,11 @@ jobs:
           if grep -F '급수·구력 미입력' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then exit 1; fi
           if grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null; then exit 1; fi
 
-      - name: Publish audited v200.6
+      - name: Publish audited v200.7
         shell: bash
         run: |
           set -euo pipefail
-          APK_TMP="$RUNNER_TEMP/jayuminton-admin-v200.6-md5-cloudflare-audited.apk"
+          APK_TMP="$RUNNER_TEMP/jayuminton-admin-v200.7-webview-loader-fixed.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK_TMP"
           SHA=$(sha256sum "$APK_TMP" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -210,10 +211,10 @@ jobs:
             git reset --hard origin/main
             git clean -fd
             mkdir -p releases deployment/status
-            cp "$APK_TMP" releases/jayuminton-admin-v200.6-md5-cloudflare-audited.apk
-            printf 'status=success\nversion=200.6\nrun_id=%s\nsha256=%s\nbuild=md5-cloudflare-audited-self-alert\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2006-md5-cloudflare-audited.txt
-            git add releases/jayuminton-admin-v200.6-md5-cloudflare-audited.apk deployment/status/v2006-md5-cloudflare-audited.txt
-            git commit -m 'Publish MD5 Cloudflare-audited Jayuminton admin v200.6 APK' || true
+            cp "$APK_TMP" releases/jayuminton-admin-v200.7-webview-loader-fixed.apk
+            printf 'status=success\nversion=200.7\nrun_id=%s\nsha256=%s\nbuild=webview-loader-fixed-cloudflare-audited\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2007-webview-loader-fixed.txt
+            git add releases/jayuminton-admin-v200.7-webview-loader-fixed.apk deployment/status/v2007-webview-loader-fixed.txt
+            git commit -m 'Publish MD5 Cloudflare-audited Jayuminton admin v200.7 APK' || true
             if git push origin HEAD:main; then exit 0; fi
             sleep 2
           done
