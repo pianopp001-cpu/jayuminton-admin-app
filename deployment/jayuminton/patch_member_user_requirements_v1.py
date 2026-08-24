@@ -7,6 +7,7 @@ import sys
 
 MARKER = "JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1"
 NATIVE_SYNC_MARKER = "JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2"
+AUTO_SYNC_MARKER = "JAYUMINTON_MEMBER_REVISION_AUTOSYNC_V1"
 
 ADDON = r'''
 <script>
@@ -230,6 +231,58 @@ NATIVE_SYNC_ADDON = r'''
 </script>
 '''
 
+AUTO_SYNC_ADDON = r'''
+<script>
+/* JAYUMINTON_MEMBER_REVISION_AUTOSYNC_V1
+   Poll only for a newer revision and render through the page's normal refresh path.
+*/
+(function installMemberRevisionAutosyncV1(){
+  if (window.__JAYUMINTON_MEMBER_REVISION_AUTOSYNC_V1__) return;
+  window.__JAYUMINTON_MEMBER_REVISION_AUTOSYNC_V1__ = true;
+  var busy = false;
+  var lastSeenRevision = null;
+
+  function currentRevision(){
+    try {
+      if (window.STATE && Number.isFinite(Number(window.STATE.revision))) return Number(window.STATE.revision);
+      if (typeof STATE !== 'undefined' && STATE && Number.isFinite(Number(STATE.revision))) return Number(STATE.revision);
+    } catch (error) {}
+    return null;
+  }
+
+  function rememberRevision(){
+    var rev = currentRevision();
+    if (rev !== null) lastSeenRevision = rev;
+  }
+
+  function pollRevision(){
+    if (busy || document.hidden) return;
+    if (typeof server !== 'function' || typeof refreshMemberState !== 'function') return;
+    busy = true;
+    Promise.resolve(server('getPublicState', []))
+      .then(function(next){
+        var rev = next && Number(next.revision);
+        if (!Number.isFinite(rev)) return;
+        var local = currentRevision();
+        var baseline = local !== null ? local : lastSeenRevision;
+        if (baseline === null) { lastSeenRevision = rev; return; }
+        if (rev !== baseline) {
+          return Promise.resolve(refreshMemberState()).then(function(){ lastSeenRevision = rev; });
+        }
+        lastSeenRevision = rev;
+      })
+      .catch(function(){})
+      .finally(function(){ busy = false; });
+  }
+
+  rememberRevision();
+  setInterval(pollRevision, 1800);
+  window.addEventListener('focus', pollRevision);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) pollRevision(); });
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -259,6 +312,19 @@ def assert_native_sync_contract(text: str) -> None:
     for needle in required:
         if needle not in text:
             raise SystemExit(f"native identity sync contract missing: {needle}")
+
+
+def assert_auto_sync_contract(text: str) -> None:
+    required = [
+        AUTO_SYNC_MARKER,
+        "setInterval(pollRevision, 1800)",
+        "server('getPublicState', [])",
+        "refreshMemberState()",
+        "Number(next.revision)",
+    ]
+    for needle in required:
+        if needle not in text:
+            raise SystemExit(f"member revision autosync contract missing: {needle}")
 
 
 def patch(path: Path) -> None:
@@ -293,9 +359,12 @@ def patch(path: Path) -> None:
 
     if NATIVE_SYNC_MARKER not in text:
         text = text.replace(marker, NATIVE_SYNC_ADDON + "\n" + marker, 1)
+    if AUTO_SYNC_MARKER not in text:
+        text = text.replace(marker, AUTO_SYNC_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
+    assert_auto_sync_contract(text)
     path.write_text(text, encoding="utf-8")
 
 
