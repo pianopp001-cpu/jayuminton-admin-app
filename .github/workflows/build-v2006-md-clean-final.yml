@@ -7,6 +7,8 @@ on:
       - 'cloudflare/state-worker/**'
       - 'deployment/jayuminton/admin_md_member_fields_patch.py'
       - 'deployment/jayuminton/admin_md_card_timer_patch.py'
+      - 'deployment/jayuminton/admin_md_self_alert_html_patch.py'
+      - 'deployment/jayuminton/admin_native_self_alert_java_patch.py'
       - '.github/workflows/build-v2006-md-clean-final.yml'
 permissions:
   contents: write
@@ -26,6 +28,7 @@ jobs:
           set -euo pipefail
           node cloudflare/state-worker/worker.test.mjs
           node cloudflare/state-worker/md4-autoassign.test.mjs
+          node cloudflare/state-worker/md-entry-autoassign.test.mjs
           node cloudflare/state-worker/md-final-entry.test.mjs
           grep -F 'main = "worker-md-final-entry.js"' cloudflare/state-worker/wrangler.toml.template >/dev/null
           grep -F "result = finishCourtMutation(current, body.courtNo)" cloudflare/state-worker/worker.js >/dev/null
@@ -53,6 +56,7 @@ jobs:
           python3 deployment/jayuminton/admin_md_ui_cleanup_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_bulk_delete_autosync_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_card_timer_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_md_self_alert_html_patch.py "$RUNNER_TEMP/admin.html"
           grep -F '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'id="mdPublicMemo"' "$RUNNER_TEMP/admin.html" >/dev/null
@@ -64,6 +68,9 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_BULK_DELETE_AUTOSYNC_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_SELF_ALERT_HTML_V1' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'adminSelfAlertSettingButton' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'NativeMemberAlert.vibrateThreeByEight' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '선택 멤버 삭제' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'setInterval(autoSyncAdmin,1500)' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'new 신규' "$RUNNER_TEMP/admin.html" >/dev/null
@@ -84,6 +91,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 deployment/jayuminton/admin_native_self_alert_java_patch.py app/src/main/java/com/jayuminton/admin/MainActivity.java
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -94,6 +102,8 @@ jobs:
           s,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";', 'private static final String APK_WEB_BUILD = "2006-md5-cloudflare-audited";', s, count=1)
           if n!=1: raise SystemExit('APK_WEB_BUILD replacement failed')
           s=re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+','JayumintonNative/200.6 CloudflareAdmin/2006',s,count=1)
+          for needle in ('JAYUMINTON_ADMIN_SELF_ALERT_NATIVE_V1','NativeMemberAlert','vibrateThreeByEight()'):
+            if needle not in s: raise SystemExit('native self-alert contract missing: '+needle)
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
@@ -127,6 +137,8 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_BULK_DELETE_AUTOSYNC_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_SELF_ALERT_HTML_V1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'adminSelfAlertSettingButton' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="mdPublicMemo"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="mdIsNew"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="mdIsSponsor"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -153,7 +165,7 @@ jobs:
             git clean -fd
             mkdir -p releases deployment/status
             cp "$APK_TMP" releases/jayuminton-admin-v200.6-md5-cloudflare-audited.apk
-            printf 'status=success\nversion=200.6\nrun_id=%s\nsha256=%s\nbuild=md5-cloudflare-audited\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2006-md5-cloudflare-audited.txt
+            printf 'status=success\nversion=200.6\nrun_id=%s\nsha256=%s\nbuild=md5-cloudflare-audited-self-alert\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2006-md5-cloudflare-audited.txt
             git add releases/jayuminton-admin-v200.6-md5-cloudflare-audited.apk deployment/status/v2006-md5-cloudflare-audited.txt
             git commit -m 'Publish MD5 Cloudflare-audited Jayuminton admin v200.6 APK' || true
             if git push origin HEAD:main; then exit 0; fi
