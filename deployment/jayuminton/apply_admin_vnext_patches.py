@@ -2,6 +2,7 @@
 """Apply admin-vNext patches in fixed fail-fast order. Never deploys user production.
 
 Operations MD sync: immediate promoted-wait return and MD-only controls v1.
+Login-screen raw compatibility-token leak fix: 2026-08-25.
 """
 from pathlib import Path
 import subprocess,sys
@@ -26,6 +27,7 @@ required_script=['function increaseSelectedGames()','function setSelectedBundle(
 required_style=['JAYUMINTON_ADMIN_SAVING_BLOCKING_CSS_V2','z-index:2147483647!important','pointer-events:auto!important','body.admin-saving-active']
 missing=([f'Code:{x}' for x in required_code if x not in code]+[f'Admin:{x}' for x in required_admin if x not in admin]+[f'Script:{x}' for x in required_script if x not in script]+[f'Style:{x}' for x in required_style if x not in style])
 if missing: raise SystemExit('admin-vNext verification failed; missing: '+' | '.join(missing))
+if 'JAYUMINTON_BRIDGE_COMPAT_TOKEN' in script: raise SystemExit('admin-vNext verification failed; raw bridge compat token leaked into Script.html')
 if '비어 있는 코트는 경기 종료할 수 없습니다.' in code: raise SystemExit('admin-vNext verification failed; empty-court backend rejection still present')
 if 'NEW <small>신규</small>' in script: raise SystemExit('admin-vNext verification failed; legacy English NEW badge still present')
 if 'onclick="testVoiceGuide()"' in admin or 'onclick="setSelectedBundle()"' in admin or 'compact-admin-tools' in admin: raise SystemExit('admin-vNext verification failed; unnecessary MD controls survived')
