@@ -1,0 +1,5 @@
+status=success
+version=202.6
+run_id=32726058742
+sha256=8c734eea461bf7df58b63b31cb6554e9c4cd0d3598d480d866e5d4d0999e77e9
+build=selected-member-message-user-popup-confirm-stops-vibration
