@@ -56,12 +56,18 @@ function occupiedIds(state) {
   ]);
 }
 
-function targetArray(state, destination) {
-  if (destination?.type !== 'court') return [];
-  return (state?.courts?.[String(destination.key)] || []).map(String);
+export function targetArray(state, destination) {
+  if (destination?.type === 'court') {
+    return (state?.courts?.[String(destination.key)] || []).map(String);
+  }
+  if (destination?.type === 'wait') {
+    const index = Math.max(0, Number(destination.key || 1) - 1);
+    return (state?.waitGroups?.[index] || []).map(String);
+  }
+  return [];
 }
 
-function selectValidFill(state, pool, destination, membersById) {
+export function selectValidFill(state, pool, destination, membersById) {
   const target = targetArray(state, destination);
   const free = Math.max(0, 4 - target.length);
   if (!free || !pool.length) return [];
@@ -80,9 +86,21 @@ function selectValidFill(state, pool, destination, membersById) {
     return [...men.slice(0, needMen), ...women.slice(0, needWomen)];
   }
 
-  // MD remainder rule: composition may be relaxed only when these are the final candidates.
+  // MD remainder rule: relax composition only when every remaining eligible member fits.
   if (pool.length <= free) return pool.slice(0, free);
   return [];
+}
+
+export function eligibleAutoAssignPool(state, candidateIds = []) {
+  const members = Array.isArray(state?.members) ? state.members : [];
+  const membersById = new Map(members.map(m => [String(m?.id || ''), m]));
+  const occupied = occupiedIds(state);
+  const requested = uniq(candidateIds);
+  const source = requested.length ? requested : members.map(m => String(m?.id || '')).filter(Boolean);
+  return uniq(source).filter(id => {
+    const member = membersById.get(id);
+    return member && String(member.status || 'active') === 'active' && !occupied.has(id);
+  });
 }
 
 async function getAdminState(request, env) {
@@ -137,8 +155,7 @@ async function moveOne(request, env, memberIds, destination) {
 async function mdAutoAssign(request, env, candidateIds, destinations) {
   let state = await getAdminState(request, env);
   const membersById = new Map((state.members || []).map(m => [String(m.id), m]));
-  const occupied = occupiedIds(state);
-  const pool = uniq(candidateIds).filter(id => membersById.has(id) && !occupied.has(id));
+  const pool = eligibleAutoAssignPool(state, candidateIds);
   const assigned = [];
 
   for (const destination of Array.isArray(destinations) ? destinations : []) {
