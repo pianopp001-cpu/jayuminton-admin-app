@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/preview-admin-cloudflare.yml'
+      - 'deployment/jayuminton/admin_cloudflare_rpc.py'
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -59,6 +60,8 @@ jobs:
           test "$PREVIEW_DEPLOYMENT_ID" != "$MEMBER_ID"
       - name: Enforce separate Cloudflare admin frontend
         run: python3 deployment/jayuminton/verify_cloudflare_admin_lock.py "$GITHUB_WORKSPACE"
+      # v201.1: the production admin login must accept touch/keyboard input.
+      # This deployment is admin-only and never changes the member web/app.
       - name: Patch isolated admin backend and verify v19 behavior
         shell: bash
         run: |
