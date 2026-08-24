@@ -1,0 +1,94 @@
+name: Cloudflare-only V24 full rollout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloudflare-v24-full-rollout.yml'
+      - 'cloudflare/state-worker/**'
+      - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
+      - 'deployment/jayuminton/patch_member_self_longpress_v6.py'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: jayuminton-cloudflare-v24-full-rollout
+  cancel-in-progress: false
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Enforce Cloudflare-only contract before rollout
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
+          grep -F "const nextMemo = String(values[2] || '').trim().slice(0, 120);" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "publicMemo: nextMemo" cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
+          grep -F '저장중 · 잠시만 기다려 주세요' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
+          grep -F 'member-public-memo' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
+          grep -F 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          grep -F '>도착전</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          grep -F '>코트배정대기</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          grep -F '>휴식</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          grep -F '>귀가</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          grep -F '>내정보입력</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          if grep -R -n -E 'clasp push|clasp deploy|script.google.com/macros/s/' \
+            .github/workflows/cloudflare-v24-full-rollout.yml \
+            cloudflare/state-worker \
+            deployment/jayuminton/admin_cloudflare_post_contract_patch.py \
+            deployment/jayuminton/patch_member_self_longpress_v6.py; then
+            echo 'GAS dependency found in Cloudflare V24 rollout inputs' >&2
+            exit 1
+          fi
+
+      - name: Dispatch and wait for Cloudflare state worker deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-cloudflare-state-shadow.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run deploy-cloudflare-state-shadow.yml --repo "$GITHUB_REPOSITORY" --ref main
+          run_id=''
+          for i in $(seq 1 90); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-cloudflare-state-shadow.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
+          echo "CLOUDFLARE_STATE_RUN_ID=$run_id" >> "$GITHUB_ENV"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Dispatch and wait for Cloudflare-direct admin APK build
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2006-md-clean-final.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run build-v2006-md-clean-final.yml --repo "$GITHUB_REPOSITORY" --ref main
+          run_id=''
+          for i in $(seq 1 90); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2006-md-clean-final.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
+          echo "ADMIN_APK_RUN_ID=$run_id" >> "$GITHUB_ENV"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Rollout complete
+        run: |
+          echo "CLOUDFLARE_V24_FULL_ROLLOUT_OK"
+          echo "Cloudflare state run: $CLOUDFLARE_STATE_RUN_ID"
+          echo "Admin APK run: $ADMIN_APK_RUN_ID"
