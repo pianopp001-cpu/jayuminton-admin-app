@@ -92,9 +92,9 @@ jobs:
           if n != 1: raise SystemExit('APK_WEB_BUILD replacement failed')
           s = re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+',
                      'JayumintonNative/201.8 CloudflareAdmin/2018', s, count=1)
-          page_finished = '''            @Override
-            public void onPageFinished(WebView view, String url) {'''
-          page_commit = '''            @Override
+          page_finished = r'(\s+@Override\s+public void onPageFinished\(WebView view, String url\) \{)'
+          page_commit = '''
+            @Override
             public void onPageCommitVisible(WebView view, String url) {
                 super.onPageCommitVisible(view, url);
                 // The administrator page is a bundled local asset. Once its first
@@ -104,8 +104,8 @@ jobs:
 
             @Override
             public void onPageFinished(WebView view, String url) {'''
-          if page_finished not in s: raise SystemExit('onPageFinished insertion point missing')
-          s = s.replace(page_finished, page_commit, 1)
+          s, n = re.subn(page_finished, page_commit, s, count=1)
+          if n != 1: raise SystemExit('onPageFinished insertion point missing')
           java.write_text(s, encoding='utf-8')
           gradle = Path('app/build.gradle')
           g = gradle.read_text(encoding='utf-8')
