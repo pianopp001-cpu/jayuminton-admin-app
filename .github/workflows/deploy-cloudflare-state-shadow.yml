@@ -67,8 +67,8 @@ jobs:
           python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$RUNNER_TEMP/rendered/member.html"
           test "$(grep -c '__JAYUMINTON_CLOUDFLARE_RPC_V6__' "$RUNNER_TEMP/rendered/admin.html")" -eq 1
           test "$(grep -c '__JAYUMINTON_CLOUDFLARE_RPC_V6__' "$RUNNER_TEMP/rendered/member.html")" -eq 1
-          grep -F '__JAYUMINTON_ADMIN_EXCLUDED_ALWAYS_VISIBLE_V1__' "$RUNNER_TEMP/rendered/admin.html" >/dev/null
-          grep -F 'admin-excluded-always-visible' "$RUNNER_TEMP/rendered/admin.html" >/dev/null
+          # The current admin screen no longer ships the retired excluded-member
+          # visibility patch. The injected bridge marker above is the active contract.
           if grep -F 'onclick="testVoiceGuide()"' "$RUNNER_TEMP/rendered/admin.html"; then
             echo 'admin regression: voice-test control returned'
             exit 1
