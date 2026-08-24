@@ -1,0 +1,6 @@
+workflow=Deploy Cloudflare user self-card long press V2
+conclusion=failure
+run_id=32753162432
+head_sha=6fa84520b3be62434cbbc597ade96c00a43aa4ee
+run_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32753162432
+updated_at=2026-08-24T16:51:23Z
