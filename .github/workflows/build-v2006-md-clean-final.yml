@@ -1,6 +1,13 @@
 name: Build MD-only clean admin v200.6 APK
 on:
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/state-worker/**'
+      - 'deployment/jayuminton/admin_md_member_fields_patch.py'
+      - 'deployment/jayuminton/admin_md_card_timer_patch.py'
+      - '.github/workflows/build-v2006-md-clean-final.yml'
 permissions:
   contents: write
 jobs:
@@ -19,6 +26,8 @@ jobs:
           set -euo pipefail
           node cloudflare/state-worker/worker.test.mjs
           node cloudflare/state-worker/md4-autoassign.test.mjs
+          node cloudflare/state-worker/md-final-entry.test.mjs
+          grep -F 'main = "worker-md-final-entry.js"' cloudflare/state-worker/wrangler.toml.template >/dev/null
           grep -F "result = finishCourtMutation(current, body.courtNo)" cloudflare/state-worker/worker.js >/dev/null
           grep -F "publishAssignmentTransitions(this.env, current, saved, result.event)" cloudflare/state-worker/worker.js >/dev/null
           grep -F "sendPush(env, 'court_assignment'" cloudflare/state-worker/worker.js >/dev/null
@@ -45,6 +54,11 @@ jobs:
           python3 deployment/jayuminton/admin_md_bulk_delete_autosync_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_card_timer_patch.py "$RUNNER_TEMP/admin.html"
           grep -F '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'id="mdPublicMemo"' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'id="mdIsNew"' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'id="mdIsSponsor"' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F "server('getPairStatistics',[ADMIN_PIN_VALUE])" "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'position:fixed!important' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'bottom:0!important' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__' "$RUNNER_TEMP/admin.html" >/dev/null
@@ -112,6 +126,11 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_BULK_DELETE_AUTOSYNC_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'id="mdPublicMemo"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'id="mdIsNew"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'id="mdIsSponsor"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "server('getPairStatistics',[ADMIN_PIN_VALUE])" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '선택 멤버 삭제' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'setInterval(autoSyncAdmin,1500)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'new 신규' "$RUNNER_TEMP/apk-admin.html" >/dev/null
