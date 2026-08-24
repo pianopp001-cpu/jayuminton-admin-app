@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Harden announcement ducking without muting or raising background music."""
+"""Harden announcement ducking and carry the latest v203 Cloudflare admin contract into bundled APK HTML."""
 from pathlib import Path
+import subprocess
+import sys
 
 path = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
 text = path.read_text(encoding='utf-8')
@@ -34,4 +36,31 @@ for marker in required:
         raise SystemExit('native audio contract missing: ' + marker)
 
 path.write_text(text, encoding='utf-8')
+
+# v203 APKs bundle the administrator page as a local asset. The web deployment
+# already applies admin_cloudflare_post_contract_patch.py after the v203 bridge;
+# do the same for the bundled APK so web and APK cannot drift again. Limit this
+# to an HTML asset that already contains the restored v203 Cloudflare markers.
+admin_html = Path('app/src/main/assets/admin/index.html')
+if admin_html.exists():
+    bundled = admin_html.read_text(encoding='utf-8')
+    if 'function usesAdminFullName(member)' in bundled and 'jayuminton-pair-statistics-disclosure-v2028' in bundled:
+        if 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' not in bundled:
+            post_patch = Path(__file__).with_name('admin_cloudflare_post_contract_patch.py')
+            subprocess.run([sys.executable, str(post_patch), str(admin_html)], check=True)
+        final_html = admin_html.read_text(encoding='utf-8')
+        for marker in (
+            'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24',
+            '__JAYUMINTON_ADMIN_SAVING__',
+            'member-public-memo',
+            'publicMemo',
+            '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_MD4__',
+            '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__',
+        ):
+            if marker not in final_html:
+                raise SystemExit('bundled v203 post-contract missing: ' + marker)
+        if 'script.google.com/macros/s/' in final_html:
+            raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
+        print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
+
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
