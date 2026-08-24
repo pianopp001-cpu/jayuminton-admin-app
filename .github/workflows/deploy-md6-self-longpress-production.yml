@@ -1,5 +1,6 @@
 name: Deploy Cloudflare user self-card long press V2
 
+# recovery redeploy 2026-08-25: preserve v203-era user card/team layout then apply self memo
 on:
   push:
     branches: [main]
@@ -59,6 +60,8 @@ jobs:
           python3 deployment/jayuminton/patch_member_user_requirements_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
           for marker in 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' '>도착전</button>' '>코트배정대기</button>' '>휴식</button>' '>귀가</button>' '내정보입력' "server('memberMoveSelf'" "server('updateMyProfile'" 'pointerdown' 'publicMemo' 'font-size:9px!important'; do grep -F "$marker" "$PUBLIC/index.html" >/dev/null; done
+          grep -F 'jm-has-team' "$PUBLIC/index.html" >/dev/null
+          grep -F 'box-shadow:inset 5px 0 0 var(--jm-team-color)!important' "$PUBLIC/index.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
           python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-inline.js" <<'PY'
@@ -81,7 +84,7 @@ jobs:
           set -euo pipefail
           sleep 5
           curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          for marker in 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' '>도착전</button>' '>코트배정대기</button>' '>휴식</button>' '>귀가</button>' '내정보입력' "server('memberMoveSelf'" "server('updateMyProfile'" 'pointerdown' 'publicMemo' 'font-size:9px!important'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
+          for marker in 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' '>도착전</button>' '>코트배정대기</button>' '>휴식</button>' '>귀가</button>' '내정보입력' "server('memberMoveSelf'" "server('updateMyProfile'" 'pointerdown' 'publicMemo' 'font-size:9px!important' 'jm-has-team' 'box-shadow:inset 5px 0 0 var(--jm-team-color)!important'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live.html" >/dev/null
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live.html"
-          echo 'CLOUDFLARE_USER_SELF_CARD_V2_OK'
+          echo 'CLOUDFLARE_USER_SELF_CARD_V2_TEAM_STRIPE_OK'
