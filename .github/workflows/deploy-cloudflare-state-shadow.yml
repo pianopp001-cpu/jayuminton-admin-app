@@ -50,6 +50,9 @@ jobs:
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
           grep -F "state.waitGroups = [[...state.waitGroups[1]], [...state.waitGroups[2]], [...state.waitGroups[3]], [...state.waitGroups[4]], []]" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "if(name==='setBundle')return adminAction(request,env,'setBundle',{memberIds:a[1]||[]});" cloudflare/state-worker/worker-md-compat-entry.js >/dev/null
+          grep -F "if(name==='clearBundle')return adminAction(request,env,'clearBundle',{memberIds:a[1]||[]});" cloudflare/state-worker/worker-md-compat-entry.js >/dev/null
+          grep -F "team_requires_assignment_wait" cloudflare/state-worker/worker.js >/dev/null
           if grep -R -n -E 'script\.google\.com|googleusercontent\.com|firebaseapp\.com|web\.app' cloudflare/state-worker deployment/jayuminton/cloudflare_v6_frontend_bridge.js; then exit 1; fi
 
       - name: Resolve existing Cloudflare D1 database
