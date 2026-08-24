@@ -31,7 +31,16 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
     window.__JAYUMINTON_SUPPRESS_TRANSITION_ALERTS__=true;
     try{
       var state=await server('finishCourt',[ADMIN_PIN_VALUE,courtNo]);
-      SELECTED.clear();renderState(state);setUndoState(previousState);rememberVoiceAnnouncement(Number(courtNo),waitingMembers);
+      // Apply the authoritative shifted queues immediately. Some legacy
+      // renderState implementations ignore their argument and read STATE.
+      if(state&&state.members){STATE=state;}
+      SELECTED.clear();renderState();setUndoState(previousState);rememberVoiceAnnouncement(Number(courtNo),waitingMembers);
+      // Confirm once from Cloudflare after the mutation so a stale poll cannot
+      // repaint the pre-finish queue order.
+      try{
+        var confirmed=await server('getPublicState',[ADMIN_PIN_VALUE]);
+        if(confirmed&&confirmed.members){STATE=confirmed;renderState();}
+      }catch(refreshError){}
       window.__JAYUMINTON_SUPPRESS_TRANSITION_ALERTS__=false;
       if(!voice.ok)alert('음성 실행 실패: '+voice.reason);
     }catch(error){
@@ -47,6 +56,6 @@ patch=r'''<style id="jayuminton-admin-statistics-no-clip-v1">
 })();
 </script>'''
 s=s.replace(marker,patch+'\n'+marker,1)
-for x in ['jayuminton-admin-finish-alert-v16','jayuminton-admin-finish-alert-v17','jayuminton-admin-finish-alert-v19','__JAYUMINTON_ADMIN_FINISH_ALERT_V16__','__JAYUMINTON_ADMIN_FINISH_ALERT_V17__','__JAYUMINTON_ADMIN_FINISH_ALERT_V18__','__JAYUMINTON_ADMIN_FINISH_ALERT_V19__','__JAYUMINTON_TRANSITION_ALERT__','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','cancelOnAlertDismiss:true','alertBeforeServerCompletion:true','transitionAlertBridge:false','adminVoiceOnly:true','fullCourtVoiceSet:true','번 코트 종료되었습니다.','대기 1번 ','번 코트로 들어가 주세요.','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true']:
+for x in ['jayuminton-admin-finish-alert-v16','jayuminton-admin-finish-alert-v17','jayuminton-admin-finish-alert-v19','__JAYUMINTON_ADMIN_FINISH_ALERT_V16__','__JAYUMINTON_ADMIN_FINISH_ALERT_V17__','__JAYUMINTON_ADMIN_FINISH_ALERT_V18__','__JAYUMINTON_ADMIN_FINISH_ALERT_V19__','__JAYUMINTON_TRANSITION_ALERT__','NativeVoice.speak','NativeVoice.vibrate','cancelVibration','emptyCourtAllowed:true','vibrationSets:8','vibrationsPerSet:3','cancelOnAlertDismiss:true','alertBeforeServerCompletion:true','transitionAlertBridge:false','adminVoiceOnly:true','fullCourtVoiceSet:true','번 코트 종료되었습니다.','대기 1번 ','번 코트로 들어가 주세요.','jayuminton-admin-statistics-no-clip-v1','statisticsNoClip:true','if(state&&state.members){STATE=state;}','var confirmed=await server(\'getPublicState\',[ADMIN_PIN_VALUE])']:
     if x not in s: raise SystemExit('missing '+x)
 p.write_text(s,encoding='utf-8')
