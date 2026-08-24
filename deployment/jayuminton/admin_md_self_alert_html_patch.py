@@ -102,12 +102,14 @@ ADDON = r'''
   }
   function mountButton(){
     if(typeof IS_ADMIN!=='undefined'&&!IS_ADMIN)return;
-    var host=document.querySelector('#adminApp header .wrap.toolbar')||document.querySelector('#adminApp header .wrap')||document.querySelector('#adminApp header');
+    var header=document.querySelector('#adminApp header .wrap.toolbar')||document.querySelector('#adminApp header .wrap')||document.querySelector('#adminApp header');var host=header&&header.querySelector(':scope>div:first-child');
     if(!host)return;
     var btn=document.getElementById('adminSelfAlertSettingButton');
     if(!btn){btn=document.createElement('button');btn.id='adminSelfAlertSettingButton';btn.type='button';btn.className='ghost-button';btn.onclick=openChooser;host.appendChild(btn);}
-    btn.textContent=selectedId()?'👤 내 알림: '+(selectedName()||'설정됨'):'👤 내 알림';
-    btn.style.cssText='white-space:nowrap;font-size:12px;font-weight:900';
+    btn.textContent='내 알림';
+    btn.title=selectedId()?'관리자 본인 알림: '+(selectedName()||'설정됨'):'관리자 본인 알림 설정';
+    btn.setAttribute('aria-label',btn.title);
+    btn.style.cssText='display:inline-flex;align-items:center;justify-content:center;width:auto;min-width:58px;min-height:26px;height:26px;margin:4px 0 0;padding:3px 9px;border-radius:999px;white-space:nowrap;font-size:11px;line-height:1;font-weight:900;vertical-align:middle';
   }
 
   var originalRender=window.renderState;
