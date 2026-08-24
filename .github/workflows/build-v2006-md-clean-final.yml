@@ -81,7 +81,6 @@ jobs:
           python3 deployment/jayuminton/admin_finish_alert_v12_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html"
-          python3 deployment/jayuminton/admin_md_ui_cleanup_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_autoassign_slots_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_bulk_delete_autosync_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_card_timer_patch.py "$RUNNER_TEMP/admin.html"
