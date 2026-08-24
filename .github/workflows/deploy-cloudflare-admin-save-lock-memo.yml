@@ -1,0 +1,108 @@
+name: Deploy Cloudflare-only admin save lock and memo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
+      - '.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-cloudflare-admin-save-lock-memo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      ADMIN_CHANNEL: admin-cloudflare-vnext
+      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Resolve project and current admin channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$CONFIG")"
+          test -n "$FIREBASE_PROJECT_ID"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+          firebase hosting:channel:list --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/channels.json"
+          ADMIN_URL="$(jq -r --arg id "$ADMIN_CHANNEL" '[.result.channels[]? | select((.name|split("/")|last)==$id)][0].url // empty' "$RUNNER_TEMP/channels.json")"
+          if [ -z "$ADMIN_URL" ]; then
+            ADMIN_URL="$(jq -r --arg id "$ADMIN_CHANNEL" '[.result[]? | select((.channelId//$id)==$id)][0].url // empty' "$RUNNER_TEMP/channels.json")"
+          fi
+          test -n "$ADMIN_URL"
+          echo "ADMIN_URL=$ADMIN_URL" >> "$GITHUB_ENV"
+      - name: Verify Cloudflare backend only
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --max-time 60 "${CLOUDFLARE_RPC_URL}health" -o "$RUNNER_TEMP/health.json" || curl --fail --location --retry 5 --max-time 60 "${CLOUDFLARE_RPC_URL}api/health" -o "$RUNNER_TEMP/health.json"
+          grep -E 'cloudflare-only|"gas"[[:space:]]*:[[:space:]]*false' "$RUNNER_TEMP/health.json" >/dev/null
+      - name: Patch existing Cloudflare admin frontend without GAS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/admin-cloudflare-only"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$ADMIN_URL/?source=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
+          # Any old admin proxy URL is replaced with the Cloudflare state/RPC worker.
+          python3 - "$PUBLIC/index.html" "$CLOUDFLARE_RPC_URL" <<'PY'
+          from pathlib import Path
+          import re,sys
+          p=Path(sys.argv[1]); rpc=sys.argv[2].rstrip('/')+'/'
+          h=p.read_text(encoding='utf-8')
+          h=re.sub(r'https://[A-Za-z0-9.-]*jayuminton-admin-rpc[A-Za-z0-9.-]*\.workers\.dev/?',rpc,h)
+          h=re.sub(r'https://jayuminton-admin-rpc\.pianopp001\.workers\.dev/?',rpc,h)
+          # Do not allow direct Google Apps Script endpoints in the deployed admin page.
+          h=re.sub(r'https://script\.google\.com/macros/s/[^\"\'<> ]+/exec',rpc,h)
+          p.write_text(h,encoding='utf-8')
+          PY
+          python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$PUBLIC/index.html"
+          grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' "$PUBLIC/index.html" >/dev/null
+          grep -F '저장중 · 잠시만 기다려 주세요' "$PUBLIC/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SAVING__' "$PUBLIC/index.html" >/dev/null
+          grep -F 'member-public-memo' "$PUBLIC/index.html" >/dev/null
+          grep -F 'publicMemo' "$PUBLIC/index.html" >/dev/null
+          grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
+          ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+      - name: Deploy Cloudflare admin frontend channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase hosting:channel:deploy "$ADMIN_CHANNEL" --project "$FIREBASE_PROJECT_ID" --expires 30d --config "$RUNNER_TEMP/admin-cloudflare-only/firebase.json" --non-interactive --json | tee "$RUNNER_TEMP/deploy.json"
+      - name: Verify live admin requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$ADMIN_URL/?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          for marker in 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' '저장중 · 잠시만 기다려 주세요' '__JAYUMINTON_ADMIN_SAVING__' 'court-voice-controls' 'member-public-memo' 'publicMemo'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
+          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live.html" >/dev/null
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live.html"
+          echo "ADMIN_CLOUDFLARE_ONLY_SAVE_LOCK_MEMO_OK url=$ADMIN_URL"
