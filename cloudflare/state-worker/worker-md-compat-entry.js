@@ -142,6 +142,7 @@ async function handleCompat(request,env,body){
   if(name==='autoFillCourt')return adminAction(request,env,'moveMembers',{memberIds:a[2]||[],destination:{type:'court',key:String(a[1])}});
   if(name==='autoFillWaitGroup')return adminAction(request,env,'moveMembers',{memberIds:a[2]||[],destination:{type:'wait',key:String(Number(a[1])+1)}});
   if(name==='setBundle')return adminAction(request,env,'setBundle',{memberIds:a[1]||[]});
+  if(name==='clearBundle')return adminAction(request,env,'clearBundle',{memberIds:a[1]||[]});
   if(name==='moveOrSwapMember'){
     const id=String(a[1]||''), targetType=String(a[2]||''), targetIndex=a[3], other=String(a[4]||'');
     if(other)return adminAction(request,env,'swapMembers',{leftIds:[id],rightIds:[other]});
@@ -161,7 +162,7 @@ async function handleCompat(request,env,body){
   return null;
 }
 
-const OWN_COMPAT=new Set(['mdAutoAssignTargets','autoFillCourt','autoFillWaitGroup','setBundle','moveOrSwapMember','assignWaitGroupToCourt','removeFromCourt','removeFromWaitGroup','swapCourts','swapWaitGroups','adjustCourtMembers','adjustWaitGroupMembers']);
+const OWN_COMPAT=new Set(['mdAutoAssignTargets','autoFillCourt','autoFillWaitGroup','setBundle','clearBundle','moveOrSwapMember','assignWaitGroupToCourt','removeFromCourt','removeFromWaitGroup','swapCourts','swapWaitGroups','adjustCourtMembers','adjustWaitGroupMembers']);
 
 export default{
   async fetch(request,env){
