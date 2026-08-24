@@ -269,7 +269,9 @@ export default {
       const body = await request.clone().json().catch(() => ({}));
       if (body.action === 'autoAssign') {
         try {
+          const before = await getAdminState(request, env).catch(() => null);
           const out = await mdAutoAssign(request, env, body.candidateIds, body.destinations);
+          if (before && out?.state) await recordPairTransitions(env, before, out.state);
           return reply({ ok: true, state: out.state, event: out.event });
         } catch (error) {
           return reply({ ok: false, error: String(error?.message || error) }, 400);
@@ -296,12 +298,14 @@ export default {
       if (body.name === 'smartAssignSelected') {
         try {
           const args = Array.isArray(body.args) ? body.args : [];
+          const before = await getVisibleState(request, env).catch(() => null);
           const out = await mdAutoAssign(
             request,
             env,
             args[1],
             [{ type: 'court', key: String(args[2]) }],
           );
+          if (before && out?.state) await recordPairTransitions(env, before, out.state);
           return reply({ ok: true, result: out.state });
         } catch (error) {
           return reply({ ok: false, error: String(error?.message || error) });
