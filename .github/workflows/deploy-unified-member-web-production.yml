@@ -83,6 +83,9 @@ jobs:
           grep -F 'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' "$PUBLIC/index.html" >/dev/null
           grep -F "active:'코트배정대기'" "$PUBLIC/index.html" >/dev/null
           grep -F 'member.teamLabel' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.confirmJmDirectMessage=function()' "$PUBLIC/index.html" >/dev/null
+          grep -F 'vibrationTimer=setInterval(vibrate,14500)' "$PUBLIC/index.html" >/dev/null
           grep -F 'window.NativeUserApp.setMember(memberId, memberName)' "$PUBLIC/index.html" >/dev/null
           grep -F 'window.NativeUserApp.clearMember()' "$PUBLIC/index.html" >/dev/null
           grep -F 'window.NativeUserApp.setPushEnabled' "$PUBLIC/index.html" >/dev/null
@@ -151,6 +154,9 @@ jobs:
             'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' \
             "active:'코트배정대기'" \
             'member.teamLabel' \
+            'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
+            'window.confirmJmDirectMessage=function()' \
+            'vibrationTimer=setInterval(vibrate,14500)' \
             'window.NativeUserApp.setMember(memberId, memberName)' \
             'window.NativeUserApp.clearMember()' \
             'window.NativeUserApp.setPushEnabled' \
