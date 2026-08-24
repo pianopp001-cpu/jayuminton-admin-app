@@ -1,5 +1,6 @@
 name: Build unified MD-final user APK v1.6.42
 
+# recovery rebuild 2026-08-25: Cloudflare-only user APK, preserve 3-pulses x 8 groups and live user web
 on:
   push:
     branches: [main]
