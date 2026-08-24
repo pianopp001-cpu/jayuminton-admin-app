@@ -32,4 +32,37 @@
   window.google=window.google||{}; window.google.script=window.google.script||{};
   window.google.script.run=runner(null,null);
   window.__JAYUMINTON_CLOUDFLARE_RPC_V6__=true;
+
+  // The proven v200.5 login button was bound inside the retired RPC bridge.
+  // Rebind it here so replacing that bridge never leaves a visible dead button.
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN){
+    function loginBox(){return document.getElementById('adminLoginBox');}
+    function adminApp(){return document.getElementById('adminApp');}
+    function hideApp(){var a=adminApp(),b=loginBox();if(a){a.classList.add('hidden');a.hidden=true;a.style.setProperty('display','none','important');}if(b){b.classList.remove('hidden');b.hidden=false;b.removeAttribute('hidden');b.style.setProperty('display','block','important');}}
+    function revealApp(){var a=adminApp(),b=loginBox();if(a){a.hidden=false;a.removeAttribute('hidden');a.style.removeProperty('display');a.classList.remove('hidden');}if(b){b.classList.add('hidden');b.hidden=true;b.style.setProperty('display','none','important');}}
+    function ensureStatus(){var box=loginBox();if(!box||document.getElementById('adminCloudflareLoginStatus'))return;var el=document.createElement('div');el.id='adminCloudflareLoginStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='margin-top:10px;font-size:13px;font-weight:700;text-align:center';box.appendChild(el);}
+    function status(text,isError){var el=document.getElementById('adminCloudflareLoginStatus');if(el){el.textContent=String(text||'');el.style.color=isError?'#b42318':'#667085';}}
+    function reset(){var b=document.getElementById('adminCloudflareLoginButton');if(b){b.disabled=false;b.textContent='로그인';}}
+    function submit(){
+      var input=document.getElementById('adminPinInput'),pin=String(input&&input.value||'').trim();
+      if(!pin){status('관리자 PIN을 입력하세요.',true);return;}
+      var b=document.getElementById('adminCloudflareLoginButton');if(b){b.disabled=true;b.textContent='확인 중…';}
+      status('관리자 서버에 연결하고 있습니다.',false);
+      invoke('createAdminSession',[pin],function(result){
+        if(!result||!result.ok){status('관리자 PIN이 틀렸습니다.',true);reset();return;}
+        var token=String(result.token||'');try{localStorage.setItem('jayuminton_admin_session_v1',token);}catch(_){}
+        if(typeof window.openAdminApp!=='function'){status('관리자 화면 초기화 함수가 없습니다.',true);reset();return;}
+        Promise.resolve(window.openAdminApp(token)).then(function(){revealApp();status('',false);reset();}).catch(function(error){hideApp();status(String(error&&error.message||error||'관리자 화면을 불러오지 못했습니다.'),true);reset();});
+      },function(error){hideApp();status(String(error&&error.message||error||'서버에 연결할 수 없습니다.'),true);reset();});
+    }
+    function bind(){
+      hideApp();ensureStatus();
+      var box=loginBox(),b=document.getElementById('adminCloudflareLoginButton'),input=document.getElementById('adminPinInput');
+      if(box){box.style.setProperty('position','relative','important');box.style.setProperty('z-index','2147483000','important');box.style.setProperty('pointer-events','auto','important');}
+      if(b&&!b.__jmBound){b.__jmBound=true;b.style.setProperty('pointer-events','auto','important');b.addEventListener('click',submit);}
+      if(input&&!input.__jmBound){input.__jmBound=true;input.disabled=false;input.readOnly=false;input.setAttribute('inputmode','numeric');input.setAttribute('enterkeyhint','done');input.style.setProperty('pointer-events','auto','important');input.addEventListener('click',function(){try{input.focus();}catch(_){}});input.addEventListener('keydown',function(event){if(event.key==='Enter'){event.preventDefault();submit();}});}
+    }
+    window.__JAYUMINTON_ADMIN_PIN_INPUT_READY__=function(){var i=document.getElementById('adminPinInput'),b=document.getElementById('adminCloudflareLoginButton');return !!(i&&b&&!i.disabled&&!i.readOnly&&i.__jmBound&&b.__jmBound);};
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else setTimeout(bind,0);
+  }
 })();
