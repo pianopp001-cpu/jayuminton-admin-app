@@ -9,6 +9,10 @@ on:
       - 'deployment/jayuminton/admin_md_card_timer_patch.py'
       - 'deployment/jayuminton/admin_md_self_alert_html_patch.py'
       - 'deployment/jayuminton/admin_native_self_alert_java_patch.py'
+      - 'deployment/jayuminton/admin_multigroup_swap_patch.py'
+      - 'deployment/jayuminton/admin_finish_alert_v12_patch.py'
+      - 'deployment/jayuminton/admin_native_tts3_patch.py'
+      - 'deployment/jayuminton/admin_native_audio_focus_patch.py'
       - '.github/workflows/build-v2006-md-clean-final.yml'
 permissions:
   contents: write
@@ -57,6 +61,8 @@ jobs:
           python3 deployment/jayuminton/admin_md_bulk_delete_autosync_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_card_timer_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_self_alert_html_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_multigroup_swap_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_finish_alert_v12_patch.py "$RUNNER_TEMP/admin.html"
           grep -F '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'id="mdPublicMemo"' "$RUNNER_TEMP/admin.html" >/dev/null
@@ -71,6 +77,9 @@ jobs:
           grep -F 'JAYUMINTON_ADMIN_SELF_ALERT_HTML_V1' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'adminSelfAlertSettingButton' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'NativeMemberAlert.vibrateThreeByEight' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MULTIGROUP_SWAP_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_FINISH_ALERT_V19__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F "[text,text,text].join(' ... ')" "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '선택 멤버 삭제' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'setInterval(autoSyncAdmin,1500)' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'new 신규' "$RUNNER_TEMP/admin.html" >/dev/null
@@ -91,6 +100,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 deployment/jayuminton/admin_native_tts3_patch.py app/src/main/java/com/jayuminton/admin/MainActivity.java
+          python3 deployment/jayuminton/admin_native_audio_focus_patch.py app/src/main/java/com/jayuminton/admin/MainActivity.java
           python3 deployment/jayuminton/admin_native_self_alert_java_patch.py app/src/main/java/com/jayuminton/admin/MainActivity.java
           python3 - <<'PY'
           from pathlib import Path
@@ -102,7 +113,7 @@ jobs:
           s,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";', 'private static final String APK_WEB_BUILD = "2006-md5-cloudflare-audited";', s, count=1)
           if n!=1: raise SystemExit('APK_WEB_BUILD replacement failed')
           s=re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+','JayumintonNative/200.6 CloudflareAdmin/2006',s,count=1)
-          for needle in ('JAYUMINTON_ADMIN_SELF_ALERT_NATIVE_V1','NativeMemberAlert','vibrateThreeByEight()'):
+          for needle in ('JAYUMINTON_ADMIN_SELF_ALERT_NATIVE_V1','NativeMemberAlert','vibrateThreeByEight()','VOICE_REPEAT_COUNT = 3','AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK'):
             if needle not in s: raise SystemExit('native self-alert contract missing: '+needle)
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
@@ -138,6 +149,8 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'JAYUMINTON_ADMIN_SELF_ALERT_HTML_V1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MULTIGROUP_SWAP_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_FINISH_ALERT_V19__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'adminSelfAlertSettingButton' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="mdPublicMemo"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="mdIsNew"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
