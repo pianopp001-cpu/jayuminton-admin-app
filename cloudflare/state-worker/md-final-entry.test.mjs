@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const finalEntry = fs.readFileSync(new URL('./worker-md-final-entry.js', import.meta.url), 'utf8');
 const compatEntry = fs.readFileSync(new URL('./worker-md-compat-entry.js', import.meta.url), 'utf8');
 const mdEntry = fs.readFileSync(new URL('./worker-md-entry.js', import.meta.url), 'utf8');
+const schema = fs.readFileSync(new URL('./schema.sql', import.meta.url), 'utf8');
 const wrangler = fs.readFileSync(new URL('./wrangler.toml.template', import.meta.url), 'utf8');
 
 for (const name of ['memberRequestWaitSwap','memberGetWaitSwapRequest','memberRespondWaitSwap']) {
@@ -18,7 +19,10 @@ for (const name of ['assignWaitGroupToCourt','autoFillCourt','autoFillWaitGroup'
   assert.ok(compatEntry.includes(name), `missing admin compat RPC: ${name}`);
 }
 assert.ok(mdEntry.includes('pair_stats'), 'D1 pair statistics missing');
+assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS pair_stats'), 'pair_stats missing from persistent schema');
 assert.ok(mdEntry.includes("body.action === 'autoAssign'"), 'MD autoAssign entry missing');
 assert.ok(mdEntry.includes("body.name === 'getPairStatistics'"), 'pair statistics compat RPC missing');
+assert.ok(mdEntry.includes('pool.length <= free'), 'MD last-remainder autoassign rule missing');
+assert.ok(mdEntry.includes('[[2, 2], [4, 0], [0, 4]]'), 'MD doubles composition rules missing');
 
 console.log('MD_FINAL_ENTRY_CONTRACT_OK');
