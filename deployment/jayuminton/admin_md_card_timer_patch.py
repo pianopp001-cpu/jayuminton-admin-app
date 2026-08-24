@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
+import subprocess, sys
 
 if len(sys.argv) != 2:
     raise SystemExit('usage: admin_md_card_timer_patch.py INDEX_HTML')
 path=Path(sys.argv[1])
 html=path.read_text(encoding='utf-8')
 marker='__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__'
-if marker in html:
-    raise SystemExit(0)
-addon=r'''
+if marker not in html:
+    addon=r'''
 <style id="jayuminton-admin-md-card-timer-v1">
 .member-md-badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:2px;font-size:10px;font-weight:900}
 .member-md-badge{display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:999px;background:rgba(255,255,255,.72)}
@@ -73,9 +72,16 @@ addon=r'''
 </script>
 <!-- __JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__ -->
 '''
-if '</body>' not in html: raise SystemExit('body missing')
-html=html.replace('</body>',addon+'\n</body>',1)
-for req in (marker,'new 신규','🎁 찬조','member.publicMemo','!member.isNew','group.length>0&&!STATE.courtStartedAt[no]'):
-    if req not in html: raise SystemExit('missing '+req)
-path.write_text(html,encoding='utf-8')
-print('ADMIN_MD_CARD_TIMER_V1_OK')
+    if '</body>' not in html: raise SystemExit('body missing')
+    html=html.replace('</body>',addon+'\n</body>',1)
+    for req in (marker,'new 신규','🎁 찬조','member.publicMemo','!member.isNew','group.length>0&&!STATE.courtStartedAt[no]'):
+        if req not in html: raise SystemExit('missing '+req)
+    path.write_text(html,encoding='utf-8')
+
+helper=Path(__file__).with_name('admin_md_member_fields_patch.py')
+if not helper.exists(): raise SystemExit('member fields helper missing')
+subprocess.run([sys.executable,str(helper),str(path)],check=True)
+final=path.read_text(encoding='utf-8')
+for req in ('__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__','__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__','id="mdPublicMemo"','id="mdIsNew"','id="mdIsSponsor"',"server('getPairStatistics',[ADMIN_PIN_VALUE])"):
+    if req not in final: raise SystemExit('final admin MD chain missing '+req)
+print('ADMIN_MD_CARD_TIMER_AND_MEMBER_FIELDS_OK')
