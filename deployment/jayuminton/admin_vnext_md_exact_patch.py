@@ -47,7 +47,7 @@ admin = re.sub(
 # Long-press actions: exact six controls from the MD.
 bar_pat = re.compile(r'<div\s+id=["\']quickMoveBar["\'][^>]*>.*?</div>', re.S | re.I)
 bar_html = '''<div id="quickMoveBar" class="quick-move-bar hidden" aria-label="길게 누른 멤버 관리">
-    <button type="button" onclick="setLongPressedMemberStatus('active')">배정대기로</button>
+    <button type="button" onclick="setLongPressedMemberStatus('active')">코트배정</button>
     <button type="button" onclick="setLongPressedMemberStatus('before')">도착전</button>
     <button type="button" onclick="setLongPressedMemberStatus('rest')">휴식</button>
     <button type="button" onclick="setLongPressedMemberStatus('away')">귀가</button>
@@ -58,6 +58,16 @@ if bar_pat.search(admin):
     admin = bar_pat.sub(bar_html, admin, count=1)
 else:
     raise SystemExit('quickMoveBar missing')
+
+# Keep the six multi-card actions on one compact line. On narrow screens the
+# row scrolls horizontally instead of wrapping over the page title.
+action_style = '''<style id="jayuminton-admin-multi-card-actions-v2">
+#quickMoveBar.quick-move-bar{display:flex!important;flex-wrap:nowrap!important;align-items:center!important;gap:5px!important;overflow-x:auto!important;max-width:100%!important;padding:6px!important}
+#quickMoveBar.quick-move-bar.hidden{display:none!important}
+#quickMoveBar.quick-move-bar>button{flex:0 0 auto!important;min-width:58px!important;min-height:34px!important;height:34px!important;margin:0!important;padding:5px 9px!important;font-size:12px!important;line-height:1!important;white-space:nowrap!important}
+</style>'''
+if 'jayuminton-admin-multi-card-actions-v2' not in admin:
+    admin = admin.replace('</body>', action_style + '\n</body>', 1)
 
 if MARKER not in admin:
     admin = admin.replace('</body>', '<!-- ' + MARKER + ' -->\n</body>', 1)
@@ -135,7 +145,7 @@ for required in (
     'id="newIsNew"', 'id="newIsSponsor"', '전체 0 · 남 0 · 여 0',
     "setLongPressedMemberStatus('active')", "setLongPressedMemberStatus('before')",
     "setLongPressedMemberStatus('rest')", "setLongPressedMemberStatus('away')",
-    'deleteLongPressedMembers()', '>취소</button>', MARKER,
+    'deleteLongPressedMembers()', '>코트배정</button>', '>취소</button>', 'jayuminton-admin-multi-card-actions-v2', MARKER,
 ):
     if required not in admin:
         raise SystemExit('MD exact admin marker missing: ' + required)
