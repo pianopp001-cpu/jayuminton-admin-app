@@ -6,11 +6,17 @@ const source = fs.readFileSync(new URL('./cloudflare_v6_frontend_bridge.js', imp
 
 async function run({ admin, stored, name, args }) {
   let request;
-  const localStorage = { getItem(key) { return stored[key] || ''; } };
+  const localStorage = {
+    getItem(key) { return stored[key] || ''; },
+    setItem(key, value) { stored[key] = String(value); },
+    removeItem(key) { delete stored[key]; },
+  };
   const context = {
     IS_ADMIN: admin,
     localStorage,
     window: {},
+    document: { readyState: 'loading', addEventListener() {} },
+    setTimeout,
     fetch: async (_url, options) => {
       request = options;
       return { json: async () => ({ ok: true, result: { ok: true } }) };
