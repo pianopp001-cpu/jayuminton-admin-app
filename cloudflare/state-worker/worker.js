@@ -557,14 +557,19 @@ export async function legacyRpc(request, env, name, args) {
     return packet.state || packet;
   }
 
-  const memberNames = new Set(['memberMoveSelf','memberReturnSelfToWait','memberMoveToWaitGroup','memberLeaveWaitGroup','memberRequestAnywhereSwap','memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap','memberCancelAnywhereSwap','memberAcceptAnywhereSwap','memberRejectAnywhereSwap']);
+  const memberNames = new Set(['updateMyProfile','memberMoveSelf','memberReturnSelfToWait','memberMoveToWaitGroup','memberLeaveWaitGroup','memberRequestAnywhereSwap','memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap','memberCancelAnywhereSwap','memberAcceptAnywhereSwap','memberRejectAnywhereSwap']);
   if (memberNames.has(name)) {
     const session = await verifyMemberSession(bearerRequest(request, token), env, state); const memberId = String(session.memberId || values[1] || '');
     if (!memberId || (values[1] && String(values[1]) !== memberId)) throw new Error('member_identity_required');
     if (name === 'memberGetAnywhereSwapRequest') return latestSwap(state, r => r.targetId === memberId);
     if (name === 'memberGetAnywhereOutgoingSwap') return latestSwap(state, r => r.requesterId === memberId);
     let action; const body = { operationId: `${name}-${Date.now()}-${crypto.randomUUID()}` };
-    if (name === 'memberMoveSelf') {
+    if (name === 'updateMyProfile') {
+      const currentMember = state.members.find(m => String(m.id) === memberId);
+      if (!currentMember) throw new Error('member_not_found');
+      const nextMemo = String(values[2] || '').trim().slice(0, 120);
+      action = 'upsertMember'; body.member = { ...currentMember, id: memberId, publicMemo: nextMemo };
+    } else if (name === 'memberMoveSelf') {
       const destination = values[2] || {};
       if (destination.type === 'status') { action = 'setMemberStatus'; body.memberIds = [memberId]; body.status = destination.status; }
       else { action = 'moveMembers'; body.memberIds = [memberId]; body.destination = destination; }
