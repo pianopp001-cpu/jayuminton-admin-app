@@ -10,6 +10,15 @@ const HEADERS = {
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:HEADERS});
 const uniq=(xs)=>[...new Set((Array.isArray(xs)?xs:[]).map(String).filter(Boolean))];
 
+// Partial admin swaps are selected from a UI snapshot. A member may move themself
+// before the administrator submits. Only IDs that are still in the expected
+// source group at execution time are eligible, so a stale admin selection can
+// never pull a user's newer self-move back or duplicate that member elsewhere.
+export function liveIdsInGroup(group,requested){
+  const present=new Set((Array.isArray(group)?group:[]).map(String));
+  return uniq(requested).filter(id=>present.has(id));
+}
+
 function syncStatuses(state){
   const playing=new Set(Object.values(state.courts||{}).flat().map(String));
   const waiting=new Set((state.waitGroups||[]).flat().map(String));
@@ -78,9 +87,11 @@ export class StateCoordinator extends BaseStateCoordinator{
             [state.courts[ka],state.courts[kb]]=[state.courts[kb]||[],state.courts[ka]||[]];
             [state.courtStartedAt[ka],state.courtStartedAt[kb]]=[state.courtStartedAt[kb]||'',state.courtStartedAt[ka]||''];
           }else{
-            const idsA=uniq(body.idsA), idsB=uniq(body.idsB);
-            const ga=(state.courts[ka]||[]).filter(id=>!idsA.includes(String(id)));
-            const gb=(state.courts[kb]||[]).filter(id=>!idsB.includes(String(id)));
+            const sourceA=(state.courts[ka]||[]).map(String);
+            const sourceB=(state.courts[kb]||[]).map(String);
+            const idsA=liveIdsInGroup(sourceA,body.idsA), idsB=liveIdsInGroup(sourceB,body.idsB);
+            const ga=sourceA.filter(id=>!idsA.includes(id));
+            const gb=sourceB.filter(id=>!idsB.includes(id));
             if(ga.length+idsB.length>4||gb.length+idsA.length>4)throw new Error('location_full');
             state.courts[ka]=ga.concat(idsB);
             state.courts[kb]=gb.concat(idsA);
@@ -94,9 +105,11 @@ export class StateCoordinator extends BaseStateCoordinator{
           if(action==='mdSwapLocations'){
             [state.waitGroups[a],state.waitGroups[b]]=[state.waitGroups[b]||[],state.waitGroups[a]||[]];
           }else{
-            const idsA=uniq(body.idsA), idsB=uniq(body.idsB);
-            const ga=(state.waitGroups[a]||[]).filter(id=>!idsA.includes(String(id)));
-            const gb=(state.waitGroups[b]||[]).filter(id=>!idsB.includes(String(id)));
+            const sourceA=(state.waitGroups[a]||[]).map(String);
+            const sourceB=(state.waitGroups[b]||[]).map(String);
+            const idsA=liveIdsInGroup(sourceA,body.idsA), idsB=liveIdsInGroup(sourceB,body.idsB);
+            const ga=sourceA.filter(id=>!idsA.includes(id));
+            const gb=sourceB.filter(id=>!idsB.includes(id));
             if(ga.length+idsB.length>4||gb.length+idsA.length>4)throw new Error('location_full');
             state.waitGroups[a]=ga.concat(idsB);
             state.waitGroups[b]=gb.concat(idsA);
