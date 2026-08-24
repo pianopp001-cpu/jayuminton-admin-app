@@ -1,0 +1,8 @@
+2026-08-25 Cloudflare-only redeploy trigger
+Purpose:
+- redeploy Cloudflare state worker/D1 path
+- rebuild bundled Cloudflare-direct admin APK using admin_cloudflare_post_contract_patch.py V24
+- verify admin saving lock blocks non-voice controls
+- keep voice controls usable while saving
+- render publicMemo on admin cards
+- no Google Apps Script deployment
