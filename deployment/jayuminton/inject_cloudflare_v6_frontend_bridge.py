@@ -198,8 +198,11 @@ new_game_panel = '''    <div class="card admin-game-count-panel" style="box-shad
         <button type="button" onclick="applyMdSelectedStatus('before')">도착전</button>
         <button type="button" onclick="applyMdSelectedStatus('rest')">휴식</button>
         <button type="button" onclick="applyMdSelectedStatus('away')">귀가</button>
-        <button type="button" onclick="setMdSelectedTeam()">같은 팀</button>
         <button id="mdBulkDeleteButton" class="danger" type="button" onclick="deleteMdSelectedMembers()" disabled>삭제</button>
+      </div>
+      <div class="md-team-member-actions">
+        <button type="button" onclick="setMdSelectedTeam()">같은 팀 설정</button>
+        <button type="button" onclick="clearMdSelectedTeam()">팀 해제</button>
       </div>
       <span id="mdBulkDeleteCount" class="meta">0명 선택</span>
     </div>'''
@@ -262,19 +265,31 @@ management_patch = r'''
 .admin-setup-details[open]>summary{background:#eaf1ff!important;border-color:#315efb!important;color:#1746b0!important}
 #newPublicMemo{min-width:220px;min-height:52px;resize:vertical}
 .md-game-actions{align-items:center!important}
-.md-bulk-member-actions{display:flex!important;flex-flow:row nowrap!important;gap:5px!important;overflow-x:auto!important;padding:4px 0 6px!important;scrollbar-width:thin}
-.md-bulk-member-actions button{flex:1 0 auto!important;min-width:72px!important;min-height:38px!important;padding:6px 8px!important;white-space:nowrap!important;font-size:11px!important;font-weight:900!important}
+.md-bulk-member-actions{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:5px!important;width:100%!important;overflow:visible!important;padding:4px 0 6px!important}
+.md-bulk-member-actions button{width:100%!important;min-width:0!important;min-height:38px!important;padding:6px 4px!important;white-space:normal!important;line-height:1.15!important;font-size:11px!important;font-weight:900!important}
+.md-team-member-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:5px!important;width:100%!important;margin-top:5px!important;overflow:visible!important}
+.md-team-member-actions button{width:100%!important;min-width:0!important;min-height:38px!important;padding:6px 4px!important;white-space:normal!important;font-size:11px!important;font-weight:950!important;color:#1d4ed8!important;border-color:#93b4ff!important;background:#eef4ff!important}
 .md-bulk-member-actions .danger{background:#c62828!important;color:#fff!important;border-color:#c62828!important}
 #quickMemberMessageButton{min-height:34px;padding:6px 10px;border-radius:10px;background:#315efb;color:#fff;border:1px solid #315efb;font-size:11px;font-weight:900;white-space:nowrap}
 .quick-message-modal{position:fixed;z-index:2147483500;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.55)}
 .quick-message-modal.hidden{display:none!important}.quick-message-card{width:min(92vw,480px);padding:16px;border-radius:16px;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .quick-message-card h3{margin:0 0 8px}.quick-message-card textarea{width:100%;box-sizing:border-box;min-height:110px;resize:vertical}.quick-message-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:10px}.quick-message-actions button{min-height:40px;padding:8px 14px;font-weight:900}.quick-message-send{background:#315efb!important;color:#fff!important;border-color:#315efb!important}
+.pair-statistics-list{overflow-y:auto!important;overflow-x:hidden!important;max-height:calc(86vh - 90px)!important}
+.pair-statistics-disclosure{display:block!important;width:100%!important;box-sizing:border-box!important;margin:0 0 7px!important;border:1px solid #dce2ee!important;border-radius:11px!important;background:#fff!important;overflow:visible!important}
+.pair-statistics-disclosure>summary{display:block!important;position:relative!important;padding:9px 34px 9px 10px!important;cursor:pointer!important;list-style:none!important;overflow:visible!important}
+.pair-statistics-disclosure>summary::-webkit-details-marker{display:none!important}
+.pair-statistics-disclosure>summary:after{content:'펼치기';position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:900;color:#315efb}
+.pair-statistics-disclosure[open]>summary:after{content:'접기'}
+.pair-statistics-disclosure .pair-statistics-head,.pair-statistics-disclosure .md-pair-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;min-width:0!important;font-size:12px!important;line-height:1.35!important;white-space:normal!important;overflow:visible!important}
+.pair-statistics-disclosure .pair-statistics-name,.pair-statistics-disclosure .md-pair-head span:first-child{min-width:0!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
+.pair-statistics-disclosure .pair-statistics-partners,.pair-statistics-disclosure .md-pair-partners{display:flex!important;flex-wrap:wrap!important;gap:5px!important;max-height:none!important;height:auto!important;padding:0 10px 10px!important;margin:0!important;white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important;word-break:keep-all!important;font-size:11px!important;line-height:1.5!important}
+.pair-statistics-disclosure .pair-statistics-chip{display:inline-flex!important;max-width:100%!important;white-space:normal!important;overflow-wrap:anywhere!important}
 #adminApp .member.male,#adminApp .person.male,#adminApp .quick-member.male{background:#e4f1ff!important;color:#0756b6!important;font-weight:900!important}
 #adminApp .member.female,#adminApp .person.female,#adminApp .quick-member.female{background:#ffe7f0!important;color:#c51b4f!important;font-weight:900!important}
 #adminApp .member .name,#adminApp .person .name,#adminApp .quick-member-name{font-weight:950!important}
 #adminApp .has-member-team{position:relative!important;box-shadow:inset 5px 0 0 var(--member-team-color)!important;padding-left:10px!important}
 #adminApp .member-team-badge{display:inline-flex!important;align-items:center!important;max-width:96px!important;margin-left:5px!important;padding:2px 6px!important;border:1px solid var(--member-team-color)!important;border-radius:999px!important;background:#fff!important;color:var(--member-team-color)!important;font-size:10px!important;font-weight:950!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;vertical-align:middle!important}
-@media(max-width:620px){.admin-setup-details>summary{width:100%!important;box-sizing:border-box!important;justify-content:center!important}.admin-panel{padding:10px!important}.admin-panel h2{font-size:15px!important}.md-game-actions{gap:5px!important}.md-game-actions button{font-size:10px!important;padding:5px 7px!important}.md-bulk-member-actions button{min-width:64px!important;font-size:10px!important;padding:5px!important}}
+@media(max-width:620px){.admin-setup-details>summary{width:100%!important;box-sizing:border-box!important;justify-content:center!important}.admin-panel{padding:10px!important}.admin-panel h2{font-size:15px!important}.md-game-actions{gap:5px!important}.md-game-actions button{font-size:10px!important;padding:5px 7px!important}.md-bulk-member-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important}.md-bulk-member-actions button{min-width:0!important;font-size:10px!important;padding:5px 2px!important}}
 </style>
 <style id="jayuminton-announcement-controls-v2021">
 .court-voice-controls{display:flex!important;flex-wrap:wrap!important;gap:6px!important}
@@ -299,6 +314,25 @@ management_patch = r'''
     <div class="quick-message-actions"><button type="button" onclick="closeQuickMemberMessage()">취소</button><button class="quick-message-send" type="button" onclick="sendQuickMemberMessage()">전송</button></div>
   </div>
 </div>
+<script id="jayuminton-pair-statistics-disclosure-v2028">
+(function(){
+  'use strict';
+  function upgrade(root){
+    (root||document).querySelectorAll('.pair-statistics-row:not([data-jm-disclosure-ready])').forEach(function(row){
+      row.setAttribute('data-jm-disclosure-ready','1');
+      var head=row.querySelector('.pair-statistics-head,.md-pair-head');
+      var partners=row.querySelector('.pair-statistics-partners,.md-pair-partners');
+      if(!head||!partners)return;
+      var details=document.createElement('details');details.className='pair-statistics-disclosure';
+      var summary=document.createElement('summary');summary.appendChild(head);
+      details.appendChild(summary);details.appendChild(partners);row.replaceWith(details);
+    });
+  }
+  var observer=new MutationObserver(function(records){records.forEach(function(record){record.addedNodes.forEach(function(node){if(node.nodeType===1)upgrade(node);});});});
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',function(){upgrade(document);},{once:true});upgrade(document);
+})();
+</script>
 <script id="jayuminton-admin-member-management-v202-script">
 (function(){
   'use strict';
@@ -310,7 +344,15 @@ management_patch = r'''
   window.setMdSelectedTeam=function(){
     var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
     if(ids.length<2){alert('같은 팀으로 묶을 멤버를 2명 이상 선택해 주세요.');return;}
+    var occupied={};try{Object.values(STATE.courts||{}).flat().concat((STATE.waitGroups||[]).flat()).forEach(function(id){occupied[String(id)]=true;});}catch(e){}
+    var invalid=[];try{invalid=(STATE.members||[]).filter(function(m){return ids.indexOf(String(m.id))>=0&&(occupied[String(m.id)]||String(m.status||'active')!=='active');});}catch(e){}
+    if(invalid.length){alert('같은 팀은 코트배정 대기에 있는 멤버만 설정할 수 있습니다.');return;}
     return runAction('setBundle',[ADMIN_PIN_VALUE,ids]);
+  };
+  window.clearMdSelectedTeam=function(){
+    var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
+    if(!ids.length){alert('팀을 해제할 멤버 카드를 선택해 주세요.');return;}
+    return runAction('clearBundle',[ADMIN_PIN_VALUE,ids]);
   };
   window.openQuickMemberMessage=function(){
     var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
@@ -447,8 +489,15 @@ for required_voice_marker in [
     'id="newIsDuplicate"',
     'function usesAdminFullName(member)',
     'window.setMdSelectedTeam=function()',
+    'window.clearMdSelectedTeam=function()',
+    '>같은 팀 설정</button>',
+    '>팀 해제</button>',
     'id="quickMemberMessageButton"',
     'window.sendQuickMemberMessage=async function()',
+    'id="jayuminton-pair-statistics-disclosure-v2028"',
+    "details.className='pair-statistics-disclosure'",
+    'function resumeSavedSession()',
+    'resumeSavedSession();',
     "event.target.closest('#voiceSaveEmergency')",
 ]:
     if required_voice_marker not in html:
