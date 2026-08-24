@@ -280,7 +280,7 @@ management_patch = r'''
 .court-voice-controls{display:flex!important;flex-wrap:wrap!important;gap:6px!important}
 .court-voice-controls button{white-space:nowrap!important}
 #announcementMuteButton.is-muted,#emergencyAnnouncementMuteButton.is-muted{background:#9f1239!important;border-color:#9f1239!important;color:#fff!important}
-.admin-save-notice{z-index:2147483600!important;background:rgba(15,23,42,.38)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;cursor:wait!important;contain:strict!important}
+.admin-save-notice{z-index:2147483600!important;background:rgba(15,23,42,.20)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;cursor:wait!important;contain:strict!important}
 .voice-save-emergency{position:fixed;z-index:2147483647;top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:8px;padding:8px;border-radius:12px;background:#fff;border:2px solid #1d4ed8;box-shadow:0 8px 30px rgba(0,0,0,.35);pointer-events:auto!important;filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 .voice-save-emergency.is-visible{display:flex!important}
 .voice-save-emergency button{min-height:42px;padding:8px 12px;border-radius:9px;font-weight:900;white-space:nowrap}
@@ -377,7 +377,7 @@ management_patch = r'''
   function syncEmergencyVoiceControls(){
     var controls=document.getElementById('voiceSaveEmergency');
     if(!controls)return;
-    controls.classList.toggle('is-visible',isSaveOverlayVisible()&&isAnnouncementActive());
+    controls.classList.toggle('is-visible',isSaveOverlayVisible());
     updateAnnouncementMuteButtons();
   }
   function syncSaveInteractionLock(){
@@ -439,7 +439,7 @@ for required_voice_marker in [
     'id="announcementMuteButton"',
     'id="voiceSaveEmergency"',
     'function(){\n    var shouldMute=VOICE_GUIDE_ENABLED;',
-    "controls.classList.toggle('is-visible',isSaveOverlayVisible()&&isAnnouncementActive())",
+    "controls.classList.toggle('is-visible',isSaveOverlayVisible())",
     "result.reason='muted';result.engine='muted'",
     'backdrop-filter:none!important',
     "if(locked)app.setAttribute('inert','')",
