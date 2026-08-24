@@ -59,7 +59,7 @@ jobs:
           grep -F 'id="announcementMuteButton"' "$HTML" >/dev/null
           grep -F 'id="voiceSaveEmergency"' "$HTML" >/dev/null
           grep -F "stopVoiceAnnouncement();" "$HTML" >/dev/null
-          grep -F ".admin-save-notice{z-index:2147483600!important}" "$HTML" >/dev/null
+          grep -F '.admin-save-notice{z-index:2147483600!important;background:' "$HTML" >/dev/null
           grep -F 'backdrop-filter:none!important' "$HTML" >/dev/null
           grep -F 'animation:jm-save-progress 1.05s ease-in-out infinite' "$HTML" >/dev/null
           grep -F "if(locked)app.setAttribute('inert','')" "$HTML" >/dev/null
