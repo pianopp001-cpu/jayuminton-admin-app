@@ -10,6 +10,9 @@ NATIVE_SYNC_MARKER = "JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2"
 AUTO_SYNC_MARKER = "JAYUMINTON_MEMBER_REVISION_AUTOSYNC_V1"
 TEAM_STATUS_MARKER = "JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1"
 MEMBER_MESSAGE_MARKER = "JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1"
+SELF_PROFILE_MARKER = "JAYUMINTON_MEMBER_SELF_PROFILE_EDIT_V1"
+TEAM_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2"
+SELF_MEMO_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2"
 
 ADDON = r'''
 <script>
@@ -290,7 +293,6 @@ TEAM_STATUS_ADDON = r'''
 .jm-member-badges{display:inline-flex;flex-wrap:wrap;gap:3px;margin-left:5px;vertical-align:middle}
 .jm-member-badge{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;background:#fff;font-size:10px;font-weight:900;line-height:1.3;white-space:nowrap}
 .jm-team-badge{border:1px solid var(--jm-team-color);color:var(--jm-team-color)}
-.jm-status-badge{border:1px solid #64748b;color:#334155}
 </style>
 <script>
 /* JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1 */
@@ -300,7 +302,6 @@ TEAM_STATUS_ADDON = r'''
   var scheduled=false;
   function state(){try{return window.STATE||(typeof STATE!=='undefined'?STATE:null);}catch(e){return null;}}
   function color(value){var p=['#5b21b6','#0f766e','#b45309','#0369a1','#be123c','#4338ca','#15803d','#a21caf'],h=0;String(value||'').split('').forEach(function(c){h=((h*31)+c.charCodeAt(0))>>>0;});return p[h%p.length];}
-  function statusText(value){return {active:'코트배정대기',before:'도착전',rest:'휴식',away:'귀가',waiting:'대기',playing:'경기중'}[String(value||'')]||'';}
   function decorate(){
     scheduled=false;var s=state();if(!s||!Array.isArray(s.members))return;
     var map={};s.members.forEach(function(m){map[String(m.id)]=m;});
@@ -308,8 +309,8 @@ TEAM_STATUS_ADDON = r'''
       var member=map[String(card.getAttribute('data-member-id')||'')];if(!member)return;
       var host=card.querySelector('.name,.member-name,.quick-member-name')||card;
       var wrap=card.querySelector('.jm-member-badges');if(!wrap){wrap=document.createElement('span');wrap.className='jm-member-badges';host.insertAdjacentElement('afterend',wrap);}
-      var team=String(member.teamLabel||'').trim(),status=statusText(member.status);
-      var next=(team?'<span class="jm-member-badge jm-team-badge" style="--jm-team-color:'+color(team)+'">'+team.replace(/[&<>]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[x];})+'</span>':'')+(status?'<span class="jm-member-badge jm-status-badge">'+status+'</span>':'');
+      var team=String(member.teamLabel||'').trim();
+      var next=team?'<span class="jm-member-badge jm-team-badge" style="--jm-team-color:'+color(team)+'">'+team.replace(/[&<>]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[x];})+'</span>':'';
       if(wrap.innerHTML!==next)wrap.innerHTML=next;
       wrap.hidden=!wrap.innerHTML;
     });
@@ -319,6 +320,48 @@ TEAM_STATUS_ADDON = r'''
   document.addEventListener('DOMContentLoaded',schedule,{once:true});
   document.addEventListener('click',function(){setTimeout(schedule,80);},true);
   setInterval(schedule,1800);schedule();
+})();
+</script>
+'''
+
+SELF_PROFILE_ADDON = r'''
+<style id="jayuminton-member-self-profile-edit-v1">
+.jm-self-edit{display:inline-flex;margin-left:5px;padding:3px 7px;border-radius:8px;background:#315efb;color:#fff;font-size:10px;font-weight:900;cursor:pointer;vertical-align:middle}.jm-public-memo{display:block;margin-top:4px;font-size:11px;font-weight:750;color:#475569;white-space:normal;word-break:break-word}
+#jmSelfProfileModal{position:fixed;z-index:2147483646;inset:0;display:flex;align-items:center;justify-content:center;padding:14px;background:rgba(15,23,42,.58)}#jmSelfProfileModal.hidden{display:none!important}.jm-self-profile-card{width:min(92vw,440px);padding:17px;border-radius:16px;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.4)}.jm-self-profile-card h2{margin:0 0 10px}.jm-self-profile-card input,.jm-self-profile-card textarea{width:100%;box-sizing:border-box;margin-top:8px}.jm-self-profile-card textarea{min-height:92px;resize:vertical}.jm-self-profile-help{margin:7px 0;font-size:11px;color:#64748b}.jm-self-profile-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:10px}.jm-self-profile-actions button{min-height:40px;padding:8px 14px;font-weight:900}.jm-self-profile-save{background:#315efb!important;color:#fff!important;border-color:#315efb!important}
+</style>
+<div id="jmSelfProfileModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="jmSelfProfileTitle"><div class="jm-self-profile-card"><h2 id="jmSelfProfileTitle">내 카드 메모 수정</h2><textarea id="jmSelfProfileMemo" maxlength="120" placeholder="카드에 표시할 메모 (선택)"></textarea><p class="jm-self-profile-help">이름·닉네임·구력·급수·성별·신규·팀 설정은 관리자만 수정할 수 있습니다.</p><div class="jm-self-profile-actions"><button type="button" onclick="closeJmSelfProfile()">취소</button><button class="jm-self-profile-save" type="button" onclick="saveJmSelfProfile()">저장</button></div></div></div>
+<script>
+/* JAYUMINTON_MEMBER_SELF_PROFILE_EDIT_V1 */
+(function installMemberSelfProfileEditV1(){
+  if(window.__JAYUMINTON_MEMBER_SELF_PROFILE_EDIT_V1__)return;window.__JAYUMINTON_MEMBER_SELF_PROFILE_EDIT_V1__=true;var scheduled=false;
+  function me(){try{return typeof selectedWebPushMember==='function'?selectedWebPushMember():null;}catch(e){return null;}}
+  function state(){try{return window.STATE||(typeof STATE!=='undefined'?STATE:null);}catch(e){return null;}}
+  function current(){var selected=me(),s=state();if(!selected||!s||!Array.isArray(s.members))return null;return s.members.find(function(m){return String(m.id)===String(selected.id);})||selected;}
+  window.openJmSelfProfile=function(event){if(event){event.preventDefault();event.stopPropagation();}var member=current();if(!member)return;var memo=document.getElementById('jmSelfProfileMemo'),modal=document.getElementById('jmSelfProfileModal');if(memo)memo.value=String(member.publicMemo||'');if(modal)modal.classList.remove('hidden');setTimeout(function(){if(memo)memo.focus();},50);};
+  window.closeJmSelfProfile=function(){var modal=document.getElementById('jmSelfProfileModal');if(modal)modal.classList.add('hidden');};
+  window.saveJmSelfProfile=async function(){var member=current(),memo=String(document.getElementById('jmSelfProfileMemo')&&document.getElementById('jmSelfProfileMemo').value||'').trim();if(!member)return;try{await server('updateMyProfile',[String(member.id),memo]);closeJmSelfProfile();if(typeof refreshMemberState==='function')await refreshMemberState();}catch(error){alert(error&&error.message?error.message:error);}};
+  function decorate(){scheduled=false;var member=current();if(!member)return;document.querySelectorAll('[data-member-id="'+String(member.id).replace(/"/g,'')+'"]').forEach(function(card){var host=card.querySelector('.name,.member-name,.quick-member-name')||card;if(!card.querySelector('.jm-self-edit')){var edit=document.createElement('span');edit.className='jm-self-edit';edit.textContent='카드 메모 수정';edit.setAttribute('role','button');edit.onclick=openJmSelfProfile;host.insertAdjacentElement('afterend',edit);}var old=card.querySelector('.jm-public-memo'),memo=String(member.publicMemo||'').trim();if(memo&&!old){old=document.createElement('span');old.className='jm-public-memo';card.appendChild(old);}if(old){if(old.textContent!==memo)old.textContent=memo;old.hidden=!memo;}});}
+  function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(decorate);}new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});setInterval(schedule,1800);document.addEventListener('DOMContentLoaded',schedule,{once:true});schedule();
+})();
+</script>
+'''
+
+TEAM_ONLY_V2_ADDON = r'''
+<style id="jayuminton-member-team-only-badges-v2">
+/* JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2 */
+.jm-status-badge{display:none!important}
+</style>
+'''
+
+SELF_MEMO_ONLY_V2_ADDON = r'''
+<script>
+/* JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2 */
+(function installMemberSelfMemoOnlyV2(){
+  function current(){try{var selected=typeof selectedWebPushMember==='function'?selectedWebPushMember():null,s=window.STATE||(typeof STATE!=='undefined'?STATE:null);return selected&&s&&Array.isArray(s.members)?s.members.find(function(m){return String(m.id)===String(selected.id);})||selected:null;}catch(e){return null;}}
+  function normalize(){var modal=document.getElementById('jmSelfProfileModal');if(!modal)return;var name=document.getElementById('jmSelfProfileName');if(name)name.remove();var title=document.getElementById('jmSelfProfileTitle'),titleText='내 카드 메모 수정';if(title&&title.textContent!==titleText)title.textContent=titleText;var help=modal.querySelector('.jm-self-profile-help'),helpText='이름·닉네임·구력·급수·성별·신규·팀 설정은 관리자만 수정할 수 있습니다.';if(help&&help.textContent!==helpText)help.textContent=helpText;document.querySelectorAll('.jm-self-edit').forEach(function(x){if(x.textContent!=='카드 메모 수정')x.textContent='카드 메모 수정';});}
+  window.openJmSelfProfile=function(event){if(event){event.preventDefault();event.stopPropagation();}var member=current(),memo=document.getElementById('jmSelfProfileMemo'),modal=document.getElementById('jmSelfProfileModal');if(!member||!modal)return;normalize();if(memo)memo.value=String(member.publicMemo||'');modal.classList.remove('hidden');setTimeout(function(){if(memo)memo.focus();},30);};
+  window.saveJmSelfProfile=async function(){var member=current(),memo=String(document.getElementById('jmSelfProfileMemo')&&document.getElementById('jmSelfProfileMemo').value||'').trim();if(!member)return;try{await server('updateMyProfile',[String(member.id),memo]);closeJmSelfProfile();if(typeof refreshMemberState==='function')await refreshMemberState();}catch(error){alert(error&&error.message?error.message:error);}};
+  new MutationObserver(normalize).observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('DOMContentLoaded',normalize,{once:true});normalize();
 })();
 </script>
 '''
@@ -398,7 +441,7 @@ def assert_auto_sync_contract(text: str) -> None:
 
 
 def assert_team_status_contract(text: str) -> None:
-    for needle in [TEAM_STATUS_MARKER, "member.teamLabel", "active:'코트배정대기'", "jm-team-badge", "jm-status-badge"]:
+    for needle in [TEAM_STATUS_MARKER, "member.teamLabel", "jm-team-badge"]:
         if needle not in text:
             raise SystemExit(f"member team/status contract missing: {needle}")
 
@@ -407,6 +450,12 @@ def assert_member_message_contract(text: str) -> None:
     for needle in [MEMBER_MESSAGE_MARKER, "window.confirmJmDirectMessage=function()", "vibrationTimer=setInterval(vibrate,14500)", "JAYUMINTON_MEMBER_MESSAGE_ALERT", "navigator.vibrate(0)"]:
         if needle not in text:
             raise SystemExit(f"member direct-message contract missing: {needle}")
+
+
+def assert_self_profile_contract(text: str) -> None:
+    for needle in [SELF_PROFILE_MARKER, SELF_MEMO_ONLY_V2_MARKER, "server('updateMyProfile'", "카드에 표시할 메모", "이름·닉네임·구력·급수·성별·신규·팀 설정은 관리자만 수정"]:
+        if needle not in text:
+            raise SystemExit(f"member self-profile contract missing: {needle}")
 
 
 def patch(path: Path) -> None:
@@ -447,12 +496,19 @@ def patch(path: Path) -> None:
         text = text.replace(marker, TEAM_STATUS_ADDON + "\n" + marker, 1)
     if MEMBER_MESSAGE_MARKER not in text:
         text = text.replace(marker, MEMBER_MESSAGE_ADDON + "\n" + marker, 1)
+    if SELF_PROFILE_MARKER not in text:
+        text = text.replace(marker, SELF_PROFILE_ADDON + "\n" + marker, 1)
+    if TEAM_ONLY_V2_MARKER not in text:
+        text = text.replace(marker, TEAM_ONLY_V2_ADDON + "\n" + marker, 1)
+    if SELF_MEMO_ONLY_V2_MARKER not in text:
+        text = text.replace(marker, SELF_MEMO_ONLY_V2_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
     assert_auto_sync_contract(text)
     assert_team_status_contract(text)
     assert_member_message_contract(text)
+    assert_self_profile_contract(text)
     path.write_text(text, encoding="utf-8")
 
 
