@@ -8,6 +8,7 @@ import sys
 MARKER = "JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1"
 NATIVE_SYNC_MARKER = "JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2"
 AUTO_SYNC_MARKER = "JAYUMINTON_MEMBER_REVISION_AUTOSYNC_V1"
+TEAM_STATUS_MARKER = "JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1"
 
 ADDON = r'''
 <script>
@@ -283,6 +284,44 @@ AUTO_SYNC_ADDON = r'''
 </script>
 '''
 
+TEAM_STATUS_ADDON = r'''
+<style id="jayuminton-member-team-status-badges-v1">
+.jm-member-badges{display:inline-flex;flex-wrap:wrap;gap:3px;margin-left:5px;vertical-align:middle}
+.jm-member-badge{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;background:#fff;font-size:10px;font-weight:900;line-height:1.3;white-space:nowrap}
+.jm-team-badge{border:1px solid var(--jm-team-color);color:var(--jm-team-color)}
+.jm-status-badge{border:1px solid #64748b;color:#334155}
+</style>
+<script>
+/* JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1 */
+(function installMemberTeamStatusBadgesV1(){
+  if(window.__JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1__)return;
+  window.__JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1__=true;
+  var scheduled=false;
+  function state(){try{return window.STATE||(typeof STATE!=='undefined'?STATE:null);}catch(e){return null;}}
+  function color(value){var p=['#5b21b6','#0f766e','#b45309','#0369a1','#be123c','#4338ca','#15803d','#a21caf'],h=0;String(value||'').split('').forEach(function(c){h=((h*31)+c.charCodeAt(0))>>>0;});return p[h%p.length];}
+  function statusText(value){return {active:'코트배정대기',before:'도착전',rest:'휴식',away:'귀가',waiting:'대기',playing:'경기중'}[String(value||'')]||'';}
+  function decorate(){
+    scheduled=false;var s=state();if(!s||!Array.isArray(s.members))return;
+    var map={};s.members.forEach(function(m){map[String(m.id)]=m;});
+    document.querySelectorAll('[data-member-id]').forEach(function(card){
+      var member=map[String(card.getAttribute('data-member-id')||'')];if(!member)return;
+      var host=card.querySelector('.name,.member-name,.quick-member-name')||card;
+      var wrap=card.querySelector('.jm-member-badges');if(!wrap){wrap=document.createElement('span');wrap.className='jm-member-badges';host.insertAdjacentElement('afterend',wrap);}
+      var team=String(member.teamLabel||'').trim(),status=statusText(member.status);
+      var next=(team?'<span class="jm-member-badge jm-team-badge" style="--jm-team-color:'+color(team)+'">'+team.replace(/[&<>]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[x];})+'</span>':'')+(status?'<span class="jm-member-badge jm-status-badge">'+status+'</span>':'');
+      if(wrap.innerHTML!==next)wrap.innerHTML=next;
+      wrap.hidden=!wrap.innerHTML;
+    });
+  }
+  function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(decorate);}
+  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',schedule,{once:true});
+  document.addEventListener('click',function(){setTimeout(schedule,80);},true);
+  setInterval(schedule,1800);schedule();
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -327,6 +366,12 @@ def assert_auto_sync_contract(text: str) -> None:
             raise SystemExit(f"member revision autosync contract missing: {needle}")
 
 
+def assert_team_status_contract(text: str) -> None:
+    for needle in [TEAM_STATUS_MARKER, "member.teamLabel", "active:'코트배정대기'", "jm-team-badge", "jm-status-badge"]:
+        if needle not in text:
+            raise SystemExit(f"member team/status contract missing: {needle}")
+
+
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     apk_url = (
@@ -361,10 +406,13 @@ def patch(path: Path) -> None:
         text = text.replace(marker, NATIVE_SYNC_ADDON + "\n" + marker, 1)
     if AUTO_SYNC_MARKER not in text:
         text = text.replace(marker, AUTO_SYNC_ADDON + "\n" + marker, 1)
+    if TEAM_STATUS_MARKER not in text:
+        text = text.replace(marker, TEAM_STATUS_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
     assert_auto_sync_contract(text)
+    assert_team_status_contract(text)
     path.write_text(text, encoding="utf-8")
 
 
