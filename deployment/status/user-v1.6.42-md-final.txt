@@ -6,4 +6,4 @@ push_backend=cloudflare-durable-object
 vibration=3-pulses-x8-groups-confirm-stop
 assignment_scope=current-selected-member-only
 auto_sync=revision-aware-short-poll
-sha256=0488981581537a869ec5cedc0a2b44e0a40d9da9f28e77d64afe7ad031a4880b
+sha256=727cd6bc096188ddc32d25ebacff83443546e3ecc3ec83d26ff54676057530f3
