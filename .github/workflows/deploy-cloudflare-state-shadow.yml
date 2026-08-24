@@ -1,4 +1,4 @@
-name: Deploy Cloudflare-only state shadow
+name: Deploy Cloudflare-only state service
 
 on:
   push:
@@ -16,11 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: jayuminton-cloudflare-state-shadow
+  group: jayuminton-cloudflare-state
   cancel-in-progress: true
 
 jobs:
-  deploy-import-verify:
+  deploy-verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -28,127 +28,53 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       INTERNAL_KEY: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
       WORKER_URL: https://jayuminton-state.pianopp001.workers.dev
-      LEGACY_READ_URL: https://jayuminton-admin-rpc.pianopp001.workers.dev/
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: npm install --global wrangler@latest
 
-      - name: Apply MD4 state-worker rules and verify Cloudflare-only source
+      - name: Verify Cloudflare-only queue and assignment rules
         shell: bash
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test "${#INTERNAL_KEY}" -ge 32
-          python3 deployment/jayuminton/patch_state_worker_md4_autoassign.py cloudflare/state-worker/worker.js
           node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/worker.test.mjs
           node cloudflare/state-worker/md4-autoassign.test.mjs
-          node --check deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          node cloudflare/state-worker/md-entry-autoassign.test.mjs
+          node cloudflare/state-worker/md-final-entry.test.mjs
           node deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs
-          python3 -m py_compile deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
-          grep -F "rpcVersion: 6" cloudflare/state-worker/worker.js >/dev/null
-          grep -F "'/api/compat/rpc'" cloudflare/state-worker/worker.js >/dev/null
-          grep -F 'MD(4): when a four-person group can be completed' cloudflare/state-worker/worker.js >/dev/null
-          if grep -R -F 'script.google.com' cloudflare/state-worker; then exit 1; fi
+          grep -F "state.waitGroups = [[...state.waitGroups[1]], [...state.waitGroups[2]], [...state.waitGroups[3]], [...state.waitGroups[4]], []]" cloudflare/state-worker/worker.js >/dev/null
+          if grep -R -n -E 'script\.google\.com|googleusercontent\.com|firebaseapp\.com|web\.app' cloudflare/state-worker deployment/jayuminton/cloudflare_v6_frontend_bridge.js; then exit 1; fi
 
-      - name: Verify unchanged rendered screens accept Cloudflare bridge
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/rendered"
-          curl --fail --location --retry 5 'https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?bridge-check=admin' -o "$RUNNER_TEMP/rendered/admin.html"
-          curl --fail --location --retry 5 'https://jayuminton-push.web.app/config-v204.js?bridge-check=member' -o "$RUNNER_TEMP/rendered/member.html"
-          python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$RUNNER_TEMP/rendered/admin.html"
-          python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$RUNNER_TEMP/rendered/member.html"
-          test "$(grep -c '__JAYUMINTON_CLOUDFLARE_RPC_V6__' "$RUNNER_TEMP/rendered/admin.html")" -eq 1
-          test "$(grep -c '__JAYUMINTON_CLOUDFLARE_RPC_V6__' "$RUNNER_TEMP/rendered/member.html")" -eq 1
-          # The current admin screen no longer ships the retired excluded-member
-          # visibility patch. The injected bridge marker above is the active contract.
-          # Voice controls are intentionally present for manager replay testing.
-          # Current source retains compact tools as display:none compatibility markup.
-          grep -F '.compact-admin-tools{display:none!important}' "$RUNNER_TEMP/rendered/admin.html" >/dev/null
-
-      - name: Create or resolve D1 database
+      - name: Resolve existing Cloudflare D1 database
         shell: bash
         run: |
           set -euo pipefail
           wrangler d1 list --json > "$RUNNER_TEMP/d1-list.json"
           D1_ID="$(jq -r '.[] | select(.name=="jayuminton-state") | .uuid' "$RUNNER_TEMP/d1-list.json" | head -1)"
-          if [ -z "$D1_ID" ]; then
-            wrangler d1 create jayuminton-state
-            wrangler d1 list --json > "$RUNNER_TEMP/d1-list-after-create.json"
-            D1_ID="$(jq -r '.[] | select(.name=="jayuminton-state") | .uuid' "$RUNNER_TEMP/d1-list-after-create.json" | head -1)"
-          fi
           test -n "$D1_ID"
           sed "s/__D1_DATABASE_ID__/$D1_ID/g" cloudflare/state-worker/wrangler.toml.template > "$RUNNER_TEMP/wrangler.toml"
-          echo "D1_ID=$D1_ID" >> "$GITHUB_ENV"
 
-      - name: Apply schema and deploy isolated Worker
+      - name: Deploy worker without replacing live state
         shell: bash
         run: |
           set -euo pipefail
           wrangler d1 execute DB --remote --file cloudflare/state-worker/schema.sql --config "$RUNNER_TEMP/wrangler.toml"
-          # wrangler resolves the entry point and its imports relative to the
-          # generated config in RUNNER_TEMP, so copy the complete module chain.
           cp cloudflare/state-worker/*.js "$RUNNER_TEMP/"
           echo "::add-mask::$INTERNAL_KEY"
           printf '%s' "$INTERNAL_KEY" | wrangler secret put INTERNAL_KEY --config "$RUNNER_TEMP/wrangler.toml" >/dev/null
           wrangler deploy --config "$RUNNER_TEMP/wrangler.toml"
 
-      - name: Read legacy state once through existing Cloudflare Worker
+      - name: Verify live Cloudflare service
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --location --retry 5 "${LEGACY_READ_URL}?adminRpc=1&rpc=getPublicState&callback=jmMigration&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/legacy.jsonp"
-          python3 - "$RUNNER_TEMP/legacy.jsonp" "$RUNNER_TEMP/import.json" "$RUNNER_TEMP/expected.json" <<'PY'
-          from pathlib import Path
-          import hashlib,json,sys
-          raw=Path(sys.argv[1]).read_text(encoding='utf-8'); prefix='jmMigration('
-          if not raw.startswith(prefix) or not raw.endswith(');'): raise SystemExit('legacy JSONP envelope invalid')
-          packet=json.loads(raw[len(prefix):-2])
-          if packet.get('ok') is not True or not isinstance(packet.get('result'),dict): raise SystemExit('legacy state read failed')
-          state=packet['result']
-          projection={'members':state.get('members',[]),'courts':state.get('courts',{}),'waitGroups':state.get('waitGroups',[]),'courtStartedAt':state.get('courtStartedAt',{})}
-          canonical=json.dumps(projection,ensure_ascii=False,sort_keys=True,separators=(',',':'))
-          digest=hashlib.sha256(canonical.encode()).hexdigest()
-          Path(sys.argv[2]).write_text(json.dumps({'source':'legacy-cloudflare-shadow-sync','replace':True,'state':state},ensure_ascii=False),encoding='utf-8')
-          Path(sys.argv[3]).write_text(json.dumps({'digest':digest,'memberCount':len(state.get('members',[]))},sort_keys=True),encoding='utf-8')
-          print('legacy_member_count='+str(len(state.get('members',[]))))
-          print('legacy_projection_sha256='+digest)
-          PY
-
-      - name: Import once and compare D1 shadow state
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --location --retry 5 "$WORKER_URL/health" -o "$RUNNER_TEMP/health.json"
+          curl --fail --location --retry 8 --retry-delay 2 "$WORKER_URL/health?run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/health.json"
           jq -e '.ok==true and .backend=="cloudflare-only" and .database=="d1" and .concurrency=="durable-object" and .gas==false' "$RUNNER_TEMP/health.json" >/dev/null
-          code="$(curl --silent --show-error --location -o "$RUNNER_TEMP/import-result.json" -w '%{http_code}' -X POST "$WORKER_URL/api/internal/import" -H 'Content-Type: application/json' -H "X-Jayuminton-Key: $INTERNAL_KEY" --data-binary @"$RUNNER_TEMP/import.json")"
-          if [ "$code" != 200 ] && [ "$code" != 409 ]; then cat "$RUNNER_TEMP/import-result.json"; exit 1; fi
-          state_code=''
-          for attempt in $(seq 1 12); do
-            state_code="$(curl --silent --show-error --location -o "$RUNNER_TEMP/actual.json" -w '%{http_code}' "$WORKER_URL/api/internal/state?verify=$GITHUB_RUN_ID-$attempt" -H "X-Jayuminton-Key: $INTERNAL_KEY")"
-            [ "$state_code" = 200 ] && break
-            sleep 3
-          done
-          if [ "$state_code" != 200 ]; then cat "$RUNNER_TEMP/actual.json"; exit 1; fi
-          python3 - "$RUNNER_TEMP/expected.json" "$RUNNER_TEMP/actual.json" <<'PY'
-          from pathlib import Path
-          import hashlib,json,sys
-          expected=json.loads(Path(sys.argv[1]).read_text())
-          packet=json.loads(Path(sys.argv[2]).read_text()); state=packet.get('state',{})
-          projection={'members':state.get('members',[]),'courts':state.get('courts',{}),'waitGroups':state.get('waitGroups',[]),'courtStartedAt':state.get('courtStartedAt',{})}
-          canonical=json.dumps(projection,ensure_ascii=False,sort_keys=True,separators=(',',':'))
-          actual=hashlib.sha256(canonical.encode()).hexdigest()
-          if len(state.get('members',[])) != expected['memberCount']: raise SystemExit('member count mismatch')
-          if actual != expected['digest']: raise SystemExit('state projection digest mismatch')
-          print('D1_SHADOW_IMPORT_VERIFIED members=%s sha256=%s'%(expected['memberCount'],actual))
-          PY
-          curl --fail --location -X POST "$WORKER_URL/api/compat/rpc" -H 'Content-Type: application/json' --data '{"name":"getPublicState","args":[]}' -o "$RUNNER_TEMP/compat-unauthorized.json"
-          jq -e '.ok==false and .error=="unauthorized"' "$RUNNER_TEMP/compat-unauthorized.json" >/dev/null
-          echo 'COMPAT_RPC_UNAUTHORIZED_STATE_BLOCKED'
+          echo CLOUDFARE_ONLY_STATE_SERVICE_READY
