@@ -49,11 +49,12 @@ jobs:
           test -n "$FIREBASE_PROJECT_ID"
           echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
           firebase hosting:channel:list --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/channels.json"
-          ADMIN_URL="$(jq -r --arg id "$ADMIN_CHANNEL" '[.result.channels[]? | select((.name|split("/")|last)==$id)][0].url // empty' "$RUNNER_TEMP/channels.json")"
+          ADMIN_URL="$(jq -r --arg id "$ADMIN_CHANNEL" '[.. | objects | select((.channelId? == $id) or (((.name? // "") | split("/") | last) == $id)) | (.url? // empty)] | map(select(length>0)) | first // empty' "$RUNNER_TEMP/channels.json")"
           if [ -z "$ADMIN_URL" ]; then
-            ADMIN_URL="$(jq -r --arg id "$ADMIN_CHANNEL" '[.result[]? | select((.channelId//$id)==$id)][0].url // empty' "$RUNNER_TEMP/channels.json")"
+            echo 'Unable to resolve admin channel URL. Available channel objects:' >&2
+            jq -c '.. | objects | select(.channelId? or .url? or .name?) | {channelId,name,url}' "$RUNNER_TEMP/channels.json" >&2 || true
+            exit 1
           fi
-          test -n "$ADMIN_URL"
           echo "ADMIN_URL=$ADMIN_URL" >> "$GITHUB_ENV"
       - name: Verify Cloudflare backend only
         shell: bash
