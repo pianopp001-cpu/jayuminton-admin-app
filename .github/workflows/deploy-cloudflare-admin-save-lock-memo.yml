@@ -1,6 +1,6 @@
 name: Deploy Cloudflare-only admin save lock and memo
 
-# self-record every result; latest admin deploy must never depend on an external watcher
+# explicit retry after authenticated RPC preflight was corrected to transport-only validation
 on:
   push:
     branches: [main]
