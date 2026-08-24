@@ -80,3 +80,5 @@ assert.equal(outerPairWrites, 2, 'admin and compat autoassign must each record p
           git add cloudflare/state-worker/worker-md-entry.js cloudflare/state-worker/md-final-entry.test.mjs
           git commit -m 'fix: record autoassign pair statistics once'
           git push origin HEAD:main
+
+# trigger: 2026-08-25
