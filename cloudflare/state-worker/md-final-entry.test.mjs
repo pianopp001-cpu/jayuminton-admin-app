@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { eligibleAutoAssignPool, selectValidFill, targetArray } from './worker-md-entry.js';
+import { liveIdsInGroup } from './worker-md-compat-entry.js';
 
 const finalEntry = fs.readFileSync(new URL('./worker-md-final-entry.js', import.meta.url), 'utf8');
 const compatEntry = fs.readFileSync(new URL('./worker-md-compat-entry.js', import.meta.url), 'utf8');
@@ -19,12 +20,20 @@ assert.ok(wrangler.includes('main = "worker-md-final-entry.js"'), 'wrangler does
 for (const name of ['assignWaitGroupToCourt','autoFillCourt','autoFillWaitGroup','moveOrSwapMember','swapCourts','swapWaitGroups','removeFromCourt','removeFromWaitGroup','adjustCourtMembers','adjustWaitGroupMembers']) {
   assert.ok(compatEntry.includes(name), `missing admin compat RPC: ${name}`);
 }
+assert.ok(compatEntry.includes('liveIdsInGroup(sourceA,body.idsA)'), 'court stale-selection guard missing');
+assert.ok(compatEntry.includes('liveIdsInGroup(sourceB,body.idsB)'), 'second-source stale-selection guard missing');
 assert.ok(mdEntry.includes('pair_stats'), 'D1 pair statistics missing');
 assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS pair_stats'), 'pair_stats missing from persistent schema');
 assert.ok(mdEntry.includes("body.action === 'autoAssign'"), 'MD autoAssign entry missing');
 assert.ok(mdEntry.includes("body.name === 'getPairStatistics'"), 'pair statistics compat RPC missing');
 assert.ok(mdEntry.includes('pool.length <= free'), 'MD last-remainder autoassign rule missing');
 assert.ok(mdEntry.includes('[[2, 2], [4, 0], [0, 4]]'), 'MD doubles composition rules missing');
+
+// Administrator selected members from an older screen. If member 14 has since
+// moved themself away, the live server group no longer contains 14 and the
+// partial swap must skip that stale selection while retaining valid member 15.
+assert.deepEqual(liveIdsInGroup(['15','16'], ['14','15','15']), ['15']);
+assert.deepEqual(liveIdsInGroup(['7','8','9'], ['8','20']), ['8']);
 
 const member=(id,gender,status='active')=>({id,name:id,gender,status,games:0});
 const autoState={
