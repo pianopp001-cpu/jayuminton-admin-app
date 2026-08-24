@@ -199,11 +199,22 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         String freshAdminUrl = ADMIN_URL
                 + "&apkBuild=" + APK_WEB_BUILD
                 + "&ts=" + System.currentTimeMillis();
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Cache-Control", "no-cache, no-store, must-revalidate");
-        headers.put("Pragma", "no-cache");
-        headers.put("Expires", "0");
-        webView.loadUrl(freshAdminUrl, headers);
+        // android_asset is a local file. Supplying HTTP headers to a file URL can
+        // leave recent Android WebView providers waiting forever for page finish.
+        webView.loadUrl(freshAdminUrl);
+        webView.postDelayed(() -> {
+            if (adminLoadPanel.getVisibility() != View.VISIBLE) return;
+            webView.evaluateJavascript(
+                    "(function(){var p=document.getElementById('adminPinInput'),a=document.getElementById('adminApp');return !!(document.body&&(p||a));})()",
+                    ready -> {
+                        if ("true".equals(ready)) {
+                            adminLoadPanel.setVisibility(View.GONE);
+                        } else {
+                            showAdminLoadState("관리자 로그인 화면을 표시하지 못했습니다.", true);
+                        }
+                    }
+            );
+        }, 5000);
     }
 
     private void showAdminLoadState(String message, boolean failed) {
