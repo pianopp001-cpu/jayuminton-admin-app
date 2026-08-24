@@ -1,115 +1,17 @@
-name: Build true-fresh live-entry user APK v1.4.2
+name: DISABLED legacy lightweight user APK v1.4.2
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'deployment/scripts/build_user_lite_true_fresh_v142.sh'
-      - '.github/workflows/build-user-lite-v142-live-entry.yml'
-      - 'deployment/scripts/build_user_lite_true_fresh_v141.sh'
-      - 'deployment/scripts/build_user_lite_fresh_v140.sh'
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: jayuminton-user-lite-v142-live-entry
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  build:
+  blocked:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
-      - uses: actions/checkout@v4
-        with: {ref: main, fetch-depth: 0}
-      - id: resolve
-        name: Resolve deployment secret
-        shell: bash
+      - name: Block obsolete lightweight user APK lineage
         run: |
-          set -euo pipefail
-          C="$RUNNER_TEMP/deploy.json"
-          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
-          jq -e '.mainDeploymentId' "$C" >/dev/null
-          echo "MAIN_DEPLOYMENT_ID=$(jq -r '.mainDeploymentId' "$C")" >> "$GITHUB_ENV"
-      - uses: actions/setup-java@v4
-        with: {distribution: temurin, java-version: '17'}
-      - uses: gradle/actions/setup-gradle@v4
-        with: {gradle-version: '8.7'}
-      - id: build_apk
-        name: Build v1.4.2 live-entry APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash deployment/scripts/build_user_lite_true_fresh_v142.sh 2>&1 | tee "$RUNNER_TEMP/user-v142-build.log"
-          APK=releases/jayuminton-courtstatus-v1.4.2-live-entry-fresh.apk
-          STATUS=deployment/status/user-lite-v1.4.2-live-entry-fresh.txt
-          test -s "$APK"
-          grep -F 'status=success' "$STATUS" >/dev/null
-          grep -F 'application_id=com.jayuminton.courtstatus.fresh' "$STATUS" >/dev/null
-          grep -F 'launch_url=https://jayuminton-push.web.app/' "$STATUS" >/dev/null
-          grep -F 'launch_contract=production-unified-member-app' "$STATUS" >/dev/null
-          SIZE=$(stat -c%s "$APK")
-          [ "$SIZE" -lt 500000 ]
-          cp "$APK" "$RUNNER_TEMP/user-v142.apk"
-          cp "$STATUS" "$RUNNER_TEMP/user-v142-status.txt"
-      - id: publish
-        name: Publish verified v1.4.2 APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          git reset --hard HEAD
-          git fetch origin main
-          git checkout -B main origin/main
-          cp "$RUNNER_TEMP/user-v142.apk" releases/jayuminton-courtstatus-v1.4.2-live-entry-fresh.apk
-          cp "$RUNNER_TEMP/user-v142-status.txt" deployment/status/user-lite-v1.4.2-live-entry-fresh.txt
-          sha256sum releases/jayuminton-courtstatus-v1.4.2-live-entry-fresh.apk > deployment/status/user-lite-v1.4.2-live-entry-fresh.sha256
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/jayuminton-courtstatus-v1.4.2-live-entry-fresh.apk deployment/status/user-lite-v1.4.2-live-entry-fresh.txt deployment/status/user-lite-v1.4.2-live-entry-fresh.sha256
-          git commit -m 'Publish live-entry lightweight user APK v1.4.2'
-          git pull --rebase origin main
-          git push origin main
-      - name: Record v1.4.2 build evidence
-        if: ${{ always() }}
-        shell: bash
-        env:
-          RESOLVE: ${{ steps.resolve.outcome }}
-          BUILD: ${{ steps.build_apk.outcome }}
-          PUBLISH: ${{ steps.publish.outcome }}
-        run: |
-          set -euo pipefail
-          git reset --hard HEAD || true
-          git fetch origin main || true
-          git checkout -B main origin/main || true
-          mkdir -p deployment/status
-          {
-            echo "source_sha=${GITHUB_SHA}"
-            echo "resolve=${RESOLVE:-not_run}"
-            echo "build_apk=${BUILD:-not_run}"
-            echo "publish=${PUBLISH:-not_run}"
-            if [ -f "$RUNNER_TEMP/user-v142-build.log" ]; then
-              echo 'build_log_tail_begin'
-              tail -40 "$RUNNER_TEMP/user-v142-build.log" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g'
-              echo
-              echo 'build_log_tail_end'
-            fi
-          } > deployment/status/user-lite-v1.4.2-live-entry-build-evidence.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/user-lite-v1.4.2-live-entry-build-evidence.txt
-          git commit -m 'Record live-entry user APK build evidence' || exit 0
-          git pull --rebase origin main
-          git push origin main
-      - uses: actions/upload-artifact@v4
-        if: ${{ success() }}
-        with:
-          name: jayuminton-courtstatus-v1.4.2-live-entry-fresh
-          path: releases/jayuminton-courtstatus-v1.4.2-live-entry-fresh.apk
-          if-no-files-found: error
-          retention-days: 30
+          echo 'DISABLED: this workflow builds the obsolete lightweight v1.4.2 package and removes native Firebase messaging.'
+          echo 'Production user APK is Cloudflare-only v1.6.42 with com.jayuminton.user and native FCM.'
+          exit 1
