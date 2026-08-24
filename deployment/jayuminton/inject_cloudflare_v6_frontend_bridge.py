@@ -129,6 +129,15 @@ if html.count(old_voice_controls) != 1:
     raise SystemExit('court voice controls mismatch')
 html = html.replace(old_voice_controls, new_voice_controls, 1)
 
+# A legacy finish-court compatibility layer calls NativeVoice directly. Make
+# that path honor the same persisted announcement-only mute state as the main
+# voice controls, otherwise court finish bypasses the mute button.
+direct_speak = "  function directSpeak(text){var result={ok:false,reason:'',engine:''};text=String(text||'').replace(/\\n/g,' ').trim();try{"
+direct_speak_muted = direct_speak + "if(localStorage.getItem(VOICE_GUIDE_KEY)==='false'||VOICE_GUIDE_ENABLED===false){result.ok=true;result.reason='muted';result.engine='muted';return result;}"
+if html.count(direct_speak) != 1:
+    raise SystemExit('legacy directSpeak mute guard anchor mismatch')
+html = html.replace(direct_speak, direct_speak_muted, 1)
+
 # Keep the combined grade/experience and radio controls synchronized when an
 # existing member is opened for editing.
 edit_gender = "  gender.value = member.gender === 'female' ? 'female' : 'male';"
@@ -160,10 +169,7 @@ management_patch = r'''
 .court-voice-controls{display:flex!important;flex-wrap:wrap!important;gap:6px!important}
 .court-voice-controls button{white-space:nowrap!important}
 #announcementMuteButton.is-muted,#emergencyAnnouncementMuteButton.is-muted{background:#9f1239!important;border-color:#9f1239!important;color:#fff!important}
-.admin-save-notice{z-index:2147483600!important;background:rgba(15,23,42,.66)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;cursor:wait!important;contain:strict!important}
-.admin-save-notice::before{content:'';position:fixed;top:0;left:0;width:38%;height:5px;background:linear-gradient(90deg,#60a5fa,#fff,#2563eb);box-shadow:0 0 12px rgba(96,165,250,.8);transform:translate3d(-110%,0,0);animation:jm-save-progress 1.05s ease-in-out infinite;will-change:transform}
-@keyframes jm-save-progress{0%{transform:translate3d(-110%,0,0)}100%{transform:translate3d(365%,0,0)}}
-@media(prefers-reduced-motion:reduce){.admin-save-notice::before{animation-duration:2.4s}}
+.admin-save-notice{z-index:2147483600!important;background:rgba(15,23,42,.38)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;cursor:wait!important;contain:strict!important}
 .voice-save-emergency{position:fixed;z-index:2147483647;top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:8px;padding:8px;border-radius:12px;background:#fff;border:2px solid #1d4ed8;box-shadow:0 8px 30px rgba(0,0,0,.35);pointer-events:auto!important;filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 .voice-save-emergency.is-visible{display:flex!important}
 .voice-save-emergency button{min-height:42px;padding:8px 12px;border-radius:9px;font-weight:900;white-space:nowrap}
@@ -283,8 +289,8 @@ for required_voice_marker in [
     'id="voiceSaveEmergency"',
     'function(){\n    var shouldMute=VOICE_GUIDE_ENABLED;',
     "controls.classList.toggle('is-visible',isSaveOverlayVisible()&&isAnnouncementActive())",
+    "result.reason='muted';result.engine='muted'",
     'backdrop-filter:none!important',
-    'animation:jm-save-progress 1.05s ease-in-out infinite',
     "if(locked)app.setAttribute('inert','')",
     'filter:none!important;backdrop-filter:none!important',
 ]:
