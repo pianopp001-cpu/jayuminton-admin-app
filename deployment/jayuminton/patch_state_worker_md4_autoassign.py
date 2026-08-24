@@ -34,7 +34,10 @@ def find_function_end(text: str, start: int) -> int:
 REPLACEMENT = r'''export function autoAssignMutation(input, candidateIds, destinations) {
   let state = normalizeState(input);
   const memberById = new Map(state.members.map(m => [String(m.id), m]));
-  const available = uniqueIds(candidateIds, 200).filter(id => memberById.has(id) && !locationOf(state, id));
+  const available = uniqueIds(candidateIds, 200).filter(id => {
+    const location = locationOf(state, id);
+    return memberById.has(id) && (!location || location.type === 'active');
+  });
 
   const isMale = id => {
     const gender = String(memberById.get(String(id))?.gender || '').toLowerCase();
