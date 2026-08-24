@@ -1,0 +1,72 @@
+JAYUMINTON_CANONICAL_PRODUCTION_MATRIX
+updated=2026-08-25
+spec=PROJECT_SPEC_20260825.md
+rules=PROJECT_RULES.md
+runtime=cloudflare-worker+d1+durable-objects
+firebase_role=hosting+fcm
+apps_script_runtime=forbidden
+
+[admin_web]
+status=success
+baseline=v203
+workflow=.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml
+verified_run=32756280670
+verified_head=888a52ba8598aeb9b76d393f8d2c456d35c359c1
+source=releases/jayuminton-admin-v200.8-webview-js-fixed.apk::assets/admin/index.html + v203 bridge + V24 post-contract
+url=https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app
+backend=cloudflare-only
+gas=absent
+team_set_clear=verified
+team_stripe=verified
+pair_statistics_full_expand=verified
+save_lock=verified
+voice_controls_during_save=verified
+public_memo=verified
+
+[admin_apk]
+status=success
+baseline=v203.0
+workflow=.github/workflows/build-v2015-known-good-shell.yml
+verified_run=32752264629
+verified_head=e947079ea8456a670cc9d5879491f246a8f870c4
+note=workflow filename v2015 is legacy naming; output baseline is v203.0 and must not be treated as v201.x
+cloudflare_v24_contract=verified
+team_cards_unobstructed=verified
+pair_recording_complete=verified
+vibration_3x8=verified
+gas=absent
+
+[user_web]
+status=success
+workflow=.github/workflows/deploy-md6-self-longpress-production.yml
+verified_run=32753455501
+verified_head=b791ac1ea2077bcf54ea87b4995c3dcaf7ded525
+url=https://jayuminton-push.web.app/
+self_longpress=verified
+self_status_change=verified
+public_memo=verified
+team_stripe_4px=verified
+backend=cloudflare-state
+gas=absent
+
+[user_apk]
+status=success
+release=1.6.42
+workflow=.github/workflows/build-user-md-final-v1642.yml
+verified_run=32752854990
+verified_head=836d7ce107a1f2ec0c5c338a529e0724b1bae8a2
+package=com.jayuminton.user
+backend=cloudflare-state
+push=fcm+cloudflare-user-push
+selected_self_only=required
+vibration_3x8=required
+gas=absent
+
+[regression_guards]
+forbidden=.github/workflows/build-apk.yml legacy v199/GAS production use
+forbidden=fix/pwa-v1641-source deploy-pwa.yml production use
+forbidden=script.google.com/macros/s/ in final web or APK
+forbidden=clasp pull/push/create-deployment in final production pipeline
+forbidden=rollback from v203 admin baseline to v199/v200/v201 snapshots
+forbidden=rollback from user v1.6.42 to v1.6.41 GAS PWA chain
+rule=do not declare PASS unless actual live/web/APK marker verification succeeds
