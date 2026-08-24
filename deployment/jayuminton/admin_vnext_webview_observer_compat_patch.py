@@ -11,11 +11,10 @@ path = root / 'Script.html'
 s = path.read_text(encoding='utf-8')
 original = s
 
-# The bridge intentionally uses exact one-shot replacements. Normalize historical
-# spacing/guard variants when present. If a current snapshot no longer has a
-# particular observer write, add one inert JS comment containing the canonical
-# token so the legacy bridge's exact-count compatibility check can pass without
-# changing runtime behaviour.
+# Normalize historical observer writes only when the real executable statement
+# exists. Never append compatibility JavaScript/comment tokens to Script.html:
+# some bundled snapshots render Script.html as plain body content, which would
+# expose those tokens to users on the login screen.
 patterns = [
     (r"^[ \t]*(?:if\s*\(\s*buttons\[0\]\.textContent\s*!==?\s*'실행취소'\s*\)\s*)?buttons\[0\]\.textContent\s*=\s*'실행취소';[ \t]*$",
      "      buttons[0].textContent='실행취소';"),
@@ -25,9 +24,11 @@ patterns = [
      "      buttons[2].textContent='자동배정';"),
 ]
 for pattern, canonical in patterns:
-    s, count = re.subn(pattern, canonical, s, count=1, flags=re.M)
-    if count == 0 and canonical not in s:
-        s += "\n// JAYUMINTON_BRIDGE_COMPAT_TOKEN " + canonical + "\n"
+    s, _ = re.subn(pattern, canonical, s, count=1, flags=re.M)
+
+# Defensive cleanup for APKs/snapshots produced by the previous broken helper.
+# Remove only the exact compatibility lines it injected.
+s = re.sub(r"^// JAYUMINTON_BRIDGE_COMPAT_TOKEN .*\n?", "", s, flags=re.M)
 
 path.write_text(s, encoding='utf-8')
 print('ADMIN_WEBVIEW_OBSERVER_COMPAT_OK' if s != original else 'ADMIN_WEBVIEW_OBSERVER_COMPAT_ALREADY_CANONICAL')
