@@ -76,7 +76,7 @@ jobs:
           grep -F "details.className='pair-statistics-disclosure'" "$HTML" >/dev/null
           grep -F "if(root.matches&&root.matches(selector))rows.push(root);" "$HTML" >/dev/null
           grep -F '#adminApp .has-member-team{position:relative!important' "$HTML" >/dev/null
-          grep -F 'flex:0 0 100%!important;width:max-content!important' "$HTML" >/dev/null
+          grep -F 'flex:0 0 100%!important;grid-column:1/-1!important;grid-row:auto!important;width:max-content!important' "$HTML" >/dev/null
           grep -F 'function resumeSavedSession()' "$HTML" >/dev/null
           grep -F 'resumeSavedSession();' "$HTML" >/dev/null
           grep -F 'grid-template-columns:repeat(3,minmax(0,1fr))!important' "$HTML" >/dev/null
