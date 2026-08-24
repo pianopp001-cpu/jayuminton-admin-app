@@ -1,0 +1,5 @@
+status=success
+version=201.6
+run_id=32714390398
+sha256=489923b4da5b5e67546d9fa7de611cbb6a3af6045591857e8c21fed76ba10ff3
+build=exact-v2005-shell-cloudflare-direct-login-bound
