@@ -1,0 +1,81 @@
+name: Migrate existing admin PIN to Cloudflare D1
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/migrate-cloudflare-admin-pin.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      INTERNAL_KEY: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+      WORKER_URL: https://jayuminton-state.pianopp001.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+
+      - name: Preserve state and migrate existing PIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${#INTERNAL_KEY}" -ge 32
+          ADMIN_PIN_VALUE=$(python3 - <<'PY'
+          from pathlib import Path
+          import re
+          source=Path('source-snapshot/current-main/Code.js').read_text(encoding='utf-8')
+          match=re.search(r"const\s+ADMIN_PIN\s*=\s*['\"]([^'\"]+)['\"]",source)
+          if not match: raise SystemExit('existing ADMIN_PIN not found')
+          print(match.group(1),end='')
+          PY
+          )
+          test -n "$ADMIN_PIN_VALUE"
+          echo "::add-mask::$ADMIN_PIN_VALUE"
+          jq -n --arg pin "$ADMIN_PIN_VALUE" '{action:"setSettings",operationId:("migrate-admin-pin-"+env.GITHUB_RUN_ID),adminPin:$pin}' > "$RUNNER_TEMP/request.json"
+          curl --fail --silent --show-error --retry 5 \
+            -H "x-jayuminton-key: $INTERNAL_KEY" \
+            -H 'content-type: application/json' \
+            --data-binary @"$RUNNER_TEMP/request.json" \
+            "$WORKER_URL/api/internal/rpc" > "$RUNNER_TEMP/migrate.json"
+          jq -e '.ok==true' "$RUNNER_TEMP/migrate.json" >/dev/null
+          jq -n --arg pin "$ADMIN_PIN_VALUE" '{name:"createAdminSession",args:[$pin]}' > "$RUNNER_TEMP/login.json"
+          curl --fail --silent --show-error --retry 5 \
+            -H 'content-type: application/json' \
+            --data-binary @"$RUNNER_TEMP/login.json" \
+            "$WORKER_URL/api/compat/rpc" > "$RUNNER_TEMP/verify.json"
+          jq -e '.ok==true and .result.ok==true and (.result.token|length>10)' "$RUNNER_TEMP/verify.json" >/dev/null
+
+      - name: Record successful PIN migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p deployment/status
+          printf 'status=success\nrun_id=%s\nbackend=cloudflare-d1\ngas=false\n' "$GITHUB_RUN_ID" > deployment/status/cloudflare-admin-pin-migration.txt
+          git add deployment/status/cloudflare-admin-pin-migration.txt
+          git commit -m 'Record Cloudflare admin PIN migration' || true
+          git push origin HEAD:main
+
+      - name: Record failed PIN migration
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p deployment/status
+          printf 'status=failure\nrun_id=%s\nbackend=cloudflare-d1\ngas=false\n' "$GITHUB_RUN_ID" > deployment/status/cloudflare-admin-pin-migration.txt
+          git add deployment/status/cloudflare-admin-pin-migration.txt
+          git commit -m 'Record failed Cloudflare admin PIN migration' || true
+          git push origin HEAD:main
