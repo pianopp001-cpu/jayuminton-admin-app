@@ -1,0 +1,92 @@
+name: Guard canonical Cloudflare production matrix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'PROJECT_RULES.md'
+      - 'PROJECT_SPEC_20260825.md'
+      - 'deployment/status/production-matrix-v203-v1642.txt'
+      - '.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml'
+      - '.github/workflows/build-v2015-known-good-shell.yml'
+      - '.github/workflows/deploy-md6-self-longpress-production.yml'
+      - '.github/workflows/build-user-md-final-v1642.yml'
+      - '.github/workflows/build-apk.yml'
+      - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
+      - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
+      - 'deployment/jayuminton/patch_member_self_longpress_v6.py'
+      - 'deployment/scripts/patch_user_native_v1642_md_final.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Verify canonical production matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          MATRIX=deployment/status/production-matrix-v203-v1642.txt
+          test -s "$MATRIX"
+          grep -F 'apps_script_runtime=forbidden' "$MATRIX" >/dev/null
+          grep -F 'workflow=.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32756280670' "$MATRIX" >/dev/null
+          grep -F 'workflow=.github/workflows/build-v2015-known-good-shell.yml' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32752264629' "$MATRIX" >/dev/null
+          grep -F 'workflow=.github/workflows/deploy-md6-self-longpress-production.yml' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32753455501' "$MATRIX" >/dev/null
+          grep -F 'workflow=.github/workflows/build-user-md-final-v1642.yml' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32752854990' "$MATRIX" >/dev/null
+
+      - name: Verify admin v203 canonical paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .github/workflows/deploy-cloudflare-admin-save-lock-memo.yml
+          test -s .github/workflows/build-v2015-known-good-shell.yml
+          grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
+          grep -F 'CLOUDFLARE_V6_FRONTEND_BRIDGE_OK' deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py >/dev/null
+          grep -F 'build-v2015-known-good-shell.yml' PROJECT_RULES.md >/dev/null
+          grep -F '32752264629' PROJECT_RULES.md >/dev/null
+          grep -F '32756280670' PROJECT_RULES.md >/dev/null
+
+      - name: Verify user v1.6.42 canonical paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .github/workflows/deploy-md6-self-longpress-production.yml
+          test -s .github/workflows/build-user-md-final-v1642.yml
+          grep -F 'Build unified MD-final user APK v1.6.42' .github/workflows/build-user-md-final-v1642.yml >/dev/null
+          grep -F 'VERSION="1.6.42"' .github/workflows/build-user-md-final-v1642.yml >/dev/null
+          grep -F 'MAX_GROUPS = 8' .github/workflows/build-user-md-final-v1642.yml >/dev/null
+          grep -F 'NativePushRegistrar.isCurrentMember' .github/workflows/build-user-md-final-v1642.yml >/dev/null
+          grep -F 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
+          grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)!important' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
+          grep -F '32752854990' PROJECT_RULES.md >/dev/null
+          grep -F '32753455501' PROJECT_RULES.md >/dev/null
+
+      - name: Verify legacy default APK route remains blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'DISABLED legacy v199.6 GAS APK build' .github/workflows/build-apk.yml >/dev/null
+          grep -F 'exit 1' .github/workflows/build-apk.yml >/dev/null
+          ! grep -F 'script.google.com/macros/s/' releases/jayuminton-courtstatus-v1.6.42-md-final.apk 2>/dev/null || {
+            echo 'Forbidden GAS URL detected in current user APK'; exit 1;
+          }
+
+      - name: Verify project rules retain Cloudflare-only priority
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'PROJECT_SPEC_20260825.md' PROJECT_RULES.md >/dev/null
+          grep -F 'Google Apps Script를 운영 런타임으로 사용하지 않는다.' PROJECT_RULES.md >/dev/null
+          grep -F '공식 운영 고정점 (2026-08-25)' PROJECT_RULES.md >/dev/null
+          echo 'CANONICAL_PRODUCTION_GUARD_OK v203 v1.6.42'
