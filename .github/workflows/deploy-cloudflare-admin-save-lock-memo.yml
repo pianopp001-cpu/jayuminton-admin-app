@@ -51,12 +51,15 @@ jobs:
           echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
           curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$ADMIN_URL/?preflight=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-preflight.html"
           grep -F '<html' "$RUNNER_TEMP/admin-preflight.html" >/dev/null || grep -F '<!DOCTYPE html' "$RUNNER_TEMP/admin-preflight.html" >/dev/null
-      - name: Verify Cloudflare backend only
+      - name: Verify Cloudflare backend through live RPC
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --location --retry 5 --max-time 60 "${CLOUDFLARE_RPC_URL}health" -o "$RUNNER_TEMP/health.json" || curl --fail --location --retry 5 --max-time 60 "${CLOUDFLARE_RPC_URL}api/health" -o "$RUNNER_TEMP/health.json"
-          grep -E 'cloudflare-only|"gas"[[:space:]]*:[[:space:]]*false' "$RUNNER_TEMP/health.json" >/dev/null
+          CALLBACK="jmAdminPreflight$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 "${CLOUDFLARE_RPC_URL}?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/rpc.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/rpc.js" >/dev/null
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/rpc.js"
       - name: Restore v203 admin frontend then apply latest save-lock memo contract
         shell: bash
         run: |
