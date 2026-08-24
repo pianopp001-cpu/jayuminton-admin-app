@@ -30,7 +30,14 @@ addon=r'''
     return t.type==='court'?(STATE.courts[t.index]||[]):(STATE.waitGroups[t.index]||[]);
   }
   function activePool(){
-    var list=(STATE.members||[]).filter(function(m){return m&&String(m.status)==='active';});
+    // Preserve user-made court/wait assignments. Only members still in the
+    // unassigned active pool may be used by the administrator auto-assign.
+    var occupied=new Set();
+    try{Object.keys(STATE.courts||{}).forEach(function(key){(STATE.courts[key]||[]).forEach(function(id){occupied.add(String(id));});});}catch(e){}
+    try{(STATE.waitGroups||[]).forEach(function(group){(group||[]).forEach(function(id){occupied.add(String(id));});});}catch(e){}
+    var list=(STATE.members||[]).filter(function(m){
+      return m&&String(m.status)==='active'&&!occupied.has(String(m.id));
+    });
     if(typeof sortMembersByKoreanName==='function')list=sortMembersByKoreanName(list);
     return list.map(function(m){return String(m.id);});
   }
@@ -107,7 +114,7 @@ addon=r'''
 <!-- __JAYUMINTON_ADMIN_MD_AUTOASSIGN_SLOTS_V1__ -->
 '''
 html=html.replace('</body>',addon+'\n</body>',1)
-for req in (marker,'targetGroups()','EMPTY_SLOT_TARGETS','1개~4개','autoFillCourt','autoFillWaitGroup','pool.length<=wanted'):
+for req in (marker,'targetGroups()','EMPTY_SLOT_TARGETS','1개~4개','autoFillCourt','autoFillWaitGroup','pool.length<=wanted','occupied=new Set()','!occupied.has(String(m.id))'):
     if req not in html: raise SystemExit('autoassign slots marker missing '+req)
 path.write_text(html,encoding='utf-8')
 print('ADMIN_MD_AUTOASSIGN_SLOTS_V1_OK')
