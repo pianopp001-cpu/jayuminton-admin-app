@@ -3111,24 +3111,62 @@ body{
   animation:none!important;
 }
 
-/* Saving still prevents conflicting writes, but the page no longer looks frozen. */
+/* Saving lock: all operation controls are blocked while a write is pending.
+   Voice controls stay above the lock so an announcement can always be stopped/replayed. */
 body.action-busy{
   cursor:progress!important;
 }
-body.action-busy::after{
-  content:"저장 중";
+body.action-busy::before{
+  content:"";
   position:fixed;
-  right:10px;
-  bottom:calc(10px + env(safe-area-inset-bottom));
+  inset:0;
+  z-index:10040;
+  background:rgba(15,23,42,.22);
+  backdrop-filter:blur(1px);
+  pointer-events:auto;
+}
+body.action-busy::after{
+  content:"저장 중 · 잠시만 기다려 주세요";
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
   z-index:10050;
-  padding:5px 9px;
-  border-radius:999px;
-  background:rgba(24,39,75,.92);
+  min-width:210px;
+  padding:13px 18px;
+  border-radius:14px;
+  background:rgba(24,39,75,.96);
   color:#fff;
-  font-size:10px;
-  font-weight:900;
-  box-shadow:0 4px 12px rgba(0,0,0,.18);
+  text-align:center;
+  font-size:13px;
+  font-weight:950;
+  box-shadow:0 12px 34px rgba(0,0,0,.3);
   pointer-events:none;
+}
+body.action-busy .court-voice-controls{
+  position:relative!important;
+  z-index:10060!important;
+  pointer-events:auto!important;
+}
+body.action-busy .court-voice-controls button{
+  position:relative!important;
+  z-index:10061!important;
+  pointer-events:auto!important;
+}
+body.action-busy .court-voice-controls::before{
+  content:"음성 제어는 저장 중에도 사용 가능";
+  position:absolute;
+  left:0;
+  bottom:calc(100% + 4px);
+  padding:3px 7px;
+  border-radius:999px;
+  background:#fff;
+  color:#334155;
+  border:1px solid #cbd5e1;
+  font-size:9px;
+  font-weight:900;
+  white-space:nowrap;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
 }
 @media(max-width:560px){
   .next-court-summary{min-height:38px!important;gap:5px!important;font-size:10px!important;padding:5px 6px!important}
@@ -3347,4 +3385,11 @@ body.action-busy::after{
   #adminApp .quick-move-bar{width:calc(100% - 6px)!important;gap:2px!important;padding:4px!important}
   #adminApp .quick-move-bar button{font-size:9px!important;padding:0 1px!important}
   .member-edit-form{grid-template-columns:1fr}
+}
+
+
+/* v1.6.32 saving lock exception: only voice playback controls remain clickable. */
+body.action-busy .court-voice-controls,
+body.action-busy .court-voice-controls button{
+  pointer-events:auto!important;
 }
