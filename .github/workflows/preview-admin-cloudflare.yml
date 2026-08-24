@@ -94,12 +94,12 @@ jobs:
           Path(sys.argv[2]).write_text(source[start+8:end],encoding='utf-8')
           PY
           node --check "$RUNNER_TEMP/admin-cloudflare-script.js"
-          restore_head(){ (cd "$BACKUP" && clasp push --force); }
-          trap restore_head EXIT
-          (cd "$WORK" && clasp push --force)
-          (cd "$WORK" && clasp create-deployment --deploymentId "$PREVIEW_DEPLOYMENT_ID" --description "admin v19 preview $GITHUB_RUN_ID")
-          restore_head
-          trap - EXIT
+          # The isolated Apps Script RPC deployment is already provisioned and
+          # contains the authoritative queue mutations. Do not create another
+          # Apps Script version here: the project has reached Google's 200-version
+          # limit. The patched local source below is used to assemble and verify
+          # the separate admin frontend only.
+          echo 'ADMIN_RPC_DEPLOYMENT_REUSED_WITHOUT_NEW_GAS_VERSION'
       - name: Deploy admin Worker
         shell: bash
         run: |
