@@ -1,6 +1,5 @@
 name: Deploy Cloudflare-only admin save lock and memo
 
-# retrigger 2026-08-25 after switching backend verification to live RPC
 on:
   push:
     branches: [main]
@@ -26,7 +25,7 @@ jobs:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       ADMIN_CHANNEL: admin-cloudflare-vnext
       ADMIN_URL: https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app
-      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+      CLOUDFLARE_RPC_URL: https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc
 
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +40,7 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@latest
-      - name: Resolve Firebase project and verify known admin source
+      - name: Resolve Firebase project and restore verified v200.8 admin source
         shell: bash
         run: |
           set -euo pipefail
@@ -50,7 +49,8 @@ jobs:
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$CONFIG")"
           test -n "$FIREBASE_PROJECT_ID"
           echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
-          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$ADMIN_URL/?preflight=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-preflight.html"
+          unzip -p releases/jayuminton-admin-v200.8-webview-js-fixed.apk assets/admin/index.html > "$RUNNER_TEMP/admin-preflight.html"
+          test -s "$RUNNER_TEMP/admin-preflight.html"
           grep -F '<html' "$RUNNER_TEMP/admin-preflight.html" >/dev/null || grep -F '<!DOCTYPE html' "$RUNNER_TEMP/admin-preflight.html" >/dev/null
       - name: Verify Cloudflare backend through live RPC
         shell: bash
@@ -69,24 +69,7 @@ jobs:
           PUBLIC="$ROOT/public"
           mkdir -p "$PUBLIC"
           cp "$RUNNER_TEMP/admin-preflight.html" "$PUBLIC/index.html"
-          python3 - "$PUBLIC/index.html" "$CLOUDFLARE_RPC_URL" <<'PY'
-          from pathlib import Path
-          import re,sys
-          p=Path(sys.argv[1]); rpc=sys.argv[2].rstrip('/')+'/'
-          h=p.read_text(encoding='utf-8')
-          h=re.sub(r'https://[A-Za-z0-9.-]*jayuminton-admin-rpc[A-Za-z0-9.-]*\.workers\.dev/?',rpc,h)
-          h=re.sub(r'https://jayuminton-admin-rpc\.pianopp001\.workers\.dev/?',rpc,h)
-          h=re.sub(r'https://script\.google\.com/macros/s/[^\"\'<> ]+/exec',rpc,h)
-          p.write_text(h,encoding='utf-8')
-          PY
-          if grep -F 'function usesAdminFullName(member)' "$PUBLIC/index.html" >/dev/null \
-             && grep -F '>같은 팀 설정</button>' "$PUBLIC/index.html" >/dev/null \
-             && grep -F '>팀 해제</button>' "$PUBLIC/index.html" >/dev/null \
-             && grep -F 'jayuminton-pair-statistics-disclosure-v2028' "$PUBLIC/index.html" >/dev/null; then
-            echo 'Admin source already contains v203 core; skip redundant bridge reinjection.'
-          else
-            python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$PUBLIC/index.html"
-          fi
+          python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$PUBLIC/index.html"
           grep -F 'function usesAdminFullName(member)' "$PUBLIC/index.html" >/dev/null
           grep -F '>같은 팀 설정</button>' "$PUBLIC/index.html" >/dev/null
@@ -126,6 +109,7 @@ jobs:
           {
             echo 'status=success'
             echo 'baseline=v203'
+            echo 'source=v200.8-verified-apk-plus-v203-bridge'
             echo 'backend=cloudflare-only'
             echo 'gas=absent'
             echo 'team_set_clear=verified'
