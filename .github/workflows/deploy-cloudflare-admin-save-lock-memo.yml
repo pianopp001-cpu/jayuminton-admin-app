@@ -1,5 +1,6 @@
 name: Deploy Cloudflare-only admin save lock and memo
 
+# retrigger 2026-08-25 after switching backend verification to live RPC
 on:
   push:
     branches: [main]
