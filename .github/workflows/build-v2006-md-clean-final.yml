@@ -6,6 +6,10 @@ on:
     paths:
       - 'cloudflare/state-worker/**'
       - 'deployment/jayuminton/admin_md_member_fields_patch.py'
+      - 'deployment/jayuminton/admin_vnext_md_exact_patch.py'
+      - 'deployment/jayuminton/apply_admin_vnext_patches.py'
+      - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
+      - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
       - 'deployment/jayuminton/admin_md_card_timer_patch.py'
       - 'deployment/jayuminton/admin_md_autoassign_slots_patch.py'
       - 'deployment/jayuminton/admin_md_self_alert_html_patch.py'
@@ -54,7 +58,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --location --retry 8 --retry-delay 2 "https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/?v2006=${GITHUB_RUN_ID}" -o "$RUNNER_TEMP/admin.html"
+          SOURCE="$RUNNER_TEMP/admin-source"
+          cp -a source-snapshot/current-main "$SOURCE"
+          python3 deployment/jayuminton/apply_admin_vnext_patches.py "$SOURCE"
+          python3 - "$SOURCE" "$RUNNER_TEMP/admin.html" <<'PY'
+          from pathlib import Path
+          import sys
+          root=Path(sys.argv[1])
+          html=(root/'Admin.html').read_text(encoding='utf-8')
+          for name in ('Style','Script','MemberSwapClient','MemberSwapAction','MemberControls','MemberSwapInbox'):
+              marker="<?!= include('%s'); ?>"%name
+              path=root/(name+'.html')
+              if marker in html:
+                  if not path.exists(): raise SystemExit('missing include: '+name)
+                  html=html.replace(marker,path.read_text(encoding='utf-8'))
+          if '<?!=' in html: raise SystemExit('unresolved Apps Script template marker')
+          Path(sys.argv[2]).write_text(html,encoding='utf-8')
+          PY
+          python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_final_form_patch.py "$RUNNER_TEMP/admin.html"
@@ -66,6 +87,10 @@ jobs:
           python3 deployment/jayuminton/admin_multigroup_swap_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_finish_alert_v12_patch.py "$RUNNER_TEMP/admin.html"
           grep -F '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '__JAYUMINTON_CLOUDFLARE_RPC_V6__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'jayuminton-admin-multi-card-actions-v2' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '>코트배정</button>' "$RUNNER_TEMP/admin.html" >/dev/null
+          if grep -E 'script\\.google\\.com|googleusercontent\\.com|firebaseapp\\.com|web\\.app' "$RUNNER_TEMP/admin.html"; then exit 1; fi
           grep -F '__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'id="mdPublicMemo"' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'id="mdIsNew"' "$RUNNER_TEMP/admin.html" >/dev/null
