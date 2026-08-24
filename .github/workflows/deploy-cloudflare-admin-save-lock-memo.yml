@@ -1,5 +1,6 @@
 name: Deploy Cloudflare-only admin save lock and memo
 
+# retry after prior overlapping run was cancelled
 on:
   push:
     branches: [main]
