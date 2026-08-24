@@ -78,10 +78,11 @@ if marker not in html:
         if req not in html: raise SystemExit('missing '+req)
     path.write_text(html,encoding='utf-8')
 
-helper=Path(__file__).with_name('admin_md_member_fields_patch.py')
-if not helper.exists(): raise SystemExit('member fields helper missing')
-subprocess.run([sys.executable,str(helper),str(path)],check=True)
+for helper_name in ('admin_md_member_fields_patch.py','admin_md_autoassign_slots_patch.py'):
+    helper=Path(__file__).with_name(helper_name)
+    if not helper.exists(): raise SystemExit(helper_name+' missing')
+    subprocess.run([sys.executable,str(helper),str(path)],check=True)
 final=path.read_text(encoding='utf-8')
-for req in ('__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__','__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__','id="mdPublicMemo"','id="mdIsNew"','id="mdIsSponsor"',"server('getPairStatistics',[ADMIN_PIN_VALUE])"):
+for req in ('__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__','__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V2__','__JAYUMINTON_ADMIN_MD_AUTOASSIGN_SLOTS_V1__','id="mdPublicMemo"','id="mdIsNew"','id="mdIsSponsor"',"server('getPairStatistics',[ADMIN_PIN_VALUE])",'1개~4개'):
     if req not in final: raise SystemExit('final admin MD chain missing '+req)
-print('ADMIN_MD_CARD_TIMER_AND_MEMBER_FIELDS_OK')
+print('ADMIN_MD_FULL_CHAIN_OK')
