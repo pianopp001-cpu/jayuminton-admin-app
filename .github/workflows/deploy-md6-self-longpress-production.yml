@@ -1,4 +1,4 @@
-name: Deploy MD6 self long-press production
+name: Deploy Cloudflare user self-card long press V2
 
 on:
   push:
@@ -24,127 +24,64 @@ jobs:
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       LIVE_USER_URL: https://jayuminton-push.web.app/
       CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
-
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
-
+        with: {ref: main}
       - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
+        with: {node-version: '22'}
       - name: Authenticate Firebase
         uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-
+        with: {credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}'}
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@latest
-
       - name: Resolve Firebase project
         shell: bash
         run: |
           set -euo pipefail
-          CONFIG="$RUNNER_TEMP/deploy.json"
-          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
-          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$CONFIG")"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$RUNNER_TEMP/deploy.json")"
           test -n "$FIREBASE_PROJECT_ID"
           echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
-
-      - name: Verify Cloudflare RPC
+      - name: Verify Cloudflare-only RPC
         shell: bash
         run: |
           set -euo pipefail
-          CALLBACK="jmMd6Preflight$GITHUB_RUN_ID"
-          curl --fail --location --retry 5 --max-time 60 \
-            "$CLOUDFLARE_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
-            -o "$RUNNER_TEMP/rpc-preflight.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc-preflight.js" >/dev/null
-          grep -F '"ok":true' "$RUNNER_TEMP/rpc-preflight.js" >/dev/null
-
-      - name: Patch current production page with MD6 self controls
+          CALLBACK="jmSelfV2Preflight$GITHUB_RUN_ID"
+          curl --fail --location --retry 5 --max-time 60 "$CLOUDFLARE_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/rpc.js"
+          grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc.js" >/dev/null
+          grep -F '"ok":true' "$RUNNER_TEMP/rpc.js" >/dev/null
+      - name: Patch current production user page
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="$RUNNER_TEMP/md6-self-longpress"
-          PUBLIC="$ROOT/public"
-          mkdir -p "$PUBLIC"
-          curl --fail --location --retry 5 --max-time 60 \
-            -H 'Cache-Control: no-cache, no-store' \
-            "$LIVE_USER_URL?source=$GITHUB_RUN_ID" \
-            -o "$PUBLIC/index.html"
-
+          ROOT="$RUNNER_TEMP/member-v2"; PUBLIC="$ROOT/public"; mkdir -p "$PUBLIC"
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?source=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_user_requirements_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
-
-          grep -F 'JAYUMINTON_MD6_SELF_LONGPRESS_V1' "$PUBLIC/index.html" >/dev/null
-          grep -F '>도착전</button>' "$PUBLIC/index.html" >/dev/null
-          grep -F '>코트배정대기</button>' "$PUBLIC/index.html" >/dev/null
-          grep -F '>휴식</button>' "$PUBLIC/index.html" >/dev/null
-          grep -F '>귀가</button>' "$PUBLIC/index.html" >/dev/null
-          grep -F '>내정보입력</button>' "$PUBLIC/index.html" >/dev/null
-          grep -F "jmMd6MoveSelf('before')" "$PUBLIC/index.html" >/dev/null
-          grep -F "jmMd6MoveSelf('active')" "$PUBLIC/index.html" >/dev/null
-          grep -F "jmMd6MoveSelf('rest')" "$PUBLIC/index.html" >/dev/null
-          grep -F "jmMd6MoveSelf('away')" "$PUBLIC/index.html" >/dev/null
-          grep -F "server('memberMoveSelf'" "$PUBLIC/index.html" >/dev/null
-          grep -F "server('updateMyProfile',[String(member.id),memo])" "$PUBLIC/index.html" >/dev/null
-          grep -F 'member.publicMemo' "$PUBLIC/index.html" >/dev/null
-          grep -F 'font-size:9px!important' "$PUBLIC/index.html" >/dev/null
+          for marker in 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' '>도착전</button>' '>코트배정대기</button>' '>휴식</button>' '>귀가</button>' '내정보입력' "server('memberMoveSelf'" "server('updateMyProfile'" 'pointerdown' 'publicMemo' 'font-size:9px!important'; do grep -F "$marker" "$PUBLIC/index.html" >/dev/null; done
           grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
-
           python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-inline.js" <<'PY'
           from pathlib import Path
-          import re, sys
-          source=Path(sys.argv[1]).read_text(encoding='utf-8')
-          scripts=re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>',source,flags=re.I)
+          import re,sys
+          h=Path(sys.argv[1]).read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>',h,flags=re.I)
           Path(sys.argv[2]).write_text('\n'.join(scripts),encoding='utf-8')
           PY
           node --check "$RUNNER_TEMP/member-inline.js"
-
           cat > "$ROOT/firebase.json" <<'JSON'
-          {
-            "hosting": {
-              "public": "public",
-              "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-              "headers": [{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],
-              "rewrites": [{"source":"**","destination":"/index.html"}]
-            }
-          }
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
-
       - name: Deploy user web
         shell: bash
-        run: |
-          set -euo pipefail
-          firebase deploy --only hosting \
-            --project "$FIREBASE_PROJECT_ID" \
-            --config "$RUNNER_TEMP/md6-self-longpress/firebase.json" \
-            --non-interactive
-
-      - name: Verify live MD6 self controls
+        run: firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/member-v2/firebase.json" --non-interactive
+      - name: Verify live user web and app source
         shell: bash
         run: |
           set -euo pipefail
           sleep 5
-          curl --fail --location --retry 5 --max-time 60 \
-            -H 'Cache-Control: no-cache, no-store' \
-            "$LIVE_USER_URL?verify=$GITHUB_RUN_ID" \
-            -o "$RUNNER_TEMP/live.html"
-          for marker in \
-            'JAYUMINTON_MD6_SELF_LONGPRESS_V1' \
-            '>도착전</button>' \
-            '>코트배정대기</button>' \
-            '>휴식</button>' \
-            '>귀가</button>' \
-            '>내정보입력</button>' \
-            "server('memberMoveSelf'" \
-            "server('updateMyProfile',[String(member.id),memo])" \
-            'member.publicMemo' \
-            'font-size:9px!important'; do
-            grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null
-          done
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          for marker in 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' '>도착전</button>' '>코트배정대기</button>' '>휴식</button>' '>귀가</button>' '내정보입력' "server('memberMoveSelf'" "server('updateMyProfile'" 'pointerdown' 'publicMemo' 'font-size:9px!important'; do grep -F "$marker" "$RUNNER_TEMP/live.html" >/dev/null; done
+          grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live.html" >/dev/null
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live.html"
-          echo 'MD6_SELF_LONGPRESS_PRODUCTION_OK'
+          echo 'CLOUDFLARE_USER_SELF_CARD_V2_OK'
