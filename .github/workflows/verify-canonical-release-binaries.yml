@@ -1,0 +1,115 @@
+name: Verify canonical release APK binaries
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk'
+      - 'releases/jayuminton-courtstatus-v1.6.42-md-final.apk'
+      - 'deployment/status/v2030-complete-pair-recording-clear-team-cards.txt'
+      - 'deployment/status/user-v1.6.42-md-final.txt'
+      - 'deployment/status/LATEST_INSTALL_FILES.txt'
+      - '.github/workflows/verify-canonical-release-binaries.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify APK files and SHA256 against status
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN='releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk'
+          USER='releases/jayuminton-courtstatus-v1.6.42-md-final.apk'
+          ADMIN_STATUS='deployment/status/v2030-complete-pair-recording-clear-team-cards.txt'
+          USER_STATUS='deployment/status/user-v1.6.42-md-final.txt'
+          test -s "$ADMIN"
+          test -s "$USER"
+          A_EXPECTED="$(sed -n 's/^sha256=//p' "$ADMIN_STATUS" | head -1)"
+          U_EXPECTED="$(sed -n 's/^sha256=//p' "$USER_STATUS" | head -1)"
+          test -n "$A_EXPECTED"; test -n "$U_EXPECTED"
+          A_ACTUAL="$(sha256sum "$ADMIN" | awk '{print $1}')"
+          U_ACTUAL="$(sha256sum "$USER" | awk '{print $1}')"
+          test "$A_ACTUAL" = "$A_EXPECTED"
+          test "$U_ACTUAL" = "$U_EXPECTED"
+          grep -F 'version=203.0' "$ADMIN_STATUS" >/dev/null
+          grep -F 'version=1.6.42' "$USER_STATUS" >/dev/null
+          grep -F 'application_id=com.jayuminton.user' "$USER_STATUS" >/dev/null
+          grep -F 'vibration=3-pulses-x8-groups-confirm-stop' "$USER_STATUS" >/dev/null
+          grep -F 'assignment_scope=current-selected-member-only' "$USER_STATUS" >/dev/null
+
+      - name: Verify actual bundled admin HTML contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN='releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk'
+          unzip -p "$ADMIN" assets/admin/index.html > "$RUNNER_TEMP/admin.html"
+          test -s "$RUNNER_TEMP/admin.html"
+          for marker in \
+            'https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc' \
+            'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' \
+            '__JAYUMINTON_ADMIN_SAVING__' \
+            '__JAYUMINTON_ADMIN_EMPTY_COURT_FINISH_MD4__' \
+            '__JAYUMINTON_ADMIN_STATISTICS_NO_CLIP_FINAL__' \
+            'id="jayuminton-pair-statistics-disclosure-v2028"' \
+            '>같은 팀 설정</button>' \
+            '>팀 해제</button>' \
+            '#adminApp .member-team-badge{display:none!important}' \
+            'box-shadow:inset 5px 0 0 var(--member-team-color)!important' \
+            '>▶ 1회 재생</button>' \
+            '>🔁 반복재생</button>' \
+            '>🔇 멘트 음소거</button>' \
+            'member-public-memo' \
+            'font-size:9px!important'; do
+              grep -F "$marker" "$RUNNER_TEMP/admin.html" >/dev/null
+          done
+          ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/admin.html"
+          ! grep -F 'jayuminton-admin-rpc.pianopp001.workers.dev' "$RUNNER_TEMP/admin.html"
+
+      - name: Verify latest-install manifest points only to canonical APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=deployment/status/LATEST_INSTALL_FILES.txt
+          grep -F 'file=releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk' "$F" >/dev/null
+          grep -F 'file=releases/jayuminton-courtstatus-v1.6.42-md-final.apk' "$F" >/dev/null
+          grep -F 'install_only_the_two_files_above=true' "$F" >/dev/null
+          grep -F 'apps_script_runtime=forbidden' "$F" >/dev/null
+
+      - name: Record verified release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN='releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk'
+          USER='releases/jayuminton-courtstatus-v1.6.42-md-final.apk'
+          A_SHA="$(sha256sum "$ADMIN" | awk '{print $1}')"
+          U_SHA="$(sha256sum "$USER" | awk '{print $1}')"
+          mkdir -p deployment/status
+          {
+            echo 'status=success'
+            echo 'check=canonical-release-binaries'
+            echo 'admin_version=203.0'
+            echo "admin_sha256=$A_SHA"
+            echo 'admin_v24_bundled=verified'
+            echo 'user_version=1.6.42'
+            echo "user_sha256=$U_SHA"
+            echo 'user_cloudflare_fcm_contract=verified'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "head_sha=$GITHUB_SHA"
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > deployment/status/canonical-release-binaries.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/canonical-release-binaries.txt
+          git commit -m 'status: verify canonical APK binaries' || exit 0
+          git pull --rebase origin main || true
+          git push origin HEAD:main
