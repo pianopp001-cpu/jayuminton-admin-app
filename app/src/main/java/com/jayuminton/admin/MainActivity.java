@@ -17,6 +17,7 @@ import android.speech.tts.Voice;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -189,6 +190,14 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                     showAdminLoadState("관리자 서버 응답 오류: " + response.getStatusCode(), true);
                 }
             }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                adminLoadPanel.setVisibility(View.GONE);
+                Toast.makeText(MainActivity.this, "앱 내부 화면 대신 브라우저 관리자 화면을 엽니다.", Toast.LENGTH_LONG).show();
+                openAdminPageInBrowser();
+                return true;
+            }
         });
 
         loadAdminPage();
@@ -215,6 +224,12 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                     }
             );
         }, 5000);
+        webView.postDelayed(() -> {
+            if (adminLoadPanel.getVisibility() != View.VISIBLE) return;
+            adminLoadPanel.setVisibility(View.GONE);
+            Toast.makeText(this, "앱 내부 화면 응답이 없어 브라우저 관리자 화면으로 전환합니다.", Toast.LENGTH_LONG).show();
+            openAdminPageInBrowser();
+        }, 8000);
     }
 
     private void showAdminLoadState(String message, boolean failed) {
@@ -239,6 +254,19 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
             return true;
         } catch (ActivityNotFoundException error) {
             return false;
+        }
+    }
+
+    private void openAdminPageInBrowser() {
+        String url = "https://jayuminton-push--admin-cloudflare-dnhyj6hu.web.app/?app=admin";
+        if (tryOpenBrowserPackage("com.android.chrome", url)) return;
+        if (tryOpenBrowserPackage("com.sec.android.app.sbrowser", url)) return;
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            startActivity(intent);
+        } catch (ActivityNotFoundException error) {
+            showAdminLoadState("관리자 화면을 열 수 없습니다.", true);
         }
     }
 
