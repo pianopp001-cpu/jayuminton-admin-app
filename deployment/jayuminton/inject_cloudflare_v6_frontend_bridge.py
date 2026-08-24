@@ -10,6 +10,7 @@ path = Path(sys.argv[1]); html = path.read_text(encoding='utf-8')
 bridge = (Path(__file__).with_name('cloudflare_v6_frontend_bridge.js')).read_text(encoding='utf-8')
 
 html = re.sub(r'<script\b[^>]*id=["\']jayuminton-admin-cloudflare-rpc["\'][^>]*>.*?</script>\s*', '', html, flags=re.S | re.I)
+html = re.sub(r'<script\b[^>]*id=["\']jayumintonCloudflareRpcV6["\'][^>]*>.*?</script>\s*', '', html, flags=re.S | re.I)
 comment = '/* jayuminton-v3-cloudflare-member-preview */'
 if comment in html:
     pos = html.index(comment); start = html.rfind('<script', 0, pos); end = html.find('</script>', pos)
