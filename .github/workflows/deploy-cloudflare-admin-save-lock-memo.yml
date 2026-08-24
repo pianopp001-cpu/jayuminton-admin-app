@@ -10,7 +10,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jayuminton-cloudflare-admin-save-lock-memo
@@ -111,3 +111,29 @@ jobs:
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live.html" >/dev/null
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live.html"
           echo "ADMIN_CLOUDFLARE_V203_SAVE_LOCK_MEMO_OK url=$ADMIN_URL"
+      - name: Record verified Cloudflare admin status
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          {
+            echo 'status=success'
+            echo 'baseline=v203'
+            echo 'backend=cloudflare-only'
+            echo 'gas=absent'
+            echo 'team_set_clear=verified'
+            echo 'team_stripe=verified'
+            echo 'pair_statistics_full_expand=verified'
+            echo 'save_lock=verified'
+            echo 'voice_controls_during_save=verified'
+            echo 'public_memo=verified'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "admin_url=$ADMIN_URL"
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > deployment/status/cloudflare-admin-v203.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/cloudflare-admin-v203.txt
+          git commit -m 'status: verify Cloudflare admin v203 deployment' || exit 0
+          git pull --rebase origin main || true
+          git push origin main
