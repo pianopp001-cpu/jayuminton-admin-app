@@ -13,7 +13,7 @@ for target in (CODE,ADMIN,SCRIPT,STYLE):
 patches=[
  HERE/'admin_vnext_backend_patch.py', HERE/'admin_vnext_assignment_guard_patch.py', HERE/'admin_vnext_notification_contract.py', HERE/'admin_vnext_recent_play_stat_patch.py',
  HERE/'admin_vnext_member_fields_patch.py', HERE/'admin_vnext_ui_patch.py', HERE/'admin_vnext_missing_value_prepatch.py', HERE/'admin_vnext_script_patch.py', HERE/'admin_vnext_fast_save_patch.py', HERE/'v3_admin_overlay_guarantee.py', HERE/'admin_vnext_badge_cleanup_patch.py',
- HERE/'admin_vnext_multiselect_patch.py', HERE/'admin_vnext_partial_court_ui_patch.py', HERE/'admin_vnext_recent_played_ui_patch.py', HERE/'admin_vnext_transition_alert_patch.py', HERE/'admin_vnext_empty_court_patch.py', HERE/'admin_finish_fast_return_patch.py', HERE/'admin_fast_state_return_patch.py', HERE/'admin_md_ui_cleanup_patch.py', HERE/'admin_excluded_always_visible_patch.py', HERE/'admin_vnext_md_exact_patch.py',
+ HERE/'admin_vnext_multiselect_patch.py', HERE/'admin_vnext_partial_court_ui_patch.py', HERE/'admin_vnext_recent_played_ui_patch.py', HERE/'admin_vnext_transition_alert_patch.py', HERE/'admin_vnext_empty_court_patch.py', HERE/'admin_finish_fast_return_patch.py', HERE/'admin_fast_state_return_patch.py', HERE/'admin_md_ui_cleanup_patch.py', HERE/'admin_excluded_always_visible_patch.py', HERE/'admin_vnext_md_exact_patch.py', HERE/'admin_vnext_webview_observer_compat_patch.py',
 ]
 for patch in patches:
  if not patch.exists(): raise SystemExit(f'patch not found: {patch}')
