@@ -247,6 +247,9 @@ jobs:
           curl -fsSL --retry 3 'https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app/' > "$RUNNER_TEMP/live-admin.html"
           grep -F 'id="adminPinInput"' "$RUNNER_TEMP/live-admin.html" >/dev/null
           grep -F 'id="adminApp"' "$RUNNER_TEMP/live-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_PIN_INPUT_READY__' "$RUNNER_TEMP/live-admin.html" >/dev/null
+          grep -F "input.disabled=false" "$RUNNER_TEMP/live-admin.html" >/dev/null
+          grep -F "touch-action','manipulation" "$RUNNER_TEMP/live-admin.html" >/dev/null
           echo 'REMOTE_ADMIN_LOGIN_RENDER_CONTRACT_OK'
 
       - name: Publish audited v201.2
