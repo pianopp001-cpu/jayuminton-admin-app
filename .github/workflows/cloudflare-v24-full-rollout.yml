@@ -66,18 +66,18 @@ jobs:
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
-      - name: Dispatch and wait for Cloudflare-direct admin APK build
+      - name: Dispatch and wait for canonical admin v203.0 APK build
         id: apk
         if: steps.contract.outcome == 'success' && steps.state.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2006-md-clean-final.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-          gh workflow run build-v2006-md-clean-final.yml --repo "$GITHUB_REPOSITORY" --ref main
+          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2015-known-good-shell.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run build-v2015-known-good-shell.yml --repo "$GITHUB_REPOSITORY" --ref main
           run_id=''
           for i in $(seq 1 90); do
-            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2006-md-clean-final.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2015-known-good-shell.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
             if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
             sleep 2
           done
@@ -109,11 +109,13 @@ jobs:
           source_sha=$GITHUB_SHA
           workflow_run=$GITHUB_RUN_ID
           gas_used=false
+          admin_apk_version=203.0
           requirements=save-lock,voice-exception,self-longpress,public-memo
           EOF
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add deployment/jayuminton/status/CLOUDFLARE_V24_ROLLOUT_RESULT.txt
           git commit -m "Record Cloudflare V24 rollout result: $overall" || true
+          git pull --rebase origin main || true
           git push origin HEAD:main
           if [ "$overall" != success ]; then exit 1; fi
