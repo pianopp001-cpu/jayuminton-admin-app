@@ -1,0 +1,10 @@
+status=success
+guard=canonical-production-v203-v1642
+admin_web_run=32756280670
+admin_apk_run=32752264629
+user_web_run=32753455501
+user_apk_run=32752854990
+apps_script_runtime=forbidden
+run_id=32758157060
+head_sha=f28c7c0c478568693d6d0bda4cbff98a3bcfa8e1
+updated_at=2026-08-24T17:42:27Z
