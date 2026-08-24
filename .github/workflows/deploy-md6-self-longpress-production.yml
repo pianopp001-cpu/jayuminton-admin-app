@@ -1,6 +1,7 @@
 name: Deploy Cloudflare user self-card long press V2
 
 # recovery redeploy 2026-08-25: preserve v203-era user card/team layout then apply self memo
+# rerun after legacy GAS paths were disabled
 on:
   push:
     branches: [main]
