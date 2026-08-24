@@ -18,6 +18,41 @@
 - 앱 미설치 사용자는 현재 사용자 웹 화면에서 팝업·진동을 제공한다.
 - Firebase Hosting은 현재 사용자 웹 화면의 호스팅에 사용할 수 있지만, 핵심 상태 변경/저장 런타임은 Cloudflare를 기준으로 한다.
 
+## 공식 운영 고정점 (2026-08-25)
+아래 4개 경로만 현재 운영 기준이다. 파일명에 과거 버전 숫자가 포함되어 있더라도 아래 성공 Run이 검증된 기준이며, 이름만 보고 더 오래된 체인으로 교체하거나 롤백하지 않는다.
+
+1. 관리자 웹
+   - workflow: `.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml`
+   - verified run: `32756280670`
+   - baseline: v203
+   - source: `releases/jayuminton-admin-v200.8-webview-js-fixed.apk` 내부 검증 HTML + v203 bridge + V24 post-contract
+   - runtime: Cloudflare-only / GAS absent
+
+2. 관리자 APK
+   - workflow: `.github/workflows/build-v2015-known-good-shell.yml`
+   - verified run: `32752264629`
+   - 실제 산출물 기준: admin v203.0 complete pair recording / unobstructed team cards / latest Cloudflare V24 contract
+   - workflow 파일명의 `v2015`는 과거 이름일 뿐 운영 버전을 뜻하지 않는다. 이를 이유로 v201.x로 롤백하지 않는다.
+
+3. 사용자 웹
+   - workflow: `.github/workflows/deploy-md6-self-longpress-production.yml`
+   - verified run: `32753455501`
+   - 기준 기능: 자기카드 긴누름, 상태변경, 내정보/공개메모, 사용자 팀 스트라이프, Cloudflare 상태 연동
+
+4. 사용자 APK
+   - workflow: `.github/workflows/build-user-md-final-v1642.yml`
+   - verified run: `32752854990`
+   - release: `1.6.42`
+   - 기준 기능: Cloudflare 상태 연동 + FCM + 선택된 본인 대상 알림 + 3회×8묶음 진동
+
+### 운영 금지 / 회귀 금지 경로
+- `.github/workflows/build-apk.yml`의 과거 v199.x/GAS 계열을 운영 빌드로 사용하지 않는다.
+- `fix/pwa-v1641-source` 브랜치의 v1.6.41 `deploy-pwa.yml`은 GAS/clasp를 포함한 과거 경로이므로 운영 배포에 사용하지 않는다.
+- `script.google.com/macros/s/`, Apps Script deployment ID, `clasp pull/push/create-deployment`가 최종 운영 경로에 다시 들어가면 회귀로 판정한다.
+- v199.x, v200.x, v201.x 명칭의 과거 APK/워크플로를 최신 운영본보다 우선하지 않는다.
+- 이미 차단한 과거 GAS/lightweight 사용자 APK, 옛 관리자 음성/빌드 체인을 다시 활성화하지 않는다.
+- 관리자 웹/APK의 v203 핵심 기능을 라이브 HTML 위에 중복 주입하지 않는다. 검증 원본에서 재현 가능한 순서로 빌드한다.
+
 ## 관리자 APK
 - 관리자 APK는 Cloudflare 운영 경로에 직접 연결되어야 한다.
 - `script.google.com`, Apps Script deployment ID, `clasp`를 최종 APK 운영 의존성으로 넣지 않는다.
@@ -59,5 +94,7 @@
 8. 사용자 상태 변경과 관리자 저장이 동시에 발생했을 때 최신 사용자 상태가 덮어써지지 않는지 확인.
 9. 저장중 오버레이가 일반 입력을 막으면서 음성제어는 계속 가능한지 확인.
 10. 사용자 공개 메모와 관리자 카드 반영, 팀 표시, 경기통계 전체 펼침이 실제 UI에서 누락 없이 보이는지 확인.
+11. 작업 전후에 위 '공식 운영 고정점' 4개 중 의도하지 않은 축이 옛 워크플로/버전으로 바뀌지 않았는지 확인.
+12. 최종 HTML/APK에 `script.google.com/macros/s/`가 포함되지 않았는지 확인.
 
 확인되지 않은 항목은 PASS로 기록하지 않는다.
