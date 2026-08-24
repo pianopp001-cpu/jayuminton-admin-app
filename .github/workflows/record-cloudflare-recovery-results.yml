@@ -1,0 +1,55 @@
+name: Record Cloudflare recovery workflow results
+
+on:
+  workflow_run:
+    workflows:
+      - 'Build unified MD-final user APK v1.6.42'
+      - 'Deploy Cloudflare-only admin save lock and memo'
+      - 'Deploy Cloudflare user self-card long press V2'
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Record workflow result on main
+        shell: bash
+        env:
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WF_RUN_ID: ${{ github.event.workflow_run.id }}
+          WF_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WF_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          case "$WF_NAME" in
+            'Build unified MD-final user APK v1.6.42') OUT=deployment/status/last-user-apk-workflow.txt ;;
+            'Deploy Cloudflare-only admin save lock and memo') OUT=deployment/status/last-admin-cloudflare-workflow.txt ;;
+            'Deploy Cloudflare user self-card long press V2') OUT=deployment/status/last-user-web-workflow.txt ;;
+            *) exit 0 ;;
+          esac
+          {
+            echo "workflow=$WF_NAME"
+            echo "conclusion=$WF_CONCLUSION"
+            echo "run_id=$WF_RUN_ID"
+            echo "head_sha=$WF_HEAD_SHA"
+            echo "run_url=$WF_URL"
+            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+          } > "$OUT"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$OUT"
+          git commit -m "status: record $WF_NAME result" || exit 0
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            sleep 2
+          done
+          exit 1
