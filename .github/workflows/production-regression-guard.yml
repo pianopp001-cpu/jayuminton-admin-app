@@ -12,6 +12,7 @@ on:
       - '.github/workflows/deploy-md6-self-longpress-production.yml'
       - '.github/workflows/build-user-md-final-v1642.yml'
       - '.github/workflows/build-apk.yml'
+      - '.github/workflows/production-regression-guard.yml'
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
       - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
       - 'deployment/jayuminton/patch_member_self_longpress_v6.py'
@@ -19,7 +20,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   guard:
@@ -28,6 +29,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
       - name: Verify canonical production matrix
         shell: bash
@@ -78,7 +80,7 @@ jobs:
           set -euo pipefail
           grep -F 'DISABLED legacy v199.6 GAS APK build' .github/workflows/build-apk.yml >/dev/null
           grep -F 'exit 1' .github/workflows/build-apk.yml >/dev/null
-          ! grep -F 'script.google.com/macros/s/' releases/jayuminton-courtstatus-v1.6.42-md-final.apk 2>/dev/null || {
+          ! grep -aF 'script.google.com/macros/s/' releases/jayuminton-courtstatus-v1.6.42-md-final.apk 2>/dev/null || {
             echo 'Forbidden GAS URL detected in current user APK'; exit 1;
           }
 
@@ -90,3 +92,28 @@ jobs:
           grep -F 'Google Apps Script를 운영 런타임으로 사용하지 않는다.' PROJECT_RULES.md >/dev/null
           grep -F '공식 운영 고정점 (2026-08-25)' PROJECT_RULES.md >/dev/null
           echo 'CANONICAL_PRODUCTION_GUARD_OK v203 v1.6.42'
+
+      - name: Record verified guard success
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          {
+            echo 'status=success'
+            echo 'guard=canonical-production-v203-v1642'
+            echo 'admin_web_run=32756280670'
+            echo 'admin_apk_run=32752264629'
+            echo 'user_web_run=32753455501'
+            echo 'user_apk_run=32752854990'
+            echo 'apps_script_runtime=forbidden'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "head_sha=$GITHUB_SHA"
+            echo "updated_at=$NOW"
+          } > deployment/status/production-regression-guard.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/production-regression-guard.txt
+          git commit -m 'status: verify canonical production regression guard' || exit 0
+          git pull --rebase origin main || true
+          git push origin HEAD:main
