@@ -7,6 +7,7 @@ on:
       - 'cloudflare/state-worker/**'
       - 'deployment/jayuminton/admin_md_member_fields_patch.py'
       - 'deployment/jayuminton/admin_md_card_timer_patch.py'
+      - 'deployment/jayuminton/admin_md_autoassign_slots_patch.py'
       - 'deployment/jayuminton/admin_md_self_alert_html_patch.py'
       - 'deployment/jayuminton/admin_native_self_alert_java_patch.py'
       - 'deployment/jayuminton/admin_multigroup_swap_patch.py'
@@ -58,6 +59,7 @@ jobs:
           python3 deployment/jayuminton/admin_top_controls_final_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_final_form_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_ui_cleanup_patch.py "$RUNNER_TEMP/admin.html"
+          python3 deployment/jayuminton/admin_md_autoassign_slots_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_bulk_delete_autosync_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_card_timer_patch.py "$RUNNER_TEMP/admin.html"
           python3 deployment/jayuminton/admin_md_self_alert_html_patch.py "$RUNNER_TEMP/admin.html"
@@ -72,6 +74,9 @@ jobs:
           grep -F 'position:fixed!important' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'bottom:0!important' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_UI_CLEANUP_V4__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MD_AUTOASSIGN_SLOTS_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F 'window.smartAssignSelected=async function()' "$RUNNER_TEMP/admin.html" >/dev/null
+          grep -F '!occupied.has(String(m.id))' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_BULK_DELETE_AUTOSYNC_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__' "$RUNNER_TEMP/admin.html" >/dev/null
           grep -F 'JAYUMINTON_ADMIN_SELF_ALERT_HTML_V1' "$RUNNER_TEMP/admin.html" >/dev/null
@@ -147,6 +152,9 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_BOTTOM_CONTROLS_FIXED_V3__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_BULK_DELETE_AUTOSYNC_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_CARD_TIMER_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MD_AUTOASSIGN_SLOTS_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'window.smartAssignSelected=async function()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '!occupied.has(String(m.id))' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MD_MEMBER_FIELDS_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'JAYUMINTON_ADMIN_SELF_ALERT_HTML_V1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_MULTIGROUP_SWAP_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
