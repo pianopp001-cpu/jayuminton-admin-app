@@ -3,6 +3,19 @@ from pathlib import Path
 path = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
 text = path.read_text(encoding='utf-8')
 
+# The repository source may already contain this contract from a previous
+# audited build. Re-running the workflow must then be a no-op, not a failure.
+_ALREADY_APPLIED = (
+    'VOICE_REPEAT_COUNT = 3',
+    'remainingVoiceRepeats = VOICE_REPEAT_COUNT',
+    'speakNextRepeat()',
+    'MEDIA_DUCK_VOLUME_STEP = 6',
+    'setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)',
+)
+if all(marker in text for marker in _ALREADY_APPLIED):
+    print('native TTS3 contract already present')
+    raise SystemExit(0)
+
 text = text.replace(
     'private static final int VOICE_VOLUME_STEP = 6;',
     'private static final int MEDIA_DUCK_VOLUME_STEP = 6;\n    private static final int VOICE_REPEAT_COUNT = 3;',
