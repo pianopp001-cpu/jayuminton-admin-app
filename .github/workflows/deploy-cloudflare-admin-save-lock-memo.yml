@@ -1,6 +1,6 @@
 name: Deploy Cloudflare-only admin save lock and memo
 
-# retry after prior overlapping run was cancelled
+# retry 2026-08-25 after switching compat RPC verification to POST contract
 on:
   push:
     branches: [main]
