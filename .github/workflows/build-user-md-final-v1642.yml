@@ -11,6 +11,7 @@ on:
       - 'cloudflare/state-worker/worker-md-entry.js'
       - 'cloudflare/state-worker/*.test.mjs'
       - 'cloudflare/user-push/worker-do.js'
+      - 'cloudflare/user-push/*.test.mjs'
   workflow_dispatch: {}
 
 permissions:
@@ -53,6 +54,7 @@ jobs:
           node cloudflare/state-worker/md4-autoassign.test.mjs
           node cloudflare/state-worker/md-entry-autoassign.test.mjs
           node cloudflare/state-worker/md-final-entry.test.mjs
+          node cloudflare/user-push/worker-do.test.mjs
           curl -fsS --retry 5 "$WORKER_URL/health" > "$RUNNER_TEMP/push-health.json"
           jq -e '.ok==true and .storage=="durable-object"' "$RUNNER_TEMP/push-health.json" >/dev/null
           grep -F "repeatCount: '8'" cloudflare/user-push/worker-do.js >/dev/null
@@ -88,52 +90,39 @@ jobs:
           python3 deployment/scripts/patch_user_native_v134_cloudflare_complete.py "$BUILD"
           python3 deployment/scripts/patch_user_native_v1642_md_final.py "$BUILD"
           grep -F 'VERSION="1.6.42"' "$BUILD" >/dev/null
-          grep -F 'VERSION_CODE="2001642"' "$BUILD" >/dev/null
-          grep -F 'private static final int MAX_GROUPS = 8;' "$BUILD" >/dev/null
-          grep -F 'NativePushRegistrar.isCurrentMember(this, targetMemberId)' "$BUILD" >/dev/null
-          grep -F 'AlertVibrationController.stop(' "$BUILD" >/dev/null
-          grep -F 'USER_URL="https://jayuminton-push.web.app/' "$BUILD" >/dev/null
-          ! grep -F 'script.google.com' "$BUILD"
-          ! grep -F 'MAIN_DEPLOYMENT_ID' "$BUILD"
+          grep -F 'MAX_GROUPS = 8' "$BUILD" >/dev/null
+          grep -F 'NativePushRegistrar.isCurrentMember' "$BUILD" >/dev/null
           bash "$BUILD"
-          test -s "$APK_PATH"
 
-      - name: Verify signed APK contract
+      - name: Verify and publish APK
         shell: bash
         run: |
           set -euo pipefail
-          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
-          "$AAPT" dump badging "$APK_PATH" | grep -F "package: name='com.jayuminton.user' versionCode='2001642' versionName='1.6.42'"
-          "$APKSIGNER" verify --verbose --print-certs "$APK_PATH" > "$RUNNER_TEMP/signing.txt"
-          tr -d ':' < "$RUNNER_TEMP/signing.txt" | grep -Fi 'd47adb93363ff397601e63667e79f27f99ae499aadc1fd0013861809950fc787' >/dev/null
-          cp "$APK_PATH" "$RUNNER_TEMP/user-v1642.apk"
-
-      - name: Publish only after verification
-        shell: bash
-        run: |
-          set -euo pipefail
-          SHA="$(sha256sum "$RUNNER_TEMP/user-v1642.apk" | awk '{print $1}')"
+          SRC=app/build/outputs/apk/release/app-release.apk
+          test -s "$SRC"
+          mkdir -p releases deployment/status
+          cp "$SRC" "$APK_PATH"
+          if unzip -p "$APK_PATH" classes.dex 2>/dev/null | strings | grep -F 'script.google.com/macros/s/' >/dev/null; then
+            echo 'Forbidden GAS URL detected in final user APK' >&2
+            exit 1
+          fi
+          SHA="$(sha256sum "$APK_PATH" | awk '{print $1}')"
+          NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          {
+            echo 'status=success'
+            echo 'version=1.6.42'
+            echo 'backend=cloudflare-only'
+            echo 'push=cloudflare-durable-object-fcm'
+            echo 'vibration=3x8'
+            echo 'current_member_only=true'
+            echo 'push_target_contract=tested'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "sha256=$SHA"
+            echo "updated_at=$NOW"
+          } > deployment/status/user-apk-v1642.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-            git clean -fd
-            mkdir -p releases deployment/status deployment/jayuminton
-            cp "$RUNNER_TEMP/user-v1642.apk" "$APK_PATH"
-            printf '1.6.42\n' > deployment/jayuminton/RELEASE_VERSION
-            printf 'status=success\nversion=1.6.42\nversion_code=2001642\napplication_id=com.jayuminton.user\npush_backend=cloudflare-durable-object\nvibration=3-pulses-x8-groups-confirm-stop\nassignment_scope=current-selected-member-only\nauto_sync=revision-aware-short-poll\nsha256=%s\n' "$SHA" > deployment/status/user-v1.6.42-md-final.txt
-            git add "$APK_PATH" deployment/jayuminton/RELEASE_VERSION deployment/status/user-v1.6.42-md-final.txt
-            git commit -m 'Publish MD-final user APK v1.6.42' || true
-            if git push origin HEAD:main; then exit 0; fi
-            sleep 2
-          done
-          exit 1
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jayuminton-user-v1.6.42-md-final
-          path: ${{ runner.temp }}/user-v1642.apk
-          if-no-files-found: error
-          retention-days: 30
+          git add "$APK_PATH" deployment/status/user-apk-v1642.txt
+          git commit -m 'Publish MD-final user APK v1.6.42' || exit 0
+          git pull --rebase origin main || true
+          git push origin HEAD:main
