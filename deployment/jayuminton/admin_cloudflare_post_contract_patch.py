@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Cloudflare admin post-contract hardening. No Google Apps Script writes/deploys."""
+# recovery verification trigger 2026-08-25: force direct Cloudflare admin deploy under workflow-result watcher
 from pathlib import Path
 import re
 import sys
