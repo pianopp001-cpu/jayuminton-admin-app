@@ -7,6 +7,9 @@ on:
       - 'deployment/scripts/patch_user_native_v1642_md_final.py'
       - '.github/workflows/build-user-md-final-v1642.yml'
       - 'deployment/jayuminton/patch_member_user_requirements_v1.py'
+      - 'cloudflare/state-worker/worker-md-entry.js'
+      - 'cloudflare/state-worker/*.test.mjs'
+      - 'cloudflare/user-push/worker-do.js'
   workflow_dispatch: {}
 
 permissions:
