@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, sendMemberMessageMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -9,11 +9,16 @@ function fixture() {
   return normalizeState(state);
 }
 {
-  const grouped = setBundleMutation(fixture(), ['7', '8', '9']);
-  const members = grouped.state.members.filter(m => ['7', '8', '9'].includes(m.id));
+  const grouped = setBundleMutation(fixture(), ['14', '15', '16']);
+  const members = grouped.state.members.filter(m => ['14', '15', '16'].includes(m.id));
   assert.equal(members.every(m => m.teamLabel === '팀 1'), true);
   assert.equal(new Set(members.map(m => m.bundleId)).size, 1);
-  assert.equal(publicState(grouped.state, '7').members.find(m => m.id === '7').teamLabel, '팀 1');
+  assert.equal(publicState(grouped.state, '14').members.find(m => m.id === '14').teamLabel, '팀 1');
+  assert.throws(() => setBundleMutation(fixture(), ['7', '8']), /team_requires_assignment_wait/);
+  const cleared = clearBundleMutation(grouped.state, ['14']);
+  assert.equal(cleared.state.members.filter(m => ['14', '15', '16'].includes(m.id)).every(m => !m.bundleId && !m.teamLabel), true);
+  const edited = upsertMemberMutation(grouped.state, { id: '14', name: '수정회원', gender: 'male' });
+  assert.equal(edited.state.members.find(m => m.id === '14').teamLabel, '팀 1');
 }
 {
   const sent = sendMemberMessageMutation(fixture(), ['7', '8'], '라켓을 준비해 주세요.');
