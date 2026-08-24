@@ -73,7 +73,7 @@ addon=r'''
       for(var i=0;i<targets.length;i+=1){
         var t=targets[i], group=currentGroup(t).slice();
         var actualFree=Math.max(0,4-group.length);
-        var wanted=Math.min(actualFree,Number(t.slots||0),pool.length);
+        var wanted=Math.min(actualFree,pool.length);
         if(wanted<=0)continue;
         var ids=[];
         if(manual.length){
@@ -93,9 +93,9 @@ addon=r'''
           ids=partialPick(pool,wanted,group);
         }
         if(!ids.length)continue;
-        var method=t.type==='court'?'autoFillCourt':'autoFillWaitGroup';
+        var method=t.type==='court'?'assignMembersToCourt':'assignMembersToWaitGroup';
         var next=await server(method,[ADMIN_PIN_VALUE,t.index,ids]);
-        if(next&&next.members)renderState(next);
+        if(next&&next.members){STATE=next;renderState();}
         assigned+=ids.length;
       }
       try{SELECTED.clear();}catch(e){}
@@ -114,7 +114,7 @@ addon=r'''
 <!-- __JAYUMINTON_ADMIN_MD_AUTOASSIGN_SLOTS_V1__ -->
 '''
 html=html.replace('</body>',addon+'\n</body>',1)
-for req in (marker,'targetGroups()','EMPTY_SLOT_TARGETS','1개~4개','autoFillCourt','autoFillWaitGroup','pool.length<=wanted','occupied=new Set()','!occupied.has(String(m.id))'):
+for req in (marker,'targetGroups()','EMPTY_SLOT_TARGETS','1개~4개','assignMembersToCourt','assignMembersToWaitGroup','var wanted=Math.min(actualFree,pool.length)','occupied=new Set()','!occupied.has(String(m.id))'):
     if req not in html: raise SystemExit('autoassign slots marker missing '+req)
 path.write_text(html,encoding='utf-8')
 print('ADMIN_MD_AUTOASSIGN_SLOTS_V1_OK')
