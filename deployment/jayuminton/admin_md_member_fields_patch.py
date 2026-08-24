@@ -32,16 +32,18 @@ if 'mdIsSponsor' in html and "document.getElementById('mdPublicMemo')" not in ht
     )
     meta_arg = r"\1, {publicMemo:String(document.getElementById('mdPublicMemo')?.value||'').trim(),isNew:!!document.getElementById('mdIsNew')?.checked,isSponsor:!!document.getElementById('mdIsSponsor')?.checked}\2"
     html, count = pat.subn(meta_arg, html, count=1)
-    if count != 1:
-        raise SystemExit('direct addMember metadata patch failed')
+    # Current Cloudflare HTML routes registration through server('addMember', ...),
+    # which is augmented by the wrapper below. Legacy GAS pages still match the
+    # direct call above; absence of that legacy call is therefore valid.
 
 # Include metadata on the optimistic temporary member card.
 if "publicMemo: String(document.getElementById('mdPublicMemo')" not in html:
     old = "    experience: experience,\n    createdAt: new Date().toISOString()"
     new = "    experience: experience,\n    publicMemo: String(document.getElementById('mdPublicMemo')?.value || '').trim(),\n    isNew: !!document.getElementById('mdIsNew')?.checked,\n    isSponsor: !!document.getElementById('mdIsSponsor')?.checked,\n    createdAt: new Date().toISOString()"
-    if old not in html:
-        raise SystemExit('temporary member anchor missing')
-    html = html.replace(old, new, 1)
+    if old in html:
+        html = html.replace(old, new, 1)
+    # Some current builds no longer create an optimistic temporary card. In that
+    # case the authoritative server response already contains these fields.
 
 # Pair statistics modal is created here if the downloaded Cloudflare source does not already contain it.
 if 'id="pairStatisticsModal"' not in html:
@@ -159,7 +161,7 @@ html = html.replace('</body>', addon + '\n</body>', 1)
 
 for req in (
     marker,'id="mdPublicMemo"','id="mdIsNew"','id="mdIsSponsor"',
-    "publicMemo:String(document.getElementById('mdPublicMemo')", 'isSponsor:!!document.getElementById',
+    "if(name==='addMember' && next.length<6)next[5]=meta()",
     "if(name==='updateMemberProfile')next[6]=meta()",
     'window.openPairStatistics=async function()', "server('getPairStatistics',[ADMIN_PIN_VALUE])",
     'new 신규','🎁 찬조','pairStatisticsModal'
