@@ -79,32 +79,14 @@ jobs:
           h=re.sub(r'https://script\.google\.com/macros/s/[^\"\'<> ]+/exec',rpc,h)
           p.write_text(h,encoding='utf-8')
           PY
-          cp deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$RUNNER_TEMP/inject_admin_web.py"
-          python3 - "$RUNNER_TEMP/inject_admin_web.py" <<'PY'
-          from pathlib import Path
-          import sys
-          p=Path(sys.argv[1])
-          s=p.read_text(encoding='utf-8')
-          old="""for old, new in replacements.items():
-    count = html.count(old)
-    if count != 1:
-        raise SystemExit(f'WebView observer guard target mismatch ({count}): {old[:72]}')
-    html = html.replace(old, new, 1)
-"""
-          new="""for old, new in replacements.items():
-    count = html.count(old)
-    if count == 1:
-        html = html.replace(old, new, 1)
-    elif count == 0:
-        print(f'WebView observer guard already changed or absent; skip: {old[:72]}')
-    else:
-        raise SystemExit(f'WebView observer guard target mismatch ({count}): {old[:72]}')
-"""
-          if old not in s:
-              raise SystemExit('temporary observer-guard relaxation target mismatch')
-          p.write_text(s.replace(old,new,1),encoding='utf-8')
-          PY
-          python3 "$RUNNER_TEMP/inject_admin_web.py" "$PUBLIC/index.html"
+          if grep -F 'function usesAdminFullName(member)' "$PUBLIC/index.html" >/dev/null \
+             && grep -F '>같은 팀 설정</button>' "$PUBLIC/index.html" >/dev/null \
+             && grep -F '>팀 해제</button>' "$PUBLIC/index.html" >/dev/null \
+             && grep -F 'jayuminton-pair-statistics-disclosure-v2028' "$PUBLIC/index.html" >/dev/null; then
+            echo 'Admin source already contains v203 core; skip redundant bridge reinjection.'
+          else
+            python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$PUBLIC/index.html"
+          fi
           python3 deployment/jayuminton/admin_cloudflare_post_contract_patch.py "$PUBLIC/index.html"
           grep -F 'function usesAdminFullName(member)' "$PUBLIC/index.html" >/dev/null
           grep -F '>같은 팀 설정</button>' "$PUBLIC/index.html" >/dev/null
