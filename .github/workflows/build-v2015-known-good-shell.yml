@@ -1,4 +1,4 @@
-name: Build admin v202.3 mute guard vibration and fast lock
+name: Build admin v202.4 member identity teams and save lock
 
 on:
   workflow_dispatch: {}
@@ -64,6 +64,12 @@ jobs:
           grep -F 'backdrop-filter:none!important' "$HTML" >/dev/null
           grep -F "if(locked)app.setAttribute('inert','')" "$HTML" >/dev/null
           grep -F "result.reason='muted';result.engine='muted'" "$HTML" >/dev/null
+          grep -F 'id="newIsDuplicate"' "$HTML" >/dev/null
+          grep -F 'id="newTeam"' "$HTML" >/dev/null
+          grep -F 'function usesAdminFullName(member)' "$HTML" >/dev/null
+          grep -F "event.target.closest('#voiceSaveEmergency')" "$HTML" >/dev/null
+          ! grep -F '아이콘 · 신규' "$HTML" >/dev/null
+          ! grep -F '아이콘 · 찬조' "$HTML" >/dev/null
           grep -F 'filter:none!important;backdrop-filter:none!important' "$HTML" >/dev/null
           test "$(grep -o 'id=\"newIsNew\"' "$HTML" | wc -l)" -eq 1
           ! grep -F 'id="mdIsNew"' "$HTML" >/dev/null
@@ -90,7 +96,7 @@ jobs:
           print('INLINE_JS_SYNTAX_OK', len(blocks))
           PY
 
-      - name: Set v202.3 identity and resilient native load release
+      - name: Set v202.4 identity and sanitize native status text
         shell: bash
         run: |
           set -euo pipefail
@@ -100,13 +106,23 @@ jobs:
           java = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s = java.read_text(encoding='utf-8')
           s, n = re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";',
-                         'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=202.3";', s, count=1)
+                         'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=202.4";', s, count=1)
           if n != 1: raise SystemExit('ADMIN_URL replacement failed')
           s, n = re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";',
-                         'private static final String APK_WEB_BUILD = "2023-mute-guard-vibration-fast-lock";', s, count=1)
+                         'private static final String APK_WEB_BUILD = "2024-member-identity-team-save-lock";', s, count=1)
           if n != 1: raise SystemExit('APK_WEB_BUILD replacement failed')
           s = re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+',
-                     'JayumintonNative/202.3 CloudflareAdmin/2023', s, count=1)
+                     'JayumintonNative/202.4 CloudflareAdmin/2024', s, count=1)
+          # Never display a bundled file:// URL (or another raw URL) in a native
+          # loading/saving status message. URLs remain internal to WebView.
+          old = 'adminLoadMessage.setText(message);'
+          new = '''String safeMessage = message == null ? "처리 중입니다." : message;
+            if (safeMessage.contains("file:/") || safeMessage.contains("://")) {
+                safeMessage = "처리 중입니다.";
+            }
+            adminLoadMessage.setText(safeMessage);'''
+          if s.count(old) != 1: raise SystemExit('native status text anchor mismatch')
+          s = s.replace(old, new, 1)
           page_finished = r'(\s+@Override\s+public void onPageFinished\(WebView view, String url\) \{)'
           page_commit = '''
             @Override
@@ -124,8 +140,8 @@ jobs:
           java.write_text(s, encoding='utf-8')
           gradle = Path('app/build.gradle')
           g = gradle.read_text(encoding='utf-8')
-          g = re.sub(r'versionCode\s+\d+', 'versionCode 2023', g, count=1)
-          g = re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '202.3'", g, count=1)
+          g = re.sub(r'versionCode\s+\d+', 'versionCode 2024', g, count=1)
+          g = re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '202.4'", g, count=1)
           gradle.write_text(g, encoding='utf-8')
           PY
           python3 deployment/jayuminton/admin_native_audio_v2021_patch.py
@@ -134,6 +150,7 @@ jobs:
           grep -F 'Math.min(originalMediaVolume, levelSix)' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
           grep -F 'new MemberAlertBridge(), "NativeMemberAlert"' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
           grep -F 'VibrationEffect.createWaveform(pattern, -1)' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
+          grep -F 'safeMessage.contains("file:/")' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
           ! grep -R -F 'onRenderProcessGone' app/src/main/java app/src/main/AndroidManifest.xml >/dev/null
           ! grep -R -F 'LAYER_TYPE_SOFTWARE' app/src/main/java app/src/main/AndroidManifest.xml >/dev/null
           ! grep -R -F 'android:hardwareAccelerated="false"' app/src/main/AndroidManifest.xml >/dev/null
@@ -160,11 +177,11 @@ jobs:
           ! grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'jayuminton-admin-rpc.pianopp001.workers.dev' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
-      - name: Publish v202.3 mute-vibration-fast-lock APK
+      - name: Publish v202.4 member-identity-team-save-lock APK
         shell: bash
         run: |
           set -euo pipefail
-          APK_TMP="$RUNNER_TEMP/jayuminton-admin-v202.3-mute-vibration-fast-lock.apk"
+          APK_TMP="$RUNNER_TEMP/jayuminton-admin-v202.4-member-team-save-lock.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK_TMP"
           SHA=$(sha256sum "$APK_TMP" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -174,10 +191,10 @@ jobs:
             git reset --hard origin/main
             git clean -fd
             mkdir -p releases deployment/status
-            cp "$APK_TMP" releases/jayuminton-admin-v202.3-mute-vibration-fast-lock.apk
-            printf 'status=success\nversion=202.3\nrun_id=%s\nsha256=%s\nbuild=announcement-mute-guard-native-3x8-vibration-inert-fast-lock\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2023-mute-vibration.txt
-            git add releases/jayuminton-admin-v202.3-mute-vibration-fast-lock.apk deployment/status/v2023-mute-vibration.txt
-            git commit -m 'Publish admin v202.3 mute vibration APK' || true
+            cp "$APK_TMP" releases/jayuminton-admin-v202.4-member-team-save-lock.apk
+            printf 'status=success\nversion=202.4\nrun_id=%s\nsha256=%s\nbuild=duplicate-full-name-team-stripe-voice-exempt-save-lock\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2024-member-team-save-lock.txt
+            git add releases/jayuminton-admin-v202.4-member-team-save-lock.apk deployment/status/v2024-member-team-save-lock.txt
+            git commit -m 'Publish admin v202.4 member team save lock APK' || true
             if git push origin HEAD:main; then
               echo "V2015_PUBLISH_OK sha256=$SHA"
               exit 0
@@ -186,7 +203,7 @@ jobs:
           done
           exit 1
 
-      - name: Report v202.3 build failure
+      - name: Report v202.4 build failure
         if: failure()
         shell: bash
         run: |
@@ -196,7 +213,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p deployment/status
-          printf 'status=failure\nversion=202.3\nrun_id=%s\nsha256=%s\nbuild=announcement-mute-guard-native-3x8-vibration-inert-fast-lock\n' "$GITHUB_RUN_ID" "" > deployment/status/v2023-mute-vibration.txt
-          git add deployment/status/v2023-mute-vibration.txt
-          git commit -m 'Record admin v202.3 mute vibration build failure' || true
+          printf 'status=failure\nversion=202.4\nrun_id=%s\nsha256=%s\nbuild=duplicate-full-name-team-stripe-voice-exempt-save-lock\n' "$GITHUB_RUN_ID" "" > deployment/status/v2024-member-team-save-lock.txt
+          git add deployment/status/v2024-member-team-save-lock.txt
+          git commit -m 'Record admin v202.4 build failure' || true
           git push origin HEAD:main
