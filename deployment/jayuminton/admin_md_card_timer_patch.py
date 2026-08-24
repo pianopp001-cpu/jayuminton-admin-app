@@ -47,7 +47,7 @@ if marker not in html:
   memberCard=function(member,showGames,clickable){
     if(!member)return '<div class="person empty">비어 있음</div>';
     var selected=SELECTED.has(member.id)?' selected':'';
-    var onclick=clickable?' onclick="handleSelectableMemberClick(\\''+member.id+'\\',event)"':'';
+    var onclick=clickable?' onclick="handleSelectableMemberClick(\''+member.id+'\',event)"':'';
     var games=showGames?'<span class="meta">'+(member.games||0)+'게임</span>':'';
     var selfStar=(typeof isSelfMember==='function'&&isSelfMember(member))?'<span class="member-self-star" aria-label="내 이름">★ 나</span>':'';
     var selfClass=(typeof isSelfMember==='function'&&isSelfMember(member))?' is-self-member':'';
