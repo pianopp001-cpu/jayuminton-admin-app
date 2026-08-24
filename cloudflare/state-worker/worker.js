@@ -175,7 +175,10 @@ export function swapLocationsMutation(input, left, right) {
 export function autoAssignMutation(input, candidateIds, destinations) {
   let state = normalizeState(input);
   const memberById = new Map(state.members.map(m => [String(m.id), m]));
-  const available = uniqueIds(candidateIds, 200).filter(id => memberById.has(id) && !locationOf(state, id));
+  const available = uniqueIds(candidateIds, 200).filter(id => {
+    const location = locationOf(state, id);
+    return memberById.has(id) && (!location || location.type === 'active');
+  });
   const ordered = [];
   const men = available.filter(id => String(memberById.get(id).gender || '').toLowerCase().startsWith('m') || memberById.get(id).gender === '남');
   const women = available.filter(id => !men.includes(id));
