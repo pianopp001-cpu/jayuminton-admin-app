@@ -139,3 +139,18 @@ jobs:
             sleep 2
           done
           exit 1
+
+      - name: Report v201.5 build failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p deployment/status
+          printf 'status=failure\nversion=201.5\nrun_id=%s\nbuild=exact-v2005-shell-cloudflare-direct-no-gas\n' "$GITHUB_RUN_ID" > deployment/status/v2015-proven-shell.txt
+          git add deployment/status/v2015-proven-shell.txt
+          git commit -m 'Record admin v201.5 build failure' || true
+          git push origin HEAD:main
