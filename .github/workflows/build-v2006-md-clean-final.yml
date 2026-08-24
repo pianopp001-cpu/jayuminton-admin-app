@@ -239,8 +239,12 @@ jobs:
           unzip -p "$APK" classes.dex > "$RUNNER_TEMP/classes.dex"
           strings "$RUNNER_TEMP/classes.dex" > "$RUNNER_TEMP/classes.strings"
           grep -F 'https://jayuminton-push--admin-cloudflare-dnhyj6hu.web.app/?app=admin&native=1&appVersion=201.0' "$RUNNER_TEMP/classes.strings" >/dev/null
-          grep -F '앱 내부 화면 응답이 없어 브라우저 관리자 화면으로 전환합니다.' "$RUNNER_TEMP/classes.strings" >/dev/null
-          grep -F '앱 내부 화면 대신 브라우저 관리자 화면을 엽니다.' "$RUNNER_TEMP/classes.strings" >/dev/null
+          # GNU strings can omit non-ASCII DEX constants. Verify the compiled URL in DEX,
+          # and verify the recovery callbacks directly in the source that Gradle compiled.
+          grep -F 'openAdminPageInBrowser' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
+          grep -F 'onRenderProcessGone' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
+          grep -F 'com.android.chrome' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
+          grep -F 'com.sec.android.app.sbrowser' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
           curl -fsSL --retry 3 'https://jayuminton-push--admin-cloudflare-dnhyj6hu.web.app/' > "$RUNNER_TEMP/live-admin.html"
           grep -F 'id="adminPinInput"' "$RUNNER_TEMP/live-admin.html" >/dev/null
           grep -F 'id="adminApp"' "$RUNNER_TEMP/live-admin.html" >/dev/null
