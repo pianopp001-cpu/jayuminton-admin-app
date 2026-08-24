@@ -1056,16 +1056,22 @@ function memberInfoDetailHtml(member, locationOverride) {
 
   experience = experience.replace(/^구력\s*/i, '').trim();
 
+  /* JAYUMINTON_ADMIN_PUBLIC_MEMO_V1 */
+  const publicMemo = String(member && member.publicMemo || '').trim();
+  const publicMemoHtml = publicMemo
+    ? '<span class="member-public-memo">' + escapeMemberInfo(publicMemo) + '</span>'
+    : '';
+
   if (!IS_ADMIN) {
     const parts = [];
     if (grade) parts.push(escapeMemberInfo(grade));
     if (experience) parts.push(escapeMemberInfo('구력 ' + experience));
-    if (!parts.length) return '';
-    return '<span class="member-info-detail">' + parts.join(' · ') + '</span>';
+    if (!parts.length) return publicMemoHtml;
+    return '<span class="member-info-detail">' + parts.join(' · ') + '</span>' + publicMemoHtml;
   }
 
   if (!grade && !experience) {
-    return '<span class="member-info-detail is-missing">급수·구력 미입력</span>';
+    return '<span class="member-info-detail is-missing">급수·구력 미입력</span>' + publicMemoHtml;
   }
 
   const gradeText = grade || '급수 미입력';
@@ -1074,7 +1080,7 @@ function memberInfoDetailHtml(member, locationOverride) {
   return '<span class="member-info-detail' +
     ((!grade || !experience) ? ' is-missing' : '') + '">' +
     escapeMemberInfo(gradeText) + ' · ' + escapeMemberInfo(experienceText) +
-    '</span>';
+    '</span>' + publicMemoHtml;
 }
 
 function toggleMemberInfo(memberId, event) {

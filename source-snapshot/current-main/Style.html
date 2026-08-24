@@ -3393,3 +3393,25 @@ body.action-busy .court-voice-controls,
 body.action-busy .court-voice-controls button{
   pointer-events:auto!important;
 }
+
+
+/* JAYUMINTON_ADMIN_PUBLIC_MEMO_STYLE_V1
+   User-entered public memo is shown on every admin/user member card at the same
+   compact information scale as grade/experience. */
+#adminApp .member-public-memo,
+#memberApp .member-public-memo,
+#memberApp .jm-public-memo{
+  display:block!important;
+  width:100%!important;
+  margin-top:2px!important;
+  font-size:clamp(7px,1.8vw,9px)!important;
+  line-height:1.12!important;
+  font-weight:750!important;
+  color:#536178!important;
+  text-align:center!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  word-break:keep-all!important;
+}
+#adminApp .male .member-public-memo{color:#31598f!important}
+#adminApp .female .member-public-memo{color:#8c4569!important}
