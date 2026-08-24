@@ -463,7 +463,7 @@ export async function legacyRpc(request, env, name, args) {
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
-  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
   if (adminNames.has(name)) {
     await verifyAdminSession(bearerRequest(request, token), env, state);
     if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
@@ -477,6 +477,21 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'assignMembersToWaitGroup') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'wait', key: String(Number(values[1]) + 1) }; }
     else if (name === 'smartAssignSelected') { action = 'autoAssign'; body.candidateIds = values[1]; body.destinations = [{ type: 'court', key: String(values[2]) }]; }
     else if (name === 'finishCourt') { action = 'finishCourt'; body.courtNo = values[1]; }
+    else if (name === 'swapMembers') { action = 'swapMembers'; body.leftIds = values[1]; body.rightIds = values[2]; }
+    else if (name === 'swapCourts') { action = 'swapMembers'; body.leftIds = [...(state.courts[String(values[1])] || [])]; body.rightIds = [...(state.courts[String(values[2])] || [])]; }
+    else if (name === 'swapWaitGroups') { action = 'swapMembers'; body.leftIds = [...(state.waitGroups[Number(values[1])] || [])]; body.rightIds = [...(state.waitGroups[Number(values[2])] || [])]; }
+    else if (name === 'moveOrSwapMember') {
+      const targetId = String(values[4] || '');
+      if (targetId) { action = 'swapMembers'; body.leftIds = [String(values[1])]; body.rightIds = [targetId]; }
+      else {
+        action = 'moveMembers'; body.memberIds = [String(values[1])];
+        body.destination = String(values[2]) === 'court'
+          ? { type: 'court', key: String(values[3]) }
+          : String(values[2]) === 'wait'
+            ? { type: 'wait', key: String(Number(values[3]) + 1) }
+            : { type: 'active', key: '' };
+      }
+    }
     else if (name === 'undoLastAction') action = 'undoLast';
     else if (name === 'adjustMemberGames') { action = 'adjustGames'; body.memberIds = [values[1]]; body.delta = values[2]; }
     else if (name === 'decreaseSelectedGameCounts') { action = 'adjustGames'; body.memberIds = values[1]; body.delta = -1; }
