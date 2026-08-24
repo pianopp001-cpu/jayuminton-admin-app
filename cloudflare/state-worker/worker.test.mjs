@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -7,6 +7,13 @@ function fixture() {
   state.courts['1'] = ['1', '2'];
   state.waitGroups = [['3', '4', '5', '6'], ['7', '8', '9', '10'], ['11'], ['12'], ['13']];
   return normalizeState(state);
+}
+{
+  const grouped = setBundleMutation(fixture(), ['7', '8', '9']);
+  const members = grouped.state.members.filter(m => ['7', '8', '9'].includes(m.id));
+  assert.equal(members.every(m => m.teamLabel === '팀 1'), true);
+  assert.equal(new Set(members.map(m => m.bundleId)).size, 1);
+  assert.equal(publicState(grouped.state, '7').members.find(m => m.id === '7').teamLabel, '팀 1');
 }
 
 {
