@@ -357,8 +357,8 @@ TEAM_ONLY_V2_ADDON = r'''
 TEAM_CARD_LAYOUT_V3_ADDON = r'''
 <style id="jayuminton-member-team-card-layout-v3">
 /* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V3 */
-[data-member-id].jm-has-team{height:auto!important;min-height:0!important;overflow:visible!important}
-[data-member-id]>.jm-member-badges{position:static!important;inset:auto!important;transform:none!important;z-index:auto!important;display:flex!important;flex-wrap:wrap!important;clear:both!important;float:none!important;width:100%!important;box-sizing:border-box!important;order:99!important;flex:0 0 100%!important;margin:5px 0 0!important;padding:0!important;overflow:visible!important}
+[data-member-id].jm-has-team{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+[data-member-id]>.jm-member-badges{position:static!important;inset:auto!important;transform:none!important;z-index:auto!important;display:flex!important;flex-wrap:wrap!important;clear:both!important;float:none!important;width:100%!important;box-sizing:border-box!important;order:99!important;flex:0 0 100%!important;grid-column:1/-1!important;grid-row:auto!important;margin:5px 0 0!important;padding:0!important;overflow:visible!important}
 [data-member-id]>.jm-member-badges .jm-team-badge{position:static!important;inset:auto!important;transform:none!important;display:inline-flex!important;max-width:100%!important;box-sizing:border-box!important;margin:0!important;border-radius:6px!important;white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
 </style>
 <script>
