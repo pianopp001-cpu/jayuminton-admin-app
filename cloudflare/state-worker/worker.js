@@ -15,7 +15,7 @@ export function emptyState() {
     courtStartedAt: { '1': '', '2': '', '3': '', '4': '' },
     waitGroups: [[], [], [], [], []],
     settings: { memberPassword: '', memberPasswordVersion: 1, adminPin: '', adminPinVersion: 1, courtOrientation: 'door-right' },
-    swapRequests: [], actionHistory: [], updatedAt: new Date(0).toISOString(),
+    swapRequests: [], memberMessages: [], actionHistory: [], updatedAt: new Date(0).toISOString(),
   };
 }
 
@@ -41,6 +41,7 @@ export function normalizeState(input) {
   state.courtStartedAt = Object.assign(base.courtStartedAt, state.courtStartedAt || {});
   state.settings = Object.assign(base.settings, state.settings || {});
   state.swapRequests = Array.isArray(state.swapRequests) ? state.swapRequests.slice(-100) : [];
+  state.memberMessages = Array.isArray(state.memberMessages) ? state.memberMessages.slice(-50) : [];
   state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory.slice(-50) : [];
   state.revision = Math.max(0, Number(state.revision) || 0);
   state.updatedAt = String(state.updatedAt || new Date().toISOString());
@@ -212,6 +213,19 @@ export function setBundleMutation(input, memberIds) {
   return { state, event: { type: 'team_set', memberIds: ids, bundleId, teamLabel } };
 }
 
+export function sendMemberMessageMutation(input, memberIds, message) {
+  const state = normalizeState(input); const ids = uniqueIds(memberIds, 200);
+  const text = String(message || '').trim().slice(0, 300);
+  if (!ids.length) throw new Error('members_required');
+  if (!text) throw new Error('message_required');
+  const known = new Set(state.members.map(m => String(m.id)));
+  const recipients = ids.filter(id => known.has(id));
+  if (!recipients.length) throw new Error('members_not_found');
+  const item = { id: `msg-${crypto.randomUUID()}`, memberIds: recipients, text, createdAt: new Date().toISOString() };
+  state.memberMessages = [...state.memberMessages, item].slice(-50);
+  return { state, event: { type: 'member_message_sent', messageId: item.id, memberIds: recipients } };
+}
+
 export function setMemberStatusMutation(input, memberIds, status) {
   const state = normalizeState(input); const ids = uniqueIds(memberIds, 200);
   if (!['active', 'before', 'rest', 'away'].includes(String(status))) throw new Error('invalid_member_status');
@@ -324,6 +338,7 @@ export function publicState(state, memberId = '') {
   const safe = normalizeState(state); const me = String(memberId || '');
   safe.settings = { memberPasswordVersion: Number(safe.settings.memberPasswordVersion || 1), courtOrientation: safe.settings.courtOrientation };
   safe.swapRequests = safe.swapRequests.filter(r => r.status === 'pending' && (r.requesterId === me || r.targetId === me));
+  safe.memberMessages = safe.memberMessages.filter(item => Array.isArray(item.memberIds) && item.memberIds.map(String).includes(me)).slice(-10);
   delete safe.actionHistory; return safe;
 }
 
@@ -415,6 +430,7 @@ export class StateCoordinator {
       else if (action === 'upsertMember') result = upsertMemberMutation(current, body.member);
       else if (action === 'setMemberStatus') result = setMemberStatusMutation(current, body.memberIds, body.status);
       else if (action === 'setBundle') result = setBundleMutation(current, body.memberIds);
+      else if (action === 'sendMemberMessage') result = sendMemberMessageMutation(current, body.memberIds, body.message);
       else if (action === 'adjustGames') result = adjustGamesMutation(current, body.memberIds, body.delta, body.reset);
       else if (action === 'requestSwap') result = requestSwapMutation(current, body.requesterId, body.targetId);
       else if (action === 'respondSwap') result = respondSwapMutation(current, body.requestId, body.responderId, body.accept);
@@ -496,7 +512,7 @@ export async function legacyRpc(request, env, name, args) {
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
-  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','sendMemberMessage','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
   if (adminNames.has(name)) {
     await verifyAdminSession(bearerRequest(request, token), env, state);
     if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
@@ -506,6 +522,7 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'updateMemberProfile') { action = 'upsertMember'; body.member = { id: values[1], name: values[2], gender: values[3], grade: values[4], experience: values[5], ...(values[6] || {}) }; }
     else if (name === 'setMemberStatus') { action = 'setMemberStatus'; body.memberIds = values[1]; body.status = values[2]; }
     else if (name === 'setBundle') { action = 'setBundle'; body.memberIds = values[1]; }
+    else if (name === 'sendMemberMessage') { action = 'sendMemberMessage'; body.memberIds = values[1]; body.message = values[2]; }
     else if (name === 'deleteMembers') { action = 'deleteMembers'; body.memberIds = values[1]; }
     else if (name === 'assignMembersToCourt') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'court', key: String(values[1]) }; }
     else if (name === 'assignMembersToWaitGroup') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'wait', key: String(Number(values[1]) + 1) }; }
@@ -628,7 +645,7 @@ export default {
     if (url.pathname === '/api/admin/rpc' && request.method === 'POST') {
       try {
         const state = await readState(env.DB); await verifyAdminSession(request, env, state); const body = await request.json();
-        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','setBundle','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
+        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','setBundle','sendMemberMessage','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
         if (!allowed.has(String(body.action || ''))) return reply({ ok: false, error: 'unsupported_admin_action' }, 400);
         return coordinatorAsInternal(request, env, String(body.action), body);
       } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
