@@ -98,9 +98,12 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         adminLoadProgress = findViewById(R.id.adminLoadProgress);
         adminLoadMessage = findViewById(R.id.adminLoadMessage);
         adminRetryButton = findViewById(R.id.adminRetryButton);
-        adminRetryButton.setOnClickListener(view -> loadAdminPage());
+        adminRetryButton.setOnClickListener(view -> recreate());
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
+        // Some Samsung/Android WebView GPU combinations terminate or stall the
+        // renderer. Software compositing keeps the admin login inside the app.
+        webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         webView.requestFocus(View.FOCUS_DOWN);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -193,9 +196,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
 
             @Override
             public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
-                adminLoadPanel.setVisibility(View.GONE);
-                Toast.makeText(MainActivity.this, "앱 내부 화면 대신 브라우저 관리자 화면을 엽니다.", Toast.LENGTH_LONG).show();
-                openAdminPageInBrowser();
+                showAdminLoadState("화면 엔진을 다시 시작해 주세요.", true);
                 return true;
             }
         });
@@ -224,12 +225,8 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                     }
             );
         }, 5000);
-        webView.postDelayed(() -> {
-            if (adminLoadPanel.getVisibility() != View.VISIBLE) return;
-            adminLoadPanel.setVisibility(View.GONE);
-            Toast.makeText(this, "앱 내부 화면 응답이 없어 브라우저 관리자 화면으로 전환합니다.", Toast.LENGTH_LONG).show();
-            openAdminPageInBrowser();
-        }, 8000);
+        // Never jump to an external browser. The retry button recreates the
+        // WebView process if the device needs a renderer restart.
     }
 
     private void showAdminLoadState(String message, boolean failed) {
