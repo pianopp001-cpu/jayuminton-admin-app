@@ -1,0 +1,5 @@
+status=success
+version=203.0
+run_id=32732058622
+sha256=2b13afd7d639f225a783fdfb0867f702b326241951d91aad6e798b872abaabf5
+build=complete-pair-recording-clear-team-cards
