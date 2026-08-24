@@ -159,6 +159,14 @@ if html.count(old_summary) != 1:
     raise SystemExit('member management summary mismatch')
 html = html.replace(old_summary, new_summary, 1)
 
+# Put member messaging beside Quick Assign so selected cards can be addressed
+# without leaving the court screen.
+quick_count = '<span id="quickSelectedCount" class="selection-pill">0명 선택</span>'
+quick_message = quick_count + '\n          <button id="quickMemberMessageButton" type="button" onclick="openQuickMemberMessage()">메시지 보내기</button>'
+if html.count(quick_count) != 1:
+    raise SystemExit('quick member message anchor mismatch')
+html = html.replace(quick_count, quick_message, 1)
+
 old_game_panel = '''    <div class="card admin-game-count-panel" style="box-shadow:none;margin-top:12px">
   <h2>게임횟수 카운트 조정</h2>
   <div class="toolbar section">
@@ -257,6 +265,10 @@ management_patch = r'''
 .md-bulk-member-actions{display:flex!important;flex-flow:row nowrap!important;gap:5px!important;overflow-x:auto!important;padding:4px 0 6px!important;scrollbar-width:thin}
 .md-bulk-member-actions button{flex:1 0 auto!important;min-width:72px!important;min-height:38px!important;padding:6px 8px!important;white-space:nowrap!important;font-size:11px!important;font-weight:900!important}
 .md-bulk-member-actions .danger{background:#c62828!important;color:#fff!important;border-color:#c62828!important}
+#quickMemberMessageButton{min-height:34px;padding:6px 10px;border-radius:10px;background:#315efb;color:#fff;border:1px solid #315efb;font-size:11px;font-weight:900;white-space:nowrap}
+.quick-message-modal{position:fixed;z-index:2147483500;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.55)}
+.quick-message-modal.hidden{display:none!important}.quick-message-card{width:min(92vw,480px);padding:16px;border-radius:16px;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.quick-message-card h3{margin:0 0 8px}.quick-message-card textarea{width:100%;box-sizing:border-box;min-height:110px;resize:vertical}.quick-message-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:10px}.quick-message-actions button{min-height:40px;padding:8px 14px;font-weight:900}.quick-message-send{background:#315efb!important;color:#fff!important;border-color:#315efb!important}
 #adminApp .member.male,#adminApp .person.male,#adminApp .quick-member.male{background:#e4f1ff!important;color:#0756b6!important;font-weight:900!important}
 #adminApp .member.female,#adminApp .person.female,#adminApp .quick-member.female{background:#ffe7f0!important;color:#c51b4f!important;font-weight:900!important}
 #adminApp .member .name,#adminApp .person .name,#adminApp .quick-member-name{font-weight:950!important}
@@ -279,6 +291,14 @@ management_patch = r'''
   <button class="voice-stop" type="button" onclick="stopVoiceAnnouncement()">■ 멘트 멈춤</button>
   <button id="emergencyAnnouncementMuteButton" type="button" onclick="toggleAnnouncementMute()">🔇 멘트 음소거</button>
 </div>
+<div id="quickMemberMessageModal" class="quick-message-modal hidden" role="dialog" aria-modal="true" aria-labelledby="quickMemberMessageTitle">
+  <div class="quick-message-card" onclick="event.stopPropagation()">
+    <h3 id="quickMemberMessageTitle">선택 회원에게 메시지</h3>
+    <div id="quickMemberMessageRecipients" class="meta"></div>
+    <textarea id="quickMemberMessageText" maxlength="300" placeholder="전송할 메시지를 입력하세요."></textarea>
+    <div class="quick-message-actions"><button type="button" onclick="closeQuickMemberMessage()">취소</button><button class="quick-message-send" type="button" onclick="sendQuickMemberMessage()">전송</button></div>
+  </div>
+</div>
 <script id="jayuminton-admin-member-management-v202-script">
 (function(){
   'use strict';
@@ -291,6 +311,24 @@ management_patch = r'''
     var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
     if(ids.length<2){alert('같은 팀으로 묶을 멤버를 2명 이상 선택해 주세요.');return;}
     return runAction('setBundle',[ADMIN_PIN_VALUE,ids]);
+  };
+  window.openQuickMemberMessage=function(){
+    var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
+    if(!ids.length){alert('메시지를 받을 회원카드를 먼저 선택해 주세요.');return;}
+    var names=[];try{names=(STATE.members||[]).filter(function(m){return ids.indexOf(String(m.id))>=0;}).map(function(m){return String(m.name||'');});}catch(e){}
+    var modal=document.getElementById('quickMemberMessageModal'),recipients=document.getElementById('quickMemberMessageRecipients'),text=document.getElementById('quickMemberMessageText');
+    if(recipients)recipients.textContent=ids.length+'명 선택 · '+names.join(', ');
+    if(modal)modal.classList.remove('hidden');if(text){text.value='';setTimeout(function(){text.focus();},50);}
+  };
+  window.closeQuickMemberMessage=function(){var modal=document.getElementById('quickMemberMessageModal');if(modal)modal.classList.add('hidden');};
+  window.sendQuickMemberMessage=async function(){
+    var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
+    var text=document.getElementById('quickMemberMessageText'),message=String(text&&text.value||'').trim();
+    if(!ids.length){alert('메시지를 받을 회원카드를 선택해 주세요.');return;}
+    if(!message){alert('메시지를 입력해 주세요.');if(text)text.focus();return;}
+    closeQuickMemberMessage();
+    try{await runAction('sendMemberMessage',[ADMIN_PIN_VALUE,ids,message]);alert(ids.length+'명에게 메시지를 전송했습니다.');}
+    catch(error){alert(error&&error.message?error.message:error);}
   };
   // Administrator cards always show the game count. Optional profile rows are
   // still rendered only when a value exists.
@@ -409,6 +447,8 @@ for required_voice_marker in [
     'id="newIsDuplicate"',
     'function usesAdminFullName(member)',
     'window.setMdSelectedTeam=function()',
+    'id="quickMemberMessageButton"',
+    'window.sendQuickMemberMessage=async function()',
     "event.target.closest('#voiceSaveEmergency')",
 ]:
     if required_voice_marker not in html:
