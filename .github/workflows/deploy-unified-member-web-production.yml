@@ -81,7 +81,10 @@ jobs:
           grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' "$PUBLIC/index.html" >/dev/null
-          grep -F "active:'코트배정대기'" "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F '.jm-status-badge{display:none!important}' "$PUBLIC/index.html" >/dev/null
+          grep -F "server('updateMyProfile',[String(member.id),memo])" "$PUBLIC/index.html" >/dev/null
           grep -F 'member.teamLabel' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'window.confirmJmDirectMessage=function()' "$PUBLIC/index.html" >/dev/null
@@ -152,7 +155,10 @@ jobs:
             'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' \
             'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' \
             'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' \
-            "active:'코트배정대기'" \
+            'JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2' \
+            'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' \
+            '.jm-status-badge{display:none!important}' \
+            "server('updateMyProfile',[String(member.id),memo])" \
             'member.teamLabel' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \
