@@ -1,0 +1,82 @@
+name: Fix pair statistics single recording
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-pair-stats-single-record.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Remove inner autoassign pair-stat write and add regression guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          worker = Path('cloudflare/state-worker/worker-md-entry.js')
+          s = worker.read_text(encoding='utf-8')
+          old = """async function moveOne(request, env, memberIds, destination) {
+  const before = await getAdminState(request, env);
+  const url = new URL(request.url);"""
+          new = """async function moveOne(request, env, memberIds, destination) {
+  const url = new URL(request.url);"""
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('moveOne header contract changed unexpectedly')
+
+          old_record = """  if (!packet.ok) throw new Error(packet.error || 'autoassign_move_failed');
+  await recordPairTransitions(env, before, packet.state);
+  return packet.state;"""
+          new_record = """  if (!packet.ok) throw new Error(packet.error || 'autoassign_move_failed');
+  return packet.state;"""
+          if old_record in s:
+              s = s.replace(old_record, new_record, 1)
+          elif new_record not in s:
+              raise SystemExit('moveOne pair-stat contract changed unexpectedly')
+          worker.write_text(s, encoding='utf-8')
+
+          test = Path('cloudflare/state-worker/md-final-entry.test.mjs')
+          t = test.read_text(encoding='utf-8')
+          marker = "assert.ok(mdEntry.includes('[[2, 2], [4, 0], [0, 4]]'), 'MD doubles composition rules missing');\n"
+          guard = """
+const moveOneBlock = mdEntry.slice(mdEntry.indexOf('async function moveOne('), mdEntry.indexOf('async function mdAutoAssign('));
+assert.ok(moveOneBlock.includes("action: 'moveMembers'"), 'autoassign moveOne action missing');
+assert.equal(moveOneBlock.includes('recordPairTransitions('), false, 'autoassign pair statistics would be recorded twice');
+const outerPairWrites = (mdEntry.match(/if \(before && out\?\.state\) await recordPairTransitions\(env, before, out\.state\);/g) || []).length;
+assert.equal(outerPairWrites, 2, 'admin and compat autoassign must each record pair statistics exactly once');
+"""
+          if guard.strip() not in t:
+              if marker not in t:
+                  raise SystemExit('pair-stat regression-test anchor missing')
+              t = t.replace(marker, marker + guard, 1)
+          test.write_text(t, encoding='utf-8')
+          PY
+          node cloudflare/state-worker/md-final-entry.test.mjs
+          git diff --check
+          git diff -- cloudflare/state-worker/worker-md-entry.js cloudflare/state-worker/md-final-entry.test.mjs
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Already fixed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add cloudflare/state-worker/worker-md-entry.js cloudflare/state-worker/md-final-entry.test.mjs
+          git commit -m 'fix: record autoassign pair statistics once'
+          git push origin HEAD:main
