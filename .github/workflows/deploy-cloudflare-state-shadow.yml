@@ -93,7 +93,9 @@ jobs:
         run: |
           set -euo pipefail
           wrangler d1 execute DB --remote --file cloudflare/state-worker/schema.sql --config "$RUNNER_TEMP/wrangler.toml"
-          cp cloudflare/state-worker/worker.js "$RUNNER_TEMP/worker.js"
+          # wrangler resolves the entry point and its imports relative to the
+          # generated config in RUNNER_TEMP, so copy the complete module chain.
+          cp cloudflare/state-worker/*.js "$RUNNER_TEMP/"
           echo "::add-mask::$INTERNAL_KEY"
           printf '%s' "$INTERNAL_KEY" | wrangler secret put INTERNAL_KEY --config "$RUNNER_TEMP/wrangler.toml" >/dev/null
           wrangler deploy --config "$RUNNER_TEMP/wrangler.toml"
