@@ -1,5 +1,6 @@
 name: Redeploy admin Cloudflare only
 
+# v203 recovery trigger 2026-08-25
 on:
   push:
     branches: [main]
