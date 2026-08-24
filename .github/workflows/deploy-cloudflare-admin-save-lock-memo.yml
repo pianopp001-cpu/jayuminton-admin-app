@@ -1,6 +1,6 @@
 name: Deploy Cloudflare-only admin save lock and memo
 
-# retry 2026-08-25 after switching compat RPC verification to POST contract
+# self-record every result; latest admin deploy must never depend on an external watcher
 on:
   push:
     branches: [main]
@@ -32,6 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -103,11 +104,12 @@ jobs:
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/live.html" >/dev/null
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/live.html"
           echo "ADMIN_CLOUDFLARE_V203_SAVE_LOCK_MEMO_OK url=$ADMIN_URL"
-      - name: Record verified Cloudflare admin status
+      - name: Record verified Cloudflare admin success
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p deployment/status
+          NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           {
             echo 'status=success'
             echo 'baseline=v203'
@@ -122,11 +124,50 @@ jobs:
             echo 'public_memo=verified'
             echo "run_id=$GITHUB_RUN_ID"
             echo "admin_url=$ADMIN_URL"
-            date -u '+updated_at=%Y-%m-%dT%H:%M:%SZ'
+            echo "updated_at=$NOW"
           } > deployment/status/cloudflare-admin-v203.txt
+          {
+            echo 'workflow=Deploy Cloudflare-only admin save lock and memo'
+            echo 'conclusion=success'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "head_sha=$GITHUB_SHA"
+            echo "run_url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "updated_at=$NOW"
+          } > deployment/status/last-admin-cloudflare-workflow.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/cloudflare-admin-v203.txt
+          git add deployment/status/cloudflare-admin-v203.txt deployment/status/last-admin-cloudflare-workflow.txt
           git commit -m 'status: verify Cloudflare admin v203 deployment' || exit 0
           git pull --rebase origin main || true
-          git push origin main
+          git push origin HEAD:main
+      - name: Record Cloudflare admin failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment/status
+          NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          {
+            echo 'workflow=Deploy Cloudflare-only admin save lock and memo'
+            echo 'conclusion=failure'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "head_sha=$GITHUB_SHA"
+            echo "run_url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "updated_at=$NOW"
+          } > deployment/status/last-admin-cloudflare-workflow.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p deployment/status
+          {
+            echo 'workflow=Deploy Cloudflare-only admin save lock and memo'
+            echo 'conclusion=failure'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "head_sha=$GITHUB_SHA"
+            echo "run_url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "updated_at=$NOW"
+          } > deployment/status/last-admin-cloudflare-workflow.txt
+          git add deployment/status/last-admin-cloudflare-workflow.txt
+          git commit -m 'status: record admin Cloudflare deploy failure' || exit 0
+          git push origin HEAD:main
