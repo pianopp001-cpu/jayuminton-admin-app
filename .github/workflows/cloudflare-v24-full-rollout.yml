@@ -12,7 +12,7 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
 
 concurrency:
   group: jayuminton-cloudflare-v24-full-rollout
@@ -28,8 +28,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
       - name: Enforce Cloudflare-only contract before rollout
+        id: contract
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -41,21 +44,13 @@ jobs:
           grep -F '저장중 · 잠시만 기다려 주세요' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
           grep -F 'member-public-memo' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
           grep -F 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
-          grep -F '>도착전</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
-          grep -F '>코트배정대기</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
-          grep -F '>휴식</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
-          grep -F '>귀가</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
-          grep -F '>내정보입력</button>' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
-          if grep -R -n -E 'clasp push|clasp deploy|script.google.com/macros/s/' \
-            .github/workflows/cloudflare-v24-full-rollout.yml \
-            cloudflare/state-worker \
-            deployment/jayuminton/admin_cloudflare_post_contract_patch.py \
-            deployment/jayuminton/patch_member_self_longpress_v6.py; then
-            echo 'GAS dependency found in Cloudflare V24 rollout inputs' >&2
-            exit 1
-          fi
+          for x in '>도착전</button>' '>코트배정대기</button>' '>휴식</button>' '>귀가</button>' '>내정보입력</button>'; do grep -F "$x" deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null; done
+          if grep -R -n -E 'clasp push|clasp deploy|script.google.com/macros/s/' cloudflare/state-worker deployment/jayuminton/admin_cloudflare_post_contract_patch.py deployment/jayuminton/patch_member_self_longpress_v6.py; then exit 1; fi
 
       - name: Dispatch and wait for Cloudflare state worker deployment
+        id: state
+        if: steps.contract.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -68,10 +63,13 @@ jobs:
             sleep 2
           done
           test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
-          echo "CLOUDFLARE_STATE_RUN_ID=$run_id" >> "$GITHUB_ENV"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
       - name: Dispatch and wait for Cloudflare-direct admin APK build
+        id: apk
+        if: steps.contract.outcome == 'success' && steps.state.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -84,11 +82,38 @@ jobs:
             sleep 2
           done
           test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
-          echo "ADMIN_APK_RUN_ID=$run_id" >> "$GITHUB_ENV"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
-      - name: Rollout complete
+      - name: Record rollout result in repository
+        if: always()
+        shell: bash
+        env:
+          CONTRACT_OUTCOME: ${{ steps.contract.outcome }}
+          STATE_OUTCOME: ${{ steps.state.outcome }}
+          APK_OUTCOME: ${{ steps.apk.outcome }}
+          STATE_RUN: ${{ steps.state.outputs.run_id }}
+          APK_RUN: ${{ steps.apk.outputs.run_id }}
         run: |
-          echo "CLOUDFLARE_V24_FULL_ROLLOUT_OK"
-          echo "Cloudflare state run: $CLOUDFLARE_STATE_RUN_ID"
-          echo "Admin APK run: $ADMIN_APK_RUN_ID"
+          set -euo pipefail
+          mkdir -p deployment/jayuminton/status
+          overall=success
+          if [ "$CONTRACT_OUTCOME" != success ] || [ "$STATE_OUTCOME" != success ] || [ "$APK_OUTCOME" != success ]; then overall=failure; fi
+          cat > deployment/jayuminton/status/CLOUDFLARE_V24_ROLLOUT_RESULT.txt <<EOF
+          overall=$overall
+          contract=$CONTRACT_OUTCOME
+          cloudflare_state=$STATE_OUTCOME
+          admin_apk=$APK_OUTCOME
+          cloudflare_state_run=${STATE_RUN:-}
+          admin_apk_run=${APK_RUN:-}
+          source_sha=$GITHUB_SHA
+          workflow_run=$GITHUB_RUN_ID
+          gas_used=false
+          requirements=save-lock,voice-exception,self-longpress,public-memo
+          EOF
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add deployment/jayuminton/status/CLOUDFLARE_V24_ROLLOUT_RESULT.txt
+          git commit -m "Record Cloudflare V24 rollout result: $overall" || true
+          git push origin HEAD:main
+          if [ "$overall" != success ]; then exit 1; fi
