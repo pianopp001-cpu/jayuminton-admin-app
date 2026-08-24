@@ -1,15 +1,11 @@
-name: Redeploy admin Cloudflare and rebuild APK
+name: Redeploy admin Cloudflare only
 
 on:
   push:
     branches: [main]
     paths:
-      - 'deployment/jayuminton/apply_admin_vnext_patches.py'
-      - 'deployment/jayuminton/v3_admin_overlay_guarantee.py'
-      - 'deployment/jayuminton/admin_vnext_*.py'
-      - 'deployment/jayuminton/admin_finish_alert_v12_patch.py'
-      - 'deployment/jayuminton/admin_cloudflare_final_contract.py'
       - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
+      - '.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml'
       - '.github/workflows/admin-redeploy-build-chain.yml'
   workflow_dispatch: {}
 
@@ -18,43 +14,27 @@ permissions:
   contents: read
 
 jobs:
-  redeploy-and-build:
+  redeploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Redeploy Cloudflare admin and wait
+      - name: Deploy Cloudflare-only admin and wait
         shell: bash
         run: |
           set -euo pipefail
-          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow preview-admin-cloudflare.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-          gh workflow run preview-admin-cloudflare.yml --repo "$GITHUB_REPOSITORY" --ref main
+          WF='deploy-cloudflare-admin-save-lock-memo.yml'
+          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run "$WF" --repo "$GITHUB_REPOSITORY" --ref main
           run_id=''
-          for i in $(seq 1 60); do
-            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow preview-admin-cloudflare.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          for i in $(seq 1 90); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
             if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
             sleep 2
           done
           test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
+          echo "CLOUDFLARE_ADMIN_RUN_ID=$run_id"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
-
-      - name: Build latest verified admin v203.0 APK and wait
-        shell: bash
-        run: |
-          set -euo pipefail
-          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2015-known-good-shell.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-          gh workflow run build-v2015-known-good-shell.yml --repo "$GITHUB_REPOSITORY" --ref main
-          run_id=''
-          for i in $(seq 1 60); do
-            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-v2015-known-good-shell.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-            if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
-            sleep 2
-          done
-          test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
-          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
-
-      - name: Chain completed
-        run: echo 'ADMIN_REDEPLOY_AND_LATEST_V2030_APK_BUILD_OK'
-
-# force-trigger: 2026-08-24-v203-public-memo-save-lock
+      - name: Confirm no GAS deployment path
+        run: echo 'ADMIN_CLOUDFLARE_ONLY_REDEPLOY_OK'
