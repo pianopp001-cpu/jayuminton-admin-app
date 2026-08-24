@@ -155,6 +155,23 @@ export function swapMutation(input, leftIds, rightIds) {
   return { state, event: { type: 'members_swapped', leftIds: a, rightIds: b } };
 }
 
+export function swapLocationsMutation(input, left, right) {
+  const state = normalizeState(input);
+  const a = { type: String(left?.type || ''), key: String(left?.key || '') };
+  const b = { type: String(right?.type || ''), key: String(right?.key || '') };
+  if (a.type !== b.type || !['court', 'wait'].includes(a.type) || a.key === b.key) throw new Error('invalid_location_swap');
+  if (a.type === 'court') {
+    if (!['1', '2', '3', '4'].includes(a.key) || !['1', '2', '3', '4'].includes(b.key)) throw new Error('invalid_court');
+    [state.courts[a.key], state.courts[b.key]] = [state.courts[b.key], state.courts[a.key]];
+    [state.courtStartedAt[a.key], state.courtStartedAt[b.key]] = [state.courtStartedAt[b.key], state.courtStartedAt[a.key]];
+  } else {
+    const ai = Number(a.key) - 1, bi = Number(b.key) - 1;
+    if (ai < 0 || ai > 4 || bi < 0 || bi > 4) throw new Error('invalid_wait_group');
+    [state.waitGroups[ai], state.waitGroups[bi]] = [state.waitGroups[bi], state.waitGroups[ai]];
+  }
+  return { state, event: { type: 'locations_swapped', left: a, right: b } };
+}
+
 export function autoAssignMutation(input, candidateIds, destinations) {
   let state = normalizeState(input);
   const memberById = new Map(state.members.map(m => [String(m.id), m]));
@@ -379,6 +396,7 @@ export class StateCoordinator {
       if (action === 'finishCourt') result = finishCourtMutation(current, body.courtNo);
       else if (action === 'moveMembers') result = moveMutation(current, body.memberIds, body.destination);
       else if (action === 'swapMembers') result = swapMutation(current, body.leftIds, body.rightIds);
+      else if (action === 'swapLocations') result = swapLocationsMutation(current, body.left, body.right);
       else if (action === 'autoAssign') result = autoAssignMutation(current, body.candidateIds, body.destinations);
       else if (action === 'upsertMember') result = upsertMemberMutation(current, body.member);
       else if (action === 'setMemberStatus') result = setMemberStatusMutation(current, body.memberIds, body.status);
@@ -478,8 +496,8 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'smartAssignSelected') { action = 'autoAssign'; body.candidateIds = values[1]; body.destinations = [{ type: 'court', key: String(values[2]) }]; }
     else if (name === 'finishCourt') { action = 'finishCourt'; body.courtNo = values[1]; }
     else if (name === 'swapMembers') { action = 'swapMembers'; body.leftIds = values[1]; body.rightIds = values[2]; }
-    else if (name === 'swapCourts') { action = 'swapMembers'; body.leftIds = [...(state.courts[String(values[1])] || [])]; body.rightIds = [...(state.courts[String(values[2])] || [])]; }
-    else if (name === 'swapWaitGroups') { action = 'swapMembers'; body.leftIds = [...(state.waitGroups[Number(values[1])] || [])]; body.rightIds = [...(state.waitGroups[Number(values[2])] || [])]; }
+    else if (name === 'swapCourts') { action = 'swapLocations'; body.left = { type: 'court', key: String(values[1]) }; body.right = { type: 'court', key: String(values[2]) }; }
+    else if (name === 'swapWaitGroups') { action = 'swapLocations'; body.left = { type: 'wait', key: String(Number(values[1]) + 1) }; body.right = { type: 'wait', key: String(Number(values[2]) + 1) }; }
     else if (name === 'moveOrSwapMember') {
       const targetId = String(values[4] || '');
       if (targetId) { action = 'swapMembers'; body.leftIds = [String(values[1])]; body.rightIds = [targetId]; }
