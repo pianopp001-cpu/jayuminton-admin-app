@@ -111,6 +111,24 @@ if html.count(old_quick_bulk) != 1:
     raise SystemExit('old quick bulk row mismatch')
 html = html.replace(old_quick_bulk, '', 1)
 
+# The court voice toolbar must expose an announcement-only mute. This does not
+# mute background music: cancelling NativeVoice restores the temporarily
+# ducked music stream immediately.
+old_voice_controls = '''        <div class="court-voice-controls" aria-label="경기 종료 음성 조작">
+          <button id="replayVoiceButton" type="button" onclick="replayLastVoiceAnnouncement()" disabled>▶ 재생</button>
+          <button id="repeatVoiceButton" type="button" onclick="toggleVoiceRepeat()" aria-pressed="false">🔁 반복</button>
+          <button type="button" onclick="stopVoiceAnnouncement()">■ 멈춤</button>
+        </div>'''
+new_voice_controls = '''        <div class="court-voice-controls" aria-label="경기 종료 음성 조작">
+          <button id="replayVoiceButton" type="button" onclick="replayLastVoiceAnnouncement()" disabled>▶ 1회 재생</button>
+          <button id="repeatVoiceButton" type="button" onclick="toggleVoiceRepeat()" aria-pressed="false">🔁 반복재생</button>
+          <button id="stopVoiceButton" type="button" onclick="stopVoiceAnnouncement()">■ 멈춤</button>
+          <button id="announcementMuteButton" type="button" onclick="toggleAnnouncementMute()" aria-pressed="false">🔇 멘트 음소거</button>
+        </div>'''
+if html.count(old_voice_controls) != 1:
+    raise SystemExit('court voice controls mismatch')
+html = html.replace(old_voice_controls, new_voice_controls, 1)
+
 # Keep the combined grade/experience and radio controls synchronized when an
 # existing member is opened for editing.
 edit_gender = "  gender.value = member.gender === 'female' ? 'female' : 'male';"
@@ -138,6 +156,21 @@ management_patch = r'''
 #adminApp .member .name,#adminApp .person .name,#adminApp .quick-member-name{font-weight:950!important}
 @media(max-width:620px){.admin-setup-details>summary{width:100%!important;box-sizing:border-box!important;justify-content:center!important}.admin-panel{padding:10px!important}.admin-panel h2{font-size:15px!important}.md-game-actions{gap:5px!important}.md-game-actions button{font-size:10px!important;padding:5px 7px!important}.md-bulk-member-actions button{min-width:64px!important;font-size:10px!important;padding:5px!important}}
 </style>
+<style id="jayuminton-announcement-controls-v2021">
+.court-voice-controls{display:flex!important;flex-wrap:wrap!important;gap:6px!important}
+.court-voice-controls button{white-space:nowrap!important}
+#announcementMuteButton.is-muted,#emergencyAnnouncementMuteButton.is-muted{background:#9f1239!important;border-color:#9f1239!important;color:#fff!important}
+.admin-save-notice{z-index:2147483600!important}
+.voice-save-emergency{position:fixed;z-index:2147483647;top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:8px;padding:8px;border-radius:12px;background:#fff;border:2px solid #1d4ed8;box-shadow:0 8px 30px rgba(0,0,0,.35);pointer-events:auto!important}
+.voice-save-emergency.is-visible{display:flex!important}
+.voice-save-emergency button{min-height:42px;padding:8px 12px;border-radius:9px;font-weight:900;white-space:nowrap}
+.voice-save-emergency .voice-stop{background:#b91c1c;color:#fff;border-color:#b91c1c}
+@media(max-width:620px){.court-voice-controls{width:100%!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:4px!important}.court-voice-controls button{min-width:0!important;padding:7px 4px!important;font-size:11px!important}.voice-save-emergency{width:calc(100vw - 20px);box-sizing:border-box;justify-content:center}.voice-save-emergency button{flex:1;min-width:0;font-size:13px}}
+</style>
+<div id="voiceSaveEmergency" class="voice-save-emergency" role="group" aria-label="저장 중 음성 멘트 긴급 조작">
+  <button class="voice-stop" type="button" onclick="stopVoiceAnnouncement()">■ 멘트 멈춤</button>
+  <button id="emergencyAnnouncementMuteButton" type="button" onclick="toggleAnnouncementMute()">🔇 멘트 음소거</button>
+</div>
 <script id="jayuminton-admin-member-management-v202-script">
 (function(){
   'use strict';
@@ -153,6 +186,57 @@ management_patch = r'''
     memberCard=function(member,showGames,clickable){return originalMemberCard(member,IS_ADMIN?true:showGames,clickable);};
     window.__JM_ADMIN_GAMES_REQUIRED_V202__=true;
   }
+})();
+</script>
+<script id="jayuminton-announcement-controls-v2021-script">
+(function(){
+  'use strict';
+  function isAnnouncementActive(){
+    try {
+      return !!VOICE_REPEAT_ENABLED || !!VOICE_QUEUE.length ||
+        !!VOICE_UTTERANCES.length ||
+        !!(window.speechSynthesis && window.speechSynthesis.speaking);
+    } catch(error){ return false; }
+  }
+  function isSaveOverlayVisible(){
+    var notice=document.getElementById('adminSaveNotice');
+    return !!(notice && notice.classList.contains('is-visible'));
+  }
+  window.updateAnnouncementMuteButtons=function(){
+    var muted=!VOICE_GUIDE_ENABLED;
+    ['announcementMuteButton','emergencyAnnouncementMuteButton'].forEach(function(id){
+      var button=document.getElementById(id); if(!button)return;
+      button.classList.toggle('is-muted',muted);
+      button.setAttribute('aria-pressed',muted?'true':'false');
+      button.textContent=muted?'🔊 멘트 켜기':'🔇 멘트 음소거';
+    });
+  };
+  window.toggleAnnouncementMute=function(){
+    var shouldMute=VOICE_GUIDE_ENABLED;
+    VOICE_GUIDE_ENABLED=!shouldMute;
+    try{localStorage.setItem(VOICE_GUIDE_KEY,VOICE_GUIDE_ENABLED?'true':'false');}catch(error){}
+    if(shouldMute){
+      // stopVoiceAnnouncement cancels only the spoken announcement. NativeVoice
+      // then restores the music stream that was temporarily lowered for speech.
+      stopVoiceAnnouncement();
+    }
+    if(typeof updateVoiceGuideButton==='function')updateVoiceGuideButton();
+    updateAnnouncementMuteButtons();
+  };
+  function syncEmergencyVoiceControls(){
+    var controls=document.getElementById('voiceSaveEmergency');
+    if(!controls)return;
+    controls.classList.toggle('is-visible',isSaveOverlayVisible()&&isAnnouncementActive());
+    updateAnnouncementMuteButtons();
+  }
+  var originalUpdateVoiceGuideButton=window.updateVoiceGuideButton;
+  window.updateVoiceGuideButton=function(){
+    if(typeof originalUpdateVoiceGuideButton==='function')originalUpdateVoiceGuideButton();
+    updateAnnouncementMuteButtons();
+  };
+  document.addEventListener('DOMContentLoaded',function(){updateAnnouncementMuteButtons();syncEmergencyVoiceControls();});
+  window.setInterval(syncEmergencyVoiceControls,160);
+  updateAnnouncementMuteButtons();
 })();
 </script>
 '''
@@ -181,5 +265,13 @@ if html.count('id="newIsNew"') != 1 or html.count('id="newIsSponsor"') != 1:
     raise SystemExit('member flag controls are not singular')
 if 'id="mdIsNew"' in html or 'id="mdIsSponsor"' in html:
     raise SystemExit('duplicate MD member flag controls remain')
+for required_voice_marker in [
+    'id="announcementMuteButton"',
+    'id="voiceSaveEmergency"',
+    'function(){\n    var shouldMute=VOICE_GUIDE_ENABLED;',
+    "controls.classList.toggle('is-visible',isSaveOverlayVisible()&&isAnnouncementActive())",
+]:
+    if required_voice_marker not in html:
+        raise SystemExit('announcement voice control missing: ' + required_voice_marker)
 path.write_text(html, encoding='utf-8')
 print('CLOUDFLARE_V6_FRONTEND_BRIDGE_OK')
