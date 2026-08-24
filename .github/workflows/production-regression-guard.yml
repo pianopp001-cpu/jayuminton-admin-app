@@ -12,6 +12,7 @@ on:
       - '.github/workflows/deploy-md6-self-longpress-production.yml'
       - '.github/workflows/build-user-md-final-v1642.yml'
       - '.github/workflows/build-apk.yml'
+      - '.github/workflows/build-v2006-md-clean-final.yml'
       - '.github/workflows/production-regression-guard.yml'
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
       - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
@@ -67,26 +68,21 @@ jobs:
           set -euo pipefail
           BRIDGE=deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py
           POST=deployment/jayuminton/admin_cloudflare_post_contract_patch.py
-          # Team: no giant team text; same team is a stable left color stripe.
           grep -F '>같은 팀 설정</button>' "$BRIDGE" >/dev/null
           grep -F '>팀 해제</button>' "$BRIDGE" >/dev/null
           grep -F '#adminApp .member-team-badge{display:none!important}' "$BRIDGE" >/dev/null
           grep -F 'box-shadow:inset 5px 0 0 var(--member-team-color)!important' "$BRIDGE" >/dev/null
-          # Pair statistics: disclosure plus fully un-clipped partner list.
           grep -F 'id="jayuminton-pair-statistics-disclosure-v2028"' "$BRIDGE" >/dev/null
           grep -F 'max-height:none!important;height:auto!important' "$POST" >/dev/null
           grep -F 'overflow:visible!important;white-space:normal!important' "$POST" >/dev/null
-          # Voice: one-shot, repeat, stop and announcement-only mute all survive.
           grep -F '>▶ 1회 재생</button>' "$BRIDGE" >/dev/null
           grep -F '>🔁 반복재생</button>' "$BRIDGE" >/dev/null
           grep -F 'onclick="stopVoiceAnnouncement()">■ 멈춤</button>' "$BRIDGE" >/dev/null
           grep -F '>🔇 멘트 음소거</button>' "$BRIDGE" >/dev/null
-          # Save lock blocks ordinary interactions while voice controls stay usable.
           grep -F '__JAYUMINTON_ADMIN_SAVING__' "$POST" >/dev/null
           grep -F "['pointerdown','click','dblclick','contextmenu']" "$POST" >/dev/null
           grep -F 'if(!window.__JAYUMINTON_ADMIN_SAVING__||isVoice(e.target))return;' "$POST" >/dev/null
           grep -F '.court-voice-controls,.admin-voice-controls,[data-voice-control]' "$POST" >/dev/null
-          # User-authored public memo must be shown on admin cards at compact size.
           grep -F 'member-public-memo' "$POST" >/dev/null
           grep -F 'publicMemo' "$POST" >/dev/null
           grep -F 'font-size:9px!important' "$POST" >/dev/null
@@ -109,12 +105,19 @@ jobs:
           grep -F '32752854990' PROJECT_RULES.md >/dev/null
           grep -F '32753455501' PROJECT_RULES.md >/dev/null
 
-      - name: Verify legacy default APK route remains blocked
+      - name: Verify all known legacy APK routes remain blocked
         shell: bash
         run: |
           set -euo pipefail
           grep -F 'DISABLED legacy v199.6 GAS APK build' .github/workflows/build-apk.yml >/dev/null
           grep -F 'exit 1' .github/workflows/build-apk.yml >/dev/null
+          grep -F 'DISABLED legacy admin v201.4 APK build' .github/workflows/build-v2006-md-clean-final.yml >/dev/null
+          grep -F 'DISABLED: legacy v201.4 admin APK build must never replace canonical v203.0.' .github/workflows/build-v2006-md-clean-final.yml >/dev/null
+          grep -F 'exit 1' .github/workflows/build-v2006-md-clean-final.yml >/dev/null
+          if grep -F "push:" .github/workflows/build-v2006-md-clean-final.yml >/dev/null; then
+            echo 'legacy v201.4 workflow must not have a push trigger' >&2
+            exit 1
+          fi
           ! grep -aF 'script.google.com/macros/s/' releases/jayuminton-courtstatus-v1.6.42-md-final.apk 2>/dev/null || {
             echo 'Forbidden GAS URL detected in current user APK'; exit 1;
           }
@@ -143,6 +146,7 @@ jobs:
             echo 'user_web_run=32753455501'
             echo 'user_apk_run=32752854990'
             echo 'apps_script_runtime=forbidden'
+            echo 'legacy_v2014_rebuild=blocked'
             echo "run_id=$GITHUB_RUN_ID"
             echo "head_sha=$GITHUB_SHA"
             echo "updated_at=$NOW"
