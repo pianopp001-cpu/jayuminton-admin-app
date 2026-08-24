@@ -43,7 +43,8 @@
     function ensureStatus(){var box=loginBox();if(!box||document.getElementById('adminCloudflareLoginStatus'))return;var el=document.createElement('div');el.id='adminCloudflareLoginStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='margin-top:10px;font-size:13px;font-weight:700;text-align:center';box.appendChild(el);}
     function status(text,isError){var el=document.getElementById('adminCloudflareLoginStatus');if(el){el.textContent=String(text||'');el.style.color=isError?'#b42318':'#667085';}}
     function reset(){var b=document.getElementById('adminCloudflareLoginButton');if(b){b.disabled=false;b.textContent='로그인';}}
-    function submit(){
+    function submit(event){
+      if(event){event.preventDefault();event.stopPropagation();}
       var input=document.getElementById('adminPinInput'),pin=String(input&&input.value||'').trim();
       if(!pin){status('관리자 PIN을 입력하세요.',true);return;}
       var b=document.getElementById('adminCloudflareLoginButton');if(b){b.disabled=true;b.textContent='확인 중…';}
@@ -58,6 +59,11 @@
     function bind(){
       hideApp();ensureStatus();
       var box=loginBox(),b=document.getElementById('adminCloudflareLoginButton'),input=document.getElementById('adminPinInput');
+      // The latest v200.8 markup dropped the legacy button id and only kept an
+      // inline adminLogin() handler. Resolve that visible button explicitly and
+      // replace the inline handler so one tap performs exactly one login request.
+      if(!b&&box)b=box.querySelector('button.primary,button[type="submit"],button');
+      if(b){b.id='adminCloudflareLoginButton';b.type='button';b.removeAttribute('onclick');}
       if(box){box.style.setProperty('position','relative','important');box.style.setProperty('z-index','2147483000','important');box.style.setProperty('pointer-events','auto','important');}
       if(b&&!b.__jmBound){b.__jmBound=true;b.style.setProperty('pointer-events','auto','important');b.addEventListener('click',submit);}
       if(input&&!input.__jmBound){input.__jmBound=true;input.disabled=false;input.readOnly=false;input.setAttribute('inputmode','numeric');input.setAttribute('enterkeyhint','done');input.style.setProperty('pointer-events','auto','important');input.addEventListener('click',function(){try{input.focus();}catch(_){}});input.addEventListener('keydown',function(event){if(event.key==='Enter'){event.preventDefault();submit();}});}
