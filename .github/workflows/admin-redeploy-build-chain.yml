@@ -57,4 +57,4 @@ jobs:
       - name: Chain completed
         run: echo 'ADMIN_REDEPLOY_AND_FINAL_V2004_APK_BUILD_OK'
 
-# force-trigger: 2026-08-23-final-v2004-chain
+# force-trigger: 2026-08-24-admin-public-memo-and-save-lock
