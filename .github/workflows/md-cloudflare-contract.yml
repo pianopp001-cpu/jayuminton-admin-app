@@ -1,0 +1,34 @@
+name: MD Cloudflare contract verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/state-worker/**'
+      - '.github/workflows/md-cloudflare-contract.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Core state regression
+        run: node cloudflare/state-worker/worker.test.mjs
+      - name: MD autoassign regression
+        run: node cloudflare/state-worker/md4-autoassign.test.mjs
+      - name: Final Cloudflare entry contract
+        run: node cloudflare/state-worker/md-final-entry.test.mjs
+      - name: Reject GAS deployment entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'main = "worker-md-final-entry.js"' cloudflare/state-worker/wrangler.toml.template
+          ! grep -R -n -E 'script\.google\.com|script\.googleusercontent\.com' cloudflare/state-worker/worker-md-final-entry.js cloudflare/state-worker/worker-md-compat-entry.js cloudflare/state-worker/worker-md-entry.js
