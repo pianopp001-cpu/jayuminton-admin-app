@@ -43,6 +43,14 @@
     function ensureStatus(){var box=loginBox();if(!box||document.getElementById('adminCloudflareLoginStatus'))return;var el=document.createElement('div');el.id='adminCloudflareLoginStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='margin-top:10px;font-size:13px;font-weight:700;text-align:center';box.appendChild(el);}
     function status(text,isError){var el=document.getElementById('adminCloudflareLoginStatus');if(el){el.textContent=String(text||'');el.style.color=isError?'#b42318':'#667085';}}
     function reset(){var b=document.getElementById('adminCloudflareLoginButton');if(b){b.disabled=false;b.textContent='로그인';}}
+    function clearAdminSession(){try{localStorage.removeItem('jayuminton_admin_session_v1');}catch(_){}}
+    function resumeSavedSession(){
+      var token=storedToken();if(!token)return false;
+      status('저장된 관리자 인증으로 연결하고 있습니다.',false);
+      if(typeof window.openAdminApp!=='function'){clearAdminSession();hideApp();return false;}
+      Promise.resolve(window.openAdminApp(token)).then(function(){revealApp();status('',false);}).catch(function(){clearAdminSession();hideApp();status('관리자 PIN을 한 번 입력해 주세요.',false);});
+      return true;
+    }
     function submit(event){
       if(event){event.preventDefault();event.stopPropagation();}
       var input=document.getElementById('adminPinInput'),pin=String(input&&input.value||'').trim();
@@ -67,6 +75,7 @@
       if(box){box.style.setProperty('position','relative','important');box.style.setProperty('z-index','2147483000','important');box.style.setProperty('pointer-events','auto','important');}
       if(b&&!b.__jmBound){b.__jmBound=true;b.style.setProperty('pointer-events','auto','important');b.addEventListener('click',submit);}
       if(input&&!input.__jmBound){input.__jmBound=true;input.disabled=false;input.readOnly=false;input.setAttribute('inputmode','numeric');input.setAttribute('enterkeyhint','done');input.style.setProperty('pointer-events','auto','important');input.addEventListener('click',function(){try{input.focus();}catch(_){}});input.addEventListener('keydown',function(event){if(event.key==='Enter'){event.preventDefault();submit();}});}
+      resumeSavedSession();
     }
     window.__JAYUMINTON_ADMIN_PIN_INPUT_READY__=function(){var i=document.getElementById('adminPinInput'),b=document.getElementById('adminCloudflareLoginButton');return !!(i&&b&&!i.disabled&&!i.readOnly&&i.__jmBound&&b.__jmBound);};
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else setTimeout(bind,0);
