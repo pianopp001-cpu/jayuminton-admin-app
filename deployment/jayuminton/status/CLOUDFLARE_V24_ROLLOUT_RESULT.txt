@@ -1,0 +1,10 @@
+overall=failure
+contract=success
+cloudflare_state=success
+admin_apk=failure
+cloudflare_state_run=32743239517
+admin_apk_run=32743296680
+source_sha=42d121c612c40590d272f13f0addbc9516028a38
+workflow_run=32743214469
+gas_used=false
+requirements=save-lock,voice-exception,self-longpress,public-memo
