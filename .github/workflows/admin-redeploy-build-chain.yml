@@ -1,6 +1,7 @@
 name: Redeploy admin Cloudflare only
 
 # v203 recovery trigger 2026-08-25
+# rerun after disabling legacy GAS/v199.6 workflows
 on:
   push:
     branches: [main]
