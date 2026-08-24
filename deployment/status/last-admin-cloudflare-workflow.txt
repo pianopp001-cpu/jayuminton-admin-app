@@ -1,6 +1,6 @@
 workflow=Deploy Cloudflare-only admin save lock and memo
-conclusion=failure
-run_id=32753701066
-head_sha=80f8e50c4ba7726cadef9f4c9821eb8f8bff45af
-run_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32753701066
-updated_at=2026-08-24T16:58:46Z
+conclusion=cancelled
+run_id=32754277898
+head_sha=ba4754cb6d5eb48e028f4782769c83c7bacb2c3e
+run_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/32754277898
+updated_at=2026-08-24T17:02:55Z
