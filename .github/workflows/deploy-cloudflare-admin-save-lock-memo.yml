@@ -24,6 +24,7 @@ jobs:
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       ADMIN_CHANNEL: admin-cloudflare-vnext
+      ADMIN_URL: https://jayuminton-push--admin-cloudflare-vnext-z3bgvi2g.web.app
       CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
 
     steps:
@@ -39,7 +40,7 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@latest
-      - name: Resolve project and current admin channel
+      - name: Resolve Firebase project and verify known admin source
         shell: bash
         run: |
           set -euo pipefail
@@ -48,14 +49,8 @@ jobs:
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$CONFIG")"
           test -n "$FIREBASE_PROJECT_ID"
           echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
-          firebase hosting:channel:list --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/channels.json"
-          ADMIN_URL="$(jq -r --arg id "$ADMIN_CHANNEL" '[.. | objects | select((.channelId? == $id) or (((.name? // "") | split("/") | last) == $id)) | (.url? // empty)] | map(select(length>0)) | first // empty' "$RUNNER_TEMP/channels.json")"
-          if [ -z "$ADMIN_URL" ]; then
-            echo 'Unable to resolve admin channel URL. Available channel objects:' >&2
-            jq -c '.. | objects | select(.channelId? or .url? or .name?) | {channelId,name,url}' "$RUNNER_TEMP/channels.json" >&2 || true
-            exit 1
-          fi
-          echo "ADMIN_URL=$ADMIN_URL" >> "$GITHUB_ENV"
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$ADMIN_URL/?preflight=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/admin-preflight.html"
+          grep -F '<html' "$RUNNER_TEMP/admin-preflight.html" >/dev/null || grep -F '<!DOCTYPE html' "$RUNNER_TEMP/admin-preflight.html" >/dev/null
       - name: Verify Cloudflare backend only
         shell: bash
         run: |
@@ -69,7 +64,7 @@ jobs:
           ROOT="$RUNNER_TEMP/admin-cloudflare-only"
           PUBLIC="$ROOT/public"
           mkdir -p "$PUBLIC"
-          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$ADMIN_URL/?source=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
+          cp "$RUNNER_TEMP/admin-preflight.html" "$PUBLIC/index.html"
           python3 - "$PUBLIC/index.html" "$CLOUDFLARE_RPC_URL" <<'PY'
           from pathlib import Path
           import re,sys
