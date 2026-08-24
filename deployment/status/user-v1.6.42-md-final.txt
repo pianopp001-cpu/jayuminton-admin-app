@@ -1,0 +1,9 @@
+status=success
+version=1.6.42
+version_code=2001642
+application_id=com.jayuminton.user
+push_backend=cloudflare-durable-object
+vibration=3-pulses-x8-groups-confirm-stop
+assignment_scope=current-selected-member-only
+auto_sync=revision-aware-short-poll
+sha256=0488981581537a869ec5cedc0a2b44e0a40d9da9f28e77d64afe7ad031a4880b
