@@ -160,8 +160,11 @@ management_patch = r'''
 .court-voice-controls{display:flex!important;flex-wrap:wrap!important;gap:6px!important}
 .court-voice-controls button{white-space:nowrap!important}
 #announcementMuteButton.is-muted,#emergencyAnnouncementMuteButton.is-muted{background:#9f1239!important;border-color:#9f1239!important;color:#fff!important}
-.admin-save-notice{z-index:2147483600!important}
-.voice-save-emergency{position:fixed;z-index:2147483647;top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:8px;padding:8px;border-radius:12px;background:#fff;border:2px solid #1d4ed8;box-shadow:0 8px 30px rgba(0,0,0,.35);pointer-events:auto!important}
+.admin-save-notice{z-index:2147483600!important;background:rgba(15,23,42,.66)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;cursor:wait!important;contain:strict!important}
+.admin-save-notice::before{content:'';position:fixed;top:0;left:0;width:38%;height:5px;background:linear-gradient(90deg,#60a5fa,#fff,#2563eb);box-shadow:0 0 12px rgba(96,165,250,.8);transform:translate3d(-110%,0,0);animation:jm-save-progress 1.05s ease-in-out infinite;will-change:transform}
+@keyframes jm-save-progress{0%{transform:translate3d(-110%,0,0)}100%{transform:translate3d(365%,0,0)}}
+@media(prefers-reduced-motion:reduce){.admin-save-notice::before{animation-duration:2.4s}}
+.voice-save-emergency{position:fixed;z-index:2147483647;top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;align-items:center;gap:8px;padding:8px;border-radius:12px;background:#fff;border:2px solid #1d4ed8;box-shadow:0 8px 30px rgba(0,0,0,.35);pointer-events:auto!important;filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 .voice-save-emergency.is-visible{display:flex!important}
 .voice-save-emergency button{min-height:42px;padding:8px 12px;border-radius:9px;font-weight:900;white-space:nowrap}
 .voice-save-emergency .voice-stop{background:#b91c1c;color:#fff;border-color:#b91c1c}
@@ -229,13 +232,23 @@ management_patch = r'''
     controls.classList.toggle('is-visible',isSaveOverlayVisible()&&isAnnouncementActive());
     updateAnnouncementMuteButtons();
   }
+  function syncSaveInteractionLock(){
+    var locked=isSaveOverlayVisible();
+    var app=document.getElementById('adminApp');
+    if(app){
+      if(locked)app.setAttribute('inert','');
+      else app.removeAttribute('inert');
+      app.setAttribute('aria-busy',locked?'true':'false');
+    }
+    document.documentElement.classList.toggle('jm-save-locked',locked);
+  }
   var originalUpdateVoiceGuideButton=window.updateVoiceGuideButton;
   window.updateVoiceGuideButton=function(){
     if(typeof originalUpdateVoiceGuideButton==='function')originalUpdateVoiceGuideButton();
     updateAnnouncementMuteButtons();
   };
   document.addEventListener('DOMContentLoaded',function(){updateAnnouncementMuteButtons();syncEmergencyVoiceControls();});
-  window.setInterval(syncEmergencyVoiceControls,160);
+  window.setInterval(function(){syncEmergencyVoiceControls();syncSaveInteractionLock();},160);
   updateAnnouncementMuteButtons();
 })();
 </script>
@@ -270,6 +283,10 @@ for required_voice_marker in [
     'id="voiceSaveEmergency"',
     'function(){\n    var shouldMute=VOICE_GUIDE_ENABLED;',
     "controls.classList.toggle('is-visible',isSaveOverlayVisible()&&isAnnouncementActive())",
+    'backdrop-filter:none!important',
+    'animation:jm-save-progress 1.05s ease-in-out infinite',
+    "if(locked)app.setAttribute('inert','')",
+    'filter:none!important;backdrop-filter:none!important',
 ]:
     if required_voice_marker not in html:
         raise SystemExit('announcement voice control missing: ' + required_voice_marker)
