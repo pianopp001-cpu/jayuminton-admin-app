@@ -35,6 +35,13 @@ assert.equal(moveOneBlock.includes('recordPairTransitions('), false, 'autoassign
 const outerPairWrites = (mdEntry.match(/if \(before && out\?\.state\) await recordPairTransitions\(env, before, out\.state\);/g) || []).length;
 assert.equal(outerPairWrites, 2, 'admin and compat autoassign must each record pair statistics exactly once');
 
+assert.ok(mdEntry.includes("await env.DB.prepare('DELETE FROM pair_stats').run();"), 'operation reset must clear pair statistics');
+assert.ok(mdEntry.includes("if (packet?.ok && options.clearPairStats) await clearPairStatistics(env);"), 'pair statistics must clear only after a successful core reset response');
+assert.ok(mdEntry.includes("{ clearPairStats: body.action === 'resetAll' }"), 'direct admin resetAll pair-stat cleanup missing');
+assert.ok(mdEntry.includes("{ clearPairStats: body.name === 'resetAllOperationData' }"), 'compat resetAllOperationData pair-stat cleanup missing');
+const clearPairCalls = (mdEntry.match(/clearPairStats:/g) || []).length;
+assert.equal(clearPairCalls, 2, 'only direct and compat full-operation reset may request pair-stat cleanup');
+
 // Administrator selected members from an older screen. If member 14 has since
 // moved themself away, the live server group no longer contains 14 and the
 // partial swap must skip that stale selection while retaining valid member 15.
