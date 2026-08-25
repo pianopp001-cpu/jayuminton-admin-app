@@ -24,7 +24,14 @@
     var cards=app.querySelectorAll('#adminApp '+CARD_SELECTOR.split(',').join(',#adminApp '));
     for(var i=0;i<cards.length;i++){
       var card=cards[i],team=teamOf(card);
-      if(team){card.setAttribute('data-jm-team-text',team);card.classList.add('has-member-team');}
+      if(team){
+        card.setAttribute('data-jm-team-text',team);
+        card.classList.add('has-member-team');
+        // Persistent team identity is always the two-line border/outline.
+        // Never leave an inline box-shadow:none!important here because that
+        // would suppress the temporary match-pair color layered above it.
+        card.style.removeProperty('box-shadow');
+      }
       var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,span,small,label,b,strong,em,i');
       for(var j=0;j<nodes.length;j++){
         var node=nodes[j];
@@ -88,7 +95,7 @@
     if(document.getElementById('jayuminton-admin-team-layout-v2038'))return;
     var style=document.createElement('style');
     style.id='jayuminton-admin-team-layout-v2038';
-    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]:not(.jm-team-bottom-label){display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{padding-right:inherit!important}#adminApp .jm-team-bottom-label{position:static!important;display:block!important;visibility:visible!important;width:100%!important;height:auto!important;min-height:0!important;margin:2px 0 0!important;padding:0!important;border:0!important;background:transparent!important;text-align:center!important;font-size:7px!important;line-height:1.1!important;font-weight:900!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;pointer-events:none!important}';
+    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]:not(.jm-team-bottom-label){display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;padding-right:inherit!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-team-bottom-label{position:static!important;display:block!important;visibility:visible!important;width:100%!important;height:auto!important;min-height:0!important;margin:2px 0 0!important;padding:0!important;border:0!important;background:transparent!important;text-align:center!important;font-size:7px!important;line-height:1.1!important;font-weight:900!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;pointer-events:none!important}';
     (document.head||document.documentElement).appendChild(style);
   }
   function apply(){installStyle();syncBottomTeamLabels(document);compactSameTeams();syncBottomTeamLabels(document);}
