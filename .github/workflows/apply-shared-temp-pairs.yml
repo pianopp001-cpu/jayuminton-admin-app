@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Fix guarded patch anchor and apply
+      - name: Fix guarded patch anchors and apply
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -29,9 +29,17 @@ jobs:
           s=p.read_text()
           old='''    w = replace_once(\n        w,\n        "\'setBundle\',\'clearBundle\',\'sendMemberMessage\'",\n        "\'setBundle\',\'clearBundle\',\'setTempPairs\',\'sendMemberMessage\'",\n        \'legacy admin name\',\n    )'''
           new='''    w = replace_once(\n        w,\n        "const adminNames = new Set([\'getCurrentMemberPassword\',\'getSystemStatus\',\'addMember\',\'updateMemberProfile\',\'setMemberStatus\',\'setBundle\',\'clearBundle\',\'sendMemberMessage\',\'deleteMembers\',\'assignMembersToCourt\',\'assignMembersToWaitGroup\',\'smartAssignSelected\',\'finishCourt\',\'swapMembers\',\'swapCourts\',\'swapWaitGroups\',\'moveOrSwapMember\',\'undoLastAction\',\'adjustMemberGames\',\'decreaseSelectedGameCounts\',\'resetSelectedGameCounts\',\'resetAllOperationData\',\'createManualBackup\',\'restoreManualBackup\',\'changeMemberPassword\']);",\n        "const adminNames = new Set([\'getCurrentMemberPassword\',\'getSystemStatus\',\'addMember\',\'updateMemberProfile\',\'setMemberStatus\',\'setBundle\',\'clearBundle\',\'setTempPairs\',\'sendMemberMessage\',\'deleteMembers\',\'assignMembersToCourt\',\'assignMembersToWaitGroup\',\'smartAssignSelected\',\'finishCourt\',\'swapMembers\',\'swapCourts\',\'swapWaitGroups\',\'moveOrSwapMember\',\'undoLastAction\',\'adjustMemberGames\',\'decreaseSelectedGameCounts\',\'resetSelectedGameCounts\',\'resetAllOperationData\',\'createManualBackup\',\'restoreManualBackup\',\'changeMemberPassword\']);",\n        \'legacy admin name\',\n    )'''
-          if old not in s:
-              raise SystemExit('patch-script anchor block changed')
-          p.write_text(s.replace(old,new,1))
+          if old in s:
+              s=s.replace(old,new,1)
+          elif "const adminNames = new Set([\\'getCurrentMemberPassword\\'" not in s and "const adminNames = new Set(['getCurrentMemberPassword'" not in s:
+              raise SystemExit('patch-script adminNames anchor block changed')
+          render_old="  function renderSharedTempPairs(){\\n    var selector="
+          render_new="  function renderSharedTempPairs(){\\n    if(typeof document==='undefined'||typeof document.querySelectorAll!=='function')return;\\n    var selector="
+          if render_old in s:
+              s=s.replace(render_old,render_new,1)
+          elif "typeof document.querySelectorAll!=='function'" not in s:
+              raise SystemExit('patch-script render anchor changed')
+          p.write_text(s)
           PY
           python3 deployment/jayuminton/patch_shared_temp_pairs.py
       - name: Run regression tests
@@ -43,6 +51,7 @@ jobs:
           grep -q "tempPairs" cloudflare/state-worker/worker.js
           grep -q "setTempPairs" cloudflare/state-worker/worker.js
           grep -q "setTempPairs" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          grep -q "typeof document.querySelectorAll!='function'\|typeof document.querySelectorAll!=='function'" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           if grep -q "bottom.textContent=teamText" deployment/jayuminton/cloudflare_v6_frontend_bridge.js; then
             echo 'legacy visible team label creator still present' >&2
             exit 1
