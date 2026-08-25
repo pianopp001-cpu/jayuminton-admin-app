@@ -6,6 +6,20 @@ runtime=cloudflare-worker+d1+durable-objects
 firebase_role=hosting+fcm
 apps_script_runtime=forbidden
 
+[state_worker]
+status=success
+workflow=.github/workflows/deploy-cloudflare-state-shadow.yml
+verified_run=32791638372
+verified_head=cb81a81c2332fd847056f7ca4b83b39ff4cfde81
+backend=cloudflare-only
+database=d1
+concurrency=durable-object
+gas=absent
+stale_partial_swap_guard=verified
+autoassign_pair_stats_single_record=verified
+finish_queue_promotion=verified
+assignment_push_transitions=verified
+
 [admin_web]
 status=success
 baseline=v203
@@ -27,8 +41,9 @@ public_memo=verified
 status=success
 baseline=v203.0
 workflow=.github/workflows/build-v2015-known-good-shell.yml
-verified_run=32752264629
-verified_head=e947079ea8456a670cc9d5879491f246a8f870c4
+verified_run=32791676287
+verified_head=cb81a81c2332fd847056f7ca4b83b39ff4cfde81
+sha256=cd1215003cb5969744369c5b4bdfce1d5bc0b01298e71c21584dd505f17bb387
 note=workflow filename v2015 is legacy naming; output baseline is v203.0 and must not be treated as v201.x
 cloudflare_v24_contract=verified
 team_cards_unobstructed=verified
@@ -53,17 +68,21 @@ gas=absent
 status=success
 release=1.6.42
 workflow=.github/workflows/build-user-md-final-v1642.yml
-verified_run=32752854990
-verified_head=836d7ce107a1f2ec0c5c338a529e0724b1bae8a2
+verified_run=32791897059
+verified_head=aa07238ac5fb8b8d15ea4d101adf579f2e990448
+sha256=d99e17eaff0395ae2f3d5576054f84780c0d1de6f485451a84fab5789d9726b2
 package=com.jayuminton.user
 backend=cloudflare-state
 push=fcm+cloudflare-user-push
-selected_self_only=required
-vibration_3x8=required
+push_target_contract=verified
+selected_self_only=verified
+vibration_3x8=verified
+stop_on_confirm=verified
 gas=absent
 
 [regression_guards]
 forbidden=.github/workflows/build-apk.yml legacy v199/GAS production use
+forbidden=.github/workflows/build-v2006-md-clean-final.yml legacy v201.4 production use
 forbidden=fix/pwa-v1641-source deploy-pwa.yml production use
 forbidden=script.google.com/macros/s/ in final web or APK
 forbidden=clasp pull/push/create-deployment in final production pipeline
