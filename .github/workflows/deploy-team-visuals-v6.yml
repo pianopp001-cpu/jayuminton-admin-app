@@ -1,0 +1,91 @@
+name: Deploy final team visuals v6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-team-visuals-v6.yml'
+      - 'deployment/jayuminton/patch_team_visuals_v6.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-unified-member-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      LIVE_USER_URL: https://jayuminton-push.web.app/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Resolve Firebase project
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$CONFIG")"
+          test -n "$FIREBASE_PROJECT_ID"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+      - name: Preserve production page and apply final team visuals
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/team-v6"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?teamv6=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
+          grep -F 'member.teamLabel' "$PUBLIC/index.html" >/dev/null
+          python3 deployment/jayuminton/patch_team_visuals_v6.py "$PUBLIC/index.html"
+          grep -F 'JAYUMINTON_TEAM_VISUALS_V6' "$PUBLIC/index.html" >/dev/null
+          grep -F '#memberApp [data-member-id].jm-has-team{' "$PUBLIC/index.html" >/dev/null
+          grep -F 'border:2px solid var(--jm-team-color)!important' "$PUBLIC/index.html" >/dev/null
+          grep -F 'box-shadow:none!important' "$PUBLIC/index.html" >/dev/null
+          grep -F 'justify-content:flex-start!important' "$PUBLIC/index.html" >/dev/null
+          grep -F "replace(/\\s+/g,'')" "$PUBLIC/index.html" >/dev/null
+          python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/team-v6-inline.js" <<'PY'
+          from pathlib import Path
+          import re, sys
+          source=Path(sys.argv[1]).read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\\s[^>]*)?>([\\s\\S]*?)</script>',source,flags=re.I)
+          Path(sys.argv[2]).write_text('\n'.join(scripts),encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/team-v6-inline.js"
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+      - name: Deploy user web team visuals
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/team-v6/firebase.json" --non-interactive
+      - name: Verify production team visuals
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verifyTeamV6=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/team-v6-live.html"
+          grep -F 'JAYUMINTON_TEAM_VISUALS_V6' "$RUNNER_TEMP/team-v6-live.html" >/dev/null
+          grep -F 'border:2px solid var(--jm-team-color)!important' "$RUNNER_TEMP/team-v6-live.html" >/dev/null
+          grep -F 'outline:2px solid var(--jm-team-color)!important' "$RUNNER_TEMP/team-v6-live.html" >/dev/null
+          grep -F 'justify-content:flex-start!important' "$RUNNER_TEMP/team-v6-live.html" >/dev/null
+          grep -F 'member.teamLabel' "$RUNNER_TEMP/team-v6-live.html" >/dev/null
+          echo 'TEAM_V6_USER_WEB_AND_APP_WEBVIEW_OK'
