@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 if len(sys.argv) != 2:
@@ -7,9 +8,6 @@ if len(sys.argv) != 2:
 path = Path(sys.argv[1])
 html = path.read_text(encoding='utf-8')
 marker = 'JAYUMINTON_TEAM_VISUALS_V6'
-if marker in html:
-    print('TEAM_VISUALS_V6_ALREADY_PRESENT')
-    raise SystemExit(0)
 
 addon = r'''
 <style id="jayuminton-team-visuals-v6">
@@ -48,7 +46,6 @@ addon = r'''
 <script id="jayuminton-team-visuals-v6-script">
 (function(){
   'use strict';
-  if(window.__JAYUMINTON_TEAM_VISUALS_V6__)return;
   window.__JAYUMINTON_TEAM_VISUALS_V6__=true;
   function normalizeLabel(text){
     var s=String(text||'').replace(/\s+/g,'').trim();
@@ -76,8 +73,24 @@ addon = r'''
 })();
 </script>
 '''
+
+# Replace the previously deployed V6 blocks rather than skipping them. The live
+# page may already carry an older V6 marker, and skipping would leave stale
+# team-label/stripe behavior active forever.
+html, style_count = re.subn(
+    r'<style\s+id=["\']jayuminton-team-visuals-v6["\'][^>]*>[\s\S]*?</style>\s*',
+    '', html, flags=re.I
+)
+html, script_count = re.subn(
+    r'<script\s+id=["\']jayuminton-team-visuals-v6-script["\'][^>]*>[\s\S]*?</script>\s*',
+    '', html, flags=re.I
+)
+if marker in html:
+    raise SystemExit('stale V6 marker survived block replacement')
 if '</body>' not in html:
     raise SystemExit('body closing tag missing')
 html = html.replace('</body>', addon + '\n</body>', 1)
+if html.count(marker) != 1:
+    raise SystemExit('new V6 marker count mismatch')
 path.write_text(html, encoding='utf-8')
-print('TEAM_VISUALS_V6_OK')
+print(f'TEAM_VISUALS_V6_REPLACED style={style_count} script={script_count}')
