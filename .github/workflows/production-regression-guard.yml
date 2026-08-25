@@ -44,19 +44,22 @@ jobs:
           test -s "$MATRIX"
           grep -F 'apps_script_runtime=forbidden' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/deploy-cloudflare-state-shadow.yml' "$MATRIX" >/dev/null
-          grep -F 'verified_run=32791638372' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32795396956' "$MATRIX" >/dev/null
           grep -F 'autoassign_pair_stats_single_record=verified' "$MATRIX" >/dev/null
+          grep -F 'pair_stats_reset_consistency=verified' "$MATRIX" >/dev/null
+          grep -F 'pair_stats_restore_consistency=verified' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml' "$MATRIX" >/dev/null
           grep -F 'verified_run=32756280670' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/build-v2015-known-good-shell.yml' "$MATRIX" >/dev/null
-          grep -F 'verified_run=32791676287' "$MATRIX" >/dev/null
-          grep -F 'sha256=cd1215003cb5969744369c5b4bdfce1d5bc0b01298e71c21584dd505f17bb387' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32795439226' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/deploy-md6-self-longpress-production.yml' "$MATRIX" >/dev/null
           grep -F 'verified_run=32753455501' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/build-user-md-final-v1642.yml' "$MATRIX" >/dev/null
-          grep -F 'verified_run=32791897059' "$MATRIX" >/dev/null
-          grep -F 'sha256=d99e17eaff0395ae2f3d5576054f84780c0d1de6f485451a84fab5789d9726b2' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32795371944' "$MATRIX" >/dev/null
           grep -F 'push_target_contract=verified' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32795371778' "$MATRIX" >/dev/null
+          grep -F 'state_worker_run=32795396956' "$MATRIX" >/dev/null
+          grep -F 'admin_apk_run=32795439226' "$MATRIX" >/dev/null
 
       - name: Verify backend concurrency, pair statistics and push contracts
         shell: bash
@@ -70,6 +73,10 @@ jobs:
           node cloudflare/state-worker/md-entry-autoassign.test.mjs
           node cloudflare/state-worker/md-final-entry.test.mjs
           node cloudflare/user-push/worker-do.test.mjs
+          grep -F "await env.DB.prepare('DELETE FROM pair_stats').run();" cloudflare/state-worker/worker-md-entry.js >/dev/null
+          grep -F "const isRestore = body.name === 'restoreManualBackup';" cloudflare/state-worker/worker-md-entry.js >/dev/null
+          grep -F 'isRestore ? null : before' cloudflare/state-worker/worker-md-entry.js >/dev/null
+          grep -F "body.name === 'resetAllOperationData' || isRestore" cloudflare/state-worker/worker-md-entry.js >/dev/null
           grep -F "repeatCount: '8'" cloudflare/user-push/worker-do.js >/dev/null
           grep -F "pulsesPerGroup: '3'" cloudflare/user-push/worker-do.js >/dev/null
           grep -F "stopOnConfirm: 'true'" cloudflare/user-push/worker-do.js >/dev/null
@@ -85,8 +92,8 @@ jobs:
           grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' "$POST" >/dev/null
           grep -F 'CLOUDFLARE_V6_FRONTEND_BRIDGE_OK' "$BRIDGE" >/dev/null
           grep -F 'build-v2015-known-good-shell.yml' PROJECT_RULES.md >/dev/null
-          grep -F '32791638372' PROJECT_RULES.md >/dev/null
-          grep -F '32791676287' PROJECT_RULES.md >/dev/null
+          grep -F '32795396956' PROJECT_RULES.md >/dev/null
+          grep -F '32795439226' PROJECT_RULES.md >/dev/null
           grep -F '32756280670' PROJECT_RULES.md >/dev/null
 
       - name: Verify exact restored admin UI contract
@@ -130,7 +137,7 @@ jobs:
           grep -F 'publicMemo' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
           grep -F "server('memberMoveSelf'" .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
           grep -F "server('updateMyProfile'" .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
-          grep -F '32791897059' PROJECT_RULES.md >/dev/null
+          grep -F '32795371944' PROJECT_RULES.md >/dev/null
           grep -F '32753455501' PROJECT_RULES.md >/dev/null
 
       - name: Verify all known legacy APK routes remain blocked
@@ -158,6 +165,8 @@ jobs:
           grep -F 'Google Apps Script를 운영 런타임으로 사용하지 않는다.' PROJECT_RULES.md >/dev/null
           grep -F '공식 운영 고정점 (2026-08-25)' PROJECT_RULES.md >/dev/null
           grep -F '자동배정의 함께 경기통계는 요청 단위 전후 상태를 기준으로 정확히 한 번만 기록한다.' PROJECT_RULES.md >/dev/null
+          grep -F '운영 초기화 `resetAll`/`resetAllOperationData`가 성공한 경우에만' PROJECT_RULES.md >/dev/null
+          grep -F '`restoreManualBackup`은 복원 전후 위치 차이를 새 경기로 기록하지 않는다.' PROJECT_RULES.md >/dev/null
           echo 'CANONICAL_PRODUCTION_GUARD_OK v203 v1.6.42'
 
       - name: Record verified guard success
@@ -170,12 +179,15 @@ jobs:
             echo 'status=success'
             echo 'guard=canonical-production-v203-v1642'
             echo 'exact_ui_contract=verified'
-            echo 'state_worker_run=32791638372'
+            echo 'state_worker_run=32795396956'
             echo 'admin_web_run=32756280670'
-            echo 'admin_apk_run=32791676287'
+            echo 'admin_apk_run=32795439226'
             echo 'user_web_run=32753455501'
-            echo 'user_apk_run=32791897059'
+            echo 'user_apk_run=32795371944'
+            echo 'full_rollout_run=32795371778'
             echo 'pair_stats_single_record=verified'
+            echo 'pair_stats_reset_consistency=verified'
+            echo 'pair_stats_restore_consistency=verified'
             echo 'push_target_3x8=verified'
             echo 'apps_script_runtime=forbidden'
             echo 'legacy_v2014_rebuild=blocked'
