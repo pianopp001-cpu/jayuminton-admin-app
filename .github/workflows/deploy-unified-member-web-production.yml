@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/deploy-unified-member-web-production.yml'
       - 'deployment/jayuminton/patch_member_user_requirements_v1.py'
+      - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
   workflow_dispatch: {}
 
 permissions:
@@ -77,6 +78,19 @@ jobs:
 
           cp "$PUBLIC/index.html" "$RUNNER_TEMP/member-before.html"
           python3 deployment/jayuminton/patch_member_user_requirements_v1.py "$PUBLIC/index.html"
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          old = "server('updateMyProfile',[String(member.id),memo])"
+          new = "server('updateMyProfile',[null,String(member.id),memo])"
+          if old in text:
+              text = text.replace(old, new)
+          if new not in text:
+              raise SystemExit('member memo RPC transport compatibility patch missing')
+          path.write_text(text, encoding='utf-8')
+          PY
 
           grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' "$PUBLIC/index.html" >/dev/null
@@ -86,7 +100,7 @@ jobs:
           grep -F 'JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5' "$PUBLIC/index.html" >/dev/null
           grep -F '#memberApp [data-member-id].jm-has-team{box-shadow:' "$PUBLIC/index.html" >/dev/null
           grep -F '.jm-status-badge{display:none!important}' "$PUBLIC/index.html" >/dev/null
-          grep -F "server('updateMyProfile',[String(member.id),memo])" "$PUBLIC/index.html" >/dev/null
+          grep -F "server('updateMyProfile',[null,String(member.id),memo])" "$PUBLIC/index.html" >/dev/null
           grep -F 'member.teamLabel' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'window.confirmJmDirectMessage=function()' "$PUBLIC/index.html" >/dev/null
@@ -162,7 +176,7 @@ jobs:
             'JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5' \
             '#memberApp [data-member-id].jm-has-team{box-shadow:' \
             '.jm-status-badge{display:none!important}' \
-            "server('updateMyProfile',[String(member.id),memo])" \
+            "server('updateMyProfile',[null,String(member.id),memo])" \
             'member.teamLabel' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \
@@ -186,5 +200,6 @@ jobs:
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/member-live-after.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/member-live-after.html"
           echo 'PRODUCTION_MEMBER_USER_REQUIREMENTS_AND_NATIVE_IDENTITY_SYNC_OK'
+          echo 'MEMBER_MEMO_RPC_TRANSPORT_COMPAT_OK'
           echo 'MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED'
           echo 'USER_APK_BINARY_NOT_REPLACED_WEBVIEW_USES_UPDATED_CLOUDFLARE_PAGE'
