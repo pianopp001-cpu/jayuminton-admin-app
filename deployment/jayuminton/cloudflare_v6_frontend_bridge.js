@@ -37,10 +37,10 @@
 
   if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN){
     function installAdminTeamSafetyStyle(){
-      if(document.getElementById('jayuminton-admin-team-safety-v2031'))return;
+      if(document.getElementById('jayuminton-admin-team-safety-v2032'))return;
       var style=document.createElement('style');
-      style.id='jayuminton-admin-team-safety-v2031';
-      style.textContent='#adminApp .member-team-badge{display:none!important;font-size:8px!important;line-height:1!important;max-width:36px!important;overflow:hidden!important;pointer-events:none!important}#adminApp .jm-team-badge{display:none!important;font-size:8px!important;line-height:1!important;max-width:36px!important;overflow:hidden!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border-color:var(--member-team-color)!important;box-shadow:inset 0 0 0 2px var(--member-team-color)!important}';
+      style.id='jayuminton-admin-team-safety-v2032';
+      style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge{display:none!important;font-size:8px!important;line-height:1!important;max-width:36px!important;overflow:hidden!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;box-shadow:none!important;overflow:visible!important;height:auto!important;min-height:0!important}#adminApp .member-card,#adminApp .member-item,#adminApp .wait-card,#adminApp .wait-item,#adminApp .player-card,#adminApp .court-player{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}#adminApp .member-card .member-info,#adminApp .member-card .member-meta,#adminApp .member-card .member-detail,#adminApp .member-card .member-sub,#adminApp .member-card .member-memo,#adminApp .member-item .member-info,#adminApp .member-item .member-meta,#adminApp .member-item .member-detail,#adminApp .member-item .member-sub,#adminApp .member-item .member-memo,#adminApp .wait-card .member-info,#adminApp .wait-card .member-meta,#adminApp .wait-card .member-detail,#adminApp .wait-card .member-sub,#adminApp .wait-card .member-memo,#adminApp .wait-item .member-info,#adminApp .wait-item .member-meta,#adminApp .wait-item .member-detail,#adminApp .wait-item .member-sub,#adminApp .wait-item .member-memo{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;white-space:normal!important;line-height:1.25!important;word-break:keep-all!important}';
       (document.head||document.documentElement).appendChild(style);
     }
     function loginBox(){return document.getElementById('adminLoginBox');}
