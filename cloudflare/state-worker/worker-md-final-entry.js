@@ -11,6 +11,12 @@ const HEADERS = {
 };
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:HEADERS});
 
+export function normalizeMemberMemoArgs(args){
+  const values=Array.isArray(args)?args.slice():[];
+  if(values.length===2)return [null,values[0],values[1]];
+  return values;
+}
+
 function authHeaders(request,args){
   const headers=new Headers(request.headers);
   headers.set('content-type','application/json');
@@ -67,12 +73,12 @@ async function handleLegacyWaitSwap(request,env,body){
     const memberId=String(packet.memberId||selfId||'');
     const state=packet.state||{};
     const requests=Array.isArray(state.swapRequests)?state.swapRequests:[];
-    const request=[...requests].reverse().find(item=>
+    const swapRequest=[...requests].reverse().find(item=>
       item&&String(item.status||'pending')==='pending'&&String(item.targetId||'')===memberId
     );
-    if(!request)return null;
-    const requester=(state.members||[]).find(member=>String(member&&member.id||'')===String(request.requesterId||''));
-    return {...request,requesterName:String(requester&&requester.name||'')};
+    if(!swapRequest)return null;
+    const requester=(state.members||[]).find(member=>String(member&&member.id||'')===String(swapRequest.requesterId||''));
+    return {...swapRequest,requesterName:String(requester&&requester.name||'')};
   }
 
   if(name==='memberRespondWaitSwap'){
@@ -102,6 +108,11 @@ export default {
     const url=new URL(request.url);
     if(request.method==='POST'&&url.pathname==='/api/compat/rpc'){
       const body=await request.clone().json().catch(()=>({}));
+      if(String(body.name||'')==='updateMyProfile'){
+        const normalized={...body,args:normalizeMemberMemoArgs(body.args)};
+        const headers=new Headers(request.headers);headers.set('content-type','application/json');
+        return compatCore.fetch(new Request(request.url,{method:'POST',headers,body:JSON.stringify(normalized)}),env);
+      }
       if(LEGACY_WAIT_SWAP.has(String(body.name||''))){
         try{return reply({ok:true,result:await handleLegacyWaitSwap(request,env,body)});}
         catch(error){return reply({ok:false,error:String(error&&error.message||error)});}
