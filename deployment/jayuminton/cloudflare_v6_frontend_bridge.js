@@ -40,7 +40,7 @@
       if(document.getElementById('jayuminton-admin-team-safety-v2031'))return;
       var style=document.createElement('style');
       style.id='jayuminton-admin-team-safety-v2031';
-      style.textContent='#adminApp .member-team-badge{display:none!important;font-size:8px!important;line-height:1!important;max-width:36px!important;overflow:hidden!important}#adminApp .has-member-team{position:relative!important;border-color:var(--member-team-color)!important;box-shadow:inset 0 0 0 2px var(--member-team-color)!important}';
+      style.textContent='#adminApp .member-team-badge{display:none!important;font-size:8px!important;line-height:1!important;max-width:36px!important;overflow:hidden!important;pointer-events:none!important}#adminApp .jm-team-badge{display:none!important;font-size:8px!important;line-height:1!important;max-width:36px!important;overflow:hidden!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border-color:var(--member-team-color)!important;box-shadow:inset 0 0 0 2px var(--member-team-color)!important}';
       (document.head||document.documentElement).appendChild(style);
     }
     function loginBox(){return document.getElementById('adminLoginBox');}
