@@ -33,8 +33,11 @@ jobs:
               s=s.replace(old,new,1)
           elif "const adminNames = new Set([\\'getCurrentMemberPassword\\'" not in s and "const adminNames = new Set(['getCurrentMemberPassword'" not in s:
               raise SystemExit('patch-script adminNames anchor block changed')
-          render_old="  function renderSharedTempPairs(){\\n    var selector="
-          render_new="  function renderSharedTempPairs(){\\n    if(typeof document==='undefined'||typeof document.querySelectorAll!=='function')return;\\n    var selector="
+          render_old='''  function renderSharedTempPairs(){
+    var selector='''
+          render_new='''  function renderSharedTempPairs(){
+    if(typeof document==='undefined'||typeof document.querySelectorAll!=='function')return;
+    var selector='''
           if render_old in s:
               s=s.replace(render_old,render_new,1)
           elif "typeof document.querySelectorAll!=='function'" not in s:
