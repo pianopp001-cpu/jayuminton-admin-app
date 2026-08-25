@@ -9,8 +9,10 @@
   }
   function invoke(name,args,success,failure){
     var values=Array.prototype.slice.call(args||[]); var token='';
-    // 기존 화면의 첫 번째 인수는 관리자 PIN 또는 회원 ID일 수 있다.
-    // 인증은 반드시 로그인 때 저장한 Cloudflare 세션으로만 보낸다.
+    // updateMyProfile is called by the independent member page as [memberId,memo].
+    // The compatibility worker keeps the legacy [credential,memberId,payload] slots,
+    // so preserve the shared member record while adapting only the transport shape.
+    if(name==='updateMyProfile'&&values.length===2)values=[null,values[0],values[1]];
     if(name!=='createAdminSession'&&name!=='verifyMemberPassword'&&name!=='getMemberPasswordVersion') token=storedToken();
     fetch(ENDPOINT,{
       method:'POST',cache:'no-store',credentials:'omit',
@@ -33,9 +35,14 @@
   window.google.script.run=runner(null,null);
   window.__JAYUMINTON_CLOUDFLARE_RPC_V6__=true;
 
-  // The proven v200.5 login button was bound inside the retired RPC bridge.
-  // Rebind it here so replacing that bridge never leaves a visible dead button.
   if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN){
+    function installAdminTeamSafetyStyle(){
+      if(document.getElementById('jayuminton-admin-team-safety-v2031'))return;
+      var style=document.createElement('style');
+      style.id='jayuminton-admin-team-safety-v2031';
+      style.textContent='#adminApp .member-team-badge{display:none!important;font-size:8px!important;line-height:1!important;max-width:36px!important;overflow:hidden!important}#adminApp .has-member-team{position:relative!important;border-color:var(--member-team-color)!important;box-shadow:inset 0 0 0 2px var(--member-team-color)!important}';
+      (document.head||document.documentElement).appendChild(style);
+    }
     function loginBox(){return document.getElementById('adminLoginBox');}
     function adminApp(){return document.getElementById('adminApp');}
     function hideApp(){var a=adminApp(),b=loginBox();if(a){a.classList.add('hidden');a.hidden=true;a.style.setProperty('display','none','important');}if(b){b.classList.remove('hidden');b.hidden=false;b.removeAttribute('hidden');b.style.setProperty('display','block','important');}}
@@ -48,7 +55,7 @@
       var token=storedToken();if(!token)return false;
       status('저장된 관리자 인증으로 연결하고 있습니다.',false);
       if(typeof window.openAdminApp!=='function'){clearAdminSession();hideApp();return false;}
-      Promise.resolve(window.openAdminApp(token)).then(function(){revealApp();status('',false);}).catch(function(){clearAdminSession();hideApp();status('관리자 PIN을 한 번 입력해 주세요.',false);});
+      Promise.resolve(window.openAdminApp(token)).then(function(){installAdminTeamSafetyStyle();revealApp();status('',false);}).catch(function(){clearAdminSession();hideApp();status('관리자 PIN을 한 번 입력해 주세요.',false);});
       return true;
     }
     function submit(event){
@@ -61,15 +68,12 @@
         if(!result||!result.ok){status('관리자 PIN이 틀렸습니다.',true);reset();return;}
         var token=String(result.token||'');try{localStorage.setItem('jayuminton_admin_session_v1',token);}catch(_){}
         if(typeof window.openAdminApp!=='function'){status('관리자 화면 초기화 함수가 없습니다.',true);reset();return;}
-        Promise.resolve(window.openAdminApp(token)).then(function(){revealApp();status('',false);reset();}).catch(function(error){hideApp();status(String(error&&error.message||error||'관리자 화면을 불러오지 못했습니다.'),true);reset();});
+        Promise.resolve(window.openAdminApp(token)).then(function(){installAdminTeamSafetyStyle();revealApp();status('',false);reset();}).catch(function(error){hideApp();status(String(error&&error.message||error||'관리자 화면을 불러오지 못했습니다.'),true);reset();});
       },function(error){hideApp();status(String(error&&error.message||error||'서버에 연결할 수 없습니다.'),true);reset();});
     }
     function bind(){
-      hideApp();ensureStatus();
+      hideApp();ensureStatus();installAdminTeamSafetyStyle();
       var box=loginBox(),b=document.getElementById('adminCloudflareLoginButton'),input=document.getElementById('adminPinInput');
-      // The latest v200.8 markup dropped the legacy button id and only kept an
-      // inline adminLogin() handler. Resolve that visible button explicitly and
-      // replace the inline handler so one tap performs exactly one login request.
       if(!b&&box)b=box.querySelector('button.primary,button[type="submit"],button');
       if(b){b.id='adminCloudflareLoginButton';b.type='button';b.removeAttribute('onclick');}
       if(box){box.style.setProperty('position','relative','important');box.style.setProperty('z-index','2147483000','important');box.style.setProperty('pointer-events','auto','important');}
