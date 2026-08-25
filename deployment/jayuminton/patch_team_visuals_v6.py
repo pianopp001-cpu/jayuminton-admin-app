@@ -74,9 +74,6 @@ addon = r'''
 </script>
 '''
 
-# Replace the previously deployed V6 blocks rather than skipping them. The live
-# page may already carry an older V6 marker, and skipping would leave stale
-# team-label/stripe behavior active forever.
 html, style_count = re.subn(
     r'<style\s+id=["\']jayuminton-team-visuals-v6["\'][^>]*>[\s\S]*?</style>\s*',
     '', html, flags=re.I
@@ -90,7 +87,9 @@ if marker in html:
 if '</body>' not in html:
     raise SystemExit('body closing tag missing')
 html = html.replace('</body>', addon + '\n</body>', 1)
-if html.count(marker) != 1:
-    raise SystemExit('new V6 marker count mismatch')
+if len(re.findall(r'<style\s+id=["\']jayuminton-team-visuals-v6["\']', html, flags=re.I)) != 1:
+    raise SystemExit('fresh V6 style block count mismatch')
+if len(re.findall(r'<script\s+id=["\']jayuminton-team-visuals-v6-script["\']', html, flags=re.I)) != 1:
+    raise SystemExit('fresh V6 script block count mismatch')
 path.write_text(html, encoding='utf-8')
 print(f'TEAM_VISUALS_V6_REPLACED style={style_count} script={script_count}')
