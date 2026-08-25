@@ -58,9 +58,6 @@ if admin_html.exists():
         if 'script.google.com/macros/s/' in final_html:
             raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
 
-        # Always replace any previously bundled V2038 layout script with the
-        # current source. This prevents a restored older APK asset from keeping
-        # stale team-label/grouping behavior merely because the marker exists.
         layout_marker = '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__'
         while layout_marker in final_html:
             marker_pos = final_html.find(layout_marker)
@@ -85,7 +82,8 @@ if admin_html.exists():
             'jayuminton-admin-team-layout-v2038',
             '.jm-team-bottom-label',
             'has-member-team.jm-temp-pair',
-            "card.style.removeProperty('box-shadow')",
+            "if(type==='wait')return [a[0],b[0],a[1],b[1]]",
+            "return [a[0],a[1],b[0],b[1]]",
         ):
             if marker not in final_html:
                 raise SystemExit('bundled team layout guard missing: ' + marker)
@@ -95,4 +93,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: team-lines-no-labels-pair-2x2-20260826
+# BUILD_TRIGGER: wait-left-right-court-top-bottom-line-only-20260826
