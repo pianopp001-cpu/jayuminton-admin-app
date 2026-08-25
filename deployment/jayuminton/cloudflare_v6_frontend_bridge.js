@@ -30,9 +30,6 @@
     var old=loadTempPairs(),next=[];
     old.forEach(function(group){
       var ids=group.pairA.concat(group.pairB);
-      // Temporary 2-player sides survive wait2->wait1 and other moves inside
-      // the same broad area. Only a WAIT<->COURT boundary crossing (or leaving
-      // both areas) clears them. Persistent teamLabel/bundleId is untouched.
       if(ids.every(function(id){return zoneOfState(state,id)===group.zone;}))next.push(group);
     });
     if(JSON.stringify(old)!==JSON.stringify(next))saveTempPairs(next);
@@ -73,9 +70,9 @@
     var cardSelector='.member,.person,.quick-member,.member-card,.member-item,.wait-card,.wait-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
 
     function installAdminTeamSafetyStyle(){
-      if(document.getElementById('jayuminton-admin-team-safety-v2035'))return;
+      if(document.getElementById('jayuminton-admin-team-safety-v2036'))return;
       var style=document.createElement('style');
-      style.id='jayuminton-admin-team-safety-v2035';
+      style.id='jayuminton-admin-team-safety-v2036';
       style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important}#adminApp .jm-team-bottom-label{display:block!important;visibility:visible!important;width:100%!important;height:auto!important;min-width:0!important;max-width:none!important;margin:3px 0 0!important;padding:0!important;border:0!important;overflow:visible!important;position:static!important;float:none!important;clear:both!important;text-align:left!important;font-size:9px!important;font-weight:900!important;line-height:1.15!important;white-space:nowrap!important;color:var(--member-team-color)!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;box-shadow:none!important;overflow:visible!important;height:auto!important;min-height:0!important;padding-bottom:5px!important;background-clip:padding-box!important}#adminApp .member-card,#adminApp .member-item,#adminApp .wait-card,#adminApp .wait-item,#adminApp .player-card,#adminApp .court-player,#adminApp .member,#adminApp .person,#adminApp .quick-member{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}#adminApp .member-card .member-info,#adminApp .member-card .member-meta,#adminApp .member-card .member-detail,#adminApp .member-card .member-sub,#adminApp .member-card .member-memo,#adminApp .member-item .member-info,#adminApp .member-item .member-meta,#adminApp .member-item .member-detail,#adminApp .member-item .member-sub,#adminApp .member-item .member-memo,#adminApp .wait-card .member-info,#adminApp .wait-card .member-meta,#adminApp .wait-card .member-detail,#adminApp .wait-card .member-sub,#adminApp .wait-card .member-memo,#adminApp .wait-item .member-info,#adminApp .wait-item .member-meta,#adminApp .wait-item .member-detail,#adminApp .wait-item .member-sub,#adminApp .wait-item .member-memo{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;white-space:normal!important;line-height:1.25!important;word-break:keep-all!important}#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair-pending{box-shadow:0 0 0 2px #111827!important}';
       (document.head||document.documentElement).appendChild(style);
     }
@@ -97,6 +94,10 @@
         }
         if(teamText){
           card.setAttribute('data-jm-team-text',teamText);
+          card.style.setProperty('box-shadow','none','important');
+          card.style.setProperty('border','2px solid var(--member-team-color)','important');
+          card.style.setProperty('outline','2px solid var(--member-team-color)','important');
+          card.style.setProperty('outline-offset','-5px','important');
           var bottom=card.querySelector('.jm-team-bottom-label');
           if(!bottom){bottom=document.createElement('small');bottom.className='jm-team-bottom-label';}
           if(bottom.textContent!==teamText)bottom.textContent=teamText;
