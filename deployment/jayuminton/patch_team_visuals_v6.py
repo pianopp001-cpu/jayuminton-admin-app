@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 
+# v6.1: final redeploy after admin inline border hardening.
 if len(sys.argv) != 2:
     raise SystemExit('usage: patch_team_visuals_v6.py <html>')
 path = Path(sys.argv[1])
