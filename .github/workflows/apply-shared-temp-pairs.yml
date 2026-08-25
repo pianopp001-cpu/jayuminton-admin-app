@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'deployment/jayuminton/patch_shared_temp_pairs.py'
+      - '.github/workflows/apply-shared-temp-pairs.yml'
   workflow_dispatch:
 
 permissions:
@@ -20,8 +21,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Apply guarded shared temp-pair patch
-        run: python3 deployment/jayuminton/patch_shared_temp_pairs.py
+      - name: Fix guarded patch anchor and apply
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deployment/jayuminton/patch_shared_temp_pairs.py')
+          s=p.read_text()
+          old='''    w = replace_once(\n        w,\n        "\'setBundle\',\'clearBundle\',\'sendMemberMessage\'",\n        "\'setBundle\',\'clearBundle\',\'setTempPairs\',\'sendMemberMessage\'",\n        \'legacy admin name\',\n    )'''
+          new='''    w = replace_once(\n        w,\n        "const adminNames = new Set([\'getCurrentMemberPassword\',\'getSystemStatus\',\'addMember\',\'updateMemberProfile\',\'setMemberStatus\',\'setBundle\',\'clearBundle\',\'sendMemberMessage\',\'deleteMembers\',\'assignMembersToCourt\',\'assignMembersToWaitGroup\',\'smartAssignSelected\',\'finishCourt\',\'swapMembers\',\'swapCourts\',\'swapWaitGroups\',\'moveOrSwapMember\',\'undoLastAction\',\'adjustMemberGames\',\'decreaseSelectedGameCounts\',\'resetSelectedGameCounts\',\'resetAllOperationData\',\'createManualBackup\',\'restoreManualBackup\',\'changeMemberPassword\']);",\n        "const adminNames = new Set([\'getCurrentMemberPassword\',\'getSystemStatus\',\'addMember\',\'updateMemberProfile\',\'setMemberStatus\',\'setBundle\',\'clearBundle\',\'setTempPairs\',\'sendMemberMessage\',\'deleteMembers\',\'assignMembersToCourt\',\'assignMembersToWaitGroup\',\'smartAssignSelected\',\'finishCourt\',\'swapMembers\',\'swapCourts\',\'swapWaitGroups\',\'moveOrSwapMember\',\'undoLastAction\',\'adjustMemberGames\',\'decreaseSelectedGameCounts\',\'resetSelectedGameCounts\',\'resetAllOperationData\',\'createManualBackup\',\'restoreManualBackup\',\'changeMemberPassword\']);",\n        \'legacy admin name\',\n    )'''
+          if old not in s:
+              raise SystemExit('patch-script anchor block changed')
+          p.write_text(s.replace(old,new,1))
+          PY
+          python3 deployment/jayuminton/patch_shared_temp_pairs.py
       - name: Run regression tests
         run: |
           node cloudflare/state-worker/worker.test.mjs
@@ -43,6 +55,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js deployment/jayuminton/patch_shared_temp_pairs.py
           git commit -m 'fix(team): share temporary pair state across admin and member'
           git push origin main
