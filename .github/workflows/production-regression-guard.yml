@@ -7,6 +7,7 @@ on:
       - 'PROJECT_RULES.md'
       - 'PROJECT_SPEC_20260825.md'
       - 'deployment/status/production-matrix-v203-v1642.txt'
+      - '.github/workflows/deploy-cloudflare-state-shadow.yml'
       - '.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml'
       - '.github/workflows/build-v2015-known-good-shell.yml'
       - '.github/workflows/deploy-md6-self-longpress-production.yml'
@@ -14,6 +15,9 @@ on:
       - '.github/workflows/build-apk.yml'
       - '.github/workflows/build-v2006-md-clean-final.yml'
       - '.github/workflows/production-regression-guard.yml'
+      - 'cloudflare/state-worker/**'
+      - 'cloudflare/user-push/worker-do.js'
+      - 'cloudflare/user-push/worker-do.test.mjs'
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
       - 'deployment/jayuminton/admin_cloudflare_post_contract_patch.py'
       - 'deployment/jayuminton/patch_member_self_longpress_v6.py'
@@ -39,14 +43,36 @@ jobs:
           MATRIX=deployment/status/production-matrix-v203-v1642.txt
           test -s "$MATRIX"
           grep -F 'apps_script_runtime=forbidden' "$MATRIX" >/dev/null
+          grep -F 'workflow=.github/workflows/deploy-cloudflare-state-shadow.yml' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32791638372' "$MATRIX" >/dev/null
+          grep -F 'autoassign_pair_stats_single_record=verified' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml' "$MATRIX" >/dev/null
           grep -F 'verified_run=32756280670' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/build-v2015-known-good-shell.yml' "$MATRIX" >/dev/null
-          grep -F 'verified_run=32752264629' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32791676287' "$MATRIX" >/dev/null
+          grep -F 'sha256=cd1215003cb5969744369c5b4bdfce1d5bc0b01298e71c21584dd505f17bb387' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/deploy-md6-self-longpress-production.yml' "$MATRIX" >/dev/null
           grep -F 'verified_run=32753455501' "$MATRIX" >/dev/null
           grep -F 'workflow=.github/workflows/build-user-md-final-v1642.yml' "$MATRIX" >/dev/null
-          grep -F 'verified_run=32752854990' "$MATRIX" >/dev/null
+          grep -F 'verified_run=32791897059' "$MATRIX" >/dev/null
+          grep -F 'sha256=d99e17eaff0395ae2f3d5576054f84780c0d1de6f485451a84fab5789d9726b2' "$MATRIX" >/dev/null
+          grep -F 'push_target_contract=verified' "$MATRIX" >/dev/null
+
+      - name: Verify backend concurrency, pair statistics and push contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .github/workflows/deploy-cloudflare-state-shadow.yml
+          grep -F 'main = "worker-md-final-entry.js"' cloudflare/state-worker/wrangler.toml.template >/dev/null
+          grep -F 'liveIdsInGroup(sourceA,body.idsA)' cloudflare/state-worker/worker-md-compat-entry.js >/dev/null
+          node cloudflare/state-worker/worker.test.mjs
+          node cloudflare/state-worker/md4-autoassign.test.mjs
+          node cloudflare/state-worker/md-entry-autoassign.test.mjs
+          node cloudflare/state-worker/md-final-entry.test.mjs
+          node cloudflare/user-push/worker-do.test.mjs
+          grep -F "repeatCount: '8'" cloudflare/user-push/worker-do.js >/dev/null
+          grep -F "pulsesPerGroup: '3'" cloudflare/user-push/worker-do.js >/dev/null
+          grep -F "stopOnConfirm: 'true'" cloudflare/user-push/worker-do.js >/dev/null
 
       - name: Verify admin v203 canonical paths
         shell: bash
@@ -59,7 +85,8 @@ jobs:
           grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' "$POST" >/dev/null
           grep -F 'CLOUDFLARE_V6_FRONTEND_BRIDGE_OK' "$BRIDGE" >/dev/null
           grep -F 'build-v2015-known-good-shell.yml' PROJECT_RULES.md >/dev/null
-          grep -F '32752264629' PROJECT_RULES.md >/dev/null
+          grep -F '32791638372' PROJECT_RULES.md >/dev/null
+          grep -F '32791676287' PROJECT_RULES.md >/dev/null
           grep -F '32756280670' PROJECT_RULES.md >/dev/null
 
       - name: Verify exact restored admin UI contract
@@ -97,12 +124,13 @@ jobs:
           grep -F 'VERSION="1.6.42"' .github/workflows/build-user-md-final-v1642.yml >/dev/null
           grep -F 'MAX_GROUPS = 8' .github/workflows/build-user-md-final-v1642.yml >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember' .github/workflows/build-user-md-final-v1642.yml >/dev/null
+          grep -F 'node cloudflare/user-push/worker-do.test.mjs' .github/workflows/build-user-md-final-v1642.yml >/dev/null
           grep -F 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
           grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)!important' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
           grep -F 'publicMemo' .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
           grep -F "server('memberMoveSelf'" .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
           grep -F "server('updateMyProfile'" .github/workflows/deploy-md6-self-longpress-production.yml >/dev/null
-          grep -F '32752854990' PROJECT_RULES.md >/dev/null
+          grep -F '32791897059' PROJECT_RULES.md >/dev/null
           grep -F '32753455501' PROJECT_RULES.md >/dev/null
 
       - name: Verify all known legacy APK routes remain blocked
@@ -129,6 +157,7 @@ jobs:
           grep -F 'PROJECT_SPEC_20260825.md' PROJECT_RULES.md >/dev/null
           grep -F 'Google Apps Script를 운영 런타임으로 사용하지 않는다.' PROJECT_RULES.md >/dev/null
           grep -F '공식 운영 고정점 (2026-08-25)' PROJECT_RULES.md >/dev/null
+          grep -F '자동배정의 함께 경기통계는 요청 단위 전후 상태를 기준으로 정확히 한 번만 기록한다.' PROJECT_RULES.md >/dev/null
           echo 'CANONICAL_PRODUCTION_GUARD_OK v203 v1.6.42'
 
       - name: Record verified guard success
@@ -141,10 +170,13 @@ jobs:
             echo 'status=success'
             echo 'guard=canonical-production-v203-v1642'
             echo 'exact_ui_contract=verified'
+            echo 'state_worker_run=32791638372'
             echo 'admin_web_run=32756280670'
-            echo 'admin_apk_run=32752264629'
+            echo 'admin_apk_run=32791676287'
             echo 'user_web_run=32753455501'
-            echo 'user_apk_run=32752854990'
+            echo 'user_apk_run=32791897059'
+            echo 'pair_stats_single_record=verified'
+            echo 'push_target_3x8=verified'
             echo 'apps_script_runtime=forbidden'
             echo 'legacy_v2014_rebuild=blocked'
             echo "run_id=$GITHUB_RUN_ID"
@@ -155,5 +187,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deployment/status/production-regression-guard.txt
           git commit -m 'status: verify canonical production regression guard' || exit 0
-          git pull --rebase origin main || true
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
           git push origin HEAD:main
