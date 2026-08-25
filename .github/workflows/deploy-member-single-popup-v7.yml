@@ -1,0 +1,102 @@
+name: Deploy member single popup v7
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-member-single-popup-v7.yml'
+      - 'deployment/jayuminton/patch_member_self_longpress_v6.py'
+      - 'deployment/jayuminton/patch_member_single_popup_cleanup_v7.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-unified-member-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      LIVE_USER_URL: https://jayuminton-push.web.app/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Resolve Firebase project
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/deploy.json"
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$CONFIG"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$CONFIG")"
+          test -n "$FIREBASE_PROJECT_ID"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+      - name: Preserve production page and apply single popup
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/member-v7"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$PUBLIC"
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?memberv7=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
+          grep -F 'memberMoveSelf' "$PUBLIC/index.html" >/dev/null
+          python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_single_popup_cleanup_v7.py "$PUBLIC/index.html"
+          grep -F 'JAYUMINTON_MD7_SINGLE_ACTION_POPUP_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F '어디로 이동할까요?' "$PUBLIC/index.html" >/dev/null
+          grep -F '>코트배정대기</button>' "$PUBLIC/index.html" >/dev/null
+          grep -F '>휴식</button>' "$PUBLIC/index.html" >/dev/null
+          grep -F '>귀가</button>' "$PUBLIC/index.html" >/dev/null
+          grep -F '>도착전</button>' "$PUBLIC/index.html" >/dev/null
+          grep -F '>내정보 입력</button>' "$PUBLIC/index.html" >/dev/null
+          grep -F "server('updateMyProfile',[String(m.id),memo])" "$PUBLIC/index.html" >/dev/null
+          if grep -F '<div id="jmSelfProfileModal"' "$PUBLIC/index.html" >/dev/null; then
+            echo 'legacy second profile modal still present' >&2
+            exit 1
+          fi
+          python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-v7-inline.js" <<'PY'
+          from pathlib import Path
+          import re, sys
+          source=Path(sys.argv[1]).read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\\s[^>]*)?>([\\s\\S]*?)</script>',source,flags=re.I)
+          Path(sys.argv[2]).write_text('\n'.join(scripts),encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/member-v7-inline.js"
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+      - name: Deploy user web single popup
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/member-v7/firebase.json" --non-interactive
+      - name: Verify production single popup
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verifyMemberV7=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/member-v7-live.html"
+          grep -F 'JAYUMINTON_MD7_SINGLE_ACTION_POPUP_V1' "$RUNNER_TEMP/member-v7-live.html" >/dev/null
+          grep -F '어디로 이동할까요?' "$RUNNER_TEMP/member-v7-live.html" >/dev/null
+          grep -F '>내정보 입력</button>' "$RUNNER_TEMP/member-v7-live.html" >/dev/null
+          grep -F "server('updateMyProfile',[String(m.id),memo])" "$RUNNER_TEMP/member-v7-live.html" >/dev/null
+          if grep -F '<div id="jmSelfProfileModal"' "$RUNNER_TEMP/member-v7-live.html" >/dev/null; then
+            echo 'legacy second profile modal found on live page' >&2
+            exit 1
+          fi
+          echo 'MEMBER_SINGLE_POPUP_V7_OK'
