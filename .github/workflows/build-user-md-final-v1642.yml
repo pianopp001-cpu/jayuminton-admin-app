@@ -124,5 +124,10 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_PATH" deployment/status/user-apk-v1642.txt
           git commit -m 'Publish MD-final user APK v1.6.42' || exit 0
-          git pull --rebase origin main || true
+          # Firebase auth/sdkconfig and Gradle may leave generated tracked/untracked files.
+          # The APK and status are already committed above, so clean only the remaining
+          # working-tree noise before rebasing onto concurrent bot commits.
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
           git push origin HEAD:main
