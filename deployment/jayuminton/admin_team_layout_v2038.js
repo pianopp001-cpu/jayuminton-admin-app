@@ -19,7 +19,7 @@
     }
     return '';
   }
-  function syncBottomTeamLabels(root){
+  function rememberOfficialTeamAndRemoveText(root){
     var app=root&&root.querySelectorAll?root:document;
     var cards=app.querySelectorAll('#adminApp '+CARD_SELECTOR.split(',').join(',#adminApp '));
     for(var i=0;i<cards.length;i++){
@@ -27,28 +27,15 @@
       if(team){
         card.setAttribute('data-jm-team-text',team);
         card.classList.add('has-member-team');
-        // Persistent team identity is always the two-line border/outline.
-        // Never leave an inline box-shadow:none!important here because that
-        // would suppress the temporary match-pair color layered above it.
         card.style.removeProperty('box-shadow');
       }
-      var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,span,small,label,b,strong,em,i');
+      var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,.jm-team-bottom-label,span,small,label,b,strong,em,i');
       for(var j=0;j<nodes.length;j++){
         var node=nodes[j];
-        if(node.classList&&node.classList.contains('jm-team-bottom-label'))continue;
         if(normalizeTeam((node.getAttribute&&node.getAttribute('data-team-label'))||node.textContent)){
-          node.textContent='';
-          node.style.setProperty('display','none','important');
-          node.style.setProperty('visibility','hidden','important');
-          node.setAttribute('aria-hidden','true');
+          node.remove();
         }
       }
-      var bottom=card.querySelector(':scope > .jm-team-bottom-label');
-      if(team){
-        if(!bottom){bottom=document.createElement('div');bottom.className='jm-team-bottom-label';card.appendChild(bottom);}
-        bottom.textContent=team;
-        bottom.setAttribute('data-team-label',team);
-      }else if(bottom){bottom.remove();}
     }
   }
   function directCardChildren(parent){
@@ -61,25 +48,51 @@
     return out;
   }
   function teamNumber(team){var m=String(team||'').match(/(\d+)$/);return m?Number(m[1]):999999;}
-  function compactTeamsInParent(parent){
-    var cards=directCardChildren(parent);
-    if(cards.length<2)return;
+  function tempPairKey(card){
+    if(!card)return '';
+    var keys=['data-jm-temp-pair-id','data-jm-temp-pair-key','data-temp-pair-id','data-pair-id','data-pair-key'];
+    for(var i=0;i<keys.length;i++){
+      var v=String(card.getAttribute&&card.getAttribute(keys[i])||'').trim();
+      if(v)return 'P:'+v;
+    }
+    if(card.classList&&card.classList.contains('jm-temp-pair')){
+      var inline=card.style&&card.style.getPropertyValue('--jm-temp-pair-color');
+      if(inline)return 'C:'+inline.trim();
+      try{
+        var computed=getComputedStyle(card).getPropertyValue('--jm-temp-pair-color');
+        if(computed&&computed.trim())return 'C:'+computed.trim();
+      }catch(e){}
+      return 'P:temp';
+    }
+    return '';
+  }
+  function orderedByPairOrOfficial(cards){
+    if(cards.length!==4)return cards.slice();
+    var tempGroups={},tempPlain=[];
+    cards.forEach(function(card){var k=tempPairKey(card);if(k){if(!tempGroups[k])tempGroups[k]=[];tempGroups[k].push(card);}else tempPlain.push(card);});
+    var tempKeys=Object.keys(tempGroups).filter(function(k){return tempGroups[k].length>=2;});
+    if(tempKeys.length){
+      var next=[];
+      tempKeys.forEach(function(k){tempGroups[k].slice(0,2).forEach(function(card){if(next.indexOf(card)<0)next.push(card);});});
+      cards.forEach(function(card){if(next.indexOf(card)<0)next.push(card);});
+      return next.slice(0,4);
+    }
     var groups={},plain=[];
-    cards.forEach(function(card){
-      var t=teamOf(card);
-      if(t){if(!groups[t])groups[t]=[];groups[t].push(card);}else plain.push(card);
-    });
-    var teamKeys=Object.keys(groups).filter(function(t){return groups[t].length>1;}).sort(function(a,b){return teamNumber(a)-teamNumber(b);});
-    if(!teamKeys.length)return;
-    var next=[];
-    teamKeys.forEach(function(t){groups[t].forEach(function(card){next.push(card);});});
-    cards.forEach(function(card){var t=teamOf(card);if(t&&groups[t]&&groups[t].length<=1)next.push(card);});
-    plain.forEach(function(card){next.push(card);});
-    if(next.length!==cards.length)return;
+    cards.forEach(function(card){var t=teamOf(card);if(t){if(!groups[t])groups[t]=[];groups[t].push(card);}else plain.push(card);});
+    var keys=Object.keys(groups).filter(function(t){return groups[t].length>=2;}).sort(function(a,b){return teamNumber(a)-teamNumber(b);});
+    if(!keys.length)return cards.slice();
+    var next2=[];
+    keys.forEach(function(t){groups[t].slice(0,2).forEach(function(card){if(next2.indexOf(card)<0)next2.push(card);});});
+    cards.forEach(function(card){if(next2.indexOf(card)<0)next2.push(card);});
+    return next2.slice(0,4);
+  }
+  function compactPairsInParent(parent){
+    var cards=directCardChildren(parent);
+    if(cards.length!==4)return;
+    var next=orderedByPairOrOfficial(cards);
     var changed=false;
     for(var i=0;i<cards.length;i++){if(cards[i]!==next[i]){changed=true;break;}}
-    if(!changed)return;
-    next.forEach(function(card){parent.appendChild(card);});
+    if(changed)next.forEach(function(card){parent.appendChild(card);});
   }
   function compactSameTeams(){
     var app=document.getElementById('adminApp');if(!app)return;
@@ -89,16 +102,16 @@
       var p=cards[i].parentElement;
       if(p&&parents.indexOf(p)<0)parents.push(p);
     }
-    parents.forEach(compactTeamsInParent);
+    parents.forEach(compactPairsInParent);
   }
   function installStyle(){
-    if(document.getElementById('jayuminton-admin-team-layout-v2038'))return;
+    var old=document.getElementById('jayuminton-admin-team-layout-v2038');if(old)old.remove();
     var style=document.createElement('style');
     style.id='jayuminton-admin-team-layout-v2038';
-    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]:not(.jm-team-bottom-label){display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;padding-right:inherit!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-team-bottom-label{position:static!important;display:block!important;visibility:visible!important;width:100%!important;height:auto!important;min-height:0!important;margin:2px 0 0!important;padding:0!important;border:0!important;background:transparent!important;text-align:center!important;font-size:7px!important;line-height:1.1!important;font-weight:900!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;pointer-events:none!important}';
+    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair:not(.has-member-team){box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}';
     (document.head||document.documentElement).appendChild(style);
   }
-  function apply(){installStyle();syncBottomTeamLabels(document);compactSameTeams();syncBottomTeamLabels(document);}
+  function apply(){installStyle();rememberOfficialTeamAndRemoveText(document);compactSameTeams();rememberOfficialTeamAndRemoveText(document);}
   function boot(){
     var app=document.getElementById('adminApp');if(!app){setTimeout(boot,100);return;}
     apply();
@@ -106,9 +119,9 @@
     var scheduled=false;
     app.__jmTeamLayoutV2038Observer=new MutationObserver(function(){
       if(scheduled)return;scheduled=true;
-      setTimeout(function(){scheduled=false;apply();},0);
+      setTimeout(function(){scheduled=false;apply();},16);
     });
-    app.__jmTeamLayoutV2038Observer.observe(app,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['data-team-label','data-jm-team-text','class','style']});
+    app.__jmTeamLayoutV2038Observer.observe(app,{childList:true,subtree:true,attributes:true,attributeFilter:['data-team-label','data-jm-team-text','data-jm-temp-pair-id','data-jm-temp-pair-key','data-pair-id','data-pair-key','class','style']});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else setTimeout(boot,0);
 })();
