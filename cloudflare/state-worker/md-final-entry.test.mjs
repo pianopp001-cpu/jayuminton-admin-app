@@ -38,9 +38,11 @@ assert.equal(outerPairWrites, 2, 'admin and compat autoassign must each record p
 assert.ok(mdEntry.includes("await env.DB.prepare('DELETE FROM pair_stats').run();"), 'operation reset must clear pair statistics');
 assert.ok(mdEntry.includes("if (packet?.ok && options.clearPairStats) await clearPairStatistics(env);"), 'pair statistics must clear only after a successful core reset response');
 assert.ok(mdEntry.includes("{ clearPairStats: body.action === 'resetAll' }"), 'direct admin resetAll pair-stat cleanup missing');
-assert.ok(mdEntry.includes("{ clearPairStats: body.name === 'resetAllOperationData' }"), 'compat resetAllOperationData pair-stat cleanup missing');
+assert.ok(mdEntry.includes("const isRestore = body.name === 'restoreManualBackup';"), 'restore must have an explicit pair-stat consistency path');
+assert.ok(mdEntry.includes('isRestore ? null : before'), 'restore must not record before/after location changes as new pair games');
+assert.ok(mdEntry.includes("body.name === 'resetAllOperationData' || isRestore"), 'successful restore must clear stale pair statistics because backup state does not contain the separate pair_stats table');
 const clearPairCalls = (mdEntry.match(/clearPairStats:/g) || []).length;
-assert.equal(clearPairCalls, 2, 'only direct and compat full-operation reset may request pair-stat cleanup');
+assert.equal(clearPairCalls, 2, 'pair-stat cleanup options must remain limited to admin reset and compat reset/restore handling');
 
 // Administrator selected members from an older screen. If member 14 has since
 // moved themself away, the live server group no longer contains 14 and the
