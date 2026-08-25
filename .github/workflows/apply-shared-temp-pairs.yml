@@ -30,7 +30,6 @@ jobs:
 
           wp=Path('cloudflare/state-worker/worker.js')
           w=wp.read_text()
-
           targets=[
             ("  syncMemberStatuses(state);\n  return { state, event: { type: 'court_finished'",
              "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'court_finished'"),
@@ -44,7 +43,6 @@ jobs:
           for old,new in targets:
             if new not in w and old in w:
               w=w.replace(old,new,1)
-
           while "  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n" in w:
             w=w.replace("  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n","  reconcileTempPairs(state);\n",1)
           wp.write_text(w)
@@ -76,14 +74,16 @@ jobs:
           grep -q "setTempPairs" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "member.jm-team-card.has-member-team.jm-temp-pair" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "card.classList.contains('jm-temp-pair')" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          if grep -q "bottom.textContent=teamText" deployment/jayuminton/cloudflare_v6_frontend_bridge.js; then
-            echo 'legacy visible team label creator still present' >&2
-            exit 1
-          fi
-          if grep -q $'reconcileTempPairs(state);\n  reconcileTempPairs(state);' cloudflare/state-worker/worker.js; then
-            echo 'duplicate reconcileTempPairs detected' >&2
-            exit 1
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          w=Path('cloudflare/state-worker/worker.js').read_text()
+          b=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js').read_text()
+          if "  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n" in w:
+              raise SystemExit('duplicate reconcileTempPairs detected')
+          if 'bottom.textContent=teamText' in b:
+              raise SystemExit('legacy visible team label creator still present')
+          print('SHARED_TEMP_PAIR_CONTRACT_OK')
+          PY
       - name: Commit generated sources to main
         run: |
           if git diff --quiet; then
