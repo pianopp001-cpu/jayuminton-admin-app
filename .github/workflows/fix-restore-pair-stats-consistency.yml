@@ -1,0 +1,55 @@
+name: Fix restore pair statistics consistency
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-restore-pair-stats-consistency.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch restore pair-stat contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare/state-worker/worker-md-entry.js')
+          s=p.read_text()
+          old="""      if (MUTATING_COMPAT.has(String(body.name || ''))) {\n        const before = await getVisibleState(request, env).catch(() => null);\n        return forwardAndRecord(request, env, before, { clearPairStats: body.name === 'resetAllOperationData' });\n      }"""
+          new="""      if (MUTATING_COMPAT.has(String(body.name || ''))) {\n        const before = await getVisibleState(request, env).catch(() => null);\n        const isRestore = body.name === 'restoreManualBackup';\n        return forwardAndRecord(request, env, isRestore ? null : before, { clearPairStats: body.name === 'resetAllOperationData' || isRestore });\n      }"""
+          if old not in s:
+              raise SystemExit('restore compat block not found')
+          p.write_text(s.replace(old,new,1))
+
+          t=Path('cloudflare/state-worker/md-final-entry.test.mjs')
+          q=t.read_text()
+          anchor="assert.equal(clearPairCalls, 2, 'only direct and compat full-operation reset may request pair-stat cleanup');\n"
+          add="""assert.ok(mdEntry.includes(\"const isRestore = body.name === 'restoreManualBackup';\"), 'restore must have an explicit pair-stat consistency path');\nassert.ok(mdEntry.includes(\"isRestore ? null : before\"), 'restore must not record before/after location changes as new pair games');\nassert.ok(mdEntry.includes(\"body.name === 'resetAllOperationData' || isRestore\"), 'successful restore must clear stale pair statistics because backups do not contain the separate pair_stats table');\n"""
+          if add.strip() not in q:
+              if anchor not in q:
+                  raise SystemExit('test anchor not found')
+              q=q.replace(anchor,anchor+add,1)
+              t.write_text(q)
+          PY
+      - name: Run state worker tests
+        run: |
+          node cloudflare/state-worker/worker.test.mjs
+          node cloudflare/state-worker/md4-autoassign.test.mjs
+          node cloudflare/state-worker/md-entry-autoassign.test.mjs
+          node cloudflare/state-worker/md-final-entry.test.mjs
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add cloudflare/state-worker/worker-md-entry.js cloudflare/state-worker/md-final-entry.test.mjs
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: keep pair statistics consistent on backup restore"
+          git pull --rebase origin main
+          git push origin HEAD:main
