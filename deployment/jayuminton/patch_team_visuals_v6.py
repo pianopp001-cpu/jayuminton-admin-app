@@ -19,6 +19,7 @@ addon = r'''
   outline:2px solid var(--member-team-color)!important;
   outline-offset:-5px!important;
   background-clip:padding-box!important;
+  box-shadow:none!important;
 }
 #adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{
   display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;
@@ -32,6 +33,7 @@ addon = r'''
   outline:2px solid var(--jm-team-color)!important;
   outline-offset:-5px!important;
   background-clip:padding-box!important;
+  box-shadow:none!important;
 }
 #memberApp [data-member-id]>.jm-member-badges,
 #memberApp [data-member-id] .jm-team-badge,
