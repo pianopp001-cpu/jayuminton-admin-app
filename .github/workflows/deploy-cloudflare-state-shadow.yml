@@ -1,5 +1,6 @@
 name: Deploy Cloudflare-only state service
 
+# Canonical Cloudflare state deployment. Touch marker: restore-pair-stats-20260825
 on:
   push:
     branches: [main]
