@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { eligibleAutoAssignPool, selectValidFill, targetArray } from './worker-md-entry.js';
 import { liveIdsInGroup } from './worker-md-compat-entry.js';
+import { normalizeMemberMemoArgs } from './worker-md-final-entry.js';
 
 const finalEntry = fs.readFileSync(new URL('./worker-md-final-entry.js', import.meta.url), 'utf8');
 const compatEntry = fs.readFileSync(new URL('./worker-md-compat-entry.js', import.meta.url), 'utf8');
@@ -16,6 +17,9 @@ assert.ok(finalEntry.includes("action:'requestSwap'"), 'requestSwap bridge missi
 assert.ok(finalEntry.includes("action:'respondSwap'"), 'respondSwap bridge missing');
 assert.ok(finalEntry.includes("url.pathname='/api/member/state'"), 'member state bridge missing');
 assert.ok(wrangler.includes('main = "worker-md-final-entry.js"'), 'wrangler does not deploy final entry');
+assert.deepEqual(normalizeMemberMemoArgs(['member-7','공개 메모']), [null,'member-7','공개 메모'], 'two-slot member memo call must be normalized');
+assert.deepEqual(normalizeMemberMemoArgs([null,'member-7','공개 메모']), [null,'member-7','공개 메모'], 'three-slot member memo call must stay stable');
+assert.ok(finalEntry.includes("String(body.name||'')==='updateMyProfile'"), 'member memo backend normalization route missing');
 
 for (const name of ['assignWaitGroupToCourt','autoFillCourt','autoFillWaitGroup','moveOrSwapMember','swapCourts','swapWaitGroups','removeFromCourt','removeFromWaitGroup','adjustCourtMembers','adjustWaitGroupMembers']) {
   assert.ok(compatEntry.includes(name), `missing admin compat RPC: ${name}`);
