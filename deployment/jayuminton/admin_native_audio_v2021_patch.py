@@ -63,4 +63,5 @@ if admin_html.exists():
             raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
+# Rebuild trigger: persistent team-card rendering fix is already in the v203 bridge.
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
