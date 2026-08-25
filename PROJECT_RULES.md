@@ -21,7 +21,7 @@
 ## 공식 운영 고정점 (2026-08-25)
 아래 4개 경로만 현재 운영 UI/APK 기준이다. 파일명에 과거 버전 숫자가 포함되어 있더라도 아래 성공 Run이 검증된 기준이며, 이름만 보고 더 오래된 체인으로 교체하거나 롤백하지 않는다.
 
-백엔드 상태 서비스의 최신 검증 고정점은 `.github/workflows/deploy-cloudflare-state-shadow.yml` Run `32791638372`이다. 이 Run에서 Cloudflare-only, D1, Durable Object, stale 부분교환 보호, 자동배정 함께 경기통계 1회 기록, 경기종료 대기열 승급 계약을 테스트한 뒤 운영 Worker를 배포하고 라이브 health까지 검증했다.
+백엔드 상태 서비스의 최신 검증 고정점은 `.github/workflows/deploy-cloudflare-state-shadow.yml` Run `32795396956`이다. 이 Run은 최신 pair_stats 초기화/복원 일관성 수정이 포함된 source SHA `35188dcab775c82c42e3872596b650dd15d5324c`를 Cloudflare-only/D1/Durable Object 운영 Worker로 배포한 V24 전체 롤아웃의 canonical state-worker 성공 Run이다.
 
 1. 관리자 웹
    - workflow: `.github/workflows/deploy-cloudflare-admin-save-lock-memo.yml`
@@ -32,8 +32,7 @@
 
 2. 관리자 APK
    - workflow: `.github/workflows/build-v2015-known-good-shell.yml`
-   - verified run: `32791676287`
-   - SHA256: `cd1215003cb5969744369c5b4bdfce1d5bc0b01298e71c21584dd505f17bb387`
+   - verified run: `32795439226`
    - 실제 산출물 기준: admin v203.0 complete pair recording / unobstructed team cards / latest Cloudflare V24 contract
    - workflow 파일명의 `v2015`는 과거 이름일 뿐 운영 버전을 뜻하지 않는다. 이를 이유로 v201.x로 롤백하지 않는다.
 
@@ -44,10 +43,11 @@
 
 4. 사용자 APK
    - workflow: `.github/workflows/build-user-md-final-v1642.yml`
-   - verified run: `32791897059`
+   - verified run: `32795371944`
    - release: `1.6.42`
-   - SHA256: `d99e17eaff0395ae2f3d5576054f84780c0d1de6f485451a84fab5789d9726b2`
-   - 기준 기능: Cloudflare 상태 연동 + Durable Object 대상 토큰 + FCM + 선택된 본인 대상 알림 + 3회×8묶음 진동 + 확인 즉시 중지
+   - 기준 기능: Cloudflare 상태 연동 + Durable Object 대상 토큰 + FCM + 선택된 본인 대상 알림 + 3회×8묶음 진동 + 확인 즉시 중지 + push target 계약 테스트
+
+최신 V24 전체 롤아웃은 `.github/workflows/cloudflare-v24-full-rollout.yml` Run `32795371778`이며, 이 실행이 state-worker Run `32795396956`과 관리자 v203.0 APK Run `32795439226`을 모두 성공으로 확인했다. GAS 사용은 false다.
 
 ### 운영 금지 / 회귀 금지 경로
 - `.github/workflows/build-apk.yml`의 과거 v199.x/GAS 계열을 운영 빌드로 사용하지 않는다.
@@ -85,6 +85,8 @@
 - 경기종료 시 일반 코트와 0명 코트 모두 대기1→코트, 대기2→대기1 순으로 승급한다.
 - 코트에 새로 진입한 회원의 게임횟수와 함께 경기통계를 서버 기준으로 기록한다.
 - 자동배정의 함께 경기통계는 요청 단위 전후 상태를 기준으로 정확히 한 번만 기록한다. 내부 이동마다 중복 기록하지 않는다.
+- 운영 초기화 `resetAll`/`resetAllOperationData`가 성공한 경우에만 별도 D1 `pair_stats`를 비워 이전 모임 통계가 남지 않게 한다. 실패한 초기화에서는 pair_stats를 건드리지 않는다.
+- `restoreManualBackup`은 복원 전후 위치 차이를 새 경기로 기록하지 않는다. 현재 백업 payload가 별도 D1 `pair_stats` 테이블을 포함하지 않으므로 복원이 성공하면 stale pair_stats를 비워 거짓 함께 경기통계를 남기지 않는다.
 - 코트로 승급한 회원은 `court_assignment`, 새 대기1이 된 회원은 `wait1_ready` 대상이 된다.
 - 푸시 Worker는 이벤트에 포함된 대상 회원 ID의 등록 토큰만 조회해 FCM을 전송한다.
 - 사용자 APK는 현재 선택된 본인 memberId와 targetMemberId가 일치할 때만 알림/소리/3×8 진동을 실행하고 확인 즉시 중지한다.
@@ -111,6 +113,8 @@
 11. 작업 전후에 위 '공식 운영 고정점' 4개 중 의도하지 않은 축이 옛 워크플로/버전으로 바뀌지 않았는지 확인.
 12. 최종 HTML/APK에 `script.google.com/macros/s/`가 포함되지 않았는지 확인.
 13. 자동배정 pair_stats가 요청당 1회만 기록되는지 회귀테스트 확인.
-14. `court_assignment`/`wait1_ready`가 대상 회원에게만 전달되고 사용자 APK가 현재 선택된 본인에게만 3×8을 실행하는지 push 계약 테스트 확인.
+14. 운영 초기화 성공 시 pair_stats가 함께 초기화되고 실패 시 보존되는지 확인.
+15. 백업 복원이 pair_stats를 새 경기로 증가시키지 않고 stale pair_stats를 남기지 않는지 확인.
+16. `court_assignment`/`wait1_ready`가 대상 회원에게만 전달되고 사용자 APK가 현재 선택된 본인에게만 3×8을 실행하는지 push 계약 테스트 확인.
 
 확인되지 않은 항목은 PASS로 기록하지 않는다.
