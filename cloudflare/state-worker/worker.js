@@ -220,7 +220,6 @@ export function swapLocationsMutation(input, left, right) {
     [state.waitGroups[ai], state.waitGroups[bi]] = [state.waitGroups[bi], state.waitGroups[ai]];
   }
   reconcileTempPairs(state);
-  reconcileTempPairs(state);
   return { state, event: { type: 'locations_swapped', left: a, right: b } };
 }
 
