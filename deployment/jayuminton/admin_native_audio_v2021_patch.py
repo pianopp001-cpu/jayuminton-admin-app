@@ -62,9 +62,9 @@ if admin_html.exists():
         if 'script.google.com/macros/s/' in final_html:
             raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
 
-        # Final APK-only layout guard: persistent teammates are grouped into
-        # left/right pairs in waiting rows and top/bottom pairs in court grids.
-        # Team labels are recreated only at the bottom of each member card.
+        # Persistent team identity always keeps its border+outline double line.
+        # Temporary two-player sides are layered with box-shadow only, so when
+        # that temporary side is cleared the persistent double line remains.
         layout_js = Path(__file__).with_name('admin_team_layout_v2038.js').read_text(encoding='utf-8')
         if '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__' not in final_html:
             tag = '<script>\n' + layout_js + '\n</script>\n'
@@ -79,6 +79,7 @@ if admin_html.exists():
             'compactSameTeams',
             'jayuminton-admin-team-layout-v2038',
             '.jm-team-bottom-label',
+            'has-member-team.jm-temp-pair',
         ):
             if marker not in final_html:
                 raise SystemExit('bundled team layout guard missing: ' + marker)
