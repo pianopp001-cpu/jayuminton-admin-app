@@ -152,6 +152,7 @@ export function finishCourtMutation(input, courtNo, now = new Date().toISOString
   removeEverywhere(state, finished);
   addGames(state, entrants, 1);
   syncMemberStatuses(state);
+  reconcileTempPairs(state);
   return { state, event: { type: 'court_finished', courtNo: Number(no), finished, courtEntrants: memberSummaries(state, entrants), wait1Entrants: memberSummaries(state, newlyReady) } };
 }
 
@@ -171,6 +172,7 @@ export function moveMutation(input, memberIds, destination) {
     addGames(state, enteringCourt, 1);
   }
   syncMemberStatuses(state);
+  reconcileTempPairs(state);
   return { state, event: { type: 'members_moved', memberIds: ids, destination } };
 }
 
@@ -199,6 +201,7 @@ export function swapMutation(input, leftIds, rightIds) {
   }
   addGames(state, enteringCourt, 1);
   syncMemberStatuses(state);
+  reconcileTempPairs(state);
   return { state, event: { type: 'members_swapped', leftIds: a, rightIds: b } };
 }
 
@@ -216,6 +219,7 @@ export function swapLocationsMutation(input, left, right) {
     if (ai < 0 || ai > 4 || bi < 0 || bi > 4) throw new Error('invalid_wait_group');
     [state.waitGroups[ai], state.waitGroups[bi]] = [state.waitGroups[bi], state.waitGroups[ai]];
   }
+  reconcileTempPairs(state);
   return { state, event: { type: 'locations_swapped', left: a, right: b } };
 }
 
