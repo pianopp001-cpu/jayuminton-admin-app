@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/deploy-member-single-popup-v7.yml'
       - 'deployment/jayuminton/patch_member_self_longpress_v6.py'
+      - 'deployment/jayuminton/patch_team_visuals_v6.py'
   workflow_dispatch: {}
 
 permissions:
@@ -45,49 +46,55 @@ jobs:
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$CONFIG")"
           test -n "$FIREBASE_PROJECT_ID"
           echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
-      - name: Preserve production page and remove later memo popup
+      - name: Preserve production page remove memo popup and apply shared team visuals
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/member-original-popup"
           PUBLIC="$ROOT/public"
           mkdir -p "$PUBLIC"
-          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?removeMemoPopup=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?teamLines=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
           grep -F 'memberMoveSelf' "$PUBLIC/index.html" >/dev/null
           python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_team_visuals_v6.py "$PUBLIC/index.html"
           ! grep -F 'JAYUMINTON_MD7_SINGLE_ACTION_POPUP_V1' "$PUBLIC/index.html"
           ! grep -F 'jayuminton-md7-single-action-popup' "$PUBLIC/index.html"
           ! grep -F 'jayuminton-member-self-profile-edit-v1' "$PUBLIC/index.html"
           ! grep -F 'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' "$PUBLIC/index.html"
-          grep -F 'jm-has-team' "$PUBLIC/index.html" >/dev/null
-          grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)!important' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_TEAM_VISUALS_V6' "$PUBLIC/index.html" >/dev/null
+          grep -F '#memberApp [data-member-id].jm-has-team' "$PUBLIC/index.html" >/dev/null
+          grep -F 'outline:2px solid var(--jm-team-color)!important' "$PUBLIC/index.html" >/dev/null
+          grep -F '#memberApp [data-member-id].jm-temp-pair' "$PUBLIC/index.html" >/dev/null
+          grep -F '.jm-team-bottom-label' "$PUBLIC/index.html" >/dev/null
           python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-original-popup-inline.js" <<'PY'
           from pathlib import Path
           import re, sys
           source=Path(sys.argv[1]).read_text(encoding='utf-8')
-          scripts=re.findall(r'<script(?:\\s[^>]*)?>([\\s\\S]*?)</script>',source,flags=re.I)
+          scripts=re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>',source,flags=re.I)
           Path(sys.argv[2]).write_text('\n'.join(scripts),encoding='utf-8')
           PY
           node --check "$RUNNER_TEMP/member-original-popup-inline.js"
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
-      - name: Deploy user web original popup
+      - name: Deploy user web shared team visuals
         shell: bash
         run: |
           set -euo pipefail
           firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/member-original-popup/firebase.json" --non-interactive
-      - name: Verify production original popup and team cards
+      - name: Verify production one popup and line-only team cards
         shell: bash
         run: |
           set -euo pipefail
           sleep 5
-          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verifyNoMemoPopup=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/member-original-popup-live.html"
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verifyTeamLines=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/member-original-popup-live.html"
           grep -F 'memberMoveSelf' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           ! grep -F 'JAYUMINTON_MD7_SINGLE_ACTION_POPUP_V1' "$RUNNER_TEMP/member-original-popup-live.html"
           ! grep -F 'jayuminton-md7-single-action-popup' "$RUNNER_TEMP/member-original-popup-live.html"
           ! grep -F 'jayuminton-member-self-profile-edit-v1' "$RUNNER_TEMP/member-original-popup-live.html"
           ! grep -F 'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' "$RUNNER_TEMP/member-original-popup-live.html"
-          grep -F 'jm-has-team' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
-          grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)!important' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
-          echo 'MEMBER_ORIGINAL_POPUP_NO_MEMO_TEAM_CARDS_OK'
+          grep -F 'JAYUMINTON_TEAM_VISUALS_V6' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F '#memberApp [data-member-id].jm-has-team' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F 'outline:2px solid var(--jm-team-color)!important' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F '#memberApp [data-member-id].jm-temp-pair' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          echo 'MEMBER_ONE_POPUP_LINE_ONLY_TEAM_CARDS_OK'
