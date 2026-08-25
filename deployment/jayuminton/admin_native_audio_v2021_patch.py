@@ -61,7 +61,28 @@ if admin_html.exists():
                 raise SystemExit('bundled v203 post-contract missing: ' + marker)
         if 'script.google.com/macros/s/' in final_html:
             raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
+
+        # Final APK-only layout guard: no visible TEAM/팀 labels may cover member
+        # text, and permanent teammates inside the same waiting/court container
+        # are compacted next to each other after every rerender.
+        layout_js = Path(__file__).with_name('admin_team_layout_v2038.js').read_text(encoding='utf-8')
+        if '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__' not in final_html:
+            tag = '<script>\n' + layout_js + '\n</script>\n'
+            if '</body>' in final_html:
+                final_html = final_html.replace('</body>', tag + '</body>', 1)
+            else:
+                final_html += tag
+            admin_html.write_text(final_html, encoding='utf-8')
+        final_html = admin_html.read_text(encoding='utf-8')
+        for marker in (
+            '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
+            'compactSameTeams',
+            'jayuminton-admin-team-layout-v2038',
+            '.jm-team-bottom-label',
+        ):
+            if marker not in final_html:
+                raise SystemExit('bundled team layout guard missing: ' + marker)
+        print('BUNDLED_ADMIN_V203_TEAM_LAYOUT_V2038_OK')
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
-# Rebuild trigger: persistent team-card rendering fix is already in the v203 bridge.
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
