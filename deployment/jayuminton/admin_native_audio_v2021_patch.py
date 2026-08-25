@@ -90,10 +90,9 @@ if admin_html.exists():
             if marker not in final_html:
                 raise SystemExit('bundled team layout guard missing: ' + marker)
         if final_html.count('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__') != 2:
-            # One occurrence is the installer/global name and one occurs in the
-            # guard statement itself inside the single freshly injected script.
             raise SystemExit('bundled team layout script duplication detected')
         print('BUNDLED_ADMIN_V203_TEAM_LAYOUT_V2038_FRESH_OK')
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
+# BUILD_TRIGGER: team-lines-no-labels-pair-2x2-20260826
