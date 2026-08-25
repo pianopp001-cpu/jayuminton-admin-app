@@ -23,7 +23,23 @@ jobs:
         with:
           node-version: '22'
       - name: Apply shared temp-pair patch
-        run: python3 deployment/jayuminton/patch_shared_temp_pairs_v2.py
+        run: |
+          python3 deployment/jayuminton/patch_shared_temp_pairs_v2.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js')
+          s=p.read_text()
+          s=s.replace(
+            ".jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}.jm-team-bottom-label{display:none!important}",
+            ".jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .member.jm-team-card.has-member-team.jm-temp-pair,#adminApp .member.jm-team-card.jm-temp-pair,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}.jm-team-bottom-label{display:none!important}")
+          s=s.replace(
+            "#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair-pending",
+            "#adminApp .member.jm-team-card.has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .member.jm-team-card.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair-pending")
+          s=s.replace(
+            "card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'",
+            "if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'")
+          p.write_text(s)
+          PY
       - name: Run regression tests
         run: |
           node cloudflare/state-worker/worker.test.mjs
@@ -34,7 +50,8 @@ jobs:
           grep -q "tempPairs" cloudflare/state-worker/worker.js
           grep -q "setTempPairsMutation" cloudflare/state-worker/worker.js
           grep -q "setTempPairs" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "document.querySelectorAll" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          grep -q "member.jm-team-card.has-member-team.jm-temp-pair" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          grep -q "card.classList.contains('jm-temp-pair')" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           if grep -q "bottom.textContent=teamText" deployment/jayuminton/cloudflare_v6_frontend_bridge.js; then
             echo 'legacy visible team label creator still present' >&2
             exit 1
@@ -48,5 +65,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          git commit -m 'fix(team): share temporary pair state across admin and member'
+          git commit -m 'fix(team): keep temporary pair overlay visible over fixed team'
           git push origin main
