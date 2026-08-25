@@ -67,3 +67,5 @@ jobs:
           git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           git commit -m 'fix(team): keep temporary pair overlay visible over fixed team'
           git push origin main
+
+# trigger: shared temp pair state validation
