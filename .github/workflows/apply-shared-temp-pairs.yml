@@ -28,36 +28,39 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          # Any mutation that can change a member's physical location must
-          # revalidate temporary pairs before returning state.
           wp=Path('cloudflare/state-worker/worker.js')
           w=wp.read_text()
-          replacements={
-            "  syncMemberStatuses(state);\n  return { state, event: { type: 'court_finished'":
-              "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'court_finished'",
-            "  syncMemberStatuses(state);\n  return { state, event: { type: 'members_moved'":
-              "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'members_moved'",
-            "  syncMemberStatuses(state);\n  return { state, event: { type: 'members_swapped'":
-              "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'members_swapped'",
-            "  return { state, event: { type: 'locations_swapped'":
-              "  reconcileTempPairs(state);\n  return { state, event: { type: 'locations_swapped'",
-          }
-          for old,new in replacements.items():
-            if old in w:
+
+          targets=[
+            ("  syncMemberStatuses(state);\n  return { state, event: { type: 'court_finished'",
+             "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'court_finished'"),
+            ("  syncMemberStatuses(state);\n  return { state, event: { type: 'members_moved'",
+             "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'members_moved'"),
+            ("  syncMemberStatuses(state);\n  return { state, event: { type: 'members_swapped'",
+             "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'members_swapped'"),
+            ("  return { state, event: { type: 'locations_swapped'",
+             "  reconcileTempPairs(state);\n  return { state, event: { type: 'locations_swapped'"),
+          ]
+          for old,new in targets:
+            if new not in w and old in w:
               w=w.replace(old,new,1)
+
+          while "  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n" in w:
+            w=w.replace("  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n","  reconcileTempPairs(state);\n",1)
           wp.write_text(w)
 
           p=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js')
           s=p.read_text()
-          s=s.replace(
-            ".jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}.jm-team-bottom-label{display:none!important}",
-            ".jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .member.jm-team-card.has-member-team.jm-temp-pair,#adminApp .member.jm-team-card.jm-temp-pair,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}.jm-team-bottom-label{display:none!important}")
-          s=s.replace(
-            "#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair-pending",
-            "#adminApp .member.jm-team-card.has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .member.jm-team-card.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair-pending")
-          s=s.replace(
-            "card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'",
-            "if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'")
+          selector="#adminApp .member.jm-team-card.has-member-team.jm-temp-pair,#adminApp .member.jm-team-card.jm-temp-pair,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}"
+          while selector+selector in s:
+            s=s.replace(selector+selector,selector)
+          duplicate="#adminApp .member.jm-team-card.has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .member.jm-team-card.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}"
+          while duplicate+duplicate in s:
+            s=s.replace(duplicate+duplicate,duplicate)
+          old="card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'"
+          new="if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'"
+          if new not in s and old in s:
+            s=s.replace(old,new,1)
           p.write_text(s)
           PY
       - name: Run regression tests
@@ -77,6 +80,10 @@ jobs:
             echo 'legacy visible team label creator still present' >&2
             exit 1
           fi
+          if grep -q $'reconcileTempPairs(state);\n  reconcileTempPairs(state);' cloudflare/state-worker/worker.js; then
+            echo 'duplicate reconcileTempPairs detected' >&2
+            exit 1
+          fi
       - name: Commit generated sources to main
         run: |
           if git diff --quiet; then
@@ -86,7 +93,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          git commit -m 'fix(team): reconcile temporary pairs after location changes'
+          git commit -m 'fix(team): keep shared temp pair patch idempotent'
           git push origin main
-
-# trigger: retry on fresh runner
