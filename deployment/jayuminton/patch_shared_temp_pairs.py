@@ -11,15 +11,12 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
-# --- Worker: make temporary pair state server-authoritative and public-read/admin-write. ---
 w = WORKER.read_text()
 if "export function setTempPairsMutation" not in w:
-    w = replace_once(
-        w,
+    w = replace_once(w,
         "    swapRequests: [], memberMessages: [], actionHistory: [], updatedAt: new Date(0).toISOString(),\n",
         "    swapRequests: [], memberMessages: [], tempPairs: [], actionHistory: [], updatedAt: new Date(0).toISOString(),\n",
-        'emptyState tempPairs',
-    )
+        'emptyState tempPairs')
 
     anchor = "function uniqueIds(value, limit = 4) { return [...new Set((Array.isArray(value) ? value : []).map(String).filter(Boolean))].slice(0, limit); }\n\n"
     helper = r'''function uniqueIds(value, limit = 4) { return [...new Set((Array.isArray(value) ? value : []).map(String).filter(Boolean))].slice(0, limit); }
@@ -69,16 +66,12 @@ function applyTempPairOrdering(state) {
 
 '''
     w = replace_once(w, anchor, helper, 'worker helpers')
-    w = replace_once(
-        w,
+    w = replace_once(w,
         "  state.memberMessages = Array.isArray(state.memberMessages) ? state.memberMessages.slice(-50) : [];\n  state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory.slice(-50) : [];\n",
         "  state.memberMessages = Array.isArray(state.memberMessages) ? state.memberMessages.slice(-50) : [];\n  state.tempPairs = normalizeTempPairs(state.tempPairs);\n  state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory.slice(-50) : [];\n",
-        'normalize tempPairs',
-    )
+        'normalize tempPairs')
     w = replace_once(w, "  return syncMemberStatuses(state);\n}\n\nfunction locationOf", "  syncMemberStatuses(state);\n  return reconcileTempPairs(state);\n}\n\nfunction locationOf", 'normalize reconcile')
-
-    mutation_anchor = "export function sendMemberMessageMutation(input, memberIds, message) {\n"
-    mutation = r'''export function setTempPairsMutation(input, tempPairs) {
+    w = replace_once(w, "export function sendMemberMessageMutation(input, memberIds, message) {\n", r'''export function setTempPairsMutation(input, tempPairs) {
   const state = normalizeState(input);
   state.tempPairs = normalizeTempPairs(tempPairs);
   reconcileTempPairs(state);
@@ -87,38 +80,24 @@ function applyTempPairOrdering(state) {
 }
 
 export function sendMemberMessageMutation(input, memberIds, message) {
-'''
-    w = replace_once(w, mutation_anchor, mutation, 'setTempPairs mutation')
-
-    w = replace_once(
-        w,
+''', 'setTempPairs mutation')
+    w = replace_once(w,
         "      else if (action === 'clearBundle') result = clearBundleMutation(current, body.memberIds);\n      else if (action === 'sendMemberMessage')",
         "      else if (action === 'clearBundle') result = clearBundleMutation(current, body.memberIds);\n      else if (action === 'setTempPairs') result = setTempPairsMutation(current, body.tempPairs);\n      else if (action === 'sendMemberMessage')",
-        'coordinator setTempPairs',
-    )
-    w = replace_once(
-        w,
-        "'setBundle','clearBundle','sendMemberMessage'",
-        "'setBundle','clearBundle','setTempPairs','sendMemberMessage'",
-        'legacy admin name',
-    )
-    w = replace_once(
-        w,
+        'coordinator setTempPairs')
+    admin_names = "const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','sendMemberMessage','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);"
+    admin_names_new = admin_names.replace("'clearBundle','sendMemberMessage'", "'clearBundle','setTempPairs','sendMemberMessage'")
+    w = replace_once(w, admin_names, admin_names_new, 'adminNames setTempPairs')
+    w = replace_once(w,
         "    else if (name === 'clearBundle') { action = 'clearBundle'; body.memberIds = values[1]; }\n    else if (name === 'sendMemberMessage')",
         "    else if (name === 'clearBundle') { action = 'clearBundle'; body.memberIds = values[1]; }\n    else if (name === 'setTempPairs') { action = 'setTempPairs'; body.tempPairs = values[1]; }\n    else if (name === 'sendMemberMessage')",
-        'legacy setTempPairs mapping',
-    )
-    w = replace_once(
-        w,
+        'legacy setTempPairs mapping')
+    w = replace_once(w,
         "'setBundle','clearBundle','sendMemberMessage','adjustGames'",
         "'setBundle','clearBundle','setTempPairs','sendMemberMessage','adjustGames'",
-        'admin rpc allowed',
-    )
-
+        'admin rpc allowed')
 WORKER.write_text(w)
 
-
-# --- Shared bridge: consume server state in both admin/member; admin writes temp pairs via RPC. ---
 b = BRIDGE.read_text()
 if "var sharedTempPairs=[];" not in b:
     old_block = r'''  function loadTempPairs(){
@@ -155,11 +134,10 @@ if "var sharedTempPairs=[];" not in b:
       return new Set(x.pairA.concat(x.pairB).map(String)).size===4;
     }).map(function(x){return {pairA:x.pairA.map(String),pairB:x.pairB.map(String),zone:String(x.zone),createdAt:Number(x.createdAt)||Date.now()};});
   }
-  function loadLegacyTempPairs(){
-    try{return validTempPairs(JSON.parse(localStorage.getItem(TEMP_PAIR_KEY)||'[]'));}catch(_){return [];}
-  }
+  function loadLegacyTempPairs(){try{return validTempPairs(JSON.parse(localStorage.getItem(TEMP_PAIR_KEY)||'[]'));}catch(_){return [];}}
   function loadTempPairs(){return sharedTempPairs.slice();}
   function renderSharedTempPairs(){
+    if(typeof document==='undefined'||typeof document.querySelectorAll!=='function')return;
     var selector='.member,.person,.quick-member,.member-card,.member-item,.wait-card,.wait-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
     var attrs=['data-member-id','data-memberid','data-player-id','data-id','data-member'];
     function idOf(card){
@@ -175,7 +153,7 @@ if "var sharedTempPairs=[];" not in b:
         Array.prototype.forEach.call(document.querySelectorAll(selector),function(card){var id=idOf(card);if(side[0].indexOf(id)>=0){card.classList.add('jm-temp-pair');card.style.setProperty('--jm-temp-pair-color',side[1]);}});
       });
     });
-    if(!document.getElementById('jayuminton-shared-temp-pair-style')){
+    if(document.getElementById&&document.createElement&&!document.getElementById('jayuminton-shared-temp-pair-style')){
       var style=document.createElement('style');style.id='jayuminton-shared-temp-pair-style';
       style.textContent='.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}.jm-team-bottom-label{display:none!important}';
       (document.head||document.documentElement).appendChild(style);
@@ -197,7 +175,6 @@ if "var sharedTempPairs=[];" not in b:
   function persistTempPairs(value,success,failure){invoke('setTempPairs',[null,validTempPairs(value)],success,failure);}
 '''
     b = replace_once(b, old_block, new_block, 'bridge shared temp state')
-
     old_invoke = r'''      if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN&&packet.result){
         var candidate=packet.result.state&&typeof packet.result.state==='object'?packet.result.state:packet.result;
         if(candidate&&candidate.courts&&candidate.waitGroups)reconcileTempPairs(candidate);
@@ -212,22 +189,16 @@ if "var sharedTempPairs=[];" not in b:
       setTimeout(renderSharedTempPairs,0);
 '''
     b = replace_once(b, old_invoke, new_invoke, 'bridge invoke state consume')
-
-    old_record = "      old.push({pairA:pairA,pairB:pairB,zone:group.zone,createdAt:Date.now()});saveTempPairs(old);pendingPair=null;renderTempPairs();\n"
-    new_record = "      old.push({pairA:pairA,pairB:pairB,zone:group.zone,createdAt:Date.now()});persistTempPairs(old,function(saved){consumeSharedState(saved);pendingPair=null;renderTempPairs();},function(){pendingPair=null;renderTempPairs();});\n"
-    b = replace_once(b, old_record, new_record, 'bridge record temp pair')
-
+    b = replace_once(b,
+        "      old.push({pairA:pairA,pairB:pairB,zone:group.zone,createdAt:Date.now()});saveTempPairs(old);pendingPair=null;renderTempPairs();\n",
+        "      old.push({pairA:pairA,pairB:pairB,zone:group.zone,createdAt:Date.now()});persistTempPairs(old,function(saved){consumeSharedState(saved);pendingPair=null;renderTempPairs();},function(){pendingPair=null;renderTempPairs();});\n",
+        'bridge record temp pair')
     old_label = r'''          var bottom=card.querySelector('.jm-team-bottom-label');
           if(!bottom){bottom=document.createElement('small');bottom.className='jm-team-bottom-label';}
           if(bottom.textContent!==teamText)bottom.textContent=teamText;
           if(bottom.parentElement!==card||card.lastElementChild!==bottom)card.appendChild(bottom);
 '''
-    new_label = r'''          Array.prototype.forEach.call(card.querySelectorAll('.jm-team-bottom-label'),function(bottom){bottom.remove();});
-'''
-    b = replace_once(b, old_label, new_label, 'remove visible team label creator')
-
+    b = replace_once(b, old_label, "          Array.prototype.forEach.call(card.querySelectorAll('.jm-team-bottom-label'),function(bottom){bottom.remove();});\n", 'remove visible team label creator')
     b = b.replace("#adminApp .jm-team-bottom-label{display:block!important;visibility:visible!important;", "#adminApp .jm-team-bottom-label{display:none!important;visibility:hidden!important;")
-
 BRIDGE.write_text(b)
-
 print('SHARED_TEMP_PAIRS_PATCH_OK')
