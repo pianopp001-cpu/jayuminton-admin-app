@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Shared temporary-pair contract v2: server-authoritative state, admin write, member/admin read.
 WORKER = Path('cloudflare/state-worker/worker.js')
 BRIDGE = Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js')
 
