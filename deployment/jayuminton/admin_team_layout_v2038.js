@@ -68,7 +68,7 @@
     });
     var valid=order.filter(function(k){return groups[k].length>=2;});
     if(valid.length>=1){
-      var first=groups[valid[0]].slice(0,2),used=first.slice(),second=[];
+      var first=groups[valid[0]].slice(0,2),second=[];
       if(valid[1])second=groups[valid[1]].slice(0,2);
       cards.forEach(function(card){if(first.indexOf(card)<0&&second.indexOf(card)<0&&second.length<2)second.push(card);});
       if(first.length===2&&second.length===2)return [first,second];
@@ -99,9 +99,6 @@
     if(cards.length!==4)return cards.slice();
     var pairs=pairGroups(cards);if(!pairs)return cards.slice();
     var a=pairs[0],b=pairs[1],type=contextType(parent);
-    // Row-major two-column layout:
-    // wait: A1 B1 / A2 B2 => A pair occupies left column, B right column.
-    // court: A1 A2 / B1 B2 => A pair occupies top row, B bottom row.
     if(type==='wait')return [a[0],b[0],a[1],b[1]];
     return [a[0],a[1],b[0],b[1]];
   }
@@ -120,7 +117,7 @@
   function installStyle(){
     var old=document.getElementById('jayuminton-admin-team-layout-v2038');if(old)old.remove();
     var style=document.createElement('style');style.id='jayuminton-admin-team-layout-v2038';
-    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair:not(.has-member-team){box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}';
+    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important;box-shadow:none!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair:not(.has-member-team){box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}';
     (document.head||document.documentElement).appendChild(style);
   }
   function apply(){installStyle();rememberOfficialTeamAndRemoveText(document);compactSameTeams();rememberOfficialTeamAndRemoveText(document);}
