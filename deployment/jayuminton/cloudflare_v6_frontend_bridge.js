@@ -34,32 +34,44 @@
 
   if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN){
     function installAdminTeamSafetyStyle(){
-      if(document.getElementById('jayuminton-admin-team-safety-v2033'))return;
+      if(document.getElementById('jayuminton-admin-team-safety-v2034'))return;
       var style=document.createElement('style');
-      style.id='jayuminton-admin-team-safety-v2033';
-      style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;box-shadow:none!important;overflow:visible!important;height:auto!important;min-height:0!important}#adminApp .member-card,#adminApp .member-item,#adminApp .wait-card,#adminApp .wait-item,#adminApp .player-card,#adminApp .court-player{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}#adminApp .member-card .member-info,#adminApp .member-card .member-meta,#adminApp .member-card .member-detail,#adminApp .member-card .member-sub,#adminApp .member-card .member-memo,#adminApp .member-item .member-info,#adminApp .member-item .member-meta,#adminApp .member-item .member-detail,#adminApp .member-item .member-sub,#adminApp .member-item .member-memo,#adminApp .wait-card .member-info,#adminApp .wait-card .member-meta,#adminApp .wait-card .member-detail,#adminApp .wait-card .member-sub,#adminApp .wait-card .member-memo,#adminApp .wait-item .member-info,#adminApp .wait-item .member-meta,#adminApp .wait-item .member-detail,#adminApp .wait-item .member-sub,#adminApp .wait-item .member-memo{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;white-space:normal!important;line-height:1.25!important;word-break:keep-all!important}';
+      style.id='jayuminton-admin-team-safety-v2034';
+      style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important}#adminApp .jm-team-bottom-label{display:block!important;visibility:visible!important;width:auto!important;height:auto!important;min-width:0!important;max-width:none!important;margin:3px 0 0!important;padding:0!important;border:0!important;overflow:visible!important;position:static!important;float:none!important;clear:both!important;text-align:left!important;font-size:9px!important;font-weight:700!important;line-height:1.15!important;white-space:nowrap!important;color:var(--member-team-color)!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;box-shadow:none!important;overflow:visible!important;height:auto!important;min-height:0!important;padding-bottom:5px!important}#adminApp .member-card,#adminApp .member-item,#adminApp .wait-card,#adminApp .wait-item,#adminApp .player-card,#adminApp .court-player{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}#adminApp .member-card .member-info,#adminApp .member-card .member-meta,#adminApp .member-card .member-detail,#adminApp .member-card .member-sub,#adminApp .member-card .member-memo,#adminApp .member-item .member-info,#adminApp .member-item .member-meta,#adminApp .member-item .member-detail,#adminApp .member-item .member-sub,#adminApp .member-item .member-memo,#adminApp .wait-card .member-info,#adminApp .wait-card .member-meta,#adminApp .wait-card .member-detail,#adminApp .wait-card .member-sub,#adminApp .wait-card .member-memo,#adminApp .wait-item .member-info,#adminApp .wait-item .member-meta,#adminApp .wait-item .member-detail,#adminApp .wait-item .member-sub,#adminApp .wait-item .member-memo{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;white-space:normal!important;line-height:1.25!important;word-break:keep-all!important}';
       (document.head||document.documentElement).appendChild(style);
     }
-    function scrubAdminTeamText(root){
+    function moveAdminTeamLabels(root){
       var scope=root&&root.querySelectorAll?root:document;
       var cards=scope.querySelectorAll('#adminApp .has-member-team');
       for(var i=0;i<cards.length;i++){
-        var nodes=cards[i].querySelectorAll('span,div,small,b,strong,em,i,label');
+        var card=cards[i];
+        var teamText=String(card.getAttribute('data-jm-team-text')||'');
+        var nodes=card.querySelectorAll('span,div,small,b,strong,em,i,label');
         for(var j=0;j<nodes.length;j++){
-          var text=String(nodes[j].textContent||'').replace(/\s+/g,'').trim();
+          var node=nodes[j];
+          if(node.classList&&node.classList.contains('jm-team-bottom-label'))continue;
+          var text=String(node.textContent||'').replace(/\s+/g,'').trim();
           if(/^팀\d+$/.test(text)||/^TEAM\d+$/i.test(text)){
-            nodes[j].textContent='';
-            nodes[j].style.setProperty('display','none','important');
-            nodes[j].setAttribute('aria-hidden','true');
+            if(!teamText)teamText=text.replace(/^TEAM/i,'팀');
+            node.textContent='';
+            node.style.setProperty('display','none','important');
+            node.setAttribute('aria-hidden','true');
           }
+        }
+        if(teamText){
+          card.setAttribute('data-jm-team-text',teamText);
+          var bottom=card.querySelector('.jm-team-bottom-label');
+          if(!bottom){bottom=document.createElement('small');bottom.className='jm-team-bottom-label';card.appendChild(bottom);}
+          if(bottom.textContent!==teamText)bottom.textContent=teamText;
         }
       }
     }
     function watchAdminTeamText(){
-      scrubAdminTeamText(document);
+      moveAdminTeamLabels(document);
       var app=document.getElementById('adminApp');
       if(!app||app.__jmTeamTextObserver)return;
-      app.__jmTeamTextObserver=new MutationObserver(function(){scrubAdminTeamText(app);});
+      var scheduled=false;
+      app.__jmTeamTextObserver=new MutationObserver(function(){if(scheduled)return;scheduled=true;setTimeout(function(){scheduled=false;moveAdminTeamLabels(app);},0);});
       app.__jmTeamTextObserver.observe(app,{childList:true,subtree:true,characterData:true});
     }
     function loginBox(){return document.getElementById('adminLoginBox');}
