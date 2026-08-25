@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'deployment/jayuminton/patch_shared_temp_pairs_v2.py'
+      - 'cloudflare/state-worker/temp-pairs.test.mjs'
       - '.github/workflows/apply-shared-temp-pairs.yml'
   workflow_dispatch:
 
@@ -26,6 +27,7 @@ jobs:
       - name: Run regression tests
         run: |
           node cloudflare/state-worker/worker.test.mjs
+          node cloudflare/state-worker/temp-pairs.test.mjs
           node deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs
       - name: Verify shared temp-pair contract
         run: |
