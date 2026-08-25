@@ -89,4 +89,4 @@ jobs:
           git commit -m 'fix(team): reconcile temporary pairs after location changes'
           git push origin main
 
-# trigger: reconcile temporary pairs after movement
+# trigger: retry on fresh runner
