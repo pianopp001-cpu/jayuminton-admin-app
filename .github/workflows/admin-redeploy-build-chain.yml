@@ -3,6 +3,7 @@ name: Redeploy admin Cloudflare only
 # v203 recovery trigger 2026-08-25
 # rerun after disabling legacy GAS/v199.6 workflows
 # observed rerun: record result through record-cloudflare-recovery-results.yml
+# shared temp-pair server-state redeploy trigger 2026-08-26
 on:
   push:
     branches: [main]
