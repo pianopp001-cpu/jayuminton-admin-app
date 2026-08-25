@@ -27,14 +27,11 @@
       if(team){
         card.setAttribute('data-jm-team-text',team);
         card.classList.add('has-member-team');
-        card.style.removeProperty('box-shadow');
       }
       var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,.jm-team-bottom-label,span,small,label,b,strong,em,i');
       for(var j=0;j<nodes.length;j++){
         var node=nodes[j];
-        if(normalizeTeam((node.getAttribute&&node.getAttribute('data-team-label'))||node.textContent)){
-          node.remove();
-        }
+        if(normalizeTeam((node.getAttribute&&node.getAttribute('data-team-label'))||node.textContent))node.remove();
       }
     }
   }
@@ -58,69 +55,79 @@
     if(card.classList&&card.classList.contains('jm-temp-pair')){
       var inline=card.style&&card.style.getPropertyValue('--jm-temp-pair-color');
       if(inline)return 'C:'+inline.trim();
-      try{
-        var computed=getComputedStyle(card).getPropertyValue('--jm-temp-pair-color');
-        if(computed&&computed.trim())return 'C:'+computed.trim();
-      }catch(e){}
+      try{var computed=getComputedStyle(card).getPropertyValue('--jm-temp-pair-color');if(computed&&computed.trim())return 'C:'+computed.trim();}catch(e){}
       return 'P:temp';
     }
     return '';
   }
-  function orderedByPairOrOfficial(cards){
-    if(cards.length!==4)return cards.slice();
-    var tempGroups={},tempPlain=[];
-    cards.forEach(function(card){var k=tempPairKey(card);if(k){if(!tempGroups[k])tempGroups[k]=[];tempGroups[k].push(card);}else tempPlain.push(card);});
-    var tempKeys=Object.keys(tempGroups).filter(function(k){return tempGroups[k].length>=2;});
-    if(tempKeys.length){
-      var next=[];
-      tempKeys.forEach(function(k){tempGroups[k].slice(0,2).forEach(function(card){if(next.indexOf(card)<0)next.push(card);});});
-      cards.forEach(function(card){if(next.indexOf(card)<0)next.push(card);});
-      return next.slice(0,4);
+  function pairGroups(cards){
+    var groups={},order=[];
+    cards.forEach(function(card){
+      var key=tempPairKey(card);
+      if(key){if(!groups[key]){groups[key]=[];order.push(key);}groups[key].push(card);}
+    });
+    var valid=order.filter(function(k){return groups[k].length>=2;});
+    if(valid.length>=1){
+      var first=groups[valid[0]].slice(0,2),used=first.slice(),second=[];
+      if(valid[1])second=groups[valid[1]].slice(0,2);
+      cards.forEach(function(card){if(first.indexOf(card)<0&&second.indexOf(card)<0&&second.length<2)second.push(card);});
+      if(first.length===2&&second.length===2)return [first,second];
     }
-    var groups={},plain=[];
-    cards.forEach(function(card){var t=teamOf(card);if(t){if(!groups[t])groups[t]=[];groups[t].push(card);}else plain.push(card);});
-    var keys=Object.keys(groups).filter(function(t){return groups[t].length>=2;}).sort(function(a,b){return teamNumber(a)-teamNumber(b);});
-    if(!keys.length)return cards.slice();
-    var next2=[];
-    keys.forEach(function(t){groups[t].slice(0,2).forEach(function(card){if(next2.indexOf(card)<0)next2.push(card);});});
-    cards.forEach(function(card){if(next2.indexOf(card)<0)next2.push(card);});
-    return next2.slice(0,4);
+    var official={},keys=[];
+    cards.forEach(function(card){var t=teamOf(card);if(t){if(!official[t]){official[t]=[];keys.push(t);}official[t].push(card);}});
+    keys=keys.filter(function(k){return official[k].length>=2;}).sort(function(a,b){return teamNumber(a)-teamNumber(b);});
+    if(keys.length){
+      var a=official[keys[0]].slice(0,2),b=[];
+      if(keys[1])b=official[keys[1]].slice(0,2);
+      cards.forEach(function(card){if(a.indexOf(card)<0&&b.indexOf(card)<0&&b.length<2)b.push(card);});
+      if(a.length===2&&b.length===2)return [a,b];
+    }
+    return null;
+  }
+  function contextType(parent){
+    var node=parent,depth=0,text='';
+    while(node&&depth<5){
+      text+=' '+String(node.id||'')+' '+String(node.className||'')+' '+String(node.getAttribute&&node.getAttribute('data-zone')||'')+' '+String(node.getAttribute&&node.getAttribute('aria-label')||'');
+      node=node.parentElement;depth++;
+    }
+    text=text.toLowerCase();
+    if(/court|코트/.test(text))return 'court';
+    if(/wait|waiting|대기/.test(text))return 'wait';
+    return '';
+  }
+  function orderedForContext(parent,cards){
+    if(cards.length!==4)return cards.slice();
+    var pairs=pairGroups(cards);if(!pairs)return cards.slice();
+    var a=pairs[0],b=pairs[1],type=contextType(parent);
+    // Row-major two-column layout:
+    // wait: A1 B1 / A2 B2 => A pair occupies left column, B right column.
+    // court: A1 A2 / B1 B2 => A pair occupies top row, B bottom row.
+    if(type==='wait')return [a[0],b[0],a[1],b[1]];
+    return [a[0],a[1],b[0],b[1]];
   }
   function compactPairsInParent(parent){
-    var cards=directCardChildren(parent);
-    if(cards.length!==4)return;
-    var next=orderedByPairOrOfficial(cards);
-    var changed=false;
+    var cards=directCardChildren(parent);if(cards.length!==4)return;
+    var next=orderedForContext(parent,cards),changed=false;
     for(var i=0;i<cards.length;i++){if(cards[i]!==next[i]){changed=true;break;}}
     if(changed)next.forEach(function(card){parent.appendChild(card);});
   }
   function compactSameTeams(){
     var app=document.getElementById('adminApp');if(!app)return;
-    var parents=[];
-    var cards=app.querySelectorAll(CARD_SELECTOR);
-    for(var i=0;i<cards.length;i++){
-      var p=cards[i].parentElement;
-      if(p&&parents.indexOf(p)<0)parents.push(p);
-    }
+    var parents=[],cards=app.querySelectorAll(CARD_SELECTOR);
+    for(var i=0;i<cards.length;i++){var p=cards[i].parentElement;if(p&&parents.indexOf(p)<0)parents.push(p);}
     parents.forEach(compactPairsInParent);
   }
   function installStyle(){
     var old=document.getElementById('jayuminton-admin-team-layout-v2038');if(old)old.remove();
-    var style=document.createElement('style');
-    style.id='jayuminton-admin-team-layout-v2038';
+    var style=document.createElement('style');style.id='jayuminton-admin-team-layout-v2038';
     style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair:not(.has-member-team){box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}';
     (document.head||document.documentElement).appendChild(style);
   }
   function apply(){installStyle();rememberOfficialTeamAndRemoveText(document);compactSameTeams();rememberOfficialTeamAndRemoveText(document);}
   function boot(){
     var app=document.getElementById('adminApp');if(!app){setTimeout(boot,100);return;}
-    apply();
-    if(app.__jmTeamLayoutV2038Observer)return;
-    var scheduled=false;
-    app.__jmTeamLayoutV2038Observer=new MutationObserver(function(){
-      if(scheduled)return;scheduled=true;
-      setTimeout(function(){scheduled=false;apply();},16);
-    });
+    apply();if(app.__jmTeamLayoutV2038Observer)return;
+    var scheduled=false;app.__jmTeamLayoutV2038Observer=new MutationObserver(function(){if(scheduled)return;scheduled=true;setTimeout(function(){scheduled=false;apply();},16);});
     app.__jmTeamLayoutV2038Observer.observe(app,{childList:true,subtree:true,attributes:true,attributeFilter:['data-team-label','data-jm-team-text','data-jm-temp-pair-id','data-jm-temp-pair-key','data-pair-id','data-pair-key','class','style']});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else setTimeout(boot,0);
