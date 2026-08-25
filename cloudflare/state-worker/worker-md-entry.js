@@ -160,6 +160,11 @@ async function ensurePairTable(env) {
   )`).run();
 }
 
+async function clearPairStatistics(env) {
+  await ensurePairTable(env);
+  await env.DB.prepare('DELETE FROM pair_stats').run();
+}
+
 async function incrementPair(env, a, b) {
   const ids = [String(a), String(b)].sort();
   if (!ids[0] || !ids[1] || ids[0] === ids[1]) return;
@@ -221,10 +226,11 @@ async function pairStatistics(request, env) {
   })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name, 'ko'));
 }
 
-async function forwardAndRecord(request, env, before) {
+async function forwardAndRecord(request, env, before, options = {}) {
   const response = await core.fetch(request, env);
   const clone = response.clone();
   const packet = await clone.json().catch(() => null);
+  if (packet?.ok && options.clearPairStats) await clearPairStatistics(env);
   const after = packet?.state?.members ? packet.state : extractStateFromCompat(packet);
   if (before && after) await recordPairTransitions(env, before, after);
   return response;
@@ -245,7 +251,7 @@ export default {
         } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 400); }
       }
       const before = await getAdminState(request, env).catch(() => null);
-      return forwardAndRecord(request, env, before);
+      return forwardAndRecord(request, env, before, { clearPairStats: body.action === 'resetAll' });
     }
     if (request.method === 'POST' && url.pathname === '/api/member/rpc') {
       const before = await getVisibleState(request, env).catch(() => null);
@@ -268,7 +274,7 @@ export default {
       }
       if (MUTATING_COMPAT.has(String(body.name || ''))) {
         const before = await getVisibleState(request, env).catch(() => null);
-        return forwardAndRecord(request, env, before);
+        return forwardAndRecord(request, env, before, { clearPairStats: body.name === 'resetAllOperationData' });
       }
     }
     return core.fetch(request, env);
