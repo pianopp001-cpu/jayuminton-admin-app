@@ -15,11 +15,55 @@ export function emptyState() {
     courtStartedAt: { '1': '', '2': '', '3': '', '4': '' },
     waitGroups: [[], [], [], [], []],
     settings: { memberPassword: '', memberPasswordVersion: 1, adminPin: '', adminPinVersion: 1, courtOrientation: 'door-right' },
-    swapRequests: [], memberMessages: [], actionHistory: [], updatedAt: new Date(0).toISOString(),
+    swapRequests: [], memberMessages: [], tempPairs: [], actionHistory: [], updatedAt: new Date(0).toISOString(),
   };
 }
 
 function uniqueIds(value, limit = 4) { return [...new Set((Array.isArray(value) ? value : []).map(String).filter(Boolean))].slice(0, limit); }
+
+export function normalizeTempPairs(value) {
+  const used = new Set();
+  const out = [];
+  for (const raw of (Array.isArray(value) ? value : []).slice(-100)) {
+    if (!raw || !['wait', 'court'].includes(String(raw.zone))) continue;
+    const pairA = uniqueIds(raw.pairA, 2);
+    const pairB = uniqueIds(raw.pairB, 2);
+    const ids = [...pairA, ...pairB];
+    if (pairA.length !== 2 || pairB.length !== 2 || new Set(ids).size !== 4) continue;
+    if (ids.some(id => used.has(id))) continue;
+    ids.forEach(id => used.add(id));
+    out.push({ pairA, pairB, zone: String(raw.zone), createdAt: Math.max(0, Number(raw.createdAt) || Date.now()) });
+  }
+  return out;
+}
+
+export function reconcileTempPairs(state) {
+  state.tempPairs = normalizeTempPairs(state.tempPairs).filter(group => {
+    const ids = [...group.pairA, ...group.pairB];
+    const first = locationOf(state, ids[0]);
+    if (!first || first.type !== group.zone || !['wait', 'court'].includes(first.type)) return false;
+    return ids.every(id => {
+      const loc = locationOf(state, id);
+      return loc && loc.type === first.type && loc.key === first.key;
+    });
+  });
+  return state;
+}
+
+function applyTempPairOrdering(state) {
+  for (const group of normalizeTempPairs(state.tempPairs)) {
+    const ids = [...group.pairA, ...group.pairB];
+    const first = locationOf(state, ids[0]);
+    if (!first || first.type !== group.zone) continue;
+    const target = first.type === 'court' ? state.courts[first.key] : state.waitGroups[Number(first.key) - 1];
+    if (!Array.isArray(target) || target.length !== 4 || !ids.every(id => target.includes(id))) continue;
+    const ordered = group.zone === 'wait'
+      ? [group.pairA[0], group.pairB[0], group.pairA[1], group.pairB[1]]
+      : [group.pairA[0], group.pairA[1], group.pairB[0], group.pairB[1]];
+    target.splice(0, target.length, ...ordered);
+  }
+  return state;
+}
 
 export function normalizeState(input) {
   const base = emptyState();
@@ -42,10 +86,12 @@ export function normalizeState(input) {
   state.settings = Object.assign(base.settings, state.settings || {});
   state.swapRequests = Array.isArray(state.swapRequests) ? state.swapRequests.slice(-100) : [];
   state.memberMessages = Array.isArray(state.memberMessages) ? state.memberMessages.slice(-50) : [];
+  state.tempPairs = normalizeTempPairs(state.tempPairs);
   state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory.slice(-50) : [];
   state.revision = Math.max(0, Number(state.revision) || 0);
   state.updatedAt = String(state.updatedAt || new Date().toISOString());
-  return syncMemberStatuses(state);
+  syncMemberStatuses(state);
+  return reconcileTempPairs(state);
 }
 
 function locationOf(state, memberId) {
@@ -222,6 +268,14 @@ export function clearBundleMutation(input, memberIds) {
   state.members.forEach(m => { if (ids.includes(String(m.id)) && m.bundleId) selectedTeams.add(String(m.bundleId)); });
   state.members = state.members.map(m => selectedTeams.has(String(m.bundleId || '')) ? { ...m, bundleId: '', teamLabel: '' } : m);
   return { state, event: { type: 'team_cleared', memberIds: ids } };
+}
+
+export function setTempPairsMutation(input, tempPairs) {
+  const state = normalizeState(input);
+  state.tempPairs = normalizeTempPairs(tempPairs);
+  reconcileTempPairs(state);
+  applyTempPairOrdering(state);
+  return { state, event: { type: 'temp_pairs_set', tempPairs: state.tempPairs } };
 }
 
 export function sendMemberMessageMutation(input, memberIds, message) {
@@ -444,6 +498,7 @@ export class StateCoordinator {
       else if (action === 'setMemberStatus') result = setMemberStatusMutation(current, body.memberIds, body.status);
       else if (action === 'setBundle') result = setBundleMutation(current, body.memberIds);
       else if (action === 'clearBundle') result = clearBundleMutation(current, body.memberIds);
+      else if (action === 'setTempPairs') result = setTempPairsMutation(current, body.tempPairs);
       else if (action === 'sendMemberMessage') result = sendMemberMessageMutation(current, body.memberIds, body.message);
       else if (action === 'adjustGames') result = adjustGamesMutation(current, body.memberIds, body.delta, body.reset);
       else if (action === 'requestSwap') result = requestSwapMutation(current, body.requesterId, body.targetId);
@@ -526,7 +581,7 @@ export async function legacyRpc(request, env, name, args) {
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
-  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','sendMemberMessage','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
   if (adminNames.has(name)) {
     await verifyAdminSession(bearerRequest(request, token), env, state);
     if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
@@ -537,6 +592,7 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'setMemberStatus') { action = 'setMemberStatus'; body.memberIds = values[1]; body.status = values[2]; }
     else if (name === 'setBundle') { action = 'setBundle'; body.memberIds = values[1]; }
     else if (name === 'clearBundle') { action = 'clearBundle'; body.memberIds = values[1]; }
+    else if (name === 'setTempPairs') { action = 'setTempPairs'; body.tempPairs = values[1]; }
     else if (name === 'sendMemberMessage') { action = 'sendMemberMessage'; body.memberIds = values[1]; body.message = values[2]; }
     else if (name === 'deleteMembers') { action = 'deleteMembers'; body.memberIds = values[1]; }
     else if (name === 'assignMembersToCourt') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'court', key: String(values[1]) }; }
@@ -665,7 +721,7 @@ export default {
     if (url.pathname === '/api/admin/rpc' && request.method === 'POST') {
       try {
         const state = await readState(env.DB); await verifyAdminSession(request, env, state); const body = await request.json();
-        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','setBundle','clearBundle','sendMemberMessage','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
+        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
         if (!allowed.has(String(body.action || ''))) return reply({ ok: false, error: 'unsupported_admin_action' }, 400);
         return coordinatorAsInternal(request, env, String(body.action), body);
       } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }

@@ -10,31 +10,57 @@
       return String(localStorage.getItem('jayuminton_member_session_token_v1')||localStorage.getItem('jayuminton_member_session_token_v164')||'');
     } catch (_) { return ''; }
   }
-  function loadTempPairs(){
-    try{
-      var value=JSON.parse(localStorage.getItem(TEMP_PAIR_KEY)||'[]');
-      return Array.isArray(value)?value.filter(function(x){return x&&Array.isArray(x.pairA)&&x.pairA.length===2&&Array.isArray(x.pairB)&&x.pairB.length===2&&(x.zone==='wait'||x.zone==='court');}):[];
-    }catch(_){return [];}
+  var sharedTempPairs=[];
+  var legacyTempPairsChecked=false;
+  function validTempPairs(value){
+    return (Array.isArray(value)?value:[]).filter(function(x){
+      if(!x||['wait','court'].indexOf(String(x.zone))<0||!Array.isArray(x.pairA)||!Array.isArray(x.pairB)||x.pairA.length!==2||x.pairB.length!==2)return false;
+      return new Set(x.pairA.concat(x.pairB).map(String)).size===4;
+    }).map(function(x){return {pairA:x.pairA.map(String),pairB:x.pairB.map(String),zone:String(x.zone),createdAt:Number(x.createdAt)||Date.now()};});
   }
-  function saveTempPairs(value){try{localStorage.setItem(TEMP_PAIR_KEY,JSON.stringify(Array.isArray(value)?value:[]));}catch(_) {}}
-  function zoneOfState(state,id){
-    id=String(id||'');if(!state||!id)return '';
-    var courts=state.courts||{};
-    for(var no in courts){if(Array.isArray(courts[no])&&courts[no].map(String).indexOf(id)>=0)return 'court';}
-    var waits=Array.isArray(state.waitGroups)?state.waitGroups:[];
-    for(var i=0;i<waits.length;i++){if(Array.isArray(waits[i])&&waits[i].map(String).indexOf(id)>=0)return 'wait';}
-    return '';
+  function loadLegacyTempPairs(){
+    try{return validTempPairs(JSON.parse(localStorage.getItem(TEMP_PAIR_KEY)||'[]'));}catch(_){return [];}
   }
-  function reconcileTempPairs(state){
-    if(typeof IS_ADMIN==='undefined'||!IS_ADMIN||!state)return;
-    var old=loadTempPairs(),next=[];
-    old.forEach(function(group){
-      var ids=group.pairA.concat(group.pairB);
-      if(ids.every(function(id){return zoneOfState(state,id)===group.zone;}))next.push(group);
+  function loadTempPairs(){return sharedTempPairs.slice();}
+  function renderSharedTempPairs(){
+    if(typeof document==='undefined'||typeof document.querySelectorAll!=='function')return;
+    var selector='.member,.person,.quick-member,.member-card,.member-item,.wait-card,.wait-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
+    var attrs=['data-member-id','data-memberid','data-player-id','data-id','data-member'];
+    function idOf(card){
+      if(!card)return '';
+      for(var i=0;i<attrs.length;i++){var v=card.getAttribute&&card.getAttribute(attrs[i]);if(v)return String(v);}
+      var nested=card.querySelector&&card.querySelector('[data-member-id],[data-memberid],[data-player-id],[data-id],[data-member]');
+      if(nested){for(var j=0;j<attrs.length;j++){var nv=nested.getAttribute(attrs[j]);if(nv)return String(nv);}}
+      var onclick=(card.getAttribute&&card.getAttribute('onclick'))||'';
+      var hit=onclick.match(/["']([0-9a-f]{8}-[0-9a-f-]{27,})["']/i);
+      return hit?String(hit[1]):'';
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.jm-temp-pair'),function(card){card.classList.remove('jm-temp-pair');if(card.style&&card.style.removeProperty)card.style.removeProperty('--jm-temp-pair-color');});
+    loadTempPairs().forEach(function(group,index){
+      [[group.pairA,TEMP_PAIR_COLORS[(index*2)%TEMP_PAIR_COLORS.length]],[group.pairB,TEMP_PAIR_COLORS[(index*2+1)%TEMP_PAIR_COLORS.length]]].forEach(function(side){
+        Array.prototype.forEach.call(document.querySelectorAll(selector),function(card){var id=idOf(card);if(side[0].indexOf(id)>=0){card.classList.add('jm-temp-pair');if(card.style&&card.style.setProperty)card.style.setProperty('--jm-temp-pair-color',side[1]);}});
+      });
     });
-    if(JSON.stringify(old)!==JSON.stringify(next))saveTempPairs(next);
-    if(typeof window.__JM_RENDER_TEMP_PAIRS__==='function')setTimeout(window.__JM_RENDER_TEMP_PAIRS__,0);
+    if(document.getElementById&&!document.getElementById('jayuminton-shared-temp-pair-style')){
+      var style=document.createElement('style');style.id='jayuminton-shared-temp-pair-style';
+      style.textContent='.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}.jm-team-bottom-label{display:none!important}';
+      (document.head||document.documentElement).appendChild(style);
+    }
   }
+  window.__JM_RENDER_TEMP_PAIRS__=renderSharedTempPairs;
+  function consumeSharedState(state){
+    if(!state||typeof state!=='object'||!state.courts||!state.waitGroups)return;
+    sharedTempPairs=validTempPairs(state.tempPairs);
+    if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN&&!legacyTempPairsChecked){
+      legacyTempPairsChecked=true;
+      var legacy=loadLegacyTempPairs();
+      if(!sharedTempPairs.length&&legacy.length){
+        invoke('setTempPairs',[null,legacy],function(saved){try{localStorage.removeItem(TEMP_PAIR_KEY);}catch(_){} consumeSharedState(saved);},function(){});
+      }else{try{localStorage.removeItem(TEMP_PAIR_KEY);}catch(_){}}
+    }
+    setTimeout(renderSharedTempPairs,0);setTimeout(renderSharedTempPairs,80);setTimeout(renderSharedTempPairs,250);
+  }
+  function persistTempPairs(value,success,failure){invoke('setTempPairs',[null,validTempPairs(value)],success,failure);}
 
   function invoke(name,args,success,failure){
     var values=Array.prototype.slice.call(args||[]); var token='';
@@ -46,11 +72,12 @@
       body:JSON.stringify({name:String(name||''),args:values})
     }).then(function(response){return response.json();}).then(function(packet){
       if(!packet||packet.ok!==true)throw new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.'));
-      if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN&&packet.result){
+      if(packet.result){
         var candidate=packet.result.state&&typeof packet.result.state==='object'?packet.result.state:packet.result;
-        if(candidate&&candidate.courts&&candidate.waitGroups)reconcileTempPairs(candidate);
+        if(candidate&&candidate.courts&&candidate.waitGroups)consumeSharedState(candidate);
       }
       if(typeof success==='function')success(packet.result);
+      setTimeout(renderSharedTempPairs,0);
     }).catch(function(error){if(typeof failure==='function')failure(error);});
   }
   function runner(success,failure){
@@ -73,7 +100,7 @@
       if(document.getElementById('jayuminton-admin-team-safety-v2037'))return;
       var style=document.createElement('style');
       style.id='jayuminton-admin-team-safety-v2037';
-      style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important}#adminApp .jm-team-bottom-label{display:block!important;visibility:visible!important;width:100%!important;height:auto!important;min-width:0!important;max-width:none!important;margin:3px 0 0!important;padding:0!important;border:0!important;overflow:visible!important;position:static!important;float:none!important;clear:both!important;text-align:left!important;font-size:9px!important;font-weight:900!important;line-height:1.15!important;white-space:nowrap!important;color:var(--member-team-color)!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;box-shadow:none!important;overflow:visible!important;height:auto!important;min-height:0!important;padding-bottom:5px!important;background-clip:padding-box!important}#adminApp .member-card,#adminApp .member-item,#adminApp .wait-card,#adminApp .wait-item,#adminApp .player-card,#adminApp .court-player,#adminApp .member,#adminApp .person,#adminApp .quick-member{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}#adminApp .member-card .member-info,#adminApp .member-card .member-meta,#adminApp .member-card .member-detail,#adminApp .member-card .member-sub,#adminApp .member-card .member-memo,#adminApp .member-item .member-info,#adminApp .member-item .member-meta,#adminApp .member-item .member-detail,#adminApp .member-item .member-sub,#adminApp .member-item .member-memo,#adminApp .wait-card .member-info,#adminApp .wait-card .member-meta,#adminApp .wait-card .member-detail,#adminApp .wait-card .member-sub,#adminApp .wait-card .member-memo,#adminApp .wait-item .member-info,#adminApp .wait-item .member-meta,#adminApp .wait-item .member-detail,#adminApp .wait-item .member-sub,#adminApp .wait-item .member-memo{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;white-space:normal!important;line-height:1.25!important;word-break:keep-all!important}#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair-pending{box-shadow:0 0 0 2px #111827!important}';
+      style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important}#adminApp .jm-team-bottom-label{display:none!important;visibility:hidden!important;width:100%!important;height:auto!important;min-width:0!important;max-width:none!important;margin:3px 0 0!important;padding:0!important;border:0!important;overflow:visible!important;position:static!important;float:none!important;clear:both!important;text-align:left!important;font-size:9px!important;font-weight:900!important;line-height:1.15!important;white-space:nowrap!important;color:var(--member-team-color)!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;box-shadow:none!important;overflow:visible!important;height:auto!important;min-height:0!important;padding-bottom:5px!important;background-clip:padding-box!important}#adminApp .member-card,#adminApp .member-item,#adminApp .wait-card,#adminApp .wait-item,#adminApp .player-card,#adminApp .court-player,#adminApp .member,#adminApp .person,#adminApp .quick-member{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}#adminApp .member-card .member-info,#adminApp .member-card .member-meta,#adminApp .member-card .member-detail,#adminApp .member-card .member-sub,#adminApp .member-card .member-memo,#adminApp .member-item .member-info,#adminApp .member-item .member-meta,#adminApp .member-item .member-detail,#adminApp .member-item .member-sub,#adminApp .member-item .member-memo,#adminApp .wait-card .member-info,#adminApp .wait-card .member-meta,#adminApp .wait-card .member-detail,#adminApp .wait-card .member-sub,#adminApp .wait-card .member-memo,#adminApp .wait-item .member-info,#adminApp .wait-item .member-meta,#adminApp .wait-item .member-detail,#adminApp .wait-item .member-sub,#adminApp .wait-item .member-memo{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;white-space:normal!important;line-height:1.25!important;word-break:keep-all!important}#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair-pending{box-shadow:0 0 0 2px #111827!important}';
       (document.head||document.documentElement).appendChild(style);
     }
     function normalizeTeamText(value){
@@ -99,10 +126,7 @@
           card.style.setProperty('border','2px solid var(--member-team-color)','important');
           card.style.setProperty('outline','2px solid var(--member-team-color)','important');
           card.style.setProperty('outline-offset','-5px','important');
-          var bottom=card.querySelector('.jm-team-bottom-label');
-          if(!bottom){bottom=document.createElement('small');bottom.className='jm-team-bottom-label';}
-          if(bottom.textContent!==teamText)bottom.textContent=teamText;
-          if(bottom.parentElement!==card||card.lastElementChild!==bottom)card.appendChild(bottom);
+          Array.prototype.forEach.call(card.querySelectorAll('.jm-team-bottom-label'),function(bottom){bottom.remove();});
         }
       }
     }
@@ -165,7 +189,7 @@
       var pairA=[first.id,second.id],pairB=ids.filter(function(id){return pairA.indexOf(id)<0;});
       if(pairB.length!==2)return;
       var old=loadTempPairs().filter(function(saved){var all=saved.pairA.concat(saved.pairB);return !ids.some(function(id){return all.indexOf(id)>=0;});});
-      old.push({pairA:pairA,pairB:pairB,zone:group.zone,createdAt:Date.now()});saveTempPairs(old);pendingPair=null;renderTempPairs();
+      old.push({pairA:pairA,pairB:pairB,zone:group.zone,createdAt:Date.now()});persistTempPairs(old,function(saved){consumeSharedState(saved);pendingPair=null;renderTempPairs();},function(){pendingPair=null;renderTempPairs();});
     }
     function handlePairClick(event){
       if(event.defaultPrevented||event.button>0)return;
