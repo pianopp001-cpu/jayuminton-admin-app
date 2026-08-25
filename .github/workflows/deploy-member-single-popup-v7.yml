@@ -60,7 +60,7 @@ jobs:
           ! grep -F 'jayuminton-member-self-profile-edit-v1' "$PUBLIC/index.html"
           ! grep -F 'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' "$PUBLIC/index.html"
           grep -F 'jm-has-team' "$PUBLIC/index.html" >/dev/null
-          grep -F 'box-shadow:inset 5px 0 0 var(--jm-team-color)!important' "$PUBLIC/index.html" >/dev/null
+          grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)!important' "$PUBLIC/index.html" >/dev/null
           python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-original-popup-inline.js" <<'PY'
           from pathlib import Path
           import re, sys
@@ -89,5 +89,5 @@ jobs:
           ! grep -F 'jayuminton-member-self-profile-edit-v1' "$RUNNER_TEMP/member-original-popup-live.html"
           ! grep -F 'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' "$RUNNER_TEMP/member-original-popup-live.html"
           grep -F 'jm-has-team' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
-          grep -F 'box-shadow:inset 5px 0 0 var(--jm-team-color)!important' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)!important' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           echo 'MEMBER_ORIGINAL_POPUP_NO_MEMO_TEAM_CARDS_OK'
