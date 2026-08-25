@@ -274,7 +274,8 @@ export default {
       }
       if (MUTATING_COMPAT.has(String(body.name || ''))) {
         const before = await getVisibleState(request, env).catch(() => null);
-        return forwardAndRecord(request, env, before, { clearPairStats: body.name === 'resetAllOperationData' });
+        const isRestore = body.name === 'restoreManualBackup';
+        return forwardAndRecord(request, env, isRestore ? null : before, { clearPairStats: body.name === 'resetAllOperationData' || isRestore });
       }
     }
     return core.fetch(request, env);
