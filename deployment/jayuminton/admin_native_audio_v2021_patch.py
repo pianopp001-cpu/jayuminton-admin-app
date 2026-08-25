@@ -37,10 +37,6 @@ for marker in required:
 
 path.write_text(text, encoding='utf-8')
 
-# v203 APKs bundle the administrator page as a local asset. The web deployment
-# already applies admin_cloudflare_post_contract_patch.py after the v203 bridge;
-# do the same for the bundled APK so web and APK cannot drift again. Limit this
-# to an HTML asset that already contains the restored v203 Cloudflare markers.
 admin_html = Path('app/src/main/assets/admin/index.html')
 if admin_html.exists():
     bundled = admin_html.read_text(encoding='utf-8')
@@ -62,17 +58,26 @@ if admin_html.exists():
         if 'script.google.com/macros/s/' in final_html:
             raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
 
-        # Persistent team identity always keeps its border+outline double line.
-        # Temporary two-player sides are layered with box-shadow only, so when
-        # that temporary side is cleared the persistent double line remains.
+        # Always replace any previously bundled V2038 layout script with the
+        # current source. This prevents a restored older APK asset from keeping
+        # stale team-label/grouping behavior merely because the marker exists.
+        layout_marker = '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__'
+        while layout_marker in final_html:
+            marker_pos = final_html.find(layout_marker)
+            script_start = final_html.rfind('<script', 0, marker_pos)
+            script_end = final_html.find('</script>', marker_pos)
+            if script_start < 0 or script_end < 0:
+                raise SystemExit('stale bundled team layout marker is outside script tag')
+            final_html = final_html[:script_start] + final_html[script_end + len('</script>'):]
+
         layout_js = Path(__file__).with_name('admin_team_layout_v2038.js').read_text(encoding='utf-8')
-        if '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__' not in final_html:
-            tag = '<script>\n' + layout_js + '\n</script>\n'
-            if '</body>' in final_html:
-                final_html = final_html.replace('</body>', tag + '</body>', 1)
-            else:
-                final_html += tag
-            admin_html.write_text(final_html, encoding='utf-8')
+        tag = '<script>\n' + layout_js + '\n</script>\n'
+        if '</body>' in final_html:
+            final_html = final_html.replace('</body>', tag + '</body>', 1)
+        else:
+            final_html += tag
+        admin_html.write_text(final_html, encoding='utf-8')
+
         final_html = admin_html.read_text(encoding='utf-8')
         for marker in (
             '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
@@ -80,10 +85,15 @@ if admin_html.exists():
             'jayuminton-admin-team-layout-v2038',
             '.jm-team-bottom-label',
             'has-member-team.jm-temp-pair',
+            "card.style.removeProperty('box-shadow')",
         ):
             if marker not in final_html:
                 raise SystemExit('bundled team layout guard missing: ' + marker)
-        print('BUNDLED_ADMIN_V203_TEAM_LAYOUT_V2038_OK')
+        if final_html.count('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__') != 2:
+            # One occurrence is the installer/global name and one occurs in the
+            # guard statement itself inside the single freshly injected script.
+            raise SystemExit('bundled team layout script duplication detected')
+        print('BUNDLED_ADMIN_V203_TEAM_LAYOUT_V2038_FRESH_OK')
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
