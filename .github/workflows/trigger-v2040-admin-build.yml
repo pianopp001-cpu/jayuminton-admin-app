@@ -19,3 +19,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run build-v2015-known-good-shell.yml --repo "$GITHUB_REPOSITORY" --ref main
+
+# trigger: final-shared-team-state-f09250d-20260826
