@@ -82,3 +82,4 @@ if len(re.findall(r'<script\s+id=["\']jayuminton-team-visuals-v6-script["\']', h
     raise SystemExit('fresh V6 script block count mismatch')
 path.write_text(html, encoding='utf-8')
 print('TEAM_VISUALS_V6_OFFICIAL_LABEL_PAIR_OVERLAY_OK')
+# DEPLOY_TRIGGER: final-shared-team-state-f09250d-20260826
