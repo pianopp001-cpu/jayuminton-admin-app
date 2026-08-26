@@ -12,7 +12,7 @@
     if(!card)return '';
     var direct=normalizeTeam(card.getAttribute&&card.getAttribute('data-jm-team-text'));
     if(direct)return direct;
-    var nodes=card.querySelectorAll?card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,.jm-team-bottom-label,span,small,label,b,strong,em,i'):[];
+    var nodes=card.querySelectorAll?card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,span,label,b,strong,em,i'):[];
     for(var i=0;i<nodes.length;i++){
       var t=normalizeTeam((nodes[i].getAttribute&&nodes[i].getAttribute('data-team-label'))||nodes[i].textContent);
       if(t)return t;
@@ -28,10 +28,15 @@
         card.setAttribute('data-jm-team-text',team);
         card.classList.add('has-member-team');
       }
-      var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,.jm-team-bottom-label,span,small,label,b,strong,em,i');
+      var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,span,label,b,strong,em,i');
       for(var j=0;j<nodes.length;j++){
         var node=nodes[j];
         if(normalizeTeam((node.getAttribute&&node.getAttribute('data-team-label'))||node.textContent))node.remove();
+      }
+      if(team){
+        var bottom=card.querySelector('.jm-team-bottom-label');
+        if(!bottom){bottom=document.createElement('small');bottom.className='jm-team-bottom-label';card.appendChild(bottom);}
+        bottom.textContent=team;if(card.lastElementChild!==bottom)card.appendChild(bottom);
       }
     }
   }
@@ -117,7 +122,7 @@
   function installStyle(){
     var old=document.getElementById('jayuminton-admin-team-layout-v2038');if(old)old.remove();
     var style=document.createElement('style');style.id='jayuminton-admin-team-layout-v2038';
-    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important;box-shadow:none!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair:not(.has-member-team){box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}';
+    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .jm-team-bottom-label{display:block!important;visibility:visible!important;position:static!important;width:100%!important;height:auto!important;margin:3px 0 0!important;padding:0!important;text-align:left!important;font-size:9px!important;font-weight:900!important;line-height:1.1!important;white-space:nowrap!important;color:var(--member-team-color)!important;pointer-events:none!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important;box-shadow:none!important}#adminApp .has-member-team.jm-temp-pair{box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}#adminApp .jm-temp-pair:not(.has-member-team){box-shadow:inset 0 0 0 3px var(--jm-temp-pair-color),0 0 0 2px var(--jm-temp-pair-color)!important}';
     (document.head||document.documentElement).appendChild(style);
   }
   function apply(){installStyle();rememberOfficialTeamAndRemoveText(document);compactSameTeams();rememberOfficialTeamAndRemoveText(document);}
