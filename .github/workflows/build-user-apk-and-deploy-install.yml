@@ -2,6 +2,11 @@ name: Build Jayuminton user APK and deploy install button
 
 on:
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/scripts/patch_user_route_guard.py'
+      - '.github/workflows/build-user-apk-and-deploy-install.yml'
 
 permissions:
   contents: write
@@ -99,7 +104,7 @@ jobs:
           npm install --global @google/clasp@latest
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
 
-      - name: Pull live source and patch only user install behavior
+      - name: Pull live source and repair user route plus install behavior
         shell: bash
         run: |
           set -euo pipefail
@@ -108,9 +113,10 @@ jobs:
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$WORK/.clasp.json"
           cd "$WORK"
           clasp pull
-          sha256sum Admin.html Style.html Code.js > "$RUNNER_TEMP/non-user-before.sha"
+          sha256sum Admin.html Style.html > "$RUNNER_TEMP/non-user-before.sha"
+          python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_route_guard.py" "$WORK"
           python3 "$GITHUB_WORKSPACE/deployment/scripts/patch_user_apk_install.py" "$WORK"
-          sha256sum Admin.html Style.html Code.js > "$RUNNER_TEMP/non-user-after.sha"
+          sha256sum Admin.html Style.html > "$RUNNER_TEMP/non-user-after.sha"
           cmp "$RUNNER_TEMP/non-user-before.sha" "$RUNNER_TEMP/non-user-after.sha"
           python3 - <<'PY'
           from pathlib import Path
@@ -120,28 +126,33 @@ jobs:
           Path('Script.syntax-check.js').write_text(text[start+8:end], encoding='utf-8')
           PY
           node --check Script.syntax-check.js
+          grep -F "const isAdmin = requestedMode === 'admin';" Code.js >/dev/null
+          grep -F "isAdmin ? 'Admin' : 'Index'" Code.js >/dev/null
           grep -F 'jayuminton-user-v1.0.0.apk' Script.html >/dev/null
           grep -F "? '앱설치 ON'" Script.html >/dev/null
           grep -F '!!window.NativeUserApp' Script.html >/dev/null
           grep -F '>앱설치</button>' Index.html >/dev/null
 
-      - name: Deploy and verify live user install behavior
+      - name: Deploy and verify live user route and install behavior
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/apps-script-main"
           cd "$WORK"
           clasp push --force
-          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "user APK direct install manual"
+          clasp create-deployment --deploymentId "$MAIN_DEPLOYMENT_ID" --description "repair user route and APK direct install"
           VERIFY="$RUNNER_TEMP/verify-user-install"
           rm -rf "$VERIFY" && mkdir -p "$VERIFY"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$MAIN_SCRIPT_ID" > "$VERIFY/.clasp.json"
           cd "$VERIFY"
           clasp pull
+          grep -F "const isAdmin = requestedMode === 'admin';" Code.js >/dev/null
+          grep -F "isAdmin ? 'Admin' : 'Index'" Code.js >/dev/null
           grep -F 'jayuminton-user-v1.0.0.apk' Script.html >/dev/null
           grep -F "? '앱설치 ON'" Script.html >/dev/null
           grep -F '!!window.NativeUserApp' Script.html >/dev/null
           grep -F '>앱설치</button>' Index.html >/dev/null
+          cp Code.js "$GITHUB_WORKSPACE/source-snapshot/current-main/Code.js"
           cp Script.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Script.html"
           cp Index.html "$GITHUB_WORKSPACE/source-snapshot/current-main/Index.html"
 
@@ -163,6 +174,7 @@ jobs:
           status=success
           user_apk=releases/jayuminton-user-v1.0.0.apk
           apk_sha256=$APK_SHA
+          user_route=Index-unless-explicit-mode-admin
           install_button_before=앱설치-white
           install_button_after_confirm=앱설치-ON-green
           confirmation_signal=JayumintonUserNative/1.0.0+NativeUserApp
@@ -172,7 +184,7 @@ jobs:
           EOF
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/user-apk-install-live.txt source-snapshot/current-main/Script.html source-snapshot/current-main/Index.html
-          git commit -m 'Record verified user APK install flow' || true
+          git add deployment/status/user-apk-install-live.txt source-snapshot/current-main/Code.js source-snapshot/current-main/Script.html source-snapshot/current-main/Index.html
+          git commit -m 'Record verified user route and APK install flow' || true
           git pull --rebase origin main
           git push origin main
