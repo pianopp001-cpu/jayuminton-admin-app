@@ -5,7 +5,8 @@
   // 같이 움직일 사람을 최대 4명까지
   if(window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__)return;
   window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__=true;
-  var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.wait-card,.wait-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
+  // IMPORTANT: only real member nodes belong here. .wait-card/.wait-item are group containers.
+  var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
   function killLegacyTeamSafety(){var old=document.getElementById('jayuminton-admin-team-safety-v2037');if(old)old.remove();}
   function normalizeTeam(value){
     var text=String(value||'').replace(/\s+/g,'').trim();
@@ -23,9 +24,20 @@
     }
     return '';
   }
+  function clearGroupTeamArtifacts(app){
+    Array.prototype.forEach.call(app.querySelectorAll('#adminApp .wait-card.has-member-team,#adminApp .wait-item.has-member-team,#adminApp .wait-card[data-jm-team-text],#adminApp .wait-item[data-jm-team-text]'),function(group){
+      group.classList.remove('has-member-team');
+      group.removeAttribute('data-jm-team-text');
+      group.style.removeProperty('--member-team-color');
+      group.style.removeProperty('border');
+      group.style.removeProperty('outline');
+      group.style.removeProperty('box-shadow');
+    });
+  }
   function syncOfficialTeams(root){
     killLegacyTeamSafety();
     var app=root&&root.querySelectorAll?root:document;
+    clearGroupTeamArtifacts(app);
     var cards=app.querySelectorAll('#adminApp '+CARD_SELECTOR.split(',').join(',#adminApp '));
     for(var i=0;i<cards.length;i++){
       var card=cards[i],team=teamOf(card);
@@ -48,7 +60,8 @@
     killLegacyTeamSafety();
     if(document.getElementById('jayuminton-admin-team-layout-v2038'))return;
     var style=document.createElement('style');style.id='jayuminton-admin-team-layout-v2038';
-    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important}#adminApp .has-member-team:not(.jm-temp-pair){box-shadow:none!important}#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}';
+    // Inset shadows do not change card geometry, so team state cannot make cards jitter.
+    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{border-color:transparent!important;outline:0!important;box-shadow:inset 0 0 0 2px var(--member-team-color)!important;background-clip:padding-box!important}#adminApp .has-member-team.jm-temp-pair,#adminApp .has-member-team.jm-temp-team-v2047{box-shadow:inset 0 0 0 2px var(--member-team-color),0 0 0 3px var(--jm-temp-pair-color,#d4a017)!important}#adminApp .wait-card.has-member-team,#adminApp .wait-item.has-member-team{border:0!important;outline:0!important;box-shadow:none!important}';
     (document.head||document.documentElement).appendChild(style);
   }
   function apply(){killLegacyTeamSafety();installStyle();syncOfficialTeams(document);}

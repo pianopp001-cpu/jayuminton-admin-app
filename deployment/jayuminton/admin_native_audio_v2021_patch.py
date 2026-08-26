@@ -53,6 +53,7 @@ if admin_html.exists():
             'killLegacyTeamSafety','__jmLegacyTeamSafetyGuard',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__',
+            '__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__',
             'jm-admin-v2054-pass-through-style','jm-send-court-wait','코트배정대기로',
             'a.__jmV2053Observer.disconnect','a.__jmV2054FastObserver',
             'jayuminton-admin-multi-action-v2053-style',
@@ -62,20 +63,21 @@ if admin_html.exists():
             '이동/교환','팀설정','#16a34a','#d4a017',
             "phase='target'",'selected.length!==2','samePlace(selected)',
             'members:ids.map(String)',
-            "rpc('swapMembers'", "rpc('moveOrSwapMember'",
+            "rpc('swapMembers'", "rpc('moveOrSwapMember'", "rpc('sendMemberMessage'",
             'if(selected.length===1)', 'if(selected.length===3||selected.length===4)',
             "if(targets.length===selected.length)executeMove();",
             "var old=document.getElementById('jayuminton-admin-team-safety-v2037');if(old)old.remove();",
-            'a.__jmV2053Observer.observe(a,{childList:true,subtree:true});'
+            'obs.observe(a,{childList:true,subtree:true})'
         )
         for marker in required:
-            if marker not in final_html: raise SystemExit('bundled admin v2054 guard missing: '+marker)
+            if marker not in final_html: raise SystemExit('bundled admin v2056 guard missing: '+marker)
         if 'window.google&&window.google.script&&window.google.script.run' in card_js: raise SystemExit('v2053 team interaction must use direct Cloudflare window.server RPC')
         if 'window.confirm(' in card_js: raise SystemExit('v2053 must use in-app action panel, not browser confirm')
         if final_html.count('__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__') != 2: raise SystemExit('v2053 card interaction duplication detected')
         if final_html.count('__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__') != 2: raise SystemExit('v2054 hotfix duplication detected')
-        print('BUNDLED_ADMIN_MULTI_ACTION_V2054_HOTFIX_OK')
-        print('BUNDLED_ADMIN_2_POPUP_3RD_SELECTION_DISMISSES_OK')
+        print('BUNDLED_ADMIN_MULTI_ACTION_V2056_HOTFIX_OK')
+        print('BUNDLED_ADMIN_MESSAGE_ANYWHERE_OK')
+        print('BUNDLED_ADMIN_STABLE_TEAM_BORDER_OK')
         print('BUNDLED_ADMIN_COURT_WAIT_RETURN_BUTTON_OK')
         print('BUNDLED_ADMIN_FAST_LOCAL_REPAINT_OK')
         print('BUNDLED_ADMIN_GREEN_MOVE_YELLOW_TEAM_OK')
@@ -83,4 +85,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_TEAM_DIRECT_CLOUDFLARE_RPC_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: v2054-popup-third-selection-fast-court-wait-20260827
+# BUILD_TRIGGER: v2056-stable-team-message-anywhere-20260827

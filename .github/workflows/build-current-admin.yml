@@ -13,6 +13,7 @@ on:
       - 'deployment/jayuminton/current_admin_build.trigger'
       - 'deployment/jayuminton/admin_card_interaction_v2042.js'
       - 'deployment/jayuminton/admin_team_layout_v2038.js'
+      - 'deployment/jayuminton/admin_multiaction_v2054_hotfix.js'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
       - 'deployment/jayuminton/patch_bridge_admin_multiselect_v2048.py'
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
@@ -69,6 +70,7 @@ jobs:
           node cloudflare/state-worker/temp-pairs.test.mjs
           grep -F "getCurrentMemberPassword" cloudflare/state-worker/worker.js >/dev/null
           grep -F "setTempPairs" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "sendMemberMessage" cloudflare/state-worker/worker.js >/dev/null
       - name: Restore proven shell
         shell: bash
         run: |
@@ -90,12 +92,14 @@ jobs:
           python3 deployment/jayuminton/admin_native_vibration_v2023_patch.py
           python3 deployment/jayuminton/force_cloudflare_admin_login_v2050.py
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__' "$HTML" >/dev/null
           grep -F 'jayuminton-admin-multi-action-v2053-style' "$HTML" >/dev/null
           grep -F '녹색 = 이동선택' "$HTML" >/dev/null
           grep -F '2명일 때만 이동/교환인지 팀설정인지 선택합니다.' "$HTML" >/dev/null
           grep -F '1명·3명·4명은 자동으로 이동/교환입니다.' "$HTML" >/dev/null
           grep -F '이동/교환' "$HTML" >/dev/null
           grep -F '팀설정' "$HTML" >/dev/null
+          grep -F '메시지 보내기' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
           grep -F "selected.length!==2" "$HTML" >/dev/null
@@ -103,6 +107,7 @@ jobs:
           grep -F "if(selected.length===3||selected.length===4)" "$HTML" >/dev/null
           grep -F "window.server!=='function'" "$HTML" >/dev/null
           grep -F "rpc('setTempPairs'" "$HTML" >/dev/null
+          grep -F "rpc('sendMemberMessage'" "$HTML" >/dev/null
           grep -F "executeSwap([left],[id])" "$HTML" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_DIRECT_CLOUDFLARE_LOGIN_V2050__' "$HTML" >/dev/null
           grep -F 'window.server=directServer' "$HTML" >/dev/null
@@ -145,16 +150,19 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jayuminton-admin-multi-action-v2053-style' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '녹색 = 이동선택' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '2명일 때만 이동/교환인지 팀설정인지 선택합니다.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '1명·3명·4명은 자동으로 이동/교환입니다.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#16a34a' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#d4a017' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '메시지 보내기' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "selected.length!==2" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===1)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===3||selected.length===4)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "rpc('setTempPairs'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "rpc('sendMemberMessage'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "executeSwap([left],[id])" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_DIRECT_CLOUDFLARE_LOGIN_V2050__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'window.server=directServer' "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -169,7 +177,7 @@ jobs:
           git reset --hard origin/main
           mkdir -p releases deployment/status
           cp "$APK" releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk
-          printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-v2053-two-only-choice\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
+          printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-v2056-stable-team-message-anywhere\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
           git add releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-          git commit -m 'Publish admin APK v2053 two-only choice behavior' || exit 0
+          git commit -m 'Publish admin APK v2056 stable team message anywhere' || exit 0
           git push origin HEAD:main
