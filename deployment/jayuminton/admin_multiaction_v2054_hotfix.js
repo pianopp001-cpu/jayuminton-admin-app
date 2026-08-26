@@ -33,6 +33,12 @@
     e.style.cssText='position:fixed;left:50%;bottom:92px;transform:translateX(-50%);z-index:2147483647;padding:10px 14px;border-radius:12px;background:'+(bad?'#991b1b':'#111827')+';color:#fff;font-size:14px;font-weight:800;box-shadow:0 8px 26px rgba(0,0,0,.22)';
     document.body.appendChild(e);setTimeout(function(){e.remove();},1600);
   }
+  function installPassThroughStyle(){
+    if(document.getElementById('jm-admin-v2054-pass-through-style'))return;
+    var s=document.createElement('style');s.id='jm-admin-v2054-pass-through-style';
+    s.textContent='#jm-admin-multi-action{pointer-events:none!important}#jm-admin-multi-action button{pointer-events:auto!important}';
+    (document.head||document.documentElement).appendChild(s);
+  }
   function resetUi(){
     var p=document.getElementById('jm-admin-multi-action');if(p)p.remove();
     var a=app();if(a)Array.prototype.forEach.call(a.querySelectorAll('.jm-source-selected,.jm-target-selected'),function(e){e.classList.remove('jm-source-selected');e.classList.remove('jm-target-selected');});
@@ -49,7 +55,8 @@
   }
   function injectButton(){
     var p=document.getElementById('jm-admin-multi-action');if(!p)return;
-    var ids=selectedIds();if(ids.length!==2)return;
+    var ids=selectedIds();
+    if(ids.length!==2){p.remove();return;}
     if(p.querySelector('.jm-send-court-wait'))return;
     var actions=p.querySelector('.jm-multi-actions');if(!actions)return;
     var b=document.createElement('button');b.type='button';b.className='jm-send-court-wait';b.textContent='코트배정대기로';
@@ -71,9 +78,6 @@
   }
   function installFastObserver(){
     var a=app();if(!a){setTimeout(installFastObserver,80);return;}
-    // v2053 observer refreshed Cloudflare state on DOM mutations. Rendering itself creates
-    // many mutations, causing request storms and the slowdown. Disable it and repaint only
-    // from already-loaded STATE; network requests remain tied to real user operations.
     try{if(a.__jmV2053Observer&&a.__jmV2053Observer.disconnect)a.__jmV2053Observer.disconnect();}catch(_){}
     if(a.__jmV2054FastObserver)return;
     var queued=false;
@@ -84,6 +88,23 @@
     obs.observe(a,{childList:true,subtree:true});a.__jmV2054FastObserver=obs;
     injectButton();paintTeamsFromLocalState();
   }
+  installPassThroughStyle();
+  window.addEventListener('click',function(event){
+    var p=document.getElementById('jm-admin-multi-action');
+    if(!p)return;
+    var ids=selectedIds();
+    if(ids.length!==2){p.remove();return;}
+    var c=event.target&&event.target.closest&&event.target.closest(CARD_SELECTOR);
+    if(c&&c.closest('#adminApp')){
+      var id=idOf(c);
+      if(id&&ids.indexOf(id)<0){
+        // Third source selection must be allowed through to v2053 immediately.
+        // The base handler will add it and its own renderPanel() removes the popup at count 3.
+        p.style.display='none';
+        setTimeout(function(){var now=selectedIds();var q=document.getElementById('jm-admin-multi-action');if(q&&now.length!==2)q.remove();else if(q)q.style.display='';},0);
+      }
+    }
+  },true);
   document.addEventListener('click',function(){setTimeout(injectButton,0);},true);
   window.addEventListener('jayuminton:state',function(){setTimeout(function(){paintTeamsFromLocalState();injectButton();},0);});
   installFastObserver();
