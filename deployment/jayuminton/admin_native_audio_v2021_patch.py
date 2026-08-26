@@ -49,6 +49,7 @@ if admin_html.exists():
         final_html=admin_html.read_text(encoding='utf-8')
         required=(
             '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
+            'killLegacyTeamSafety','__jmLegacyTeamSafetyGuard',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__',
             'jayuminton-admin-multi-action-v2046-style',
             'jm-source-selected','jm-target-selected','jm-temp-team-v2046',
@@ -57,7 +58,6 @@ if admin_html.exists():
             "phase='target'",'sourceIds.length<2',
             "for(var i=0;i<ids.length-1;i++)existing.push",
             "await server('moveOrSwapMember'",
-            "handleEmptySlotTap\\(['\\\"]([^'\\\"]+)",
             "if(targets.length===sourceIds.length)executeMove();",
             "old=document.getElementById('jayuminton-admin-team-safety-v2037');if(old)old.remove();",
             'a.__jmV2046Observer.observe(a,{childList:true,subtree:true});'
@@ -71,7 +71,7 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_MULTI_ACTION_V2046_OK')
         print('BUNDLED_ADMIN_MULTI_MOVE_SWAP_USES_EXISTING_ENGINE_OK')
         print('BUNDLED_ADMIN_2_TO_4_YELLOW_TEAM_CHAIN_OK')
-        print('BUNDLED_ADMIN_NEW_LAYOUT_PARENT_STYLE_REMOVED_AT_RUNTIME_OK')
+        print('BUNDLED_ADMIN_LEGACY_TEAM_CSS_GUARD_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: v2046-multi-source-action-target-yellow-team-20260826-2353
+# BUILD_TRIGGER: v2046-multi-source-action-target-yellow-team-new-guard-20260826-2356
