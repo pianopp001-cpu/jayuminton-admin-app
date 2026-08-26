@@ -67,14 +67,14 @@ if admin_html.exists():
                 raise SystemExit('stale bundled team layout marker is outside script tag')
             final_html = final_html[:script_start] + final_html[script_end + len('</script>'):]
 
-        card_marker = '__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__'
-        while card_marker in final_html:
-            marker_pos = final_html.find(card_marker)
-            script_start = final_html.rfind('<script', 0, marker_pos)
-            script_end = final_html.find('</script>', marker_pos)
-            if script_start < 0 or script_end < 0:
-                raise SystemExit('stale bundled card interaction marker is outside script tag')
-            final_html = final_html[:script_start] + final_html[script_end + len('</script>'):]
+        for card_marker in ('__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__', '__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__'):
+            while card_marker in final_html:
+                marker_pos = final_html.find(card_marker)
+                script_start = final_html.rfind('<script', 0, marker_pos)
+                script_end = final_html.find('</script>', marker_pos)
+                if script_start < 0 or script_end < 0:
+                    raise SystemExit('stale bundled card interaction marker is outside script tag')
+                final_html = final_html[:script_start] + final_html[script_end + len('</script>'):]
 
         layout_js = Path(__file__).with_name('admin_team_layout_v2038.js').read_text(encoding='utf-8')
         card_js = Path(__file__).with_name('admin_card_interaction_v2042.js').read_text(encoding='utf-8')
@@ -91,22 +91,26 @@ if admin_html.exists():
             'jayuminton-admin-team-layout-v2038',
             '.jm-team-bottom-label',
             'has-member-team.jm-temp-pair',
-            '__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__',
+            '__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__',
             'jm-move-selected',
             '팀 설정하시겠습니까?',
             '#16a34a',
             '#d4a017',
-            "swapMembers',[null,[String(first.id)],[String(second.id)]]",
+            "rpc('getPublicState',[null]",
+            "rpc('setTempPairs',[null,existing]",
+            'setTimeout(clearMove,250)',
         ):
             if marker not in final_html:
                 raise SystemExit('bundled admin interaction guard missing: ' + marker)
+        if "swapMembers',[null,[String(first.id)],[String(second.id)]]" in final_html:
+            raise SystemExit('v2042 direct swap interception survived; native move/swap must own cross-location clicks')
         if final_html.count('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__') != 2:
             raise SystemExit('bundled team layout script duplication detected')
-        if final_html.count('__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__') != 2:
+        if final_html.count('__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__') != 2:
             raise SystemExit('bundled card interaction script duplication detected')
         print('BUNDLED_ADMIN_V203_TEAM_LAYOUT_V2038_FRESH_OK')
-        print('BUNDLED_ADMIN_CARD_INTERACTION_V2042_OK')
+        print('BUNDLED_ADMIN_CARD_INTERACTION_V2043_NATIVE_MOVE_OK')
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: unified-card-swap-team-v2042-20260826
+# BUILD_TRIGGER: native-move-yellow-team-v2043-20260826-2312
