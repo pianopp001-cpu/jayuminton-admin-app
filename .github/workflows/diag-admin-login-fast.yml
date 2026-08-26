@@ -1,0 +1,39 @@
+name: Diagnose admin login fast
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diag-admin-login-fast.yml'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK and print login code
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 -o /tmp/admin.apk 'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk'
+          unzip -p /tmp/admin.apk assets/admin/index.html > /tmp/admin.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('/tmp/admin.html').read_text(encoding='utf-8',errors='replace')
+          pats=[r'로그인',r'login',r'PIN',r'pin',r'password',r'createAdminSession',r'adminLogin',r'adminPin',r'관리자']
+          spans=[]
+          for pat in pats:
+              for m in re.finditer(pat,s,re.I):
+                  spans.append((max(0,m.start()-650),min(len(s),m.end()+1000),pat))
+          spans.sort()
+          merged=[]
+          for a,b,p in spans:
+              if merged and a<=merged[-1][1]+100:
+                  merged[-1]=(merged[-1][0],max(merged[-1][1],b),merged[-1][2]+'|'+p)
+              else: merged.append((a,b,p))
+          print('LOGIN_DIAG_TOTAL',len(merged))
+          for i,(a,b,p) in enumerate(merged[:35],1):
+              print(f'===== MATCH {i} [{p}] {a}:{b} =====')
+              print(s[a:b].replace('\r',''))
+          PY
