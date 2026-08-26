@@ -3,6 +3,7 @@
   if(window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__)return;
   window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__=true;
   var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.wait-card,.wait-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
+  function killLegacyTeamSafety(){var old=document.getElementById('jayuminton-admin-team-safety-v2037');if(old)old.remove();}
   function normalizeTeam(value){
     var text=String(value||'').replace(/\s+/g,'').trim();
     if(/^TEAM\d+$/i.test(text))text=text.replace(/^TEAM/i,'팀');
@@ -20,6 +21,7 @@
     return '';
   }
   function syncOfficialTeams(root){
+    killLegacyTeamSafety();
     var app=root&&root.querySelectorAll?root:document;
     var cards=app.querySelectorAll('#adminApp '+CARD_SELECTOR.split(',').join(',#adminApp '));
     for(var i=0;i<cards.length;i++){
@@ -40,15 +42,18 @@
     }
   }
   function installStyle(){
+    killLegacyTeamSafety();
     if(document.getElementById('jayuminton-admin-team-layout-v2038'))return;
     var style=document.createElement('style');style.id='jayuminton-admin-team-layout-v2038';
-    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{position:relative!important;border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important;overflow:visible!important}#adminApp .has-member-team:not(.jm-temp-pair){box-shadow:none!important}#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}';
+    style.textContent='#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}#adminApp .has-member-team{border:2px solid var(--member-team-color)!important;outline:2px solid var(--member-team-color)!important;outline-offset:-5px!important;background-clip:padding-box!important}#adminApp .has-member-team:not(.jm-temp-pair){box-shadow:none!important}#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}';
     (document.head||document.documentElement).appendChild(style);
   }
-  function apply(){installStyle();syncOfficialTeams(document);}
+  function apply(){killLegacyTeamSafety();installStyle();syncOfficialTeams(document);}
   function boot(){
     var app=document.getElementById('adminApp');if(!app){setTimeout(boot,150);return;}
-    apply();if(app.__jmTeamLayoutV2038Observer)return;
+    apply();
+    if(document.head&&!document.head.__jmLegacyTeamSafetyGuard){document.head.__jmLegacyTeamSafetyGuard=true;new MutationObserver(killLegacyTeamSafety).observe(document.head,{childList:true});}
+    if(app.__jmTeamLayoutV2038Observer)return;
     var scheduled=false;app.__jmTeamLayoutV2038Observer=new MutationObserver(function(){if(scheduled)return;scheduled=true;requestAnimationFrame(function(){scheduled=false;syncOfficialTeams(app);});});
     app.__jmTeamLayoutV2038Observer.observe(app,{childList:true,subtree:true});
   }
