@@ -26,24 +26,35 @@ export function normalizeTempPairs(value) {
   const out = [];
   for (const raw of (Array.isArray(value) ? value : []).slice(-100)) {
     if (!raw || !['wait', 'court'].includes(String(raw.zone))) continue;
-    const pairA = uniqueIds(raw.pairA, 2);
-    if (pairA.length !== 2 || new Set(pairA).size !== 2) continue;
-    if (pairA.some(id => used.has(id))) continue;
-    pairA.forEach(id => used.add(id));
-    out.push({ pairA, pairB: [], zone: String(raw.zone), createdAt: Math.max(0, Number(raw.createdAt) || Date.now()) });
+    const legacyIds = [...uniqueIds(raw.pairA, 2), ...uniqueIds(raw.pairB, 2)];
+    const members = uniqueIds(Array.isArray(raw.members) && raw.members.length ? raw.members : legacyIds, 4);
+    if (members.length < 2 || members.length > 4) continue;
+    if (members.some(id => used.has(id))) continue;
+    members.forEach(id => used.add(id));
+    out.push({
+      members,
+      pairA: members.slice(0, 2),
+      pairB: members.slice(2, 4),
+      zone: String(raw.zone),
+      createdAt: Math.max(0, Number(raw.createdAt) || Date.now()),
+    });
   }
   return out;
 }
 
 export function reconcileTempPairs(state) {
   state.tempPairs = normalizeTempPairs(state.tempPairs).filter(group => {
-    const ids = group.pairA;
+    const ids = uniqueIds(group.members?.length ? group.members : [...(group.pairA || []), ...(group.pairB || [])], 4);
+    if (ids.length < 2) return false;
     const first = locationOf(state, ids[0]);
     if (!first || first.type !== group.zone || !['wait', 'court'].includes(first.type)) return false;
     return ids.every(id => {
       const loc = locationOf(state, id);
       return loc && loc.type === first.type && loc.key === first.key;
     });
+  }).map(group => {
+    const members = uniqueIds(group.members?.length ? group.members : [...(group.pairA || []), ...(group.pairB || [])], 4);
+    return { ...group, members, pairA: members.slice(0, 2), pairB: members.slice(2, 4) };
   });
   return state;
 }
@@ -701,7 +712,7 @@ export default {
       return reply({ ok: true, token: await issueAdminSession(env, state), state: adminState(state) });
     }
     if (url.pathname === '/api/admin/state' && request.method === 'GET') {
-      try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) }); }
+      try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) });
       catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
     }
     if (url.pathname === '/api/admin/rpc' && request.method === 'POST') {
