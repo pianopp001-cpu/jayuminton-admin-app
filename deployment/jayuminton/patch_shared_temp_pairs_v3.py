@@ -1,6 +1,7 @@
 from pathlib import Path
 import runpy
 
+# Final shared temp-pair pass: keep the existing v2 contract and only harden idempotent rendering.
 # Apply the complete server-authoritative temp-pair patch first.
 runpy.run_path('deployment/jayuminton/patch_shared_temp_pairs_v2.py', run_name='__main__')
 
