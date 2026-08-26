@@ -40,10 +40,6 @@
       var side=[group.pairA,TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length]];
       Array.prototype.forEach.call(document.querySelectorAll(selector),function(card){var id=idOf(card);if(side[0].indexOf(id)>=0){card.classList.add('jm-temp-pair');if(card.style&&card.style.setProperty)card.style.setProperty('--jm-temp-pair-color',side[1]);}});
     });
-    Array.prototype.forEach.call(document.querySelectorAll('.jm-team-bottom-label,.member-team-badge,.jm-team-badge,.team-badge,.team-label,[data-team-label]'),function(node){
-      var txt=String(node.textContent||((node.getAttribute&&node.getAttribute('data-team-label'))||'')).replace(/\s+/g,'');
-      if(/^팀\d+$/.test(txt)||/^TEAM\d+$/i.test(txt)){node.textContent='';if(node.style)node.style.setProperty('display','none','important');}
-    });
     if(document.getElementById&&!document.getElementById('jayuminton-shared-temp-pair-style')){
       var style=document.createElement('style');style.id='jayuminton-shared-temp-pair-style';
       style.textContent='.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .member.jm-team-card.has-member-team.jm-temp-pair,#adminApp .member.jm-team-card.jm-temp-pair,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}.jm-team-bottom-label{display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important}';
@@ -117,17 +113,8 @@
       var cards=scope.querySelectorAll('#adminApp '+cardSelector.split(',').join(',#adminApp '));
       for(var i=0;i<cards.length;i++){
         var card=cards[i],teamText=normalizeTeamText(card.getAttribute('data-jm-team-text'));
-        if(!teamText){
-          var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,.jm-team-bottom-label');
-          for(var j=0;j<nodes.length&&!teamText;j++)teamText=normalizeTeamText(nodes[j].textContent||nodes[j].getAttribute('data-team-label'));
-        }
-        if(teamText){
-          card.classList.add('has-member-team');
-          card.setAttribute('data-jm-team-text',teamText);
-          card.style.setProperty('border','2px solid var(--member-team-color)','important');
-          card.style.setProperty('outline','2px solid var(--member-team-color)','important');
-          card.style.setProperty('outline-offset','-5px','important');
-        }
+        if(!teamText){var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,.jm-team-bottom-label');for(var j=0;j<nodes.length&&!teamText;j++)teamText=normalizeTeamText(nodes[j].textContent||nodes[j].getAttribute('data-team-label'));}
+        if(teamText){card.classList.add('has-member-team');card.setAttribute('data-jm-team-text',teamText);card.style.setProperty('border','2px solid var(--member-team-color)','important');card.style.setProperty('outline','2px solid var(--member-team-color)','important');card.style.setProperty('outline-offset','-5px','important');}
       }
     }
     function cardMemberId(card){
