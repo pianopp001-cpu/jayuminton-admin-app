@@ -130,8 +130,6 @@ jobs:
           if n != 1: raise SystemExit('APK_WEB_BUILD replacement failed')
           s = re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+',
                      'JayumintonNative/203.0 CloudflareAdmin/2030', s, count=1)
-          # Never display a bundled file:// URL (or another raw URL) in a native
-          # loading/saving status message. URLs remain internal to WebView.
           old = 'adminLoadMessage.setText(message);'
           new = '''String safeMessage = message == null ? "처리 중입니다." : message;
             if (safeMessage.contains("file:/") || safeMessage.contains("://")) {
@@ -145,8 +143,6 @@ jobs:
             @Override
             public void onPageCommitVisible(WebView view, String url) {
                 super.onPageCommitVisible(view, url);
-                // The administrator page is a bundled local asset. Once its first
-                // frame is committed, never let a delayed JS callback cover it.
                 view.postDelayed(() -> adminLoadPanel.setVisibility(View.GONE), 350);
             }
 
@@ -234,3 +230,5 @@ jobs:
           git add deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
           git commit -m 'Record admin v203.0 build failure' || true
           git push origin HEAD:main
+
+# BUILD_TRIGGER: v2044-pretty-popup-visible-green-yellow-no-self-loop-final
