@@ -19,26 +19,27 @@ jobs:
         with: {ref: main}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Apply final 2+2 team patch
+      - name: Apply latest team patch
         run: python3 deployment/jayuminton/patch_shared_temp_pairs_v4.py
       - name: Run regression tests
         run: |
           node cloudflare/state-worker/worker.test.mjs
           node cloudflare/state-worker/temp-pairs.test.mjs
           node deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs
-      - name: Verify final team contract
+      - name: Verify latest team contract
         run: |
-          grep -q "applyTempPairOrdering" cloudflare/state-worker/worker.js
           grep -q "TEAM_TEXT_HARD_HIDE_V2041" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "pairB=ids.filter" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          grep -q "확인 = 1회성 팀설정" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           python3 - <<'PY'
           from pathlib import Path
           w=Path('cloudflare/state-worker/worker.js').read_text()
           b=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js').read_text()
-          assert "[group.pairA[0], group.pairB[0], group.pairA[1], group.pairB[1]]" in w
-          assert "[group.pairA[0], group.pairA[1], group.pairB[0], group.pairB[1]]" in w
-          assert 'pairB=ids.filter' in b
-          print('FINAL_TEAM_CONTRACT_OK fixed=double-line temp=two-pairs wait=left-right court=top-bottom labels=none')
+          assert 'applyTempPairOrdering' not in w
+          assert 'pairB=ids.filter' not in b
+          assert 'items.length===4' not in b
+          assert 'characterData:true' not in b
+          assert 'pairB: []' in w
+          print('LATEST_TEAM_CONTRACT_OK fixed=double-line temp=clicked-two remaining=plain reorder=false stable=true')
           PY
       - name: Commit generated sources
         run: |
@@ -46,6 +47,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          git commit -m 'fix(team): finalize shared 2+2 team behavior'
+          git commit -m 'fix(team): apply latest two-person temporary-team behavior'
           git pull --rebase origin main
           git push origin main
