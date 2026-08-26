@@ -2,6 +2,10 @@ name: Build current admin APK clean
 
 on:
   workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/current_admin_build.trigger'
   push:
     branches: [main]
     paths:
@@ -66,19 +70,6 @@ jobs:
           set -euo pipefail
           HTML=app/src/main/assets/admin/index.html
           python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$HTML"
-          python3 - <<'PY'
-          from pathlib import Path
-          html_path=Path('app/src/main/assets/admin/index.html')
-          js_path=Path('deployment/jayuminton/admin_card_interaction_v2042.js')
-          html=html_path.read_text(encoding='utf-8')
-          js=js_path.read_text(encoding='utf-8')
-          marker='id="jayuminton-admin-multi-action-v2047"'
-          html=html.replace('<script '+marker+'>'+js+'</script>','')
-          block='<script '+marker+'>'+js+'</script>'
-          if '</body>' not in html: raise SystemExit('body closing tag missing')
-          html=html.replace('</body>',block+'\n</body>',1)
-          html_path.write_text(html,encoding='utf-8')
-          PY
           python3 deployment/jayuminton/admin_native_audio_v2021_patch.py
           python3 deployment/jayuminton/admin_native_vibration_v2023_patch.py
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$HTML" >/dev/null
