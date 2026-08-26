@@ -1,12 +1,53 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, setTempPairsMutation, moveMutation, publicState } from './worker.js';
-function fixture(){const state=emptyState();state.members=Array.from({length:12},(_,i)=>({id:String(i+1),name:`회원${i+1}`,games:0,status:'active'}));state.courts['1']=['1','2','3','4'];state.waitGroups=[['5','6','7','8'],['9','10','11','12']];return normalizeState(state);}
-// 대기: 클릭한 두 명만 1회성 팀. 남은 두 명은 무표시이며 자리 순서는 바꾸지 않는다.
-{const r=setTempPairsMutation(fixture(),[{pairA:['5','7'],pairB:['6','8'],zone:'wait',createdAt:1}]);assert.deepEqual(r.state.waitGroups[0],['5','6','7','8']);assert.deepEqual(r.state.tempPairs[0].pairA,['5','7']);assert.deepEqual(r.state.tempPairs[0].pairB,[]);assert.deepEqual(publicState(r.state,'5').tempPairs,r.state.tempPairs);}
-// 코트도 클릭한 두 명만 임시 팀이며 2+2 자동분리/자리 재정렬을 하지 않는다.
-{const r=setTempPairsMutation(fixture(),[{pairA:['1','3'],pairB:['2','4'],zone:'court',createdAt:1}]);assert.deepEqual(r.state.courts['1'],['1','2','3','4']);assert.deepEqual(r.state.tempPairs[0].pairA,['1','3']);assert.deepEqual(r.state.tempPairs[0].pairB,[]);}
-// 대기↔코트 등 위치 변경 시 1회성 테두리는 자동 제거.
-{const paired=setTempPairsMutation(fixture(),[{pairA:['5','7'],pairB:[],zone:'wait',createdAt:1}]).state;const moved=moveMutation(paired,['5'],{type:'court',key:'2'}).state;assert.deepEqual(moved.tempPairs,[]);}
-// 고정 팀의 teamLabel/bundleId(2중 테두리)는 1회성 팀과 독립적으로 유지.
-{const s=fixture();for(const id of ['5','7']){const m=s.members.find(x=>x.id===id);m.teamLabel='팀 1';m.bundleId='fixed-team-1';}const r=setTempPairsMutation(s,[{pairA:['5','6'],pairB:[],zone:'wait',createdAt:1}]);assert.equal(r.state.members.find(m=>m.id==='5').teamLabel,'팀 1');assert.equal(r.state.members.find(m=>m.id==='5').bundleId,'fixed-team-1');assert.deepEqual(r.state.tempPairs[0].pairA,['5','6']);}
-console.log('STATE_WORKER_TEMP_PAIRS_TESTS_OK clicked-two-only=true remaining-plain=true reorder=false');
+import { emptyState, normalizeState, setTempPairsMutation, moveMutation, finishCourtMutation, publicState } from './worker.js';
+
+function fixture(){
+  const state=emptyState();
+  state.members=Array.from({length:12},(_,i)=>({id:String(i+1),name:`회원${i+1}`,games:0,status:'active'}));
+  state.courts['1']=['1','2','3','4'];
+  state.waitGroups=[['5','6','7','8'],['9','10','11','12'],[],[],[]];
+  return normalizeState(state);
+}
+
+// 같은 대기에서 3명을 고르면 세 명 전체가 하나의 임시 노란 팀으로 저장되어야 한다.
+{
+  const r=setTempPairsMutation(fixture(),[{members:['5','6','7'],zone:'wait',createdAt:1}]);
+  assert.equal(r.state.tempPairs.length,1);
+  assert.deepEqual(r.state.tempPairs[0].members,['5','6','7']);
+  assert.deepEqual(r.state.waitGroups[0],['5','6','7','8']);
+  assert.deepEqual(publicState(r.state,'5').tempPairs,r.state.tempPairs);
+}
+
+// 같은 코트에서 4명까지 하나의 임시 팀으로 저장한다. 자리 재정렬은 하지 않는다.
+{
+  const r=setTempPairsMutation(fixture(),[{members:['1','2','3','4'],zone:'court',createdAt:1}]);
+  assert.equal(r.state.tempPairs.length,1);
+  assert.deepEqual(r.state.tempPairs[0].members,['1','2','3','4']);
+  assert.deepEqual(r.state.courts['1'],['1','2','3','4']);
+}
+
+// 2명도 같은 그룹 형식으로 유지한다.
+{
+  const r=setTempPairsMutation(fixture(),[{members:['5','7'],zone:'wait',createdAt:1}]);
+  assert.deepEqual(r.state.tempPairs[0].members,['5','7']);
+}
+
+// 임시 팀 중 한 명이라도 다른 위치로 이동하면 노란 임시 테두리는 자동 해제되어야 한다.
+{
+  const paired=setTempPairsMutation(fixture(),[{members:['5','6','7'],zone:'wait',createdAt:1}]).state;
+  const moved=moveMutation(paired,['5'],{type:'court',key:'2'}).state;
+  assert.deepEqual(moved.tempPairs,[]);
+}
+
+// 경기 종료로 위치가 바뀌어도 임시 노란 팀은 사라지고, 영구 팀 정보는 남아야 한다.
+{
+  const s=fixture();
+  for(const id of ['1','2','3']){const m=s.members.find(x=>x.id===id);m.teamLabel='팀 1';m.bundleId='fixed-team-1';}
+  const paired=setTempPairsMutation(s,[{members:['1','2','3'],zone:'court',createdAt:1}]).state;
+  const finished=finishCourtMutation(paired,1).state;
+  assert.deepEqual(finished.tempPairs,[]);
+  assert.equal(finished.members.find(m=>m.id==='1').teamLabel,'팀 1');
+  assert.equal(finished.members.find(m=>m.id==='1').bundleId,'fixed-team-1');
+}
+
+console.log('STATE_WORKER_TEMP_GROUPS_TESTS_OK members=2..4 yellow=true movement-clears=true persistent-team-kept=true');
