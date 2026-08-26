@@ -46,3 +46,4 @@ jobs:
           grep -F "directServer('createAdminSession',[pin])" /tmp/admin.html
           grep -F 'https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc' /tmp/admin.html
           echo ADMIN_PUBLISHED_APK_DIRECT_CLOUDFLARE_LOGIN_OK
+      # recheck nonce: enforced-login-build-23
