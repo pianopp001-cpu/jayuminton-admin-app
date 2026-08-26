@@ -1,4 +1,4 @@
-name: Build admin v203.0 complete pair recording and unobstructed team cards
+name: Build current Cloudflare admin APK
 
 on:
   workflow_dispatch: {}
@@ -10,9 +10,15 @@ on:
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
       - 'deployment/jayuminton/admin_native_audio_v2021_patch.py'
       - 'deployment/jayuminton/admin_native_vibration_v2023_patch.py'
+      - 'deployment/jayuminton/admin_card_interaction_v2042.js'
+      - 'deployment/jayuminton/admin_team_layout_v2038.js'
 
 permissions:
   contents: write
+
+concurrency:
+  group: jayuminton-current-admin-apk
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -23,6 +29,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -34,7 +41,7 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Restore exact v200.5 Android shell with latest v200.8 UI
+      - name: Restore proven Android shell
         shell: bash
         run: |
           set -euo pipefail
@@ -45,130 +52,50 @@ jobs:
           unzip -p releases/jayuminton-admin-v200.8-webview-js-fixed.apk assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
 
-      - name: Replace only legacy RPC bridge with direct Cloudflare
+      - name: Inject current Cloudflare admin UI
         shell: bash
         run: |
           set -euo pipefail
           HTML=app/src/main/assets/admin/index.html
           python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$HTML"
           grep -F 'https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc' "$HTML" >/dev/null
-          grep -F '__JAYUMINTON_ADMIN_PIN_INPUT_READY__' "$HTML" >/dev/null
-          grep -F "b.removeAttribute('onclick')" "$HTML" >/dev/null
-          grep -F "b.addEventListener('click',submit)" "$HTML" >/dev/null
-          grep -F '멤버등록·비밀번호·게임횟수·제외인원 관리' "$HTML" >/dev/null
-          grep -F "applyMdSelectedStatus('away')" "$HTML" >/dev/null
-          grep -F 'id="announcementMuteButton"' "$HTML" >/dev/null
-          grep -F 'id="voiceSaveEmergency"' "$HTML" >/dev/null
-          grep -F "stopVoiceAnnouncement();" "$HTML" >/dev/null
-          grep -F '.admin-save-notice{z-index:2147483600!important;background:' "$HTML" >/dev/null
-          grep -F 'backdrop-filter:none!important' "$HTML" >/dev/null
-          grep -F "if(locked)app.setAttribute('inert','')" "$HTML" >/dev/null
-          grep -F "result.reason='muted';result.engine='muted'" "$HTML" >/dev/null
-          grep -F 'id="newIsDuplicate"' "$HTML" >/dev/null
-          grep -F 'window.setMdSelectedTeam=function()' "$HTML" >/dev/null
-          grep -F '>코트배정대기</button>' "$HTML" >/dev/null
-          grep -F '>같은 팀 설정</button>' "$HTML" >/dev/null
-          grep -F '>팀 해제</button>' "$HTML" >/dev/null
-          grep -F 'window.clearMdSelectedTeam=function()' "$HTML" >/dev/null
-          grep -F 'id="quickMemberMessageButton"' "$HTML" >/dev/null
-          grep -F 'window.sendQuickMemberMessage=async function()' "$HTML" >/dev/null
-          grep -F 'id="jayuminton-pair-statistics-disclosure-v2028"' "$HTML" >/dev/null
-          grep -F "details.className='pair-statistics-disclosure'" "$HTML" >/dev/null
-          grep -F "if(root.matches&&root.matches(selector))rows.push(root);" "$HTML" >/dev/null
-          grep -F '#adminApp .has-member-team{position:relative!important' "$HTML" >/dev/null
-          grep -F '#adminApp .member-team-badge{display:none!important}' "$HTML" >/dev/null
-          grep -F 'function resumeSavedSession()' "$HTML" >/dev/null
-          grep -F 'resumeSavedSession();' "$HTML" >/dev/null
-          grep -F 'grid-template-columns:repeat(3,minmax(0,1fr))!important' "$HTML" >/dev/null
-          grep -F '.md-bulk-member-actions button{width:100%!important;min-width:0!important' "$HTML" >/dev/null
-          grep -F '.md-team-member-actions{display:grid!important' "$HTML" >/dev/null
-          ! grep -F 'id="newTeam"' "$HTML" >/dev/null
-          grep -F 'function usesAdminFullName(member)' "$HTML" >/dev/null
-          grep -F "event.target.closest('#voiceSaveEmergency')" "$HTML" >/dev/null
-          ! grep -F '아이콘 · 신규' "$HTML" >/dev/null
-          ! grep -F '아이콘 · 찬조' "$HTML" >/dev/null
-          grep -F 'filter:none!important;backdrop-filter:none!important' "$HTML" >/dev/null
-          test "$(grep -o 'id=\"newIsNew\"' "$HTML" | wc -l)" -eq 1
-          ! grep -F 'id="mdIsNew"' "$HTML" >/dev/null
-          grep -F '경기통계' "$HTML" >/dev/null
-          grep -F '빠른 코트배정' "$HTML" >/dev/null
-          grep -F '코트배정 제외' "$HTML" >/dev/null
-          grep -F 'autoFillWaitGroup' "$HTML" >/dev/null
-          grep -F 'assignWaitGroupToCourt' "$HTML" >/dev/null
-          grep -F '게임횟수 카운트 조정' "$HTML" >/dev/null
-          grep -F 'if (el.textContent !== nextText) el.textContent = nextText;' "$HTML" >/dev/null
           ! grep -F 'script.google.com' "$HTML" >/dev/null
-          ! grep -F 'jayuminton-admin-rpc.pianopp001.workers.dev' "$HTML" >/dev/null
-          python3 - <<'PY'
-          from pathlib import Path
-          import re, subprocess, tempfile
-          html = Path('app/src/main/assets/admin/index.html').read_text(encoding='utf-8')
-          blocks = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, flags=re.S|re.I)
-          for i, js in enumerate(blocks):
-              if not js.strip():
-                  continue
-              p = Path(tempfile.gettempdir()) / f'v2015-inline-{i}.js'
-              p.write_text(js, encoding='utf-8')
-              subprocess.run(['node', '--check', str(p)], check=True)
-          print('INLINE_JS_SYNTAX_OK', len(blocks))
-          PY
 
-      - name: Set v203.0 identity and sanitize native status text
+      - name: Patch current native shell and current multi-select UI
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import re
-          java = Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
-          s = java.read_text(encoding='utf-8')
-          s, n = re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";',
-                         'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=203.0";', s, count=1)
-          if n != 1: raise SystemExit('ADMIN_URL replacement failed')
-          s, n = re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";',
-                         'private static final String APK_WEB_BUILD = "2030-complete-pair-recording-clear-team-cards";', s, count=1)
-          if n != 1: raise SystemExit('APK_WEB_BUILD replacement failed')
-          s = re.sub(r'JayumintonNative/[0-9.]+ CloudflareAdmin/[0-9]+',
-                     'JayumintonNative/203.0 CloudflareAdmin/2030', s, count=1)
-          old = 'adminLoadMessage.setText(message);'
-          new = '''String safeMessage = message == null ? "처리 중입니다." : message;
-            if (safeMessage.contains("file:/") || safeMessage.contains("://")) {
-                safeMessage = "처리 중입니다.";
-            }
-            adminLoadMessage.setText(safeMessage);'''
-          if s.count(old) != 1: raise SystemExit('native status text anchor mismatch')
-          s = s.replace(old, new, 1)
-          page_finished = r'(\s+@Override\s+public void onPageFinished\(WebView view, String url\) \{)'
-          page_commit = '''
-            @Override
-            public void onPageCommitVisible(WebView view, String url) {
-                super.onPageCommitVisible(view, url);
-                view.postDelayed(() -> adminLoadPanel.setVisibility(View.GONE), 350);
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {'''
-          s, n = re.subn(page_finished, page_commit, s, count=1)
-          if n != 1: raise SystemExit('onPageFinished insertion point missing')
-          java.write_text(s, encoding='utf-8')
-          gradle = Path('app/build.gradle')
-          g = gradle.read_text(encoding='utf-8')
-          g = re.sub(r'versionCode\s+\d+', 'versionCode 2030', g, count=1)
-          g = re.sub(r"versionName\s+['\"][^'\"]+['\"]", "versionName '203.0'", g, count=1)
-          gradle.write_text(g, encoding='utf-8')
+          java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
+          s=java.read_text(encoding='utf-8')
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";',
+                      'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=203.0";',s,count=1)
+          if n!=1: raise SystemExit('ADMIN_URL replacement failed')
+          s,n=re.subn(r'private static final String APK_WEB_BUILD = "[^"]+";',
+                      'private static final String APK_WEB_BUILD = "2030-current-cloudflare-admin";',s,count=1)
+          if n!=1: raise SystemExit('APK_WEB_BUILD replacement failed')
+          java.write_text(s,encoding='utf-8')
+          gradle=Path('app/build.gradle')
+          g=gradle.read_text(encoding='utf-8')
+          g=re.sub(r'versionCode\s+\d+','versionCode 2030',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '203.0'",g,count=1)
+          gradle.write_text(g,encoding='utf-8')
           PY
           python3 deployment/jayuminton/admin_native_audio_v2021_patch.py
           python3 deployment/jayuminton/admin_native_vibration_v2023_patch.py
-          grep -F 'int levelSix = Math.max(1, Math.min(MEDIA_DUCK_VOLUME_STEP, maxMedia));' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
-          grep -F 'Math.min(originalMediaVolume, levelSix)' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
-          grep -F 'new MemberAlertBridge(), "NativeMemberAlert"' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
-          grep -F 'VibrationEffect.createWaveform(pattern, -1)' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
-          grep -F 'safeMessage.contains("file:/")' app/src/main/java/com/jayuminton/admin/MainActivity.java >/dev/null
-          ! grep -R -F 'onRenderProcessGone' app/src/main/java app/src/main/AndroidManifest.xml >/dev/null
-          ! grep -R -F 'LAYER_TYPE_SOFTWARE' app/src/main/java app/src/main/AndroidManifest.xml >/dev/null
-          ! grep -R -F 'android:hardwareAccelerated="false"' app/src/main/AndroidManifest.xml >/dev/null
+          HTML=app/src/main/assets/admin/index.html
+          grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__' "$HTML" >/dev/null
+          grep -F '같이 움직일 사람을 최대 4명까지' "$HTML" >/dev/null
+          grep -F '이동/교환' "$HTML" >/dev/null
+          grep -F '팀설정' "$HTML" >/dev/null
+          grep -F '#16a34a' "$HTML" >/dev/null
+          grep -F '#d4a017' "$HTML" >/dev/null
+          grep -F "await server('moveOrSwapMember'" "$HTML" >/dev/null
+          ! grep -F 'window.confirm(' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
 
-      - name: Restore icon and release signer
+      - name: Restore icon and signer
         shell: bash
         run: |
           set -euo pipefail
@@ -177,7 +104,7 @@ jobs:
           base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
           test -s signing/jayuminton-release.jks
 
-      - name: Build and verify signed APK
+      - name: Build and verify APK
         shell: bash
         run: |
           set -euo pipefail
@@ -186,11 +113,12 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
+          grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '같이 움직일 사람을 최대 4명까지' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          ! grep -F 'jayuminton-admin-rpc.pianopp001.workers.dev' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
-      - name: Publish v203.0 complete-pair-recording-clear-team-cards APK
+      - name: Publish current APK
         shell: bash
         run: |
           set -euo pipefail
@@ -199,36 +127,11 @@ jobs:
           SHA=$(sha256sum "$APK_TMP" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-            git clean -fd
-            mkdir -p releases deployment/status
-            cp "$APK_TMP" releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk
-            printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=complete-pair-recording-clear-team-cards\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-            git add releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-            git commit -m 'Publish admin v203.0 complete pair recording and clear team cards APK' || true
-            if git push origin HEAD:main; then
-              echo "V2015_PUBLISH_OK sha256=$SHA"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
-
-      - name: Report v203.0 build failure
-        if: failure()
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
-          mkdir -p deployment/status
-          printf 'status=failure\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=complete-pair-recording-clear-team-cards\n' "$GITHUB_RUN_ID" "" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-          git add deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-          git commit -m 'Record admin v203.0 build failure' || true
+          mkdir -p releases deployment/status
+          cp "$APK_TMP" releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk
+          printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-v2046\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
+          git add releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
+          git commit -m 'Publish current Cloudflare admin APK' || exit 0
           git push origin HEAD:main
-
-# BUILD_TRIGGER: v2046-multi-select-source-action-target-final
