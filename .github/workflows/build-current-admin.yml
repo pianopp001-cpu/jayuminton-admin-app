@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/build-current-admin.yml'
+      - 'deployment/jayuminton/current_admin_build.trigger'
       - 'deployment/jayuminton/admin_card_interaction_v2042.js'
       - 'deployment/jayuminton/admin_team_layout_v2038.js'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
@@ -114,5 +114,3 @@ jobs:
           git add releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
           git commit -m 'Publish clean current Cloudflare admin APK' || exit 0
           git push origin HEAD:main
-
-# trigger: clean-v2046-20260827-0034
