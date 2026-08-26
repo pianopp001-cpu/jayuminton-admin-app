@@ -34,7 +34,7 @@ if admin_html.exists():
             if marker not in final_html: raise SystemExit('bundled v203 post-contract missing: '+marker)
         if 'script.google.com/macros/s/' in final_html: raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
 
-        for marker in ('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2045__'):
+        for marker in ('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2045__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__'):
             while marker in final_html:
                 p=final_html.find(marker); a=final_html.rfind('<script',0,p); b=final_html.find('</script>',p)
                 if a<0 or b<0: raise SystemExit('stale bundled patch marker outside script tag: '+marker)
@@ -47,15 +47,31 @@ if admin_html.exists():
         admin_html.write_text(final_html,encoding='utf-8')
 
         final_html=admin_html.read_text(encoding='utf-8')
-        required=('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2045__','jayuminton-admin-card-interaction-v2045-style','jm-move-selected','jm-temp-pair-v2045','같은 팀으로 설정할까요?','#16a34a','#d4a017','releaseNativeSelection(first.id)','nativeCleanup=true','app.__jmV2045Observer.observe(app,{childList:true,subtree:true});')
+        required=(
+            '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
+            '__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__',
+            'jayuminton-admin-multi-action-v2046-style',
+            'jm-source-selected','jm-target-selected','jm-temp-team-v2046',
+            '이동/교환','팀설정','같이 움직일 사람을 최대 4명까지',
+            '#16a34a','#d4a017',
+            "phase='target'",'sourceIds.length<2',
+            "for(var i=0;i<ids.length-1;i++)existing.push",
+            "await server('moveOrSwapMember'",
+            "handleEmptySlotTap\\(['\\\"]([^'\\\"]+)",
+            "if(targets.length===sourceIds.length)executeMove();",
+            "old=document.getElementById('jayuminton-admin-team-safety-v2037');if(old)old.remove();",
+            'a.__jmV2046Observer.observe(a,{childList:true,subtree:true});'
+        )
         for marker in required:
-            if marker not in final_html: raise SystemExit('bundled admin v2045 guard missing: '+marker)
-        if 'visualCard(' in card_js: raise SystemExit('v2045 must not expand styling to parent card wrappers')
-        if "swapMembers',[null,[String(first.id)],[String(second.id)]]" in final_html: raise SystemExit('direct swap interception survived')
-        if final_html.count('__JAYUMINTON_ADMIN_CARD_INTERACTION_V2045__') != 2: raise SystemExit('v2045 card interaction duplication detected')
-        print('BUNDLED_ADMIN_CARD_INTERACTION_V2045_EXCLUSIVE_YELLOW_OK')
-        print('BUNDLED_ADMIN_NATIVE_MOVE_SWAP_PRESERVED_OK')
-        print('BUNDLED_ADMIN_CARD_LAYOUT_NOT_EXPANDED_OK')
+            if marker not in final_html: raise SystemExit('bundled admin v2046 guard missing: '+marker)
+        if 'visualCard(' in card_js: raise SystemExit('v2046 must not expand styling to parent card wrappers')
+        if 'releaseNativeSelection' in card_js: raise SystemExit('v2046 must not leave native blue-selection cleanup hack')
+        if 'window.confirm(' in card_js: raise SystemExit('v2046 must use in-app action panel, not browser confirm')
+        if final_html.count('__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__') != 2: raise SystemExit('v2046 card interaction duplication detected')
+        print('BUNDLED_ADMIN_MULTI_ACTION_V2046_OK')
+        print('BUNDLED_ADMIN_MULTI_MOVE_SWAP_USES_EXISTING_ENGINE_OK')
+        print('BUNDLED_ADMIN_2_TO_4_YELLOW_TEAM_CHAIN_OK')
+        print('BUNDLED_ADMIN_NEW_LAYOUT_PARENT_STYLE_REMOVED_AT_RUNTIME_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: exclusive-yellow-clear-native-selection-new-layout-v2045-20260826-2342
+# BUILD_TRIGGER: v2046-multi-source-action-target-yellow-team-20260826-2353
