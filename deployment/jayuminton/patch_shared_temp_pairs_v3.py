@@ -34,21 +34,12 @@ visible_admin = "#adminApp .jm-team-bottom-label{display:block!important;visibil
 hidden_admin = "#adminApp .jm-team-bottom-label{display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important}"
 b = b.replace(visible_admin, hidden_admin)
 
-# Remove any creator left by an older patch. This also prevents flicker from periodic rerenders.
+# Remove any creator left by an older patch. This prevents label flicker.
 creator = "          var bottom=card.querySelector('.jm-team-bottom-label');\n          if(!bottom){bottom=document.createElement('small');bottom.className='jm-team-bottom-label';card.appendChild(bottom);}\n          bottom.textContent=teamText;\n          if(bottom.parentElement!==card||card.lastElementChild!==bottom)card.appendChild(bottom);"
 remove_creator = "          Array.prototype.forEach.call(card.querySelectorAll('.jm-team-bottom-label'),function(bottom){bottom.remove();});"
 b = b.replace(creator, remove_creator)
 
-# Pair overlay: only the two explicitly selected players get a single solid overlay.
-# Do not reorder seats when a pair is created; multi-select move/swap remains separate.
-old_side = "var side=[group.pairA,TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length]];"
-if old_side not in b:
-    # v2 may still contain pairA+pairB renderer; collapse it to pairA only.
-    old_both = "[[group.pairA,TEMP_PAIR_COLORS[(index*2)%TEMP_PAIR_COLORS.length]],[group.pairB,TEMP_PAIR_COLORS[(index*2+1)%TEMP_PAIR_COLORS.length]]].forEach(function(side){"
-    if old_both in b:
-        b = b.replace(old_both, "[ [group.pairA,TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length]] ].forEach(function(side){", 1)
-
-# Ensure the same-group ambiguity is explicit: confirm creates one-game pair, cancel leaves normal move/swap flow.
+# Pair overlay is pairA only. No seat reordering is performed by temporary pairing.
 if "확인 = 1회성 팀설정" not in b or "취소 = 이동·교환" not in b:
     raise SystemExit('same-group choice prompt missing')
 if 'bottom.textContent=teamText' in b:
