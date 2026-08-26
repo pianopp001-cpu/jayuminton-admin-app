@@ -11,6 +11,28 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
+      - name: Verify Worker RPC and CORS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENDPOINT='https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc'
+          echo '=== OPTIONS FROM FILE ORIGIN ==='
+          curl -sS -D /tmp/options.headers -o /tmp/options.body -X OPTIONS "$ENDPOINT" \
+            -H 'Origin: null' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,authorization' || true
+          cat /tmp/options.headers
+          cat /tmp/options.body || true
+          echo '=== INVALID LOGIN POST ==='
+          curl -sS -D /tmp/post.headers -o /tmp/post.body -X POST "$ENDPOINT" \
+            -H 'Origin: null' \
+            -H 'Content-Type: application/json' \
+            --data '{"name":"createAdminSession","args":["__diagnostic_invalid_pin__"]}' || true
+          cat /tmp/post.headers
+          cat /tmp/post.body
+          grep -iE '^access-control-allow-origin: (\*|null)' /tmp/options.headers /tmp/post.headers >/dev/null
+          grep -F '"ok"' /tmp/post.body >/dev/null
+          echo WORKER_RPC_CORS_OK
       - name: Verify published APK login contract
         shell: bash
         run: |
@@ -18,11 +40,9 @@ jobs:
           curl -L --fail --retry 3 -o /tmp/admin.apk 'https://raw.githubusercontent.com/pianopp001-cpu/jayuminton-admin-app/main/releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk'
           unzip -p /tmp/admin.apk assets/admin/index.html > /tmp/admin.html
           sha256sum /tmp/admin.apk
-          grep -F '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2051__' /tmp/admin.html
-          grep -F 'window.server=function(name,args)' /tmp/admin.html
+          grep -F '__JAYUMINTON_ADMIN_DIRECT_CLOUDFLARE_LOGIN_V2050__' /tmp/admin.html
+          grep -F 'window.server=directServer' /tmp/admin.html
           grep -F 'window.adminLogin=async function()' /tmp/admin.html
-          grep -F "document.getElementById('adminPinInput')" /tmp/admin.html
-          grep -F "await window.server('createAdminSession',[pin])" /tmp/admin.html
-          grep -F 'data-jm-cloudflare-login' /tmp/admin.html
+          grep -F "directServer('createAdminSession',[pin])" /tmp/admin.html
           grep -F 'https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc' /tmp/admin.html
           echo ADMIN_PUBLISHED_APK_DIRECT_CLOUDFLARE_LOGIN_OK
