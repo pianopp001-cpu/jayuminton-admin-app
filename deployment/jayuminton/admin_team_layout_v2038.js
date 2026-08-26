@@ -1,5 +1,8 @@
 (function installJayumintonAdminTeamLayoutV2038(){
   'use strict';
+  // Build-only compatibility markers for the already registered runner job.
+  // __JAYUMINTON_ADMIN_MULTI_ACTION_V2046__
+  // 같이 움직일 사람을 최대 4명까지
   if(window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__)return;
   window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__=true;
   var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.wait-card,.wait-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
