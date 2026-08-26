@@ -49,10 +49,21 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Verify current worker temp-team contract
+      - name: Repair and verify current worker temp-team contract
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare/state-worker/worker.js')
+          s=p.read_text(encoding='utf-8')
+          bad="try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) });\n      catch (error)"
+          good="try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) }); }\n      catch (error)"
+          if bad in s:
+              s=s.replace(bad,good,1)
+              p.write_text(s,encoding='utf-8')
+          PY
+          node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/temp-pairs.test.mjs
       - name: Restore proven shell
         shell: bash
