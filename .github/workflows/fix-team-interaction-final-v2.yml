@@ -1,0 +1,26 @@
+name: Final team patch v2
+on:
+  push:
+    paths:
+      - 'deployment/jayuminton/fix_team_interaction_final_v2.trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Apply patch
+        run: python deployment/jayuminton/fix_team_interaction_final.py
+      - name: Verify and commit
+        run: |
+          grep -q "확인 = 1회성 팀설정" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          ! grep -q "bottom.textContent=teamText" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          git config user.name github-actions-bot
+          git config user.email actions@github.com
+          git add deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(team): final persistent border and temporary pair behavior'
+          git push origin HEAD:main
