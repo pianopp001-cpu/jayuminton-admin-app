@@ -76,14 +76,13 @@ if admin_html.exists():
         admin_html.write_text(final_html, encoding='utf-8')
 
         final_html = admin_html.read_text(encoding='utf-8')
+        # Pair ordering is server-authoritative in worker.js. The bundled layer only
+        # guarantees permanent two-line team borders and temporary one-line overlay.
         for marker in (
             '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
-            'compactSameTeams',
             'jayuminton-admin-team-layout-v2038',
             '.jm-team-bottom-label',
             'has-member-team.jm-temp-pair',
-            "if(type==='wait')return [a[0],b[0],a[1],b[1]]",
-            "return [a[0],a[1],b[0],b[1]]",
         ):
             if marker not in final_html:
                 raise SystemExit('bundled team layout guard missing: ' + marker)
@@ -93,4 +92,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: final-shared-team-state-apk-20260826-1412
+# BUILD_TRIGGER: server-authoritative-repair-20260826-1458
