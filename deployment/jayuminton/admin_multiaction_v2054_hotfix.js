@@ -4,6 +4,7 @@
   window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__=true;
 
   var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.wait-card,.wait-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
+  var lastAuthoritativeState=null;
   function app(){return document.getElementById('adminApp');}
   function idOf(c){
     if(!c)return '';
@@ -43,12 +44,21 @@
     var p=document.getElementById('jm-admin-multi-action');if(p)p.remove();
     var a=app();if(a)Array.prototype.forEach.call(a.querySelectorAll('.jm-source-selected,.jm-target-selected'),function(e){e.classList.remove('jm-source-selected');e.classList.remove('jm-target-selected');});
   }
+  function authoritativeState(candidate){
+    if(candidate&&candidate.state&&Array.isArray(candidate.state.members))candidate=candidate.state;
+    if(candidate&&Array.isArray(candidate.members))lastAuthoritativeState=candidate;
+    if(lastAuthoritativeState)return lastAuthoritativeState;
+    try{if(typeof window.STATE!=='undefined'&&window.STATE)return window.STATE;}catch(_){}
+    return null;
+  }
   async function sendToCourtWaiting(){
     var ids=selectedIds();
     if(ids.length!==2){toast('2명을 선택한 상태에서 사용하세요.',true);return;}
     try{
-      await rpc('setMemberStatus',[null,ids,'active']);
+      var saved=await rpc('setMemberStatus',[null,ids,'active']);
+      authoritativeState(saved);
       resetUi();
+      paintTeamsFromState(saved);
       if(typeof window.renderState==='function')window.renderState();
       toast('2명을 코트배정 대기로 보냈습니다.',false);
     }catch(e){toast(String(e&&e.message||e||'코트배정 대기 이동 실패'),true);}
@@ -69,12 +79,13 @@
     var out=[];[p&&p.members,p&&p.pairA,p&&p.pairB].forEach(function(v){(Array.isArray(v)?v:[]).forEach(function(x){x=String(x||'');if(x&&out.indexOf(x)<0)out.push(x);});});
     return out.slice(0,4);
   }
-  function paintTeamsFromLocalState(){
+  function paintTeamsFromState(candidate){
     var a=app();if(!a)return;
+    var st=authoritativeState(candidate);
     Array.prototype.forEach.call(a.querySelectorAll('.jm-temp-team-v2047,.jm-temp-pair'),function(e){e.classList.remove('jm-temp-team-v2047');e.classList.remove('jm-temp-pair');});
-    var st=null;try{st=typeof window.STATE!=='undefined'?window.STATE:null;}catch(_){st=null;}
     var ids=[];(Array.isArray(st&&st.tempPairs)?st.tempPairs:[]).forEach(function(p){tempIds(p).forEach(function(id){if(ids.indexOf(id)<0)ids.push(id);});});
     ids.forEach(function(id){Array.prototype.forEach.call(a.querySelectorAll(CARD_SELECTOR),function(el){var c=el.closest&&el.closest(CARD_SELECTOR)||el;if(idOf(c)===String(id))c.classList.add('jm-temp-team-v2047');});});
+    // Permanent team styling (.has-member-team) is intentionally untouched so its double border always follows the member.
   }
   function installFastObserver(){
     var a=app();if(!a){setTimeout(installFastObserver,80);return;}
@@ -83,10 +94,10 @@
     var queued=false;
     var obs=new MutationObserver(function(){
       if(queued)return;queued=true;
-      requestAnimationFrame(function(){queued=false;injectButton();paintTeamsFromLocalState();});
+      requestAnimationFrame(function(){queued=false;injectButton();paintTeamsFromState();});
     });
     obs.observe(a,{childList:true,subtree:true});a.__jmV2054FastObserver=obs;
-    injectButton();paintTeamsFromLocalState();
+    injectButton();paintTeamsFromState();
   }
   installPassThroughStyle();
   window.addEventListener('click',function(event){
@@ -98,14 +109,21 @@
     if(c&&c.closest('#adminApp')){
       var id=idOf(c);
       if(id&&ids.indexOf(id)<0){
-        // Third source selection must be allowed through to v2053 immediately.
-        // The base handler will add it and its own renderPanel() removes the popup at count 3.
         p.style.display='none';
         setTimeout(function(){var now=selectedIds();var q=document.getElementById('jm-admin-multi-action');if(q&&now.length!==2)q.remove();else if(q)q.style.display='';},0);
       }
     }
   },true);
   document.addEventListener('click',function(){setTimeout(injectButton,0);},true);
-  window.addEventListener('jayuminton:state',function(){setTimeout(function(){paintTeamsFromLocalState();injectButton();},0);});
+  window.addEventListener('jayuminton:state',function(event){
+    var detail=event&&event.detail;
+    authoritativeState(detail);
+    setTimeout(function(){paintTeamsFromState(detail);injectButton();},0);
+  });
+  window.addEventListener('jayuminton:court-finished',function(event){
+    var detail=event&&event.detail;
+    authoritativeState(detail);
+    setTimeout(function(){paintTeamsFromState(detail);},0);
+  });
   installFastObserver();
 })();
