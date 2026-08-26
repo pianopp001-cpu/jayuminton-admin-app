@@ -1,11 +1,9 @@
 from pathlib import Path
 import runpy
 
-# Final shared temp-pair pass: keep the existing v2 contract and only harden idempotent rendering.
 # Apply the complete server-authoritative temp-pair patch first.
 runpy.run_path('deployment/jayuminton/patch_shared_temp_pairs_v2.py', run_name='__main__')
 
-# Keep mutation-side reconciliation deterministic/idempotent.
 wp = Path('cloudflare/state-worker/worker.js')
 w = wp.read_text()
 targets = [
@@ -25,36 +23,27 @@ while "  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n" in w:
     w = w.replace("  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n", "  reconcileTempPairs(state);\n", 1)
 wp.write_text(w)
 
-# Frontend: preserve temporary-pair outline above permanent-team styling on both admin/member views.
 bp = Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js')
 b = bp.read_text()
-old_shadow = "card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'"
-new_shadow = "if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'"
-if new_shadow not in b and old_shadow in b:
-    b = b.replace(old_shadow, new_shadow, 1)
-
-# Clean accidental duplicated guard from earlier patch retries.
-dup_guard = "if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');"
-clean_guard = "if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');"
-while dup_guard in b:
-    b = b.replace(dup_guard, clean_guard, 1)
-
-outline = "#adminApp .member.jm-team-card.has-member-team.jm-temp-pair,#adminApp .member.jm-team-card.jm-temp-pair,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}"
-if outline not in b:
-    marker = ".jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}.jm-team-bottom-label{display:none!important}"
-    if marker in b:
-        b = b.replace(marker, marker + outline, 1)
-while outline + outline in b:
-    b = b.replace(outline + outline, outline, 1)
-
-# Team text must stay hidden; only borders/outlines indicate permanent teams.
-b = b.replace("#adminApp .jm-team-bottom-label{display:block!important;visibility:visible!important;", "#adminApp .jm-team-bottom-label{display:none!important;visibility:hidden!important;")
-while 'bottom.textContent=teamText' in b:
-    start = b.find("          var bottom=card.querySelector('.jm-team-bottom-label');")
-    end = b.find("\n", b.find("card.appendChild(bottom);", start))
-    if start < 0 or end < 0:
-        break
-    b = b[:start] + "          Array.prototype.forEach.call(card.querySelectorAll('.jm-team-bottom-label'),function(bottom){bottom.remove();});" + b[end:]
-
+# Never render permanent team text. Permanent team = two-line border only.
+b = b.replace(".jm-team-bottom-label{display:block!important;visibility:visible!important;position:static!important;width:100%!important;margin:3px 0 0!important;padding:0!important;text-align:left!important;font-size:9px!important;font-weight:900!important;line-height:1.1!important;white-space:nowrap!important;pointer-events:none!important}", ".jm-team-bottom-label{display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important}")
+b = b.replace("#adminApp .jm-team-bottom-label{display:block!important;visibility:visible!important;width:100%!important;height:auto!important;min-width:0!important;max-width:none!important;margin:3px 0 0!important;padding:0!important;border:0!important;overflow:visible!important;position:static!important;float:none!important;clear:both!important;text-align:left!important;font-size:9px!important;font-weight:900!important;line-height:1.15!important;white-space:nowrap!important;color:var(--member-team-color)!important;pointer-events:none!important}", "#adminApp .jm-team-bottom-label{display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important}")
+# Remove the legacy creator itself, not just its CSS.
+old_creator = "          var bottom=card.querySelector('.jm-team-bottom-label');\n          if(!bottom){bottom=document.createElement('small');bottom.className='jm-team-bottom-label';card.appendChild(bottom);}\n          bottom.textContent=teamText;\n          if(bottom.parentElement!==card||card.lastElementChild!==bottom)card.appendChild(bottom);"
+new_creator = "          Array.prototype.forEach.call(card.querySelectorAll('.jm-team-bottom-label'),function(bottom){bottom.remove();});"
+if old_creator in b:
+    b = b.replace(old_creator, new_creator, 1)
+# Temporary pair is an overlay; never erase permanent border/outline.
+b = b.replace("if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');", "if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');")
+# Re-pairing is intentionally replaceable: selecting any two people in the same 4-person
+# wait/court group removes the previous temporary grouping involving those four and saves the new pair.
+if "old=loadTempPairs().filter(function(saved){var all=saved.pairA.concat(saved.pairB);return !ids.some(function(id){return all.indexOf(id)>=0;});});" not in b:
+    raise SystemExit('replaceable temporary-pair contract missing')
+# Only clicked pairA gets the temporary solid overlay; pairB stays visually unpainted.
+if "var side=[group.pairA,TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length]];" not in b:
+    raise SystemExit('pairA-only overlay contract missing')
+# Remove any surviving visible bottom-label assignment.
+if 'bottom.textContent=teamText' in b:
+    raise SystemExit('visible team label creator survived')
 bp.write_text(b)
-print('SHARED_TEMP_PAIRS_V3_OK')
+print('SHARED_TEMP_PAIRS_V3_OK replaceable=true labels=false pairAOnly=true')
