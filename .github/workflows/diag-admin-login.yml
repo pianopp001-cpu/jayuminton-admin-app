@@ -1,0 +1,54 @@
+name: Diagnose admin login DOM
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diag-admin-login.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Extract exact login DOM and handlers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/jm deployment/status
+          unzip -p releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk assets/admin/index.html > /tmp/jm/admin.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('/tmp/jm/admin.html').read_text(encoding='utf-8',errors='replace')
+          pats=[r'로그인',r'login',r'PIN',r'pin',r'password',r'createAdminSession',r'adminLogin',r'adminPin']
+          spans=[]
+          for pat in pats:
+              for m in re.finditer(pat,s,re.I):
+                  a=max(0,m.start()-700); b=min(len(s),m.end()+1100)
+                  spans.append((a,b,pat))
+          spans.sort()
+          merged=[]
+          for a,b,p in spans:
+              if merged and a<=merged[-1][1]+100:
+                  merged[-1]=(merged[-1][0],max(merged[-1][1],b),merged[-1][2]+'|'+p)
+              else: merged.append((a,b,p))
+          out=[]
+          for i,(a,b,p) in enumerate(merged[:30],1):
+              chunk=s[a:b].replace('\r','')
+              out.append(f'===== MATCH {i} [{p}] {a}:{b} =====\n{chunk}\n')
+          Path('deployment/status/admin-login-dom-diag.txt').write_text('\n'.join(out),encoding='utf-8')
+          print('LOGIN_DIAG_MATCHES',len(merged))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/status/admin-login-dom-diag.txt
+          git commit -m 'diag(admin): publish exact login DOM snippets' || exit 0
+          git push origin HEAD:main
