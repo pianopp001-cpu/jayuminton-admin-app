@@ -1,88 +1,13 @@
-name: Verify v1.3.0 nested court page visible
+name: Verify v1.3.0 nested court page visible (manual legacy)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/verify-v130-visible-nested.yml'
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  verify:
+  legacy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
     steps:
-      - uses: actions/checkout@v4
-        with: {ref: main}
-      - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - name: Browser verify all nested frame bodies
-        shell: bash
-        run: |
-          set -euo pipefail
-          C="$RUNNER_TEMP/deploy.json"
-          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
-          BASE="$(jq -r '.hostingUrl' "$C")"
-          BASE="${BASE%/}"
-          D="$RUNNER_TEMP/pw"; mkdir -p "$D"; cd "$D"
-          npm init -y >/dev/null 2>&1
-          npm i playwright@1.54.2 >/dev/null 2>&1
-          npx playwright install --with-deps chromium >/dev/null 2>&1
-          cat > verify.mjs <<'JS'
-          import { chromium } from 'playwright';
-          import fs from 'fs';
-          const base=process.env.BASE_URL;
-          const browser=await chromium.launch({headless:true});
-          const page=await browser.newPage({viewport:{width:412,height:915},userAgent:'Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139 Mobile Safari/537.36'});
-          const errors=[];
-          page.on('pageerror',e=>errors.push('PAGE '+e.message));
-          page.on('console',m=>{if(m.type()==='error')errors.push('CONSOLE '+m.text())});
-          await page.goto(base+'/?visiblecheck='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
-          await page.waitForTimeout(10000);
-          const infos=[];
-          for(const f of page.frames()){
-            let text='';
-            try{text=(await f.locator('body').innerText({timeout:5000})).replace(/\s+/g,' ').trim();}catch{}
-            infos.push({url:f.url(),textLength:text.length,text:text.slice(0,1500)});
-          }
-          const mainText=(await page.locator('body').innerText().catch(()=>'' )).replace(/\s+/g,' ').trim();
-          const visibleFrame=infos.filter(x=>!x.url.includes('jayuminton-push.web.app')).sort((a,b)=>b.textLength-a.textLength)[0];
-          const proof={mainTextLength:mainText.length,frames:infos,errors,bestNested:visibleFrame||null};
-          console.log(JSON.stringify(proof,null,2));
-          fs.writeFileSync('proof.json',JSON.stringify(proof,null,2));
-          if(!infos.some(x=>x.url.includes('script.google.com/macros/s/') && x.url.includes('mode=user'))) throw new Error('user Apps Script iframe route missing');
-          if(!visibleFrame || visibleFrame.textLength<20) throw new Error('no visible nested court content');
-          await browser.close();
-JS
-          BASE_URL="$BASE" node verify.mjs
-          cd "$GITHUB_WORKSPACE"
-          BEST_URL="$(node -e "const p=require('$D/proof.json'); console.log(p.bestNested?.url||'')")"
-          BEST_LEN="$(node -e "const p=require('$D/proof.json'); console.log(p.bestNested?.textLength||0)")"
-          cat > deployment/status/v130-visible-nested-proof.txt <<EOF
-          status=success
-          live_page=$BASE/
-          apps_script_user_route=yes
-          nested_visible_content=yes
-          best_nested_url=$BEST_URL
-          best_nested_text_length=$BEST_LEN
-          version_name=1.3.0
-          version_code=130
-          wait1_groups=8
-          court_groups=8
-          verified_at=$(date -u +%FT%TZ)
-          EOF
-      - name: Publish proof
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/status/v130-visible-nested-proof.txt
-          git commit -m 'Verify nested court page content is visible' || exit 0
-          git pull --rebase origin main || true
-          git push origin main
+      - run: echo 'Legacy GAS iframe verifier disabled. Current deployment is Cloudflare-based.'
