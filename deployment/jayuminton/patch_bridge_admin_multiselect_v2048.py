@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import subprocess
 
 p = Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js')
 s = p.read_text(encoding='utf-8')
@@ -51,4 +52,7 @@ if "if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;" not in s:
     raise SystemExit('legacy pair guard missing')
 
 p.write_text(s, encoding='utf-8')
+# Catch a broken global bridge before it can be embedded in an APK. A syntax
+# error here makes the login button and every other JS-driven control appear dead.
+subprocess.run(['node', '--check', str(p)], check=True)
 print('PATCH_BRIDGE_ADMIN_MULTISELECT_V2048_OK')
