@@ -1,129 +1,21 @@
 name: Build unified MD-final user APK v1.6.42
 
-# recovery rebuild 2026-08-25: Cloudflare-only user APK, preserve 3-pulses x 8 groups and live user web
 on:
   push:
     branches: [main]
     paths:
-      - 'deployment/scripts/patch_user_native_v1642_md_final.py'
       - '.github/workflows/build-user-md-final-v1642.yml'
-      - 'deployment/jayuminton/patch_member_user_requirements_v1.py'
-      - 'cloudflare/state-worker/worker-md-entry.js'
-      - 'cloudflare/user-push/worker-do.js'
-      - 'cloudflare/user-push/*.test.mjs'
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: jayuminton-user-md-final-v1642
   cancel-in-progress: true
 
 jobs:
-  build:
+  drain-stale-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      FIREBASE_PROJECT_CONFIG: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
-      WORKER_URL: https://jayuminton-user-push.pianopp001.workers.dev
-      APK_PATH: releases/jayuminton-courtstatus-v1.6.42-md-final.apk
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-
     steps:
-      - uses: actions/checkout@v4
-        with: {ref: main, fetch-depth: 0}
-      - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - uses: actions/setup-java@v4
-        with: {distribution: temurin, java-version: '17'}
-      - uses: gradle/actions/setup-gradle@v4
-        with: {gradle-version: '8.7'}
-      - uses: google-github-actions/auth@v2
-        with: {credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}'}
-      - run: npm install --global firebase-tools@latest
-
-      - name: Verify Cloudflare state and push contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          node cloudflare/state-worker/worker.test.mjs
-          node cloudflare/state-worker/md4-autoassign.test.mjs
-          node cloudflare/state-worker/md-entry-autoassign.test.mjs
-          node cloudflare/state-worker/md-final-entry.test.mjs
-          node cloudflare/user-push/worker-do.test.mjs
-          curl -fsS --retry 5 "$WORKER_URL/health" > "$RUNNER_TEMP/push-health.json"
-          jq -e '.ok==true and .storage=="durable-object"' "$RUNNER_TEMP/push-health.json" >/dev/null
-          grep -F "repeatCount: '8'" cloudflare/user-push/worker-do.js >/dev/null
-          grep -F "pulsesPerGroup: '3'" cloudflare/user-push/worker-do.js >/dev/null
-          grep -F 'rosterNames' cloudflare/user-push/worker-do.js >/dev/null
-
-      - name: Prepare Firebase Android config
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s' "$FIREBASE_PROJECT_CONFIG" > "$RUNNER_TEMP/deploy.json"
-          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$RUNNER_TEMP/deploy.json")"
-          test -n "$FIREBASE_PROJECT_ID"
-          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
-          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
-          APP_ID="$(jq -r '[.. | objects | select(((.packageName? == "com.jayuminton.user") or (.package_name? == "com.jayuminton.user") or (.androidClientInfo?.packageName? == "com.jayuminton.user")) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
-          test -n "$APP_ID"
-          firebase apps:sdkconfig ANDROID "$APP_ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
-
-      - name: Build MD-final native user APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PUSH_URL="$WORKER_URL"
-          BUILD="$RUNNER_TEMP/build-v1642.sh"
-          cp deployment/scripts/build_user_native_push_fresh_v110.sh "$BUILD"
-          for patch in patch_build_user_native_v111.py patch_build_user_native_v112.py patch_build_user_native_v113.py patch_build_user_native_v114.py patch_build_user_native_v115.py patch_build_user_native_v116.py patch_build_user_native_v117.py patch_build_user_native_v118.py patch_build_user_native_v119.py patch_build_user_native_v120_diagnostic.py patch_build_user_native_v121.py patch_build_user_native_v122.py patch_build_user_native_v124_confirmed_overlay.py patch_build_user_native_v126_stop_controller.py patch_build_user_native_v126_raceguard.py patch_build_user_native_v127_member_switch.py patch_build_user_native_v128_repeat_switch.py patch_build_user_native_v129_background_registration.py; do
-            python3 "deployment/scripts/$patch" "$BUILD"
-          done
-          python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$BUILD"
-          python3 deployment/scripts/patch_user_native_v132_strict_current_member.py "$BUILD"
-          python3 deployment/scripts/patch_user_native_v133_install_safe.py "$BUILD"
-          python3 deployment/scripts/patch_user_native_v134_cloudflare_complete.py "$BUILD"
-          python3 deployment/scripts/patch_user_native_v1642_md_final.py "$BUILD"
-          grep -F 'VERSION="1.6.42"' "$BUILD" >/dev/null
-          grep -F 'MAX_GROUPS = 8' "$BUILD" >/dev/null
-          grep -F 'NativePushRegistrar.isCurrentMember' "$BUILD" >/dev/null
-          bash "$BUILD"
-
-      - name: Verify and publish APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          SRC=app/build/outputs/apk/release/app-release.apk
-          test -s "$SRC"
-          mkdir -p releases deployment/status
-          cp "$SRC" "$APK_PATH"
-          if unzip -p "$APK_PATH" classes.dex 2>/dev/null | strings | grep -F 'script.google.com/macros/s/' >/dev/null; then
-            echo 'Forbidden GAS URL detected in final user APK' >&2
-            exit 1
-          fi
-          SHA="$(sha256sum "$APK_PATH" | awk '{print $1}')"
-          NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          {
-            echo 'status=success'
-            echo 'version=1.6.42'
-            echo 'backend=cloudflare-only'
-            echo 'push=cloudflare-durable-object-fcm'
-            echo 'vibration=3x8'
-            echo 'current_member_only=true'
-            echo 'push_target_contract=tested'
-            echo "run_id=$GITHUB_RUN_ID"
-            echo "sha256=$SHA"
-            echo "updated_at=$NOW"
-          } > deployment/status/user-apk-v1642.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$APK_PATH" deployment/status/user-apk-v1642.txt
-          git commit -m 'Publish MD-final user APK v1.6.42' || exit 0
-          git reset --hard HEAD
-          git clean -fd
-          git pull --rebase origin main
-          git push origin HEAD:main
+      - run: echo 'stale user APK run drained; canonical workflow restored next commit'
