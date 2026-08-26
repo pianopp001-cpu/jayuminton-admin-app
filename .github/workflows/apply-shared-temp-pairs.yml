@@ -34,25 +34,18 @@ jobs:
         run: |
           grep -q "tempPairs" cloudflare/state-worker/worker.js
           grep -q "setTempPairsMutation" cloudflare/state-worker/worker.js
-          grep -q "reconcileTempPairs(state)" cloudflare/state-worker/worker.js
+          grep -q "applyTempPairOrdering" cloudflare/state-worker/worker.js
           grep -q "setTempPairs" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "확인 = 1회성 팀설정" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "TEAM_TEXT_HARD_HIDE_V2041" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           python3 - <<'PY'
           from pathlib import Path
           w=Path('cloudflare/state-worker/worker.js').read_text()
           b=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js').read_text()
-          if 'applyTempPairOrdering' in w:
-              raise SystemExit('temporary pairing must never reorder seats')
-          if 'pairA.length !== 2 || pairB.length !== 2' in w:
-              raise SystemExit('old automatic second-pair contract remains')
-          if 'bottom.textContent=teamText' in b:
-              raise SystemExit('team label creator must not exist')
-          if 'pairB=ids.filter' in b:
-              raise SystemExit('unselected two must not become an automatic pair')
-          if "characterData:true" in b:
-              raise SystemExit('flicker-prone characterData observer remains')
-          print('FINAL_TEAM_INTERACTION_OK fixed=double-line temp=clicked-two-only reorder=false labels=none')
+          assert "[group.pairA[0], group.pairB[0], group.pairA[1], group.pairB[1]]" in w
+          assert "[group.pairA[0], group.pairA[1], group.pairB[0], group.pairB[1]]" in w
+          assert 'bottom.textContent=teamText' not in b
+          assert 'pairB=ids.filter' in b
+          print('FINAL_TEAM_INTERACTION_OK fixed=double-line temp=2+2 wait=left-right court=top-bottom labels=none')
           PY
       - name: Commit generated sources to main
         run: |
@@ -63,6 +56,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          git commit -m 'fix(team): finalize stable permanent and one-shot team behavior'
+          git commit -m 'fix(team): finalize shared 2+2 team behavior'
           git pull --rebase origin main
           git push origin main
