@@ -122,7 +122,7 @@
         if(teamText){
           card.classList.add('has-member-team');
           card.setAttribute('data-jm-team-text',teamText);
-          if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');
+          if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');
           card.style.setProperty('border','2px solid var(--member-team-color)','important');
           card.style.setProperty('outline','2px solid var(--member-team-color)','important');
           card.style.setProperty('outline-offset','-5px','important');
