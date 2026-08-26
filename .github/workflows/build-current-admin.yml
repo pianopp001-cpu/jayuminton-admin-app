@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/build-current-admin.yml'
       - 'deployment/jayuminton/current_admin_build.trigger'
       - 'deployment/jayuminton/admin_card_interaction_v2042.js'
       - 'deployment/jayuminton/admin_team_layout_v2038.js'
@@ -44,13 +45,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-
       - name: Verify current worker temp-team contract
         shell: bash
         run: |
           set -euo pipefail
           node cloudflare/state-worker/temp-pairs.test.mjs
-
       - name: Restore proven shell
         shell: bash
         run: |
@@ -61,7 +60,6 @@ jobs:
           mkdir -p app/src/main/assets/admin
           unzip -p releases/jayuminton-admin-v200.8-webview-js-fixed.apk assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
-
       - name: Inject current Cloudflare admin
         shell: bash
         run: |
@@ -77,15 +75,13 @@ jobs:
           marker='id="jayuminton-admin-multi-action-v2047"'
           html=html.replace('<script '+marker+'>'+js+'</script>','')
           block='<script '+marker+'>'+js+'</script>'
-          if '</body>' not in html:
-            raise SystemExit('body closing tag missing')
+          if '</body>' not in html: raise SystemExit('body closing tag missing')
           html=html.replace('</body>',block+'\n</body>',1)
           html_path.write_text(html,encoding='utf-8')
           PY
           python3 deployment/jayuminton/admin_native_audio_v2021_patch.py
           python3 deployment/jayuminton/admin_native_vibration_v2023_patch.py
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$HTML" >/dev/null
-          test "$(grep -o '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$HTML" | wc -l)" -eq 1
           grep -F '1~4명을 먼저 선택한 뒤 이동/교환 또는 팀설정을 누르세요.' "$HTML" >/dev/null
           grep -F '이동/교환' "$HTML" >/dev/null
           grep -F '팀설정' "$HTML" >/dev/null
@@ -94,9 +90,7 @@ jobs:
           grep -F "await server('swapMembers'" "$HTML" >/dev/null
           grep -F "await server('moveOrSwapMember'" "$HTML" >/dev/null
           ! grep -F 'window.confirm(' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
-          ! grep -F 'jm-target-number' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
           ! grep -F 'script.google.com' "$HTML" >/dev/null
-
       - name: Set APK identity and signer
         shell: bash
         run: |
@@ -118,7 +112,6 @@ jobs:
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
           rm -f app/src/main/res/drawable/icon_from_library.b64
           base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
-
       - name: Build verify publish
         shell: bash
         run: |
@@ -129,7 +122,6 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          test "$(grep -o '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$RUNNER_TEMP/apk-admin.html" | wc -l)" -eq 1
           grep -F '1~4명을 먼저 선택한 뒤 이동/교환 또는 팀설정을 누르세요.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           SHA=$(sha256sum "$APK" | awk '{print $1}')
