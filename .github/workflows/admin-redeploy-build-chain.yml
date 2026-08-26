@@ -5,6 +5,7 @@ name: Redeploy admin Cloudflare only
 # observed rerun: record result through record-cloudflare-recovery-results.yml
 # shared temp-pair server-state redeploy trigger 2026-08-26
 # shared temp-pair verified redeploy trigger 2026-08-26 09:28 KST
+# hardened shared temp-pair frontend redeploy trigger 2026-08-26 09:55 KST
 on:
   push:
     branches: [main]
