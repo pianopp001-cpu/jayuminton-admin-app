@@ -1,3 +1,3 @@
-current-admin-v2047
+current-admin-v2048
 requested=2026-08-27
-reason=pr-trigger-current-v2047-worker-repair
+reason=canonical-2-4-member-move-team-yellow-apk
