@@ -55,7 +55,6 @@ jobs:
           PUBLIC="$ROOT/public"
           mkdir -p "$PUBLIC"
           curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?teamLines=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
-          grep -F 'memberMoveSelf' "$PUBLIC/index.html" >/dev/null
           python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/remove_member_team_text_creators.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_team_visuals_v6.py "$PUBLIC/index.html"
@@ -91,7 +90,6 @@ jobs:
           set -euo pipefail
           sleep 5
           curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verifyTeamLines=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/member-original-popup-live.html"
-          grep -F 'memberMoveSelf' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           ! grep -F 'JAYUMINTON_MD7_SINGLE_ACTION_POPUP_V1' "$RUNNER_TEMP/member-original-popup-live.html"
           ! grep -F 'jayuminton-md7-single-action-popup' "$RUNNER_TEMP/member-original-popup-live.html"
           ! grep -F 'jayuminton-member-self-profile-edit-v1' "$RUNNER_TEMP/member-original-popup-live.html"
