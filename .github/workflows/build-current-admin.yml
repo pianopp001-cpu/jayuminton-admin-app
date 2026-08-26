@@ -12,6 +12,8 @@ on:
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
       - 'deployment/jayuminton/admin_native_audio_v2021_patch.py'
       - 'deployment/jayuminton/admin_native_vibration_v2023_patch.py'
+      - 'cloudflare/state-worker/worker.js'
+      - 'cloudflare/state-worker/temp-pairs.test.mjs'
 
 permissions:
   contents: write
@@ -33,12 +35,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager --licenses >/dev/null || true
       - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+
+      - name: Verify current worker temp-team contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node cloudflare/state-worker/temp-pairs.test.mjs
 
       - name: Restore proven shell
         shell: bash
@@ -59,14 +70,16 @@ jobs:
           python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$HTML"
           python3 deployment/jayuminton/admin_native_audio_v2021_patch.py
           python3 deployment/jayuminton/admin_native_vibration_v2023_patch.py
-          grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__' "$HTML" >/dev/null
-          grep -F '같이 움직일 사람을 최대 4명까지' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$HTML" >/dev/null
+          grep -F '1~4명을 먼저 선택한 뒤 이동/교환 또는 팀설정을 누르세요.' "$HTML" >/dev/null
           grep -F '이동/교환' "$HTML" >/dev/null
           grep -F '팀설정' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
+          grep -F "await server('swapMembers'" "$HTML" >/dev/null
           grep -F "await server('moveOrSwapMember'" "$HTML" >/dev/null
           ! grep -F 'window.confirm(' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
+          ! grep -F 'jm-target-number' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
           ! grep -F 'script.google.com' "$HTML" >/dev/null
 
       - name: Set APK identity and signer
@@ -100,8 +113,8 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
-          grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F '같이 움직일 사람을 최대 4명까지' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '1~4명을 먼저 선택한 뒤 이동/교환 또는 팀설정을 누르세요.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -110,7 +123,7 @@ jobs:
           git reset --hard origin/main
           mkdir -p releases deployment/status
           cp "$APK" releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk
-          printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-v2046-clean\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
+          printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-v2047-clean\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
           git add releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-          git commit -m 'Publish clean current Cloudflare admin APK' || exit 0
+          git commit -m 'Publish clean current Cloudflare admin APK v2047' || exit 0
           git push origin HEAD:main
