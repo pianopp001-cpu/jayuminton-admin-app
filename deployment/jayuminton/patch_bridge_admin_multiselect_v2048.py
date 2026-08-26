@@ -28,11 +28,9 @@ s, n = pat.subn(replacement, s, count=1)
 if n != 1:
     raise SystemExit('validTempPairs block not found')
 
-# Every member of the temporary group gets one dark-yellow border. Do not repaint only pairA.
 s = s.replace("loadTempPairs().forEach(function(group,index){var color=TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length];group.pairA.forEach(function(id){desired[String(id)]=color;});});",
               "loadTempPairs().forEach(function(group){tempTeamIds(group).forEach(function(id){desired[String(id)]='#d4a017';});});")
 
-# Persist fresh Cloudflare login sessions immediately.
 login_anchor = """    }).then(function(response){return response.json();}).then(function(packet){
       if(!packet||packet.ok!==true)throw new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.'));
       if(packet.result){"""
@@ -45,22 +43,15 @@ if login_anchor not in s:
     raise SystemExit('Cloudflare login response anchor not found')
 s = s.replace(login_anchor, login_replacement, 1)
 
-# Disable the old two-click/confirm pair controller whenever the v2047+ multi-action controller is installed.
 s = s.replace("function handlePairClick(event){\n      if(event.defaultPrevented||event.button>0)return;",
               "function handlePairClick(event){\n      if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;\n      if(event.defaultPrevented||event.button>0)return;")
-
-# Old safety CSS must not resize member cards or move NEW/name text after the new controller exists.
 s = s.replace("function installAdminTeamSafetyStyle(){\n      if(document.getElementById('jayuminton-admin-team-safety-v2037'))return;",
               "function installAdminTeamSafetyStyle(){\n      if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;\n      if(document.getElementById('jayuminton-admin-team-safety-v2037'))return;")
-
-# Any legacy pending two-person state is ignored by the new controller.
 s = s.replace("function recordTempPair(first,second,group){",
               "function recordTempPair(first,second,group){\n      if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;")
 
-# Hard fallback for the administrator login screen. It runs inside the bridge IIFE,
-# so it can call invoke() even if the restored page's old login handler is broken.
 login_fallback = r'''
-  window.__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2049__=true;
+  window.__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2050__=true;
   function jmIsAdminPage(){
     try{return (typeof IS_ADMIN!=='undefined'&&!!IS_ADMIN)||/(?:^|[?&])app=admin(?:&|$)/.test(String(location.search||''));}catch(_){return false;}
   }
@@ -92,6 +83,7 @@ login_fallback = r'''
     if(!jmIsAdminPage())return false;
     var input=jmPinInput(button),pin=String(input&&input.value||'').trim();
     if(!pin){jmLoginStatus(button,'관리자 PIN을 입력하세요.',true);if(input)input.focus();return true;}
+    try{localStorage.removeItem('jayuminton_admin_session_v1');}catch(_){}
     if(button){button.disabled=true;button.setAttribute('data-jm-login-busy','1');}
     jmLoginStatus(button,'로그인 중...',false);
     invoke('createAdminSession',[pin],function(result){
@@ -111,13 +103,12 @@ login_fallback = r'''
   }
   if(jmIsAdminPage()){
     window.addEventListener('click',function(event){
-      if(storedToken())return;
       var button=jmLoginControl(event.target);if(!button)return;
       event.preventDefault();event.stopPropagation();if(event.stopImmediatePropagation)event.stopImmediatePropagation();
       jmDoAdminLogin(button);
     },true);
     window.addEventListener('keydown',function(event){
-      if(storedToken()||String(event.key)!=='Enter')return;
+      if(String(event.key)!=='Enter')return;
       var input=event.target;if(!input||!input.matches||!input.matches('input'))return;
       var button=null,root=input.closest&&input.closest('form,.card,.panel,.login,.login-card');
       if(root)button=Array.prototype.find.call(root.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"]'),function(x){return !!jmLoginControl(x);});
@@ -127,7 +118,7 @@ login_fallback = r'''
     },true);
   }
 '''
-if '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2049__' not in s:
+if '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2050__' not in s:
     close = s.rfind('\n})();')
     if close < 0:
         raise SystemExit('bridge IIFE closing anchor not found')
@@ -141,9 +132,9 @@ if "if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;" not in s:
     raise SystemExit('legacy pair guard missing')
 if "jayuminton_admin_session_v1" not in s or "name==='createAdminSession'" not in s:
     raise SystemExit('admin login session persistence patch missing')
-if '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2049__' not in s or "invoke('createAdminSession',[pin]" not in s:
+if '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2050__' not in s or "invoke('createAdminSession',[pin]" not in s or "localStorage.removeItem('jayuminton_admin_session_v1')" not in s:
     raise SystemExit('admin login click fallback missing')
 
 p.write_text(s, encoding='utf-8')
 subprocess.run(['node', '--check', str(p)], check=True)
-print('PATCH_BRIDGE_ADMIN_MULTISELECT_V2049_LOGIN_OK')
+print('PATCH_BRIDGE_ADMIN_MULTISELECT_V2050_LOGIN_OK')
