@@ -76,8 +76,6 @@ if admin_html.exists():
         admin_html.write_text(final_html, encoding='utf-8')
 
         final_html = admin_html.read_text(encoding='utf-8')
-        # Pair ordering is server-authoritative in worker.js. The bundled layer only
-        # guarantees permanent two-line team borders and temporary one-line overlay.
         for marker in (
             '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
             'jayuminton-admin-team-layout-v2038',
@@ -92,4 +90,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: server-authoritative-repair-20260826-1458
+# BUILD_TRIGGER: replaceable-shared-pairs-20260826-1500
