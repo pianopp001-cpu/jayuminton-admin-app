@@ -93,4 +93,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: wait-left-right-court-top-bottom-line-only-20260826
+# BUILD_TRIGGER: final-shared-team-state-apk-20260826-1412
