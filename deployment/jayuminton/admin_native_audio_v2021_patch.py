@@ -92,10 +92,13 @@ if admin_html.exists():
             '.jm-team-bottom-label',
             'has-member-team.jm-temp-pair',
             '__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__',
+            '__JAYUMINTON_ADMIN_CARD_VISUAL_FIX_V2044__',
             'jm-move-selected',
-            '팀 설정하시겠습니까?',
+            'jm-temp-pair-v2044',
+            '같은 팀으로 설정할까요?',
             '#16a34a',
             '#d4a017',
+            "signature:zone+'|'",
             "rpc('getPublicState',[null]",
             "rpc('setTempPairs',[null,existing]",
             'setTimeout(clearMove,250)',
@@ -103,14 +106,14 @@ if admin_html.exists():
             if marker not in final_html:
                 raise SystemExit('bundled admin interaction guard missing: ' + marker)
         if "swapMembers',[null,[String(first.id)],[String(second.id)]]" in final_html:
-            raise SystemExit('v2042 direct swap interception survived; native move/swap must own cross-location clicks')
+            raise SystemExit('direct swap interception survived; native move/swap must own cross-location clicks')
         if final_html.count('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__') != 2:
             raise SystemExit('bundled team layout script duplication detected')
         if final_html.count('__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__') != 2:
             raise SystemExit('bundled card interaction script duplication detected')
         print('BUNDLED_ADMIN_V203_TEAM_LAYOUT_V2038_FRESH_OK')
-        print('BUNDLED_ADMIN_CARD_INTERACTION_V2043_NATIVE_MOVE_OK')
+        print('BUNDLED_ADMIN_CARD_INTERACTION_V2044_VISUAL_NATIVE_MOVE_OK')
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: native-move-yellow-team-v2043-20260826-2312
+# BUILD_TRIGGER: pretty-popup-visible-green-yellow-v2044-20260826-2325
