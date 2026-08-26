@@ -30,27 +30,29 @@ jobs:
           node cloudflare/state-worker/worker.test.mjs
           node cloudflare/state-worker/temp-pairs.test.mjs
           node deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs
-      - name: Verify shared temp-pair contract
+      - name: Verify final team interaction contract
         run: |
           grep -q "tempPairs" cloudflare/state-worker/worker.js
           grep -q "setTempPairsMutation" cloudflare/state-worker/worker.js
           grep -q "reconcileTempPairs(state)" cloudflare/state-worker/worker.js
           grep -q "setTempPairs" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "typeof document==='undefined'||typeof document.querySelectorAll!=='function'" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "확인 = 1회성 팀설정" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          grep -q "TEAM_TEXT_HARD_HIDE_V2041" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           python3 - <<'PY'
           from pathlib import Path
           w=Path('cloudflare/state-worker/worker.js').read_text()
           b=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js').read_text()
-          if "  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n" in w:
-              raise SystemExit('duplicate reconcileTempPairs detected')
+          if 'applyTempPairOrdering' in w:
+              raise SystemExit('temporary pairing must never reorder seats')
+          if 'pairA.length !== 2 || pairB.length !== 2' in w:
+              raise SystemExit('old automatic second-pair contract remains')
           if 'bottom.textContent=teamText' in b:
               raise SystemExit('team label creator must not exist')
-          if '.jm-team-bottom-label{display:none!important' not in b:
-              raise SystemExit('team label hidden style missing')
-          if 'group.pairA' not in b or 'jm-temp-pair' not in b:
-              raise SystemExit('pairA overlay missing')
-          print('SHARED_TEMP_PAIR_CONTRACT_OK labels=none pairAOnly=true prompt=true')
+          if 'pairB=ids.filter' in b:
+              raise SystemExit('unselected two must not become an automatic pair')
+          if "characterData:true" in b:
+              raise SystemExit('flicker-prone characterData observer remains')
+          print('FINAL_TEAM_INTERACTION_OK fixed=double-line temp=clicked-two-only reorder=false labels=none')
           PY
       - name: Commit generated sources to main
         run: |
@@ -61,5 +63,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          git commit -m 'fix(team): share temporary pair state across admin and member'
+          git commit -m 'fix(team): finalize stable permanent and one-shot team behavior'
+          git pull --rebase origin main
           git push origin main
