@@ -32,9 +32,7 @@ if n != 1:
 s = s.replace("loadTempPairs().forEach(function(group,index){var color=TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length];group.pairA.forEach(function(id){desired[String(id)]=color;});});",
               "loadTempPairs().forEach(function(group){tempTeamIds(group).forEach(function(id){desired[String(id)]='#d4a017';});});")
 
-# Persist fresh Cloudflare login sessions immediately. The old page performs the
-# next admin/member state call right after login; without this, that follow-up
-# request has no Authorization token and the UI looks like a dead login button.
+# Persist fresh Cloudflare login sessions immediately.
 login_anchor = """    }).then(function(response){return response.json();}).then(function(packet){
       if(!packet||packet.ok!==true)throw new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.'));
       if(packet.result){"""
@@ -59,6 +57,82 @@ s = s.replace("function installAdminTeamSafetyStyle(){\n      if(document.getEle
 s = s.replace("function recordTempPair(first,second,group){",
               "function recordTempPair(first,second,group){\n      if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;")
 
+# Hard fallback for the administrator login screen. It runs inside the bridge IIFE,
+# so it can call invoke() even if the restored page's old login handler is broken.
+login_fallback = r'''
+  window.__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2049__=true;
+  function jmIsAdminPage(){
+    try{return (typeof IS_ADMIN!=='undefined'&&!!IS_ADMIN)||/(?:^|[?&])app=admin(?:&|$)/.test(String(location.search||''));}catch(_){return false;}
+  }
+  function jmLoginControl(node){
+    if(!node||!node.closest)return null;
+    var c=node.closest('button,input[type="submit"],input[type="button"],[role="button"]');
+    if(!c)return null;
+    var text=String((c.textContent||'')+' '+(c.value||'')+' '+(c.id||'')+' '+(c.name||'')+' '+(typeof c.className==='string'?c.className:'')).toLowerCase();
+    if(/logout|로그아웃/.test(text))return null;
+    return /login|로그인/.test(text)?c:null;
+  }
+  function jmPinInput(button){
+    var scopes=[],cur=button;
+    for(var i=0;cur&&i<6;i++,cur=cur.parentElement)scopes.push(cur);
+    scopes.push(document);
+    var selectors=['input[type="password"]','input[id*="pin" i]','input[name*="pin" i]','input[id*="password" i]','input[name*="password" i]','input[inputmode="numeric"]','input[type="tel"]','input[type="number"]'];
+    for(var sidx=0;sidx<scopes.length;sidx++){
+      var root=scopes[sidx];if(!root||!root.querySelector)continue;
+      for(var j=0;j<selectors.length;j++){var el=root.querySelector(selectors[j]);if(el&&String(el.value||'').trim())return el;}
+    }
+    return document.querySelector('input[type="password"],input[id*="pin" i],input[name*="pin" i]');
+  }
+  function jmLoginStatus(button,text,bad){
+    var id='jm-admin-login-fallback-status',el=document.getElementById(id);
+    if(!el){el=document.createElement('div');el.id=id;el.style.cssText='margin-top:8px;text-align:center;font-size:13px;font-weight:800;';if(button&&button.parentElement)button.parentElement.appendChild(el);else document.body.appendChild(el);}
+    el.textContent=String(text||'');el.style.color=bad?'#b91c1c':'#166534';
+  }
+  function jmDoAdminLogin(button){
+    if(!jmIsAdminPage())return false;
+    var input=jmPinInput(button),pin=String(input&&input.value||'').trim();
+    if(!pin){jmLoginStatus(button,'관리자 PIN을 입력하세요.',true);if(input)input.focus();return true;}
+    if(button){button.disabled=true;button.setAttribute('data-jm-login-busy','1');}
+    jmLoginStatus(button,'로그인 중...',false);
+    invoke('createAdminSession',[pin],function(result){
+      if(!result||result.ok!==true||!result.token){if(button){button.disabled=false;button.removeAttribute('data-jm-login-busy');}jmLoginStatus(button,'PIN을 확인하세요.',true);return;}
+      try{localStorage.setItem('jayuminton_admin_session_v1',String(result.token));}catch(_){}
+      invoke('getPublicState',[null],function(state){
+        try{if(typeof STATE!=='undefined')STATE=state;}catch(_){}
+        try{if(typeof renderState==='function')renderState();}catch(_){}
+        jmLoginStatus(button,'로그인 완료',false);
+        setTimeout(function(){location.reload();},30);
+      },function(){setTimeout(function(){location.reload();},30);});
+    },function(error){
+      if(button){button.disabled=false;button.removeAttribute('data-jm-login-busy');}
+      jmLoginStatus(button,String(error&&error.message||'로그인에 실패했습니다.'),true);
+    });
+    return true;
+  }
+  if(jmIsAdminPage()){
+    window.addEventListener('click',function(event){
+      if(storedToken())return;
+      var button=jmLoginControl(event.target);if(!button)return;
+      event.preventDefault();event.stopPropagation();if(event.stopImmediatePropagation)event.stopImmediatePropagation();
+      jmDoAdminLogin(button);
+    },true);
+    window.addEventListener('keydown',function(event){
+      if(storedToken()||String(event.key)!=='Enter')return;
+      var input=event.target;if(!input||!input.matches||!input.matches('input'))return;
+      var button=null,root=input.closest&&input.closest('form,.card,.panel,.login,.login-card');
+      if(root)button=Array.prototype.find.call(root.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"]'),function(x){return !!jmLoginControl(x);});
+      if(!button)button=Array.prototype.find.call(document.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"]'),function(x){return !!jmLoginControl(x);});
+      if(!button)return;
+      event.preventDefault();event.stopPropagation();if(event.stopImmediatePropagation)event.stopImmediatePropagation();jmDoAdminLogin(button);
+    },true);
+  }
+'''
+if '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2049__' not in s:
+    close = s.rfind('\n})();')
+    if close < 0:
+        raise SystemExit('bridge IIFE closing anchor not found')
+    s = s[:close] + '\n' + login_fallback + s[close:]
+
 if s == original:
     raise SystemExit('bridge was not changed')
 if "tempTeamIds(group).forEach" not in s or "#d4a017" not in s:
@@ -67,9 +141,9 @@ if "if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;" not in s:
     raise SystemExit('legacy pair guard missing')
 if "jayuminton_admin_session_v1" not in s or "name==='createAdminSession'" not in s:
     raise SystemExit('admin login session persistence patch missing')
+if '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2049__' not in s or "invoke('createAdminSession',[pin]" not in s:
+    raise SystemExit('admin login click fallback missing')
 
 p.write_text(s, encoding='utf-8')
-# Catch a broken global bridge before it can be embedded in an APK. A syntax
-# error here makes the login button and every other JS-driven control appear dead.
 subprocess.run(['node', '--check', str(p)], check=True)
-print('PATCH_BRIDGE_ADMIN_MULTISELECT_V2048_OK')
+print('PATCH_BRIDGE_ADMIN_MULTISELECT_V2049_LOGIN_OK')
