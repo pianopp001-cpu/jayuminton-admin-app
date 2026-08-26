@@ -1,3 +1,3 @@
 current-admin-v2047
 requested=2026-08-27
-reason=multi-select-team-move-after-worker-syntax-repair
+reason=pr-trigger-current-v2047-worker-repair
