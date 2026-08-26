@@ -1,0 +1,73 @@
+name: Fix final team interaction
+on:
+  push:
+    paths:
+      - 'deployment/jayuminton/fix_team_interaction_final.trigger'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Patch shared admin/member team interaction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js')
+          s=p.read_text()
+          # Official teams: no visible team1/team2 text; keep two-line border only.
+          s=s.replace(".jm-team-bottom-label{display:block!important;visibility:visible!important;position:static!important;width:100%!important;margin:3px 0 0!important;padding:0!important;text-align:left!important;font-size:9px!important;font-weight:900!important;line-height:1.1!important;white-space:nowrap!important;pointer-events:none!important}", ".jm-team-bottom-label{display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important}")
+          old="""          var bottom=card.querySelector('.jm-team-bottom-label');
+          if(!bottom){bottom=document.createElement('small');bottom.className='jm-team-bottom-label';card.appendChild(bottom);}
+          bottom.textContent=teamText;
+          if(bottom.parentElement!==card||card.lastElementChild!==bottom)card.appendChild(bottom);"""
+          new="""          Array.prototype.forEach.call(card.querySelectorAll('.jm-team-bottom-label'),function(bottom){bottom.remove();});"""
+          if old not in s:
+              raise SystemExit('official team label creation anchor not found')
+          s=s.replace(old,new)
+          # Pair overlay is only for the two explicitly selected members. pairB is retained only for group identity/cleanup.
+          # Same-location second click asks whether this is a one-game pair or normal move/exchange; no DOM reordering occurs.
+          if "var pairA=[first.id,second.id],pairB=ids.filter" not in s:
+              raise SystemExit('pair anchor missing')
+          # Remove stale label text aggressively on every render, including member web.
+          marker="window.__JM_RENDER_TEMP_PAIRS__=renderSharedTempPairs;"
+          inject="""Array.prototype.forEach.call(document.querySelectorAll('.jm-team-bottom-label,.member-team-badge,.jm-team-badge,.team-badge,.team-label,[data-team-label]'),function(node){
+      var txt=String(node.textContent||node.getAttribute&&node.getAttribute('data-team-label')||'').replace(/\\s+/g,'');
+      if(/^팀\\d+$/.test(txt)||/^TEAM\\d+$/i.test(txt)){node.textContent='';node.style&&node.style.setProperty('display','none','important');}
+    });
+    """
+          # Put cleanup inside shared renderer before style install.
+          anchor="    if(document.getElementById&&!document.getElementById('jayuminton-shared-temp-pair-style')){"
+          if inject.strip() not in s:
+              if anchor not in s: raise SystemExit('shared renderer anchor missing')
+              s=s.replace(anchor,'    '+inject+anchor,1)
+          p.write_text(s)
+          PY
+      - name: Verify final rules
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js').read_text()
+          assert "bottom.textContent=teamText" not in s
+          assert ".jm-team-bottom-label{display:none!important" in s
+          assert "var side=[group.pairA" in s
+          assert "확인 = 1회성 팀설정" in s and "취소 = 이동·교환" in s
+          assert "card.style.setProperty('border','2px solid var(--member-team-color)'" in s
+          assert "card.style.setProperty('outline','2px solid var(--member-team-color)'" in s
+          print('final team interaction checks passed')
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(team): finalize official borders and one-game pair overlay'
+          git push origin HEAD:main
