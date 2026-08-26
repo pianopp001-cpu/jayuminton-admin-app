@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Harden announcement ducking and carry the latest v203 Cloudflare admin contract into bundled APK HTML."""
+"""Harden announcement ducking and carry the latest Cloudflare admin contract into bundled APK HTML."""
 from pathlib import Path
 import subprocess
 import sys
@@ -34,7 +34,7 @@ if admin_html.exists():
             if marker not in final_html: raise SystemExit('bundled v203 post-contract missing: '+marker)
         if 'script.google.com/macros/s/' in final_html: raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
 
-        for marker in ('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2045__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__'):
+        for marker in ('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2045__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2052__'):
             while marker in final_html:
                 p=final_html.find(marker); a=final_html.rfind('<script',0,p); b=final_html.find('</script>',p)
                 if a<0 or b<0: raise SystemExit('stale bundled patch marker outside script tag: '+marker)
@@ -50,29 +50,27 @@ if admin_html.exists():
         required=(
             '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
             'killLegacyTeamSafety','__jmLegacyTeamSafetyGuard',
-            '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__',
-            'jayuminton-admin-multi-action-v2047-style',
+            '__JAYUMINTON_ADMIN_MULTI_ACTION_V2052__',
+            'jayuminton-admin-multi-action-v2052-style',
             'jm-source-selected','jm-target-selected','jm-temp-team-v2047',
-            '1~4명을 먼저 선택한 뒤 이동/교환 또는 팀설정을 누르세요.',
+            '녹색 = 이동선택','다른 위치 사람을 누르면 바로 교환합니다.',
             '이동/교환','팀설정','#16a34a','#d4a017',
-            "phase='target'",'sourceIds.length<2',
+            "phase='target'",'samePlace(selected)',
             'members:ids.map(String)',
-            "await server('swapMembers'",
-            "await server('moveOrSwapMember'",
-            "if(targets.length===sourceIds.length)executeMove();",
+            "rpc('swapMembers'", "rpc('moveOrSwapMember'",
+            "if(targets.length===selected.length)executeMove();",
             "var old=document.getElementById('jayuminton-admin-team-safety-v2037');if(old)old.remove();",
-            'a.__jmV2047Observer.observe(a,{childList:true,subtree:true});'
+            'a.__jmV2052Observer.observe(a,{childList:true,subtree:true});'
         )
         for marker in required:
-            if marker not in final_html: raise SystemExit('bundled admin v2047 guard missing: '+marker)
-        if 'visualCard(' in card_js: raise SystemExit('v2047 must not expand styling to parent card wrappers')
-        if 'releaseNativeSelection' in card_js: raise SystemExit('v2047 must not leave native blue-selection cleanup hack')
-        if 'window.confirm(' in card_js: raise SystemExit('v2047 must use in-app action panel, not browser confirm')
-        if final_html.count('__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__') != 2: raise SystemExit('v2047 card interaction duplication detected')
-        print('BUNDLED_ADMIN_MULTI_ACTION_V2047_OK')
-        print('BUNDLED_ADMIN_MULTI_MOVE_SWAP_USES_EXISTING_ENGINE_OK')
-        print('BUNDLED_ADMIN_2_TO_4_YELLOW_TEAM_GROUP_OK')
-        print('BUNDLED_ADMIN_LEGACY_TEAM_CSS_GUARD_OK')
+            if marker not in final_html: raise SystemExit('bundled admin v2052 guard missing: '+marker)
+        if 'window.google&&window.google.script&&window.google.script.run' in card_js: raise SystemExit('v2052 team interaction must use direct Cloudflare window.server RPC')
+        if 'window.confirm(' in card_js: raise SystemExit('v2052 must use in-app action panel, not browser confirm')
+        if final_html.count('__JAYUMINTON_ADMIN_MULTI_ACTION_V2052__') != 2: raise SystemExit('v2052 card interaction duplication detected')
+        print('BUNDLED_ADMIN_MULTI_ACTION_V2052_OK')
+        print('BUNDLED_ADMIN_GREEN_MOVE_YELLOW_TEAM_OK')
+        print('BUNDLED_ADMIN_CROSS_LOCATION_DIRECT_SWAP_OK')
+        print('BUNDLED_ADMIN_TEAM_DIRECT_CLOUDFLARE_RPC_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: v2047-multi-source-action-target-yellow-team-20260827
+# BUILD_TRIGGER: v2052-direct-cloudflare-green-move-yellow-team-20260827
