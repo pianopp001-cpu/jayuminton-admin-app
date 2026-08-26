@@ -27,19 +27,17 @@ export function normalizeTempPairs(value) {
   for (const raw of (Array.isArray(value) ? value : []).slice(-100)) {
     if (!raw || !['wait', 'court'].includes(String(raw.zone))) continue;
     const pairA = uniqueIds(raw.pairA, 2);
-    const pairB = uniqueIds(raw.pairB, 2);
-    const ids = [...pairA, ...pairB];
-    if (pairA.length !== 2 || pairB.length !== 2 || new Set(ids).size !== 4) continue;
-    if (ids.some(id => used.has(id))) continue;
-    ids.forEach(id => used.add(id));
-    out.push({ pairA, pairB, zone: String(raw.zone), createdAt: Math.max(0, Number(raw.createdAt) || Date.now()) });
+    if (pairA.length !== 2 || new Set(pairA).size !== 2) continue;
+    if (pairA.some(id => used.has(id))) continue;
+    pairA.forEach(id => used.add(id));
+    out.push({ pairA, pairB: [], zone: String(raw.zone), createdAt: Math.max(0, Number(raw.createdAt) || Date.now()) });
   }
   return out;
 }
 
 export function reconcileTempPairs(state) {
   state.tempPairs = normalizeTempPairs(state.tempPairs).filter(group => {
-    const ids = [...group.pairA, ...group.pairB];
+    const ids = group.pairA;
     const first = locationOf(state, ids[0]);
     if (!first || first.type !== group.zone || !['wait', 'court'].includes(first.type)) return false;
     return ids.every(id => {
@@ -47,21 +45,6 @@ export function reconcileTempPairs(state) {
       return loc && loc.type === first.type && loc.key === first.key;
     });
   });
-  return state;
-}
-
-function applyTempPairOrdering(state) {
-  for (const group of normalizeTempPairs(state.tempPairs)) {
-    const ids = [...group.pairA, ...group.pairB];
-    const first = locationOf(state, ids[0]);
-    if (!first || first.type !== group.zone) continue;
-    const target = first.type === 'court' ? state.courts[first.key] : state.waitGroups[Number(first.key) - 1];
-    if (!Array.isArray(target) || target.length !== 4 || !ids.every(id => target.includes(id))) continue;
-    const ordered = group.zone === 'wait'
-      ? [group.pairA[0], group.pairB[0], group.pairA[1], group.pairB[1]]
-      : [group.pairA[0], group.pairA[1], group.pairB[0], group.pairB[1]];
-    target.splice(0, target.length, ...ordered);
-  }
   return state;
 }
 
@@ -278,7 +261,6 @@ export function setTempPairsMutation(input, tempPairs) {
   const state = normalizeState(input);
   state.tempPairs = normalizeTempPairs(tempPairs);
   reconcileTempPairs(state);
-  applyTempPairOrdering(state);
   return { state, event: { type: 'temp_pairs_set', tempPairs: state.tempPairs } };
 }
 

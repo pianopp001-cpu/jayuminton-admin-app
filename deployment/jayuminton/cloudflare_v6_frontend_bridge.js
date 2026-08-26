@@ -14,9 +14,9 @@
   var legacyTempPairsChecked=false;
   function validTempPairs(value){
     return (Array.isArray(value)?value:[]).filter(function(x){
-      if(!x||['wait','court'].indexOf(String(x.zone))<0||!Array.isArray(x.pairA)||!Array.isArray(x.pairB)||x.pairA.length!==2||x.pairB.length!==2)return false;
-      return new Set(x.pairA.concat(x.pairB).map(String)).size===4;
-    }).map(function(x){return {pairA:x.pairA.map(String),pairB:x.pairB.map(String),zone:String(x.zone),createdAt:Number(x.createdAt)||Date.now()};});
+      if(!x||['wait','court'].indexOf(String(x.zone))<0||!Array.isArray(x.pairA)||x.pairA.length!==2)return false;
+      return new Set(x.pairA.map(String)).size===2;
+    }).map(function(x){return {pairA:x.pairA.map(String),pairB:[],zone:String(x.zone),createdAt:Number(x.createdAt)||Date.now()};});
   }
   function loadLegacyTempPairs(){
     try{return validTempPairs(JSON.parse(localStorage.getItem(TEMP_PAIR_KEY)||'[]'));}catch(_){return [];}
@@ -50,6 +50,7 @@
       (document.head||document.documentElement).appendChild(style);
     }
   }
+  if(typeof document!=='undefined'&&document.createElement&&!document.getElementById('TEAM_TEXT_HARD_HIDE_V2041')){var th=document.createElement('style');th.id='TEAM_TEXT_HARD_HIDE_V2041';th.textContent='.jm-team-bottom-label,.member-team-badge,.jm-team-badge,.team-badge,.team-label,[data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important}';(document.head||document.documentElement).appendChild(th);}
   window.__JM_RENDER_TEMP_PAIRS__=renderSharedTempPairs;
   function consumeSharedState(state){
     if(!state||typeof state!=='object'||!state.courts||!state.waitGroups)return;
@@ -61,7 +62,7 @@
         invoke('setTempPairs',[null,legacy],function(saved){try{localStorage.removeItem(TEMP_PAIR_KEY);}catch(_){} consumeSharedState(saved);},function(){});
       }else{try{localStorage.removeItem(TEMP_PAIR_KEY);}catch(_){}}
     }
-    setTimeout(renderSharedTempPairs,0);setTimeout(renderSharedTempPairs,80);setTimeout(renderSharedTempPairs,250);
+    setTimeout(renderSharedTempPairs,0);
   }
   function persistTempPairs(value,success,failure){invoke('setTempPairs',[null,validTempPairs(value)],success,failure);}
 
@@ -116,20 +117,16 @@
       var cards=scope.querySelectorAll('#adminApp '+cardSelector.split(',').join(',#adminApp '));
       for(var i=0;i<cards.length;i++){
         var card=cards[i],teamText=normalizeTeamText(card.getAttribute('data-jm-team-text'));
-        var nodes=card.querySelectorAll('span,div,small,b,strong,em,i,label');
-        for(var j=0;j<nodes.length;j++){
-          var node=nodes[j];if(node.classList&&node.classList.contains('jm-team-bottom-label'))continue;
-          var found=normalizeTeamText(node.textContent||node.getAttribute('data-team-label'));
-          if(found){if(!teamText)teamText=found;node.textContent='';node.style.setProperty('display','none','important');node.setAttribute('aria-hidden','true');}
+        if(!teamText){
+          var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,.jm-team-bottom-label');
+          for(var j=0;j<nodes.length&&!teamText;j++)teamText=normalizeTeamText(nodes[j].textContent||nodes[j].getAttribute('data-team-label'));
         }
         if(teamText){
           card.classList.add('has-member-team');
           card.setAttribute('data-jm-team-text',teamText);
-          if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');
           card.style.setProperty('border','2px solid var(--member-team-color)','important');
           card.style.setProperty('outline','2px solid var(--member-team-color)','important');
           card.style.setProperty('outline-offset','-5px','important');
-          Array.prototype.forEach.call(card.querySelectorAll('.jm-team-bottom-label'),function(bottom){bottom.remove();});
         }
       }
     }
@@ -188,8 +185,7 @@
     window.__JM_RENDER_TEMP_PAIRS__=renderTempPairs;
     function recordTempPair(first,second,group){
       var ids=group.items.map(function(x){return x.id;});
-      var pairA=[first.id,second.id],pairB=ids.filter(function(id){return pairA.indexOf(id)<0;});
-      if(pairB.length!==2)return;
+      var pairA=[first.id,second.id],pairB=[];
       var old=loadTempPairs().filter(function(saved){var all=saved.pairA.concat(saved.pairB);return !ids.some(function(id){return all.indexOf(id)>=0;});});
       old.push({pairA:pairA,pairB:pairB,zone:group.zone,createdAt:Date.now()});persistTempPairs(old,function(saved){consumeSharedState(saved);pendingPair=null;renderTempPairs();},function(){pendingPair=null;renderTempPairs();});
     }
@@ -215,7 +211,7 @@
       var app=document.getElementById('adminApp');if(!app||app.__jmTeamTextObserver)return;
       var scheduled=false;
       app.__jmTeamTextObserver=new MutationObserver(function(){if(scheduled)return;scheduled=true;setTimeout(function(){scheduled=false;moveAdminTeamLabels(app);renderTempPairs();},0);});
-      app.__jmTeamTextObserver.observe(app,{childList:true,subtree:true,characterData:true});
+      app.__jmTeamTextObserver.observe(app,{childList:true,subtree:true});
       if(!app.__jmPairClickBound){app.__jmPairClickBound=true;app.addEventListener('click',handlePairClick,true);}
     }
     function loginBox(){return document.getElementById('adminLoginBox');}
