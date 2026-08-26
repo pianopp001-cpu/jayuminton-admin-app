@@ -6,6 +6,7 @@ on:
     paths:
       - 'deployment/jayuminton/patch_shared_temp_pairs_v2.py'
       - 'deployment/jayuminton/patch_shared_temp_pairs_v3.py'
+      - 'deployment/jayuminton/patch_shared_temp_pairs_v4.py'
       - 'cloudflare/state-worker/temp-pairs.test.mjs'
       - '.github/workflows/apply-shared-temp-pairs.yml'
   workflow_dispatch:
@@ -24,7 +25,7 @@ jobs:
         with:
           node-version: '22'
       - name: Apply shared temp-pair patch
-        run: python3 deployment/jayuminton/patch_shared_temp_pairs_v3.py
+        run: python3 deployment/jayuminton/patch_shared_temp_pairs_v4.py
       - name: Run regression tests
         run: |
           node cloudflare/state-worker/worker.test.mjs
@@ -34,18 +35,24 @@ jobs:
         run: |
           grep -q "tempPairs" cloudflare/state-worker/worker.js
           grep -q "setTempPairsMutation" cloudflare/state-worker/worker.js
-          grep -q "applyTempPairOrdering" cloudflare/state-worker/worker.js
           grep -q "setTempPairs" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          grep -q "확인 = 1회성 팀설정" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "TEAM_TEXT_HARD_HIDE_V2041" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           python3 - <<'PY'
           from pathlib import Path
           w=Path('cloudflare/state-worker/worker.js').read_text()
           b=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js').read_text()
-          assert "[group.pairA[0], group.pairB[0], group.pairA[1], group.pairB[1]]" in w
-          assert "[group.pairA[0], group.pairA[1], group.pairB[0], group.pairB[1]]" in w
-          assert 'bottom.textContent=teamText' not in b
-          assert 'pairB=ids.filter' in b
-          print('FINAL_TEAM_INTERACTION_OK fixed=double-line temp=2+2 wait=left-right court=top-bottom labels=none')
+          if 'applyTempPairOrdering' in w:
+              raise SystemExit('temporary team must never reorder seats')
+          if 'pairB=ids.filter' in b:
+              raise SystemExit('remaining two must stay plain')
+          if 'items.length===4' in b:
+              raise SystemExit('same-group pairing must support 2-4 present members')
+          if "querySelectorAll('.jm-temp-pair')" in b and "classList.remove('jm-temp-pair')" in b.split('function renderSharedTempPairs',1)[1].split('function',1)[0]:
+              raise SystemExit('flicker-prone clear-all rendering remains')
+          if "characterData:true" in b:
+              raise SystemExit('flicker-prone character observer remains')
+          print('FINAL_TEAM_INTERACTION_OK fixed=double-line temp=clicked-two-only remaining=plain reorder=false stable-render=true')
           PY
       - name: Commit generated sources to main
         run: |
@@ -56,6 +63,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          git commit -m 'fix(team): finalize shared 2+2 team behavior'
+          git commit -m 'fix(team): stabilize clicked-pair-only interaction'
           git pull --rebase origin main
           git push origin main
