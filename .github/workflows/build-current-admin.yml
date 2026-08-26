@@ -14,6 +14,7 @@ on:
       - 'deployment/jayuminton/admin_card_interaction_v2042.js'
       - 'deployment/jayuminton/admin_team_layout_v2038.js'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
+      - 'deployment/jayuminton/patch_bridge_admin_multiselect_v2048.py'
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
       - 'deployment/jayuminton/admin_native_audio_v2021_patch.py'
       - 'deployment/jayuminton/admin_native_vibration_v2023_patch.py'
@@ -80,6 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           HTML=app/src/main/assets/admin/index.html
+          python3 deployment/jayuminton/patch_bridge_admin_multiselect_v2048.py
           python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$HTML"
           python3 deployment/jayuminton/admin_native_audio_v2021_patch.py
           python3 deployment/jayuminton/admin_native_vibration_v2023_patch.py
@@ -89,6 +91,8 @@ jobs:
           grep -F '팀설정' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
+          grep -F 'tempTeamIds(group).forEach' deployment/jayuminton/cloudflare_v6_frontend_bridge.js >/dev/null
+          grep -F 'if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;' deployment/jayuminton/cloudflare_v6_frontend_bridge.js >/dev/null
           grep -F "await server('swapMembers'" "$HTML" >/dev/null
           grep -F "await server('moveOrSwapMember'" "$HTML" >/dev/null
           ! grep -F 'window.confirm(' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
@@ -125,6 +129,7 @@ jobs:
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '1~4명을 먼저 선택한 뒤 이동/교환 또는 팀설정을 누르세요.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '#d4a017' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -133,7 +138,7 @@ jobs:
           git reset --hard origin/main
           mkdir -p releases deployment/status
           cp "$APK" releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk
-          printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-v2047-clean\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
+          printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-v2048-multiselect\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
           git add releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-          git commit -m 'Publish clean current Cloudflare admin APK v2047' || exit 0
+          git commit -m 'Publish current Cloudflare admin APK v2048 multi-select' || exit 0
           git push origin HEAD:main
