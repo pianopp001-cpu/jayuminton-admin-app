@@ -78,6 +78,7 @@ if admin_html.exists():
 
         layout_js = Path(__file__).with_name('admin_team_layout_v2038.js').read_text(encoding='utf-8')
         card_js = Path(__file__).with_name('admin_card_interaction_v2042.js').read_text(encoding='utf-8')
+        card_js = card_js.replace("app.__jmV2044Observer.observe(app,{childList:true,subtree:true,attributes:true,attributeFilter:['class','data-member-id','data-memberid','data-player-id']});", "app.__jmV2044Observer.observe(app,{childList:true,subtree:true});")
         tag = '<script>\n' + layout_js + '\n</script>\n<script>\n' + card_js + '\n</script>\n'
         if '</body>' in final_html:
             final_html = final_html.replace('</body>', tag + '</body>', 1)
@@ -102,9 +103,12 @@ if admin_html.exists():
             "rpc('getPublicState',[null]",
             "rpc('setTempPairs',[null,existing]",
             'setTimeout(clearMove,250)',
+            'app.__jmV2044Observer.observe(app,{childList:true,subtree:true});',
         ):
             if marker not in final_html:
                 raise SystemExit('bundled admin interaction guard missing: ' + marker)
+        if "attributes:true,attributeFilter:['class'" in final_html:
+            raise SystemExit('v2044 border observer self-loop guard failed')
         if "swapMembers',[null,[String(first.id)],[String(second.id)]]" in final_html:
             raise SystemExit('direct swap interception survived; native move/swap must own cross-location clicks')
         if final_html.count('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__') != 2:
@@ -116,4 +120,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_V203_POST_CONTRACT_V24_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: pretty-popup-visible-green-yellow-v2044-20260826-2325
+# BUILD_TRIGGER: pretty-popup-visible-green-yellow-v2044-no-self-loop-20260826-2330
