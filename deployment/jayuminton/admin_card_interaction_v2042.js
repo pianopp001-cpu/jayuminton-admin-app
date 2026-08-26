@@ -1,8 +1,9 @@
-(function installJayumintonAdminMultiActionV2052(){
+(function installJayumintonAdminMultiActionV2053(){
   'use strict';
-  if(typeof IS_ADMIN==='undefined'||!IS_ADMIN||window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2052__)return;
+  if(typeof IS_ADMIN==='undefined'||!IS_ADMIN||window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__)return;
   window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__=true;
   window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2052__=true;
+  window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__=true;
 
   var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.wait-card,.wait-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
   var selected=[],group=null,phase='source',targets=[],targetKind='',yellow={};
@@ -10,8 +11,8 @@
   function app(){return document.getElementById('adminApp');}
   function ensureStyle(){
     var old=document.getElementById('jayuminton-admin-team-safety-v2037');if(old)old.remove();
-    if(document.getElementById('jayuminton-admin-multi-action-v2052-style'))return;
-    var s=document.createElement('style');s.id='jayuminton-admin-multi-action-v2052-style';
+    if(document.getElementById('jayuminton-admin-multi-action-v2053-style'))return;
+    var s=document.createElement('style');s.id='jayuminton-admin-multi-action-v2053-style';
     s.textContent=''
       +'#adminApp .jm-source-selected,#adminApp .jm-target-selected{box-shadow:0 0 0 4px #16a34a!important;outline:2px solid rgba(22,163,74,.22)!important;outline-offset:1px!important}'
       +'#adminApp .jm-temp-team-v2047,#adminApp .jm-temp-pair{box-shadow:0 0 0 4px #d4a017!important;outline:2px solid rgba(212,160,23,.24)!important;outline-offset:1px!important}'
@@ -35,34 +36,59 @@
   function samePlace(ids){if(!ids.length)return true;var s=signature(ids[0]);return !!s&&ids.every(function(id){return signature(id)===s;});}
   function reset(){selected=[];group=null;phase='source';targets=[];targetKind='';renderGreen();renderPanel();renderYellow();}
   function panel(){var p=document.getElementById('jm-admin-multi-action');if(!p){p=document.createElement('div');p.id='jm-admin-multi-action';p.className='jm-multi-action';document.body.appendChild(p);}return p;}
-  function renderPanel(){var p=document.getElementById('jm-admin-multi-action');if(!selected.length){if(p)p.remove();return;}p=panel();if(phase==='target'){p.innerHTML='<div class="jm-multi-head"><div class="jm-multi-title">'+selected.length+'명 이동/교환</div><div class="jm-multi-count">대상 '+targets.length+'/'+selected.length+'</div></div><div class="jm-multi-help">빈자리 '+selected.length+'곳 또는 바꿀 사람 '+selected.length+'명을 선택하세요.</div><div class="jm-multi-actions" style="grid-template-columns:1fr 90px"><button type="button" class="jm-back-source">사람 다시 선택</button><button type="button" class="jm-do-cancel">취소</button></div>';p.querySelector('.jm-back-source').onclick=function(e){e.stopPropagation();phase='source';targets=[];targetKind='';renderGreen();renderPanel();};p.querySelector('.jm-do-cancel').onclick=function(e){e.stopPropagation();reset();};return;}
-    var canTeam=selected.length>=2&&selected.length<=4&&samePlace(selected);
-    p.innerHTML='<div class="jm-multi-head"><div class="jm-multi-title">'+selected.length+'명 선택</div><div class="jm-multi-count">녹색 = 이동선택</div></div><div class="jm-multi-help">같은 대기번호/코트에서는 1~4명 선택 후 이동/교환 또는 팀설정. 다른 위치 사람을 누르면 바로 교환합니다.</div><div class="jm-multi-actions"><button type="button" class="jm-do-move">이동/교환</button><button type="button" class="jm-do-team" '+(canTeam?'':'disabled')+'>팀설정</button><button type="button" class="jm-do-cancel">취소</button></div>';
+  function renderPanel(){
+    var p=document.getElementById('jm-admin-multi-action');
+    if(!selected.length){if(p)p.remove();return;}
+    if(phase==='target'){
+      p=panel();
+      p.innerHTML='<div class="jm-multi-head"><div class="jm-multi-title">'+selected.length+'명 이동/교환</div><div class="jm-multi-count">대상 '+targets.length+'/'+selected.length+'</div></div><div class="jm-multi-help">빈자리 '+selected.length+'곳 또는 바꿀 사람 '+selected.length+'명을 선택하세요.</div><div class="jm-multi-actions" style="grid-template-columns:1fr 90px"><button type="button" class="jm-back-source">사람 다시 선택</button><button type="button" class="jm-do-cancel">취소</button></div>';
+      p.querySelector('.jm-back-source').onclick=function(e){e.stopPropagation();phase='source';targets=[];targetKind='';renderGreen();renderPanel();};
+      p.querySelector('.jm-do-cancel').onclick=function(e){e.stopPropagation();reset();};
+      return;
+    }
+    // Only exactly two selected members need the move-vs-team decision.
+    // 1, 3 and 4 members are movement-only and therefore show no popup.
+    if(selected.length!==2){if(p)p.remove();return;}
+    var canTeam=samePlace(selected);
+    p=panel();
+    p.innerHTML='<div class="jm-multi-head"><div class="jm-multi-title">2명 선택</div><div class="jm-multi-count">녹색 = 이동선택</div></div><div class="jm-multi-help">2명일 때만 이동/교환인지 팀설정인지 선택합니다. 1명·3명·4명은 자동으로 이동/교환입니다.</div><div class="jm-multi-actions"><button type="button" class="jm-do-move">이동/교환</button><button type="button" class="jm-do-team" '+(canTeam?'':'disabled')+'>팀설정</button><button type="button" class="jm-do-cancel">취소</button></div>';
     p.querySelector('.jm-do-move').onclick=function(e){e.stopPropagation();phase='target';targets=[];targetKind='';renderPanel();};
     p.querySelector('.jm-do-team').onclick=function(e){e.stopPropagation();if(canTeam)saveTeam(selected.slice());};
     p.querySelector('.jm-do-cancel').onclick=function(e){e.stopPropagation();reset();};
   }
-  async function saveTeam(ids){try{var loc=locate(ids[0]);if(!loc||!samePlace(ids))throw new Error('같은 대기번호 또는 같은 코트의 사람만 팀설정할 수 있습니다.');var st=await rpc('getPublicState',[null]);var existing=Array.isArray(st&&st.tempPairs)?st.tempPairs.slice():[];existing=existing.filter(function(p){var all=tempIds(p);return !ids.some(function(id){return all.indexOf(String(id))>=0;});});existing.push({members:ids.map(String),pairA:ids.slice(0,2).map(String),pairB:ids.slice(2,4).map(String),zone:loc.type,createdAt:Date.now()});var saved=await rpc('setTempPairs',[null,existing]);absorb(saved||{});ids.forEach(function(id){yellow[String(id)]=1;});reset();renderYellow();toast(ids.length+'명 팀설정 완료',false);}catch(e){toast(String(e&&e.message||e||'팀설정 실패'),true);}}
+  async function saveTeam(ids){try{if(ids.length!==2)throw new Error('팀설정은 2명 선택일 때만 사용할 수 있습니다.');var loc=locate(ids[0]);if(!loc||!samePlace(ids))throw new Error('같은 대기번호 또는 같은 코트의 2명만 팀설정할 수 있습니다.');var st=await rpc('getPublicState',[null]);var existing=Array.isArray(st&&st.tempPairs)?st.tempPairs.slice():[];existing=existing.filter(function(p){var all=tempIds(p);return !ids.some(function(id){return all.indexOf(String(id))>=0;});});existing.push({members:ids.map(String),pairA:ids.map(String),pairB:[],zone:loc.type,createdAt:Date.now()});var saved=await rpc('setTempPairs',[null,existing]);absorb(saved||{});ids.forEach(function(id){yellow[String(id)]=1;});reset();renderYellow();toast('2명 팀설정 완료',false);}catch(e){toast(String(e&&e.message||e||'팀설정 실패'),true);}}
   function emptyTarget(el){if(!el)return null;var raw=String(el.getAttribute('onclick')||'');var m=raw.match(/handleEmptySlotTap\(['\"]([^'\"]+)['\"],['\"]([^'\"]+)['\"],\s*(\d+)/);if(!m)return null;var type=String(m[1]),idx=String(m[2]);return {kind:'empty',type:type,key:type==='wait'?String(Number(idx)+1):idx,slotIndex:Number(m[3]),el:el,id:'e|'+type+'|'+idx+'|'+m[3]};}
   async function executeSwap(src,dst){try{await rpc('swapMembers',[null,src.map(String),dst.map(String)]);reset();if(typeof renderState==='function')renderState();toast(src.length+'명 교환 완료',false);}catch(e){toast(String(e&&e.message||e||'교환 실패'),true);}}
   async function executeMove(){var src=selected.slice(),dst=targets.slice();if(src.length!==dst.length)return;try{if(targetKind==='member'){await rpc('swapMembers',[null,src,dst.map(function(t){return String(t.id);})]);}else{for(var i=0;i<src.length;i++){var t=dst[i];await rpc('moveOrSwapMember',[null,String(src[i]),String(t.type),String(t.type==='wait'?Number(t.key)-1:t.key),'']);}}reset();if(typeof renderState==='function')renderState();toast(src.length+'명 이동/교환 완료',false);}catch(e){toast(String(e&&e.message||e||'이동/교환 실패'),true);phase='source';targets=[];targetKind='';renderGreen();renderPanel();}}
   function addTarget(t){if(!t)return;if(targetKind&&targetKind!==t.kind){toast('빈자리와 사람은 섞어서 선택할 수 없습니다.',true);return;}var key=t.kind==='member'?'m|'+t.id:t.id;var at=targets.findIndex(function(x){return (x.kind==='member'?'m|'+x.id:x.id)===key;});if(at>=0){targets.splice(at,1);if(!targets.length)targetKind='';renderGreen();renderPanel();return;}if(targets.length>=selected.length)return;targetKind=t.kind;targets.push(t);renderGreen();renderPanel();if(targets.length===selected.length)executeMove();}
+  function beginAutoTarget(t){phase='target';targets=[];targetKind='';addTarget(t);}
   function onClick(event){if(event.button>0)return;if(event.target&&event.target.closest&&event.target.closest('#jm-admin-multi-action'))return;ensureStyle();
     if(phase==='target'){
       var ee=event.target&&event.target.closest&&event.target.closest('.quick-empty-slot,.person.empty');if(ee&&ee.closest('#adminApp')){var et=emptyTarget(ee);if(et){event.preventDefault();event.stopPropagation();if(event.stopImmediatePropagation)event.stopImmediatePropagation();addTarget(et);return;}}
       var tc=card(event.target);if(tc){var tid=idOf(tc);if(!tid||selected.indexOf(tid)>=0)return;event.preventDefault();event.stopPropagation();if(event.stopImmediatePropagation)event.stopImmediatePropagation();addTarget({kind:'member',id:tid});return;}return;
     }
+    // Movement-only counts (1,3,4): tapping an empty destination starts movement immediately.
+    var sourceEmpty=event.target&&event.target.closest&&event.target.closest('.quick-empty-slot,.person.empty');
+    if(sourceEmpty&&sourceEmpty.closest('#adminApp')&&selected.length&&selected.length!==2){var sourceEt=emptyTarget(sourceEmpty);if(sourceEt){event.preventDefault();event.stopPropagation();if(event.stopImmediatePropagation)event.stopImmediatePropagation();beginAutoTarget(sourceEt);return;}}
     if(event.target&&event.target.closest&&event.target.closest('button,input,textarea,select,a,[role="button"]'))return;
     var c=card(event.target);if(!c)return;var id=idOf(c);if(!id)return;var loc=locate(id);if(!loc)return;
     event.preventDefault();event.stopPropagation();if(event.stopImmediatePropagation)event.stopImmediatePropagation();
     var at=selected.indexOf(id);if(at>=0){selected.splice(at,1);if(!selected.length)group=null;renderGreen();renderPanel();return;}
     if(!selected.length){selected=[id];group=signature(id);renderGreen();renderPanel();return;}
     var same=signature(id)===group;
-    if(same){if(selected.length<4)selected.push(id);else toast('한 번에 최대 4명까지 선택할 수 있습니다.',true);renderGreen();renderPanel();return;}
+    if(same){
+      if(selected.length<4){selected.push(id);renderGreen();renderPanel();return;}
+      toast('한 번에 최대 4명까지 선택할 수 있습니다.',true);return;
+    }
+    // One selected member moves/swaps immediately without any choice popup.
     if(selected.length===1){var left=selected[0];renderGreen();executeSwap([left],[id]);return;}
-    toast('여러 명 이동은 먼저 이동/교환 버튼을 누른 뒤 같은 수의 대상을 선택하세요.',false);
+    // Three/four selected members are movement-only. A different-location tap
+    // becomes the first destination automatically, with no move/team popup.
+    if(selected.length===3||selected.length===4){beginAutoTarget({kind:'member',id:id});return;}
+    // Exactly two selected members intentionally keep the decision popup.
+    toast('2명 선택 시 이동/교환 또는 팀설정을 먼저 선택하세요.',false);
   }
   async function refreshTeams(){try{var s=await rpc('getPublicState',[null]);absorb(s);}catch(_){} }
-  function watch(){var a=app();if(!a){setTimeout(watch,120);return;}ensureStyle();if(!a.__jmV2052Observer){var busy=false;a.__jmV2052Observer=new MutationObserver(function(){if(busy)return;busy=true;(window.requestAnimationFrame||setTimeout)(function(){busy=false;renderGreen();renderYellow();},16);});a.__jmV2052Observer.observe(a,{childList:true,subtree:true});}refreshTeams();}
+  function watch(){var a=app();if(!a){setTimeout(watch,120);return;}ensureStyle();if(!a.__jmV2053Observer){var busy=false;a.__jmV2053Observer=new MutationObserver(function(){if(busy)return;busy=true;(window.requestAnimationFrame||setTimeout)(function(){busy=false;renderGreen();renderYellow();},16);});a.__jmV2053Observer.observe(a,{childList:true,subtree:true});}refreshTeams();}
   ensureStyle();window.addEventListener('click',onClick,true);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',watch,{once:true});else setTimeout(watch,0);
 })();
