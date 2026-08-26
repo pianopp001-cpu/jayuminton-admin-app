@@ -1,0 +1,2 @@
+trigger=2026-08-21T19:25:00+09:00
+purpose=force pull_request synchronize for relay repair
