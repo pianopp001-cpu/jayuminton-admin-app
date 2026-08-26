@@ -14,9 +14,9 @@
   var legacyTempPairsChecked=false;
   function validTempPairs(value){
     return (Array.isArray(value)?value:[]).filter(function(x){
-      if(!x||['wait','court'].indexOf(String(x.zone))<0||!Array.isArray(x.pairA)||x.pairA.length!==2)return false;
-      return new Set(x.pairA.map(String)).size===2;
-    }).map(function(x){return {pairA:x.pairA.map(String),pairB:[],zone:String(x.zone),createdAt:Number(x.createdAt)||Date.now()};});
+      if(!x||['wait','court'].indexOf(String(x.zone))<0||!Array.isArray(x.pairA)||!Array.isArray(x.pairB)||x.pairA.length!==2||x.pairB.length!==2)return false;
+      return new Set(x.pairA.concat(x.pairB).map(String)).size===4;
+    }).map(function(x){return {pairA:x.pairA.map(String),pairB:x.pairB.map(String),zone:String(x.zone),createdAt:Number(x.createdAt)||Date.now()};});
   }
   function loadLegacyTempPairs(){
     try{return validTempPairs(JSON.parse(localStorage.getItem(TEMP_PAIR_KEY)||'[]'));}catch(_){return [];}
@@ -37,8 +37,7 @@
     }
     Array.prototype.forEach.call(document.querySelectorAll('.jm-temp-pair'),function(card){card.classList.remove('jm-temp-pair');if(card.style&&card.style.removeProperty)card.style.removeProperty('--jm-temp-pair-color');});
     loadTempPairs().forEach(function(group,index){
-      var side=[group.pairA,TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length]];
-      Array.prototype.forEach.call(document.querySelectorAll(selector),function(card){var id=idOf(card);if(side[0].indexOf(id)>=0){card.classList.add('jm-temp-pair');if(card.style&&card.style.setProperty)card.style.setProperty('--jm-temp-pair-color',side[1]);}});
+      [[group.pairA,TEMP_PAIR_COLORS[(index*2)%TEMP_PAIR_COLORS.length]],[group.pairB,TEMP_PAIR_COLORS[(index*2+1)%TEMP_PAIR_COLORS.length]]].forEach(function(side){Array.prototype.forEach.call(document.querySelectorAll(selector),function(card){var id=idOf(card);if(side[0].indexOf(id)>=0){card.classList.add('jm-temp-pair');if(card.style&&card.style.setProperty)card.style.setProperty('--jm-temp-pair-color',side[1]);}});});
     });
     if(document.getElementById&&!document.getElementById('jayuminton-shared-temp-pair-style')){
       var style=document.createElement('style');style.id='jayuminton-shared-temp-pair-style';
@@ -172,7 +171,8 @@
     window.__JM_RENDER_TEMP_PAIRS__=renderTempPairs;
     function recordTempPair(first,second,group){
       var ids=group.items.map(function(x){return x.id;});
-      var pairA=[first.id,second.id],pairB=[];
+      var pairA=[first.id,second.id],pairB=ids.filter(function(id){return pairA.indexOf(id)<0;});
+      if(pairB.length!==2)return;
       var old=loadTempPairs().filter(function(saved){var all=saved.pairA.concat(saved.pairB);return !ids.some(function(id){return all.indexOf(id)>=0;});});
       old.push({pairA:pairA,pairB:pairB,zone:group.zone,createdAt:Date.now()});persistTempPairs(old,function(saved){consumeSharedState(saved);pendingPair=null;renderTempPairs();},function(){pendingPair=null;renderTempPairs();});
     }
