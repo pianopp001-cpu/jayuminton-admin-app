@@ -7,6 +7,7 @@ name: Redeploy admin Cloudflare only
 # shared temp-pair verified redeploy trigger 2026-08-26 09:28 KST
 # hardened shared temp-pair frontend redeploy trigger 2026-08-26 09:55 KST
 # server-authoritative tempPairs redeploy trigger 2026-08-26 14:05 KST
+# stable pairA-only + no team-label flicker redeploy trigger 2026-08-26 16:20 KST
 on:
   push:
     branches: [main]
