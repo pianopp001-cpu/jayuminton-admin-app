@@ -32,6 +32,21 @@ if n != 1:
 s = s.replace("loadTempPairs().forEach(function(group,index){var color=TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length];group.pairA.forEach(function(id){desired[String(id)]=color;});});",
               "loadTempPairs().forEach(function(group){tempTeamIds(group).forEach(function(id){desired[String(id)]='#d4a017';});});")
 
+# Persist fresh Cloudflare login sessions immediately. The old page performs the
+# next admin/member state call right after login; without this, that follow-up
+# request has no Authorization token and the UI looks like a dead login button.
+login_anchor = """    }).then(function(response){return response.json();}).then(function(packet){
+      if(!packet||packet.ok!==true)throw new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.'));
+      if(packet.result){"""
+login_replacement = """    }).then(function(response){return response.json();}).then(function(packet){
+      if(!packet||packet.ok!==true)throw new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.'));
+      if(name==='createAdminSession'&&packet.result&&packet.result.ok&&packet.result.token){try{localStorage.setItem('jayuminton_admin_session_v1',String(packet.result.token));}catch(_){}}
+      if(name==='verifyMemberPassword'&&packet.result&&packet.result.ok&&packet.result.sessionToken){try{localStorage.setItem('jayuminton_member_session_token_v1',String(packet.result.sessionToken));localStorage.setItem('jayuminton_member_session_token_v164',String(packet.result.sessionToken));}catch(_){}}
+      if(packet.result){"""
+if login_anchor not in s:
+    raise SystemExit('Cloudflare login response anchor not found')
+s = s.replace(login_anchor, login_replacement, 1)
+
 # Disable the old two-click/confirm pair controller whenever the v2047+ multi-action controller is installed.
 s = s.replace("function handlePairClick(event){\n      if(event.defaultPrevented||event.button>0)return;",
               "function handlePairClick(event){\n      if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;\n      if(event.defaultPrevented||event.button>0)return;")
@@ -50,6 +65,8 @@ if "tempTeamIds(group).forEach" not in s or "#d4a017" not in s:
     raise SystemExit('2-4 yellow team bridge patch missing')
 if "if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;" not in s:
     raise SystemExit('legacy pair guard missing')
+if "jayuminton_admin_session_v1" not in s or "name==='createAdminSession'" not in s:
+    raise SystemExit('admin login session persistence patch missing')
 
 p.write_text(s, encoding='utf-8')
 # Catch a broken global bridge before it can be embedded in an APK. A syntax
