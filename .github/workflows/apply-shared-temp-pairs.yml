@@ -37,9 +37,6 @@ jobs:
           grep -q "reconcileTempPairs(state)" cloudflare/state-worker/worker.js
           grep -q "setTempPairs" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "typeof document==='undefined'||typeof document.querySelectorAll!=='function'" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "member.jm-team-card.has-member-team.jm-temp-pair" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "card.classList.contains('jm-temp-pair')" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "bottom.textContent=teamText" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "확인 = 1회성 팀설정" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           python3 - <<'PY'
           from pathlib import Path
@@ -47,11 +44,13 @@ jobs:
           b=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js').read_text()
           if "  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n" in w:
               raise SystemExit('duplicate reconcileTempPairs detected')
-          if "var side=[group.pairA,TEMP_PAIR_COLORS[index%TEMP_PAIR_COLORS.length]];" not in b:
-              raise SystemExit('pairA-only overlay missing')
-          if '.jm-team-bottom-label{display:block!important' not in b:
-              raise SystemExit('small bottom official team label style missing')
-          print('SHARED_TEMP_PAIR_CONTRACT_OK labels=bottom-small pairAOnly=true prompt=true')
+          if 'bottom.textContent=teamText' in b:
+              raise SystemExit('team label creator must not exist')
+          if '.jm-team-bottom-label{display:none!important' not in b:
+              raise SystemExit('team label hidden style missing')
+          if 'group.pairA' not in b or 'jm-temp-pair' not in b:
+              raise SystemExit('pairA overlay missing')
+          print('SHARED_TEMP_PAIR_CONTRACT_OK labels=none pairAOnly=true prompt=true')
           PY
       - name: Commit generated sources to main
         run: |
