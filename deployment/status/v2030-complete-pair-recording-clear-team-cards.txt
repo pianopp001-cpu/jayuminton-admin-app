@@ -1,5 +1,5 @@
 status=success
 version=203.0
-run_id=33003377956
-sha256=798531afd0cddb89be5a356760de20496d804f56493c6929a916f784f2bef3be
-build=current-cloudflare-admin-v2050-direct-login
+run_id=33005263859
+sha256=8d7e48de4aa4871629735cfce0ecd35b3d3877128b41286aa39fd90dc50bca1f
+build=current-cloudflare-admin-v2052-green-move-yellow-team-current-password
