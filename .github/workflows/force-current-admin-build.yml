@@ -1,0 +1,35 @@
+name: Force current admin APK build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/force-current-admin-build.yml'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Dispatch current v203 admin APK build
+        shell: bash
+        run: |
+          set -euo pipefail
+          WF='build-v2015-known-good-shell.yml'
+          old="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run "$WF" --repo "$GITHUB_REPOSITORY" --ref main
+          run_id=''
+          for i in $(seq 1 90); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "$run_id" != "0" ] && [ "$run_id" != "$old" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"; test "$run_id" != "0"; test "$run_id" != "$old"
+          echo "ADMIN_APK_RUN_ID=$run_id"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
