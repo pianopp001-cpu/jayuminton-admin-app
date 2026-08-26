@@ -2,6 +2,8 @@ name: Build current admin APK clean
 
 on:
   workflow_dispatch: {}
+  issues:
+    types: [opened]
   push:
     branches: [main]
     paths:
@@ -24,6 +26,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'issues' || startsWith(github.event.issue.title, '[BUILD-CURRENT-ADMIN]')
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
