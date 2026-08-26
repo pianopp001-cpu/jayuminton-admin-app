@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'deployment/jayuminton/patch_shared_temp_pairs_v2.py'
+      - 'deployment/jayuminton/patch_shared_temp_pairs_v3.py'
       - 'cloudflare/state-worker/temp-pairs.test.mjs'
       - '.github/workflows/apply-shared-temp-pairs.yml'
   workflow_dispatch:
@@ -23,44 +24,7 @@ jobs:
         with:
           node-version: '22'
       - name: Apply shared temp-pair patch
-        run: |
-          python3 deployment/jayuminton/patch_shared_temp_pairs_v2.py
-          python3 - <<'PY'
-          from pathlib import Path
-
-          wp=Path('cloudflare/state-worker/worker.js')
-          w=wp.read_text()
-          targets=[
-            ("  syncMemberStatuses(state);\n  return { state, event: { type: 'court_finished'",
-             "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'court_finished'"),
-            ("  syncMemberStatuses(state);\n  return { state, event: { type: 'members_moved'",
-             "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'members_moved'"),
-            ("  syncMemberStatuses(state);\n  return { state, event: { type: 'members_swapped'",
-             "  syncMemberStatuses(state);\n  reconcileTempPairs(state);\n  return { state, event: { type: 'members_swapped'"),
-            ("  return { state, event: { type: 'locations_swapped'",
-             "  reconcileTempPairs(state);\n  return { state, event: { type: 'locations_swapped'"),
-          ]
-          for old,new in targets:
-            if new not in w and old in w:
-              w=w.replace(old,new,1)
-          while "  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n" in w:
-            w=w.replace("  reconcileTempPairs(state);\n  reconcileTempPairs(state);\n","  reconcileTempPairs(state);\n",1)
-          wp.write_text(w)
-
-          p=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js')
-          s=p.read_text()
-          selector="#adminApp .member.jm-team-card.has-member-team.jm-temp-pair,#adminApp .member.jm-team-card.jm-temp-pair,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}"
-          while selector+selector in s:
-            s=s.replace(selector+selector,selector)
-          duplicate="#adminApp .member.jm-team-card.has-member-team.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}#adminApp .member.jm-team-card.jm-temp-pair{box-shadow:0 0 0 3px var(--jm-temp-pair-color)!important}"
-          while duplicate+duplicate in s:
-            s=s.replace(duplicate+duplicate,duplicate)
-          old="card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'"
-          new="if(card.classList.contains('jm-temp-pair'))card.style.removeProperty('box-shadow');else card.style.setProperty('box-shadow','none','important');\n          card.style.setProperty('border'"
-          if new not in s and old in s:
-            s=s.replace(old,new,1)
-          p.write_text(s)
-          PY
+        run: python3 deployment/jayuminton/patch_shared_temp_pairs_v3.py
       - name: Run regression tests
         run: |
           node cloudflare/state-worker/worker.test.mjs
@@ -72,6 +36,7 @@ jobs:
           grep -q "setTempPairsMutation" cloudflare/state-worker/worker.js
           grep -q "reconcileTempPairs(state)" cloudflare/state-worker/worker.js
           grep -q "setTempPairs" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
+          grep -q "typeof document==='undefined'||typeof document.querySelectorAll!=='function'" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "member.jm-team-card.has-member-team.jm-temp-pair" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           grep -q "card.classList.contains('jm-temp-pair')" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
           python3 - <<'PY'
@@ -93,5 +58,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare/state-worker/worker.js deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          git commit -m 'fix(team): keep shared temp pair patch idempotent'
+          git commit -m 'fix(team): share temporary pair state across admin and member'
           git push origin main
