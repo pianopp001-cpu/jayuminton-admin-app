@@ -1,49 +1,13 @@
-name: Apply team interaction v2040
+name: Apply team interaction v2040 (disabled obsolete)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'deployment/jayuminton/patch_team_interaction_v2040.py'
-      - '.github/workflows/apply-team-interaction-v2040.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-      - name: Apply exact team interaction patch
-        run: python3 deployment/jayuminton/patch_team_interaction_v2040.py
-      - name: Syntax check generated JavaScript
-        run: |
-          node --check deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          node --check deployment/jayuminton/admin_team_layout_v2038.js
-      - name: Verify contract
-        run: |
-          grep -q "확인 = 1회성 팀설정" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "bottom.textContent=teamText" deployment/jayuminton/cloudflare_v6_frontend_bridge.js
-          grep -q "bottom.textContent=team" deployment/jayuminton/admin_team_layout_v2038.js
-          python3 - <<'PY'
-          from pathlib import Path
-          b=Path('deployment/jayuminton/cloudflare_v6_frontend_bridge.js').read_text()
-          assert "[[group.pairA" not in b, 'pairB is still being colored'
-          assert "var side=[group.pairA" in b
-          print('TEAM_V2040_CONTRACT_OK')
-          PY
-      - name: Commit generated sources
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment/jayuminton/cloudflare_v6_frontend_bridge.js deployment/jayuminton/admin_team_layout_v2038.js
-          if git diff --cached --quiet; then
-            echo 'No generated changes'
-            exit 0
-          fi
-          git commit -m 'fix(team): v2040 official labels and one-game pair choice'
-          git push origin main
+      - run: echo 'Disabled: obsolete workflow restored Team1/Team2 labels and conflicts with shared temp-pair v3.'
