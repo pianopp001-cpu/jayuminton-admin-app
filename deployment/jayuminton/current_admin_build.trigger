@@ -1,2 +1,2 @@
-build=current-cloudflare-admin-v2071-free-2-4-bundled-contract
-reason=align-bundled-contract-with-free-2-4-admin-selection
+build=current-cloudflare-admin-v2074-md-full-contract
+reason=full-md-recheck-and-continue-current-admin-actions
