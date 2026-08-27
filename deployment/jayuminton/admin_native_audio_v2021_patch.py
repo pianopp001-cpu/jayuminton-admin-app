@@ -34,7 +34,12 @@ if admin_html.exists():
             if marker not in final_html: raise SystemExit('bundled v203 post-contract missing: '+marker)
         if 'script.google.com/macros/s/' in final_html: raise SystemExit('GAS URL survived in bundled v203 administrator HTML')
 
-        for marker in ('__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2045__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2052__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__'):
+        stale_markers=(
+            '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
+            '__JAYUMINTON_ADMIN_CARD_INTERACTION_V2042__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2043__','__JAYUMINTON_ADMIN_CARD_INTERACTION_V2045__',
+            '__JAYUMINTON_ADMIN_MULTI_ACTION_V2046__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2052__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__','__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__'
+        )
+        for marker in stale_markers:
             while marker in final_html:
                 p=final_html.find(marker); a=final_html.rfind('<script',0,p); b=final_html.find('</script>',p)
                 if a<0 or b<0: raise SystemExit('stale bundled patch marker outside script tag: '+marker)
@@ -49,40 +54,31 @@ if admin_html.exists():
 
         final_html=admin_html.read_text(encoding='utf-8')
         required=(
-            '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__',
-            'killLegacyTeamSafety','__jmLegacyTeamSafetyGuard',
+            '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2060__',
+            '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2060__',
+            'has-member-team','--member-team-color',
+            'inset 0 0 0 5px #d4a017',
+            'jm-admin-new-card','jm-admin-new-flag','min-height:86px',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__',
             '__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__',
-            'jm-admin-v2054-pass-through-style','jm-send-court-wait','코트배정대기로',
-            'a.__jmV2053Observer.disconnect','a.__jmV2054FastObserver',
             'jayuminton-admin-multi-action-v2053-style',
-            'jm-source-selected','jm-target-selected','jm-temp-team-v2047',
             '녹색 = 이동선택','2명일 때만 이동/교환인지 팀설정인지 선택합니다.',
             '1명·3명·4명은 자동으로 이동/교환입니다.',
             '이동/교환','팀설정','#16a34a','#d4a017',
-            "phase='target'",'selected.length!==2','samePlace(selected)',
-            'members:ids.map(String)',
-            "rpc('swapMembers'", "rpc('moveOrSwapMember'", "rpc('sendMemberMessage'",
+            "rpc('setTempPairs'", "rpc('sendMemberMessage'",
             'if(selected.length===1)', 'if(selected.length===3||selected.length===4)',
-            "if(targets.length===selected.length)executeMove();",
-            "var old=document.getElementById('jayuminton-admin-team-safety-v2037');if(old)old.remove();",
-            'obs.observe(a,{childList:true,subtree:true})'
+            "if(targets.length===selected.length)executeMove();"
         )
         for marker in required:
-            if marker not in final_html: raise SystemExit('bundled admin v2056 guard missing: '+marker)
-        if 'window.google&&window.google.script&&window.google.script.run' in card_js: raise SystemExit('v2053 team interaction must use direct Cloudflare window.server RPC')
-        if 'window.confirm(' in card_js: raise SystemExit('v2053 must use in-app action panel, not browser confirm')
-        if final_html.count('__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__') != 2: raise SystemExit('v2053 card interaction duplication detected')
-        if final_html.count('__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__') != 2: raise SystemExit('v2054 hotfix duplication detected')
-        print('BUNDLED_ADMIN_MULTI_ACTION_V2056_HOTFIX_OK')
+            if marker not in final_html: raise SystemExit('bundled admin current-contract missing: '+marker)
+        if 'window.google&&window.google.script&&window.google.script.run' in card_js: raise SystemExit('team interaction must use direct Cloudflare window.server RPC')
+        if 'window.confirm(' in card_js: raise SystemExit('team interaction must use in-app action panel, not browser confirm')
+        print('BUNDLED_ADMIN_CURRENT_TEAM_CONTRACT_OK')
         print('BUNDLED_ADMIN_MESSAGE_ANYWHERE_OK')
-        print('BUNDLED_ADMIN_STABLE_TEAM_BORDER_OK')
-        print('BUNDLED_ADMIN_COURT_WAIT_RETURN_BUTTON_OK')
-        print('BUNDLED_ADMIN_FAST_LOCAL_REPAINT_OK')
-        print('BUNDLED_ADMIN_GREEN_MOVE_YELLOW_TEAM_OK')
-        print('BUNDLED_ADMIN_CROSS_LOCATION_DIRECT_SWAP_OK')
-        print('BUNDLED_ADMIN_TEAM_DIRECT_CLOUDFLARE_RPC_OK')
+        print('BUNDLED_ADMIN_PERMANENT_DOUBLE_BORDER_OK')
+        print('BUNDLED_ADMIN_TEMP_YELLOW_TEAM_OK')
+        print('BUNDLED_ADMIN_NEW_BADGE_NO_NAME_OVERLAP_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: v2056-stable-team-message-anywhere-20260827
+# BUILD_TRIGGER: v2060-current-team-contract-20260827
