@@ -50,6 +50,15 @@ s = s.replace("function installAdminTeamSafetyStyle(){\n      if(document.getEle
 s = s.replace("function recordTempPair(first,second,group){",
               "function recordTempPair(first,second,group){\n      if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;")
 
+# Permanent-team borders are rendered by the final v2064 layout contract.
+# Do not leave an inline !important outline here: it would beat the later CSS
+# and draw the old inward border over the card contents.
+legacy_inline_team = "if(teamText){card.classList.add('has-member-team');card.setAttribute('data-jm-team-text',teamText);card.style.setProperty('border','2px solid var(--member-team-color)','important');card.style.setProperty('outline','2px solid var(--member-team-color)','important');card.style.setProperty('outline-offset','-5px','important');}"
+single_team_marker = "if(teamText){card.classList.add('has-member-team');card.setAttribute('data-jm-team-text',teamText);}"
+if s.count(legacy_inline_team) != 1:
+    raise SystemExit('legacy inline permanent-team border mismatch')
+s = s.replace(legacy_inline_team, single_team_marker, 1)
+
 login_fallback = r'''
   window.__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2051__=true;
   function jmIsAdminPage(){
@@ -125,6 +134,8 @@ if "if(window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__)return;" not in s:
     raise SystemExit('legacy pair guard missing')
 if "jayuminton_admin_session_v1" not in s or "name==='createAdminSession'" not in s:
     raise SystemExit('admin login session persistence patch missing')
+if "card.style.setProperty('outline','2px solid var(--member-team-color)'" in s:
+    raise SystemExit('legacy inline permanent-team outline remains')
 if '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2051__' not in s or "window.server=function(name,args)" not in s or "window.adminLogin=async function()" not in s or "data-jm-cloudflare-login" not in s:
     raise SystemExit('exact admin Cloudflare login override missing')
 

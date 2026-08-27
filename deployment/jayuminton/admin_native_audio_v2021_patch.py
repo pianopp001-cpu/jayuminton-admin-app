@@ -54,11 +54,14 @@ if admin_html.exists():
 
         final_html=admin_html.read_text(encoding='utf-8')
         required=(
-            '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2060__',
-            '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2060__',
+            '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2064__',
+            '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2064__',
             'has-member-team','--member-team-color',
-            'inset 0 0 0 5px #d4a017',
-            'jm-admin-new-card','jm-admin-new-flag','min-height:86px',
+            'outline:1px solid var(--member-team-color',
+            'outline-offset:2px',
+            '0 0 0 5px var(--member-team-color',
+            'outline:3px solid #d4a017',
+            'jm-admin-new-card','min-height:88px',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__',
             '__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__',
@@ -66,7 +69,7 @@ if admin_html.exists():
             '녹색 = 이동선택','2명일 때만 이동/교환인지 팀설정인지 선택합니다.',
             '1명·3명·4명은 자동으로 이동/교환입니다.',
             '이동/교환','팀설정','#16a34a','#d4a017',
-            "rpc('setTempPairs'", "rpc('sendMemberMessage'",
+            "rpc('setTempPairs'", "runAction('sendMemberMessage'",
             'if(selected.length===1)', 'if(selected.length===3||selected.length===4)',
             "if(targets.length===selected.length)executeMove();"
         )
@@ -81,4 +84,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_NEW_BADGE_NO_NAME_OVERLAP_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: v2060-current-team-contract-20260827
+# BUILD_TRIGGER: v2064-single-password-distinct-thin-team-borders-20260827

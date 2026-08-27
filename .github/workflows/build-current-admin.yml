@@ -13,6 +13,7 @@ on:
       - 'deployment/jayuminton/current_admin_build.trigger'
       - 'deployment/jayuminton/admin_card_interaction_v2042.js'
       - 'deployment/jayuminton/admin_team_layout_v2038.js'
+      - 'deployment/jayuminton/admin_team_layout_v2064.test.mjs'
       - 'deployment/jayuminton/admin_multiaction_v2054_hotfix.js'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
       - 'deployment/jayuminton/patch_bridge_admin_multiselect_v2048.py'
@@ -88,6 +89,7 @@ jobs:
           HTML=app/src/main/assets/admin/index.html
           python3 deployment/jayuminton/patch_bridge_admin_multiselect_v2048.py
           python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$HTML"
+          node deployment/jayuminton/admin_team_layout_v2064.test.mjs
           python3 deployment/jayuminton/admin_native_audio_v2021_patch.py
           python3 deployment/jayuminton/admin_native_vibration_v2023_patch.py
           python3 deployment/jayuminton/force_cloudflare_admin_login_v2050.py
@@ -107,14 +109,22 @@ jobs:
           grep -F "if(selected.length===3||selected.length===4)" "$HTML" >/dev/null
           grep -F "window.server!=='function'" "$HTML" >/dev/null
           grep -F "rpc('setTempPairs'" "$HTML" >/dev/null
-          grep -F "rpc('sendMemberMessage'" "$HTML" >/dev/null
+          grep -F "runAction('sendMemberMessage'" "$HTML" >/dev/null
           grep -F "executeSwap([left],[id])" "$HTML" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_DIRECT_CLOUDFLARE_LOGIN_V2050__' "$HTML" >/dev/null
           grep -F 'window.server=directServer' "$HTML" >/dev/null
           grep -F 'window.adminLogin=async function()' "$HTML" >/dev/null
           grep -F "directServer('createAdminSession',[pin])" "$HTML" >/dev/null
           grep -F "directServer('getCurrentMemberPassword',[null])" "$HTML" >/dev/null
-          grep -F 'jm-current-member-password-value' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SINGLE_MEMBER_PASSWORD_V2064__' "$HTML" >/dev/null
+          grep -F 'id="currentMemberPassword"' "$HTML" >/dev/null
+          test "$(grep -o 'id="currentMemberPassword"' "$HTML" | wc -l)" -eq 1
+          ! grep -F 'jm-current-member-password-box' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2064__' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2064__' "$HTML" >/dev/null
+          grep -F 'outline:1px solid var(--member-team-color' "$HTML" >/dev/null
+          grep -F '0 0 0 5px var(--member-team-color' "$HTML" >/dev/null
+          ! grep -F "card.style.setProperty('outline','2px solid var(--member-team-color)'" "$HTML" >/dev/null
           grep -F 'jayuminton-state.pianopp001.workers.dev/api/compat/rpc' "$HTML" >/dev/null
           ! grep -F 'window.google&&window.google.script&&window.google.script.run' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
           ! grep -F 'window.confirm(' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
@@ -162,12 +172,20 @@ jobs:
           grep -F "if(selected.length===1)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===3||selected.length===4)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "rpc('setTempPairs'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "rpc('sendMemberMessage'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "runAction('sendMemberMessage'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "executeSwap([left],[id])" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_DIRECT_CLOUDFLARE_LOGIN_V2050__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'window.server=directServer' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "directServer('getCurrentMemberPassword',[null])" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'jm-current-member-password-value' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SINGLE_MEMBER_PASSWORD_V2064__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'id="currentMemberPassword"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          test "$(grep -o 'id="currentMemberPassword"' "$RUNNER_TEMP/apk-admin.html" | wc -l)" -eq 1
+          ! grep -F 'jm-current-member-password-box' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2064__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2064__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'outline:1px solid var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '0 0 0 5px var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F "card.style.setProperty('outline','2px solid var(--member-team-color)'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jayuminton-state.pianopp001.workers.dev/api/compat/rpc' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           SHA=$(sha256sum "$APK" | awk '{print $1}')
