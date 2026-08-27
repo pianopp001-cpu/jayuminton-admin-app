@@ -1,9 +1,9 @@
-(function installJayumintonAdminTeamLayoutV2060(){
+(function installJayumintonAdminTeamLayoutV2061(){
   'use strict';
-  if(window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2060__)return;
+  if(window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2061__)return;
   window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__=true;
-  window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2060__=true;
-  window.__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2060__=true;
+  window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2061__=true;
+  window.__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2061__=true;
 
   var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
   var PALETTE=['#6d28d9','#0891b2','#c2410c','#0f766e','#be185d','#4f46e5','#15803d','#a16207'];
@@ -19,16 +19,16 @@
   function flagNewCard(card,member){var isNew=!!(member&&(member.isNew===true||['1','true'].indexOf(String(member.isNew||'').toLowerCase())>=0));card.classList.toggle('jm-admin-new-card',isNew);var nodes=card.querySelectorAll?card.querySelectorAll('span,b,strong,small,label,em,i'):[];for(var i=0;i<nodes.length;i++){var txt=String(nodes[i].textContent||'').replace(/\s+/g,' ').trim().toLowerCase();nodes[i].classList.toggle('jm-admin-new-flag',!!(isNew&&(txt==='신규'||txt==='new'||txt==='new 신규'||txt==='신규 new')));}}
   function hideTeamWords(card){var nodes=card.querySelectorAll('[data-team-label],.member-team-badge,.jm-team-badge,.team-badge,.team-label,.jm-team-bottom-label');for(var i=0;i<nodes.length;i++){nodes[i].style.setProperty('display','none','important');nodes[i].setAttribute('aria-hidden','true');}}
   function sync(root){killLegacyTeamSafety();clearContainerArtifacts();cards(root).forEach(function(card){var id=memberId(card),member=memberById(id),key=teamKey(member);flagNewCard(card,member);hideTeamWords(card);if(key){card.classList.add('has-member-team');card.setAttribute('data-jm-team-text',key);card.style.setProperty('--member-team-color',colorFor(key,member));}else{card.classList.remove('has-member-team');card.removeAttribute('data-jm-team-text');card.style.removeProperty('--member-team-color');}});}
-  function installStyle(){killLegacyTeamSafety();var old=document.getElementById('jayuminton-admin-team-layout-v2038');if(old)old.remove();var style=document.getElementById('jayuminton-admin-team-layout-v2060');if(style)return;style=document.createElement('style');style.id='jayuminton-admin-team-layout-v2060';style.textContent=''
+  function installStyle(){killLegacyTeamSafety();var old=document.getElementById('jayuminton-admin-team-layout-v2038');if(old)old.remove();var old2=document.getElementById('jayuminton-admin-team-layout-v2060');if(old2)old2.remove();var style=document.getElementById('jayuminton-admin-team-layout-v2061');if(style)return;style=document.createElement('style');style.id='jayuminton-admin-team-layout-v2061';style.textContent=''
     +'#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}'
-    +'#adminApp .has-member-team{border-color:transparent!important;outline:0!important;box-shadow:inset 0 0 0 2px var(--member-team-color,#6d28d9),inset 0 0 0 5px rgba(255,255,255,.98),inset 0 0 0 7px var(--member-team-color,#6d28d9)!important;background-clip:padding-box!important}'
-    +'#adminApp .has-member-team.jm-temp-team-v2047,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-team-v2047,#adminApp .jm-temp-pair{box-shadow:inset 0 0 0 5px #d4a017!important;outline:0!important}'
+    +'#adminApp .has-member-team{border-color:transparent!important;outline:3px solid var(--member-team-color,#6d28d9)!important;outline-offset:3px!important;box-shadow:0 0 0 6px #fff,0 0 0 9px var(--member-team-color,#6d28d9)!important;background-clip:padding-box!important}'
+    +'#adminApp .has-member-team.jm-temp-team-v2047,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-team-v2047,#adminApp .jm-temp-pair{outline:5px solid #d4a017!important;outline-offset:1px!important;box-shadow:none!important}'
     +'#adminApp .wait-card.has-member-team,#adminApp .wait-item.has-member-team,#adminApp .wait-card.jm-temp-team-v2047,#adminApp .wait-item.jm-temp-team-v2047{box-shadow:none!important;outline:0!important}'
     +'#adminApp .jm-admin-new-card{position:relative!important;min-height:86px!important;padding-right:8px!important;padding-bottom:28px!important;overflow:visible!important}'
     +'#adminApp .jm-admin-new-card .name,#adminApp .jm-admin-new-card .quick-member-name{display:block!important;position:relative!important;z-index:2!important;max-width:100%!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;word-break:keep-all!important}'
     +'#adminApp .jm-admin-new-flag{position:absolute!important;right:6px!important;bottom:4px!important;top:auto!important;left:auto!important;z-index:3!important;display:inline-flex!important;width:auto!important;height:auto!important;max-width:48px!important;margin:0!important;padding:1px 4px!important;font-size:9px!important;line-height:1.2!important;white-space:nowrap!important;pointer-events:none!important}';
     (document.head||document.documentElement).appendChild(style);
   }
-  function boot(){var app=document.getElementById('adminApp');if(!app){setTimeout(boot,120);return;}installStyle();sync(document);if(app.__jmTeamLayoutV2060Observer)return;var queued=false;app.__jmTeamLayoutV2060Observer=new MutationObserver(function(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;sync(app);});});app.__jmTeamLayoutV2060Observer.observe(app,{childList:true,subtree:true});}
+  function boot(){var app=document.getElementById('adminApp');if(!app){setTimeout(boot,120);return;}installStyle();sync(document);if(app.__jmTeamLayoutV2061Observer)return;var queued=false;app.__jmTeamLayoutV2061Observer=new MutationObserver(function(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;sync(app);});});app.__jmTeamLayoutV2061Observer.observe(app,{childList:true,subtree:true});}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else setTimeout(boot,0);
 })();
