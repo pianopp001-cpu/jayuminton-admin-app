@@ -67,21 +67,26 @@ function memberFirebasePreviewRpc_(e) {
 BRIDGE = r'''<script>
 /* jayuminton-v130-firebase-member-preview */
 (function(){
-  var endpoint=RPC_URL_JSON, seq=0;
-  function enc(args){
-    var bytes=new TextEncoder().encode(JSON.stringify(args||[])), s='';
-    for(var i=0;i<bytes.length;i++)s+=String.fromCharCode(bytes[i]);
-    return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  var endpoint=RPC_URL_JSON;
+  function storedToken(){
+    try{return String(localStorage.getItem('jayuminton_member_session_token_v1')||localStorage.getItem('jayuminton_member_session_token_v164')||'');}
+    catch(_){return '';}
   }
   function invoke(name,args,success,failure){
-    var cb='__jmPrev'+Date.now()+'_'+(++seq), sc=document.createElement('script'), done=false;
-    var timer=setTimeout(function(){finish(new Error('서버 응답 시간이 초과되었습니다.'));},20000);
-    function cleanup(){clearTimeout(timer);try{delete window[cb];}catch(e){window[cb]=undefined;}if(sc.parentNode)sc.parentNode.removeChild(sc);}
-    function finish(err,val){if(done)return;done=true;cleanup();try{if(err){if(typeof failure==='function')failure(err);}else if(typeof success==='function')success(val);}catch(e){}}
-    window[cb]=function(packet){if(packet&&packet.ok)finish(null,packet.result);else finish(new Error(String(packet&&packet.error||'서버 요청에 실패했습니다.')));};
-    sc.onerror=function(){finish(new Error('서버에 연결할 수 없습니다.'));};
-    sc.src=endpoint+'?rpc='+encodeURIComponent(String(name))+'&callback='+encodeURIComponent(cb)+'&payload='+encodeURIComponent(enc(args))+'&nonce='+Date.now()+'_'+seq;
-    document.head.appendChild(sc);
+    var rpcName=String(name||''), token='';
+    if(rpcName!=='verifyMemberPassword'&&rpcName!=='getMemberPasswordVersion')token=storedToken();
+    fetch(endpoint,{
+      method:'POST',cache:'no-store',credentials:'omit',
+      headers:Object.assign({'content-type':'application/json'},token?{'authorization':'Bearer '+token}:{}),
+      body:JSON.stringify({name:rpcName,args:Array.isArray(args)?args:[]})
+    }).then(function(response){
+      return response.text().then(function(text){
+        var packet;try{packet=JSON.parse(text);}catch(_){throw new Error('서버 응답 오류 ('+response.status+')');}
+        if(!response.ok||!packet||packet.ok!==true)throw new Error(String(packet&&packet.error||('서버 요청 실패 ('+response.status+')')));
+        return packet.result;
+      });
+    }).then(function(result){if(typeof success==='function')success(result);})
+      .catch(function(error){if(typeof failure==='function')failure(error);});
   }
   function runner(success,failure){
     return new Proxy({}, {get:function(_,prop){
@@ -95,6 +100,7 @@ BRIDGE = r'''<script>
   window.google.script=window.google.script||{};
   window.google.script.run=runner(null,null);
   window.__JAYUMINTON_V130_FIREBASE_MEMBER_PREVIEW__=true;
+  window.__JAYUMINTON_MEMBER_CURRENT_STATE_RPC__=true;
 
   var loginBusy=false;
   function loginStatus(text,isError){

@@ -27,7 +27,7 @@ jobs:
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       LIVE_USER_URL: https://jayuminton-push.web.app/
-      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+      CLOUDFLARE_RPC_URL: https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,6 +83,8 @@ jobs:
           grep -F "'resumeMemberSession'" "$PUBLIC/index.html" >/dev/null
           grep -F 'memberPreviewLoginButton' "$PUBLIC/index.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
+          grep -F '__JAYUMINTON_MEMBER_CURRENT_STATE_RPC__' "$PUBLIC/index.html" >/dev/null
+          grep -F "method:'POST',cache:'no-store',credentials:'omit'" "$PUBLIC/index.html" >/dev/null
           ! grep -F 'JAYUMINTON_MD7_SINGLE_ACTION_POPUP_V1' "$PUBLIC/index.html"
           ! grep -F 'jayuminton-md7-single-action-popup' "$PUBLIC/index.html"
           ! grep -F 'jayuminton-member-self-profile-edit-v1' "$PUBLIC/index.html"
@@ -135,6 +137,8 @@ jobs:
           grep -F "'resumeMemberSession'" "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F 'memberPreviewLoginButton' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F '__JAYUMINTON_MEMBER_CURRENT_STATE_RPC__' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F "method:'POST',cache:'no-store',credentials:'omit'" "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F 'JAYUMINTON_TEAM_VISUALS_V8' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F '#memberApp [data-member-id].jm-has-team' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F 'border:2px solid var(--jm-team-color' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
