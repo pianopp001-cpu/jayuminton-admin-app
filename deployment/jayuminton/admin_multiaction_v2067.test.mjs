@@ -24,7 +24,8 @@ const clickHandler = source.slice(
   source.indexOf('async function refreshTeams'),
 );
 assert.ok(clickHandler.includes('if(same){if(selected.length<4){selected.push(id);renderGreen();renderPanel();return;}'));
-assert.ok(clickHandler.includes('if(selected.length===3||selected.length===4){beginAutoTarget'));
+assert.ok(clickHandler.includes('if(sourceEmpty&&sourceEmpty.closest(\'#adminApp\')&&selected.length)'));
+assert.ok(clickHandler.includes('if(selected.length>=2&&selected.length<=4){beginAutoTarget'));
 
 const moveHandler = source.slice(
   source.indexOf('async function executeMove()'),
