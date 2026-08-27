@@ -45,17 +45,16 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__' app/src/main/assets/admin/index.html >/dev/null
           grep -F '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__' app/src/main/assets/admin/index.html >/dev/null
 
-      - name: Apply only 3-4 continuous selection fix
+      - name: Apply only non-invasive 2-person overlay fix
         shell: bash
         run: |
           set -euo pipefail
           HTML=app/src/main/assets/admin/index.html
           python3 deployment/jayuminton/patch_v203_baseline_continuous_3_4.py "$HTML"
-          grep -F 'JAYUMINTON_V203_BASELINE_CONTINUOUS_3_4_MINIMAL' "$HTML" >/dev/null
-          grep -F "if(same){if(selected.length<4){selected.push(id);renderGreen();renderPanel();return;}" "$HTML" >/dev/null
-          grep -F "if(selected.length>=2&&selected.length<=4){beginAutoTarget({kind:'member',id:id});return;}" "$HTML" >/dev/null
-          grep -F "if(ids.length!==2)throw new Error('팀설정은 2명 선택일 때만 사용할 수 있습니다.')" "$HTML" >/dev/null
-          grep -F 'jm-v203-two-team-only' "$HTML" >/dev/null
+          grep -F 'JAYUMINTON_V203_BASELINE_CONTINUOUS_3_4_OVERLAY_V2' "$HTML" >/dev/null
+          grep -F 'jm-v203-two-only' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__' "$HTML" >/dev/null
 
       - name: Set identity and signer
         shell: bash
@@ -88,9 +87,9 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
-          grep -F 'JAYUMINTON_V203_BASELINE_CONTINUOUS_3_4_MINIMAL' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "if(same){if(selected.length<4){selected.push(id);renderGreen();renderPanel();return;}" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "if(ids.length!==2)throw new Error('팀설정은 2명 선택일 때만 사용할 수 있습니다.')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'JAYUMINTON_V203_BASELINE_CONTINUOUS_3_4_OVERLAY_V2' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jm-v203-two-only' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -98,7 +97,7 @@ jobs:
           git reset --hard origin/main
           mkdir -p releases deployment/status
           cp "$APK" releases/jayuminton-admin-v203.1-baseline-continuous-3-4.apk
-          printf 'status=success\nversion=203.1\nbase=v203.0-complete-pair-recording-clear-team-cards\nchange=continuous-3-4-selection-only\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2031-baseline-continuous-3-4.txt
+          printf 'status=success\nversion=203.1\nbase=v203.0-complete-pair-recording-clear-team-cards\nchange=continuous-3-4-selection-overlay-only\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2031-baseline-continuous-3-4.txt
           git add releases/jayuminton-admin-v203.1-baseline-continuous-3-4.apk deployment/status/v2031-baseline-continuous-3-4.txt
           git commit -m 'Publish v203.1 baseline continuous 3-4 selection APK' || exit 0
           git push origin HEAD:main
