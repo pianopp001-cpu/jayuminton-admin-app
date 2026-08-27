@@ -85,14 +85,15 @@ if admin_html.exists():
             'jayuminton-admin-multi-action-v2053-style',
             '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__',
             '__JAYUMINTON_ADMIN_FAST_MULTI_MOVE_V2067__',
-            '녹색 = 이동선택', '3·4명 계속 선택 가능',
-            '같은 코트·대기조 사람은 계속 눌러 3명·4명으로 선택할 수 있고, 빈자리나 다른 위치 사람을 누르면 바로 이동/교환 대상으로 선택됩니다.',
             'pointer-events:none', 'applyMoveOrSwapLocally', '명 이동 저장 중',
             '이동/교환','팀설정','#16a34a','#d4a017',
             "rpc('setTempPairs'", "runAction('sendMemberMessage'",
             'if(selected.length===1)', 'if(selected.length>=2&&selected.length<=4){beginAutoTarget',
+            'selected.length===2&&samePlace(selected)',
+            'ids.length<2||ids.length>4||!samePlace(ids)',
+            "if(ids.length!==2)throw new Error('팀설정은 2명 선택일 때만 사용할 수 있습니다.')",
             "if(targets.length===selected.length)executeMove();",
-            'class="jm-do-active">코트배정 대기</button>',
+            'class="jm-do-active"',
             "rpc('setMemberStatus',[null,ids,'active'])",
         )
         for marker in required:
@@ -115,4 +116,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_NEW_BADGE_NO_NAME_OVERLAP_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: v2067-cloudflare-2-4-direct-selection-20260828
+# BUILD_TRIGGER: v2068-continuous-2-4-selection-behavior-20260828
