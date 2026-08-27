@@ -1,0 +1,88 @@
+name: Build admin quick-title toolbar v2073
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-toolbar-v2073.yml'
+      - 'deployment/jayuminton/admin_toolbar_position_colors_v2073.js'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-toolbar-v2073
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager --licenses >/dev/null || true
+      - run: sdkmanager 'build-tools;35.0.0' >/dev/null
+      - name: Patch v2072 APK toolbar position colors and message button
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=releases/jayuminton-admin-v207.2-unlimited-selection.apk
+          test -s "$BASE"
+          ROOT="$RUNNER_TEMP/jm2073"
+          mkdir -p "$ROOT/assets/admin"
+          cp "$BASE" "$ROOT/base.apk"
+          unzip -p "$BASE" assets/admin/index.html > "$ROOT/assets/admin/index.html"
+          test -s "$ROOT/assets/admin/index.html"
+          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js <<'PY'
+          from pathlib import Path
+          import sys
+          html_path=Path(sys.argv[1]); overlay_path=Path(sys.argv[2])
+          html=html_path.read_text(encoding='utf-8')
+          overlay=overlay_path.read_text(encoding='utf-8')
+          close=html.lower().rfind('</body>')
+          if close<0: raise SystemExit('body close not found')
+          html=html[:close]+'<script>\n'+overlay+'\n</script>\n'+html[close:]
+          html_path.write_text(html,encoding='utf-8')
+          PY
+          grep -F '__JAYUMINTON_ADMIN_UNLIMITED_SELECTION_V2072__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TOOLBAR_V2073__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '메시지보내기' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jm-toolbar-under-quick-title' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '[data-a="perm"]' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '[data-a="temp"]' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '[data-a="move"]' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '[data-a="swap"]' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'border:2px solid var(--member-team-color' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '#d4a017' "$ROOT/assets/admin/index.html" >/dev/null
+          cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
+          (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
+          base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk"
+          unzip -p "$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk" assets/admin/index.html > "$ROOT/verify.html"
+          grep -F '__JAYUMINTON_ADMIN_TOOLBAR_V2073__' "$ROOT/verify.html" >/dev/null
+          grep -F '메시지보내기' "$ROOT/verify.html" >/dev/null
+          grep -F 'jm-toolbar-under-quick-title' "$ROOT/verify.html" >/dev/null
+      - name: Publish APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/jm2073"
+          APK="$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk"
+          SHA=$(sha256sum "$APK" | awk '{print $1}')
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK" releases/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk
+          printf 'status=success\nversion=207.3\nfeature=quick-title-colored-toolbar\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2073-quick-title-toolbar.txt
+          git add releases/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk deployment/status/v2073-quick-title-toolbar.txt
+          git commit -m 'Publish admin v207.3 quick-title colored toolbar APK' || exit 0
+          git push origin HEAD:main
