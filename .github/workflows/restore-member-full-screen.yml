@@ -1,0 +1,95 @@
+name: Restore member full screen from known-good source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-member-full-screen.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-unified-member-production
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      LIVE_USER_URL: https://jayuminton-push.web.app/
+      CLOUDFLARE_RPC_URL: https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Resolve Firebase project
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$RUNNER_TEMP/deploy.json")"
+          test -n "$FIREBASE_PROJECT_ID"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+      - name: Rebuild full member page from known-good source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/member-full-restore"
+          WORK="$ROOT/source"
+          PUBLIC="$ROOT/public"
+          mkdir -p "$WORK" "$PUBLIC"
+          SOURCE_COMMIT=c41ab20
+          for file in Index.html Style.html Script.html; do
+            git show "$SOURCE_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
+          done
+          python3 deployment/jayuminton/v130_firebase_member_preview.py build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$CLOUDFLARE_RPC_URL"
+          python3 deployment/jayuminton/patch_member_login_recovery_addons.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/remove_member_team_text_creators.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_team_visuals_v6.py "$PUBLIC/index.html"
+          grep -F 'function initialize()' "$PUBLIC/index.html" >/dev/null
+          grep -F 'function renderState' "$PUBLIC/index.html" >/dev/null
+          grep -F 'waitGroups' "$PUBLIC/index.html" >/dev/null
+          grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
+          ! grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V1' "$PUBLIC/index.html"
+          python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-inline.js" <<'PY'
+          from pathlib import Path
+          import re,sys
+          s=Path(sys.argv[1]).read_text(encoding='utf-8')
+          Path(sys.argv[2]).write_text('\n'.join(re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>',s,flags=re.I)),encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/member-inline.js"
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+      - name: Deploy restored full member web
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$RUNNER_TEMP/member-full-restore/firebase.json" --non-interactive
+      - name: Verify restored production page
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?restore=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F 'function initialize()' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'function renderState' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'waitGroups' "$RUNNER_TEMP/live.html" >/dev/null
+          ! grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V1' "$RUNNER_TEMP/live.html"
+          echo 'MEMBER_FULL_SCREEN_RESTORE_OK'
