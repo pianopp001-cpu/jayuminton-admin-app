@@ -109,8 +109,12 @@ assert.match(interactionSource, /function clearMessageSelection\(\)/);
 assert.match(interactionSource, /SELECTED\.clear\(\)/);
 assert.match(interactionSource, /__JAYUMINTON_RESET_MULTI_SELECTION_V2057__/);
 assert.match(interactionSource, /if\(!selected\.length\)clearMessageSelection\(\)/);
-assert.match(interactionSource, /class=\"jm-do-active\">코트배정 대기/);
+// The active button is dynamically disabled only when the current selection is not from one place.
+assert.match(interactionSource, /class=\"jm-do-active\"/);
+assert.match(interactionSource, />코트배정 대기<\/button>/);
+assert.match(interactionSource, /canActive=samePlace\(selected\)/);
 assert.match(interactionSource, /function moveSelectedToActive\(ids\)/);
+assert.match(interactionSource, /ids\.length<2\|\|ids\.length>4\|\|!samePlace\(ids\)/);
 assert.match(interactionSource, /rpc\('setMemberStatus',\[null,ids,'active'\]\)/);
 assert.match(interactionSource, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 
