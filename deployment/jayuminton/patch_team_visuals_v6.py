@@ -90,6 +90,7 @@ for version in ('v6','v7','v8'):
     html = re.sub(r'<style\s+id=["\']jayuminton-team-visuals-'+version+r'["\'][^>]*>[\s\S]*?</style>\s*','',html,flags=re.I)
     html = re.sub(r'<script\s+id=["\']jayuminton-team-visuals-'+version+r'-script["\'][^>]*>[\s\S]*?</script>\s*','',html,flags=re.I)
 html = html.replace('#memberApp [data-member-id].jm-has-team{box-shadow:inset 4px 0 0 var(--jm-team-color)!important}', '')
+html = html.replace('#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}', '')
 if 'JAYUMINTON_TEAM_VISUALS_V6' in html or marker in html:
     raise SystemExit('stale team visual marker survived block replacement')
 if '</body>' not in html:
