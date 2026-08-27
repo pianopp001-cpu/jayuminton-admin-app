@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+import re
 
 path = Path(sys.argv[1])
 source = path.read_text(encoding='utf-8')
@@ -24,21 +25,11 @@ pairs = (
 for old, new in pairs:
     source = source.replace(old, new)
 
-# The final user APK must always enter the Firebase member page explicitly.
-# A cache-busting memberRoute marker prevents a stale WebView/admin document from
-# being restored after an APK update while keeping the user's saved auth storage.
-USER_ROUTE = 'https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42&memberRoute=20260827b'
-source = source.replace(
-    'USER_URL="https://jayuminton-push.web.app/"',
-    f'USER_URL="{USER_ROUTE}"',
-)
-source = source.replace(
-    'USER_URL="https://jayuminton-push.web.app/;',
-    f'USER_URL="{USER_ROUTE}";',
-)
-
-# Normalize every older Firebase user URL, including already-parameterized ones.
-import re
+# MD contract: user APK always opens the Firebase member surface, never admin.
+# Change this marker on every emergency login/routing repair so Android WebView
+# cannot restore a stale cached document after installing the rebuilt APK.
+ROUTE_MARKER = '20260827c-login-recovery'
+USER_ROUTE = f'https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42&memberRoute={ROUTE_MARKER}'
 source = re.sub(
     r'USER_URL="https://jayuminton-push\.web\.app/[^"\n]*"',
     f'USER_URL="{USER_ROUTE}"',
@@ -63,8 +54,8 @@ if 'script.google.com' in source or 'MAIN_DEPLOYMENT_ID' in source:
     raise SystemExit('v1642 must remain Cloudflare/Firebase-only')
 if 'mode=admin' in source:
     raise SystemExit('v1642 user APK must never contain admin mode routing')
-if 'mode=user' not in source or 'memberRoute=20260827b' not in source:
+if 'mode=user' not in source or ROUTE_MARKER not in source:
     raise SystemExit('v1642 fresh member route guard missing')
 
 path.write_text(source, encoding='utf-8')
-print('Prepared v1.6.42 MD-final native user APK with fresh Firebase member route guard.')
+print('Prepared v1.6.42 MD-final user APK with forced fresh member login route.')
