@@ -1,3 +1,3 @@
-current-admin-v2063
-requested=2026-08-27
-reason=persist-yellow-temp-team-distinct-double-permanent-team-clear-yellow-after-court-finish
+current-admin-v2067
+requested=2026-08-28
+reason=build-admin-2-to-4-member-direct-move-swap-selection
