@@ -37,12 +37,12 @@ function card(id) {
 
 const cards = ['1', '2', '3', '4', '5', '6'].map(card);
 const members = [
-  { id: '1', bundleId: 'team-a', teamLabel: '팀 1', teamColor: '#6d28d9' },
-  { id: '2', bundleId: 'team-a', teamLabel: '팀 1', teamColor: '#6d28d9' },
-  { id: '3', bundleId: 'team-b', teamLabel: '팀 2', teamColor: '#6d28d9' },
-  { id: '4', bundleId: 'team-b', teamLabel: '팀 2', teamColor: '#6d28d9' },
-  { id: '5', bundleId: 'team-c', teamLabel: '팀 3', teamColor: '#6d28d9' },
-  { id: '6', bundleId: 'team-c', teamLabel: '팀 3', teamColor: '#6d28d9' },
+  { id: '1', bundleId: 'legacy-shared-bundle', teamLabel: '팀 1', teamColor: '#6d28d9' },
+  { id: '2', bundleId: 'legacy-shared-bundle', teamLabel: '팀 1', teamColor: '#6d28d9' },
+  { id: '3', bundleId: 'legacy-shared-bundle', teamLabel: '팀 2', teamColor: '#6d28d9' },
+  { id: '4', bundleId: 'legacy-shared-bundle', teamLabel: '팀 2', teamColor: '#6d28d9' },
+  { id: '5', bundleId: 'legacy-shared-bundle', teamLabel: '팀 3', teamColor: '#6d28d9' },
+  { id: '6', bundleId: 'legacy-shared-bundle', teamLabel: '팀 3', teamColor: '#6d28d9' },
 ];
 
 const elements = new Map();
@@ -93,15 +93,16 @@ assert.equal(colors[2], colors[3]);
 assert.equal(colors[4], colors[5]);
 assert.equal(new Set([colors[0], colors[2], colors[4]]).size, 3, 'every permanent team must have a distinct color');
 
-const css = elements.get('jm-team-v2064').textContent;
-assert.match(css, /outline:1px solid var\(--member-team-color/);
-assert.match(css, /outline-offset:2px/);
-assert.match(css, /0 0 0 5px var\(--member-team-color/);
+const css = elements.get('jm-team-v2066').textContent;
+assert.match(css, /border:2px solid var\(--member-team-color/);
+assert.match(css, /0 0 0 2px rgba\(255,255,255/);
+assert.match(css, /0 0 0 4px var\(--member-team-color/);
 assert.doesNotMatch(css, /inset 0 0 0/);
 assert.doesNotMatch(css, /inset\s+5px\s+0/);
 assert.doesNotMatch(css, /padding-left/);
 assert.doesNotMatch(css, /border-left/);
-assert.doesNotMatch(css, /outline-offset:-/);
+assert.doesNotMatch(css, /min-height:88px/);
+assert.doesNotMatch(css, /padding-bottom:28px/);
 
 const interactionSource = await readFile(new URL('./admin_card_interaction_v2042.js', import.meta.url), 'utf8');
 assert.match(interactionSource, /function clearMessageSelection\(\)/);
@@ -131,4 +132,11 @@ assert.match(injectorSource, /saveButton&&!saveBusy/);
 assert.match(injectorSource, /ADD_MEMBER_IN_FLIGHT\|\|!!ACTION_IN_FLIGHT/);
 assert.match(injectorSource, /legacy google\.script\.run member registration survived/);
 
-console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true selection-scope=true edit-button=true member-save-cloudflare=true compact-actions=true');
+const userVisualSource = await readFile(new URL('./patch_team_visuals_v6.py', import.meta.url), 'utf8');
+assert.match(userVisualSource, /JAYUMINTON_TEAM_VISUALS_V8/);
+assert.match(userVisualSource, /border:2px solid var\(--jm-team-color/);
+assert.match(userVisualSource, /0 0 0 2px rgba\(255,255,255/);
+assert.match(userVisualSource, /0 0 0 4px var\(--jm-team-color/);
+assert.match(userVisualSource, /'#7c3aed','#0891b2','#ea580c','#059669'/);
+
+console.log('ADMIN_TEAM_LAYOUT_V2066_OK distinct=true vivid-double=true size-stable=true user-admin-consistent=true');

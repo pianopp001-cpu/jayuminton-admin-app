@@ -56,12 +56,14 @@ if admin_html.exists():
         required=(
             '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2064__',
             '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2064__',
+            '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2066__',
+            '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2066__',
             'has-member-team','--member-team-color',
-            'outline:1px solid var(--member-team-color',
-            'outline-offset:2px',
-            '0 0 0 5px var(--member-team-color',
-            'outline:3px solid #d4a017',
-            'jm-admin-new-card','min-height:88px',
+            'border:2px solid var(--member-team-color',
+            '0 0 0 2px rgba(255,255,255',
+            '0 0 0 4px var(--member-team-color',
+            'border:2px solid #d4a017',
+            'jm-admin-new-card',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__',
             '__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__',
             '__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__',
@@ -95,6 +97,9 @@ if admin_html.exists():
         for forbidden in (
             'box-shadow:inset 5px 0 0 var(--member-team-color)',
             'padding-left:10px!important',
+            '#adminApp .jm-admin-new-card{min-height:88px',
+            'padding-bottom:28px!important',
+            'outline:1px solid var(--member-team-color',
             '.addMember(ADMIN_PIN_VALUE',
         ):
             if forbidden in final_html: raise SystemExit('bundled admin left-stripe contract survived: '+forbidden)

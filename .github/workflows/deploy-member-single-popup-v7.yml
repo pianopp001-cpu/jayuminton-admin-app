@@ -64,13 +64,14 @@ jobs:
           ! grep -F 'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' "$PUBLIC/index.html"
           ! grep -F 'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' "$PUBLIC/index.html"
           ! grep -F 'JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2' "$PUBLIC/index.html"
-          grep -F 'JAYUMINTON_TEAM_VISUALS_V7' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_TEAM_VISUALS_V8' "$PUBLIC/index.html" >/dev/null
           grep -F '#memberApp [data-member-id].jm-has-team' "$PUBLIC/index.html" >/dev/null
-          grep -F 'outline:1px solid var(--jm-team-color' "$PUBLIC/index.html" >/dev/null
-          grep -F 'outline-offset:2px' "$PUBLIC/index.html" >/dev/null
-          grep -F '0 0 0 5px var(--jm-team-color' "$PUBLIC/index.html" >/dev/null
+          grep -F 'border:2px solid var(--jm-team-color' "$PUBLIC/index.html" >/dev/null
+          grep -F '0 0 0 2px rgba(255,255,255' "$PUBLIC/index.html" >/dev/null
+          grep -F '0 0 0 4px var(--jm-team-color' "$PUBLIC/index.html" >/dev/null
           grep -F 'card.style.setProperty('"'"'--jm-team-color'"'"',colorFor(label))' "$PUBLIC/index.html" >/dev/null
           ! grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)' "$PUBLIC/index.html" >/dev/null
+          ! grep -F 'outline:1px solid var(--jm-team-color' "$PUBLIC/index.html" >/dev/null
           ! grep -F 'outline-offset:-5px' "$PUBLIC/index.html" >/dev/null
           grep -F '#memberApp [data-member-id].jm-temp-pair' "$PUBLIC/index.html" >/dev/null
           python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-original-popup-inline.js" <<'PY'
@@ -101,13 +102,14 @@ jobs:
           ! grep -F 'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' "$RUNNER_TEMP/member-original-popup-live.html"
           ! grep -F 'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' "$RUNNER_TEMP/member-original-popup-live.html"
           ! grep -F 'JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2' "$RUNNER_TEMP/member-original-popup-live.html"
-          grep -F 'JAYUMINTON_TEAM_VISUALS_V7' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F 'JAYUMINTON_TEAM_VISUALS_V8' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F '#memberApp [data-member-id].jm-has-team' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
-          grep -F 'outline:1px solid var(--jm-team-color' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
-          grep -F 'outline-offset:2px' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
-          grep -F '0 0 0 5px var(--jm-team-color' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F 'border:2px solid var(--jm-team-color' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F '0 0 0 2px rgba(255,255,255' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F '0 0 0 4px var(--jm-team-color' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F 'card.style.setProperty('"'"'--jm-team-color'"'"',colorFor(label))' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           ! grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          ! grep -F 'outline:1px solid var(--jm-team-color' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           ! grep -F 'outline-offset:-5px' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F '#memberApp [data-member-id].jm-temp-pair' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           echo 'MEMBER_ONE_POPUP_LINE_ONLY_TEAM_CARDS_OK'

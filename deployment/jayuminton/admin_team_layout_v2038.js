@@ -1,16 +1,18 @@
-(function installJayumintonAdminTeamLayoutV2064(){
+(function installJayumintonAdminTeamLayoutV2066(){
   'use strict';
-  if(window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2064__)return;
+  if(window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2066__)return;
   window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2038__=true;
   window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2064__=true;
   window.__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2064__=true;
+  window.__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2066__=true;
+  window.__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2066__=true;
 
   var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]';
   var PALETTE=[
-    '#6d28d9','#0891b2','#c2410c','#0f766e',
-    '#be185d','#4f46e5','#15803d','#a16207',
-    '#b91c1c','#0369a1','#7e22ce','#047857',
-    '#c026d3','#1d4ed8','#4d7c0f','#9f1239'
+    '#7c3aed','#0891b2','#ea580c','#059669',
+    '#db2777','#2563eb','#ca8a04','#dc2626',
+    '#4f46e5','#0d9488','#9333ea','#65a30d',
+    '#e11d48','#0284c7','#a21caf','#16a34a'
   ];
 
   function app(){return document.getElementById('adminApp');}
@@ -32,7 +34,9 @@
     return members().find(function(member){return String(member.id||'')===String(id);})||null;
   }
   function teamKey(member){
-    return String(member&&(member.bundleId||member.teamId||member.teamLabel||member.team||member.teamName)||'').trim();
+    // Some legacy rows reused one bundleId for multiple named teams. The
+    // visible permanent-team label is therefore the primary identity.
+    return String(member&&(member.teamLabel||member.teamName||member.team||member.bundleId||member.teamId)||'').trim();
   }
   function teamLabel(member){
     return String(member&&(member.teamLabel||member.teamName||member.team)||'').trim();
@@ -52,7 +56,9 @@
     }).map(function(group){return group.key;});
   }
   function colorFor(team){
-    var index=teamOrder().indexOf(String(team||''));
+    var value=String(team||'');
+    var match=/([0-9]+)$/.exec(value.replace(/\s+/g,''));
+    var index=match?Math.max(0,Number(match[1])-1):teamOrder().indexOf(value);
     if(index<0)index=0;
     if(index<PALETTE.length)return PALETTE[index];
     return 'hsl('+Math.round((index*137.508)%360)+',72%,38%)';
@@ -73,7 +79,8 @@
       'jayuminton-admin-team-layout-v2060',
       'jayuminton-admin-team-layout-v2061',
       'jayuminton-admin-team-layout-v2062',
-      'jm-team-v2063'
+      'jm-team-v2063',
+      'jm-team-v2064'
     ].forEach(function(id){var old=document.getElementById(id);if(old)old.remove();});
   }
   function hideTeamWords(card){
@@ -115,14 +122,13 @@
   }
   function installStyle(){
     removeLegacyStyles();
-    if(document.getElementById('jm-team-v2064'))return;
+    if(document.getElementById('jm-team-v2066'))return;
     var style=document.createElement('style');
-    style.id='jm-team-v2064';
+    style.id='jm-team-v2066';
     style.textContent=''
       +'#adminApp .member-team-badge,#adminApp .jm-team-badge,#adminApp .team-badge,#adminApp .team-label,#adminApp .jm-team-bottom-label,#adminApp [data-team-label]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important;pointer-events:none!important;font-size:0!important;line-height:0!important}'
-      +'#adminApp .has-member-team{position:relative!important;border-color:transparent!important;outline:1px solid var(--member-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--member-team-color,#6d28d9)!important;overflow:visible!important;background-clip:padding-box!important}'
-      +'#adminApp .has-member-team.jm-temp-team-v2047,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-team-v2047,#adminApp .jm-temp-pair{outline:3px solid #d4a017!important;outline-offset:1px!important;box-shadow:none!important}'
-      +'#adminApp .jm-admin-new-card{min-height:88px!important;padding-bottom:28px!important;overflow:visible!important}';
+      +'#adminApp .has-member-team{position:relative!important;box-sizing:border-box!important;border:2px solid var(--member-team-color,#7c3aed)!important;outline:none!important;box-shadow:0 0 0 2px rgba(255,255,255,.98),0 0 0 4px var(--member-team-color,#7c3aed),0 4px 10px rgba(15,23,42,.10)!important;background-clip:padding-box!important}'
+      +'#adminApp .has-member-team.jm-temp-team-v2047,#adminApp .has-member-team.jm-temp-pair,#adminApp .jm-temp-team-v2047,#adminApp .jm-temp-pair{border:2px solid #d4a017!important;outline:none!important;box-shadow:0 0 0 2px rgba(255,255,255,.98),0 0 0 4px #d4a017!important}';
     (document.head||document.documentElement).appendChild(style);
   }
   function boot(){

@@ -140,8 +140,14 @@ jobs:
           ! grep -F 'jm-current-member-password-box' "$HTML" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2064__' "$HTML" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2064__' "$HTML" >/dev/null
-          grep -F 'outline:1px solid var(--member-team-color' "$HTML" >/dev/null
-          grep -F '0 0 0 5px var(--member-team-color' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2066__' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2066__' "$HTML" >/dev/null
+          grep -F 'border:2px solid var(--member-team-color' "$HTML" >/dev/null
+          grep -F '0 0 0 2px rgba(255,255,255' "$HTML" >/dev/null
+          grep -F '0 0 0 4px var(--member-team-color' "$HTML" >/dev/null
+          ! grep -F '#adminApp .jm-admin-new-card{min-height:88px' "$HTML" >/dev/null
+          ! grep -F 'padding-bottom:28px!important' "$HTML" >/dev/null
+          ! grep -F 'outline:1px solid var(--member-team-color' "$HTML" >/dev/null
           ! grep -F "card.style.setProperty('outline','2px solid var(--member-team-color)'" "$HTML" >/dev/null
           ! grep -F 'box-shadow:inset 5px 0 0 var(--member-team-color)' "$HTML" >/dev/null
           ! grep -F 'padding-left:10px!important' "$HTML" >/dev/null
@@ -221,8 +227,14 @@ jobs:
           ! grep -F 'jm-current-member-password-box' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2064__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2064__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'outline:1px solid var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F '0 0 0 5px var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TEAM_LAYOUT_V2066__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TEAM_CONTRACT_V2066__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'border:2px solid var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '0 0 0 2px rgba(255,255,255' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '0 0 0 4px var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F '#adminApp .jm-admin-new-card{min-height:88px' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F 'padding-bottom:28px!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F 'outline:1px solid var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F "card.style.setProperty('outline','2px solid var(--member-team-color)'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'box-shadow:inset 5px 0 0 var(--member-team-color)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'padding-left:10px!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
