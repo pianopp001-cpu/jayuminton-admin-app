@@ -105,9 +105,17 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__' "$HTML" >/dev/null
           grep -F '__JAYUMINTON_RESET_MULTI_SELECTION_V2057__' "$HTML" >/dev/null
           grep -F 'id="quickClearSelectionButton"' "$HTML" >/dev/null
+          grep -F 'class="jm-quick-member-actions"' "$HTML" >/dev/null
+          grep -F '#adminApp #quickMoveBar.quick-move-bar{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important' "$HTML" >/dev/null
+          grep -F 'overflow-x:hidden!important' "$HTML" >/dev/null
           grep -F 'onclick="startMemberEdit()">편집</button>' "$HTML" >/dev/null
+          grep -F 'id="cancelMemberEditButton"' "$HTML" >/dev/null
           grep -F 'closeQuickMemberMessage(true)' "$HTML" >/dev/null
           grep -F "await window.server('addMember'" "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MEMBER_SAVE_V2065__' "$HTML" >/dev/null
+          grep -F "window.addMember=function(){return save('add');}" "$HTML" >/dev/null
+          grep -F "window.applyMemberEdit=function(){return save('edit');}" "$HTML" >/dev/null
+          grep -F "window.server(editing?'updateMemberProfile':'addMember',args)" "$HTML" >/dev/null
           ! grep -F '.addMember(ADMIN_PIN_VALUE' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
@@ -180,9 +188,17 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_RESET_MULTI_SELECTION_V2057__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="quickClearSelectionButton"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'class="jm-quick-member-actions"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '#adminApp #quickMoveBar.quick-move-bar{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'overflow-x:hidden!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'onclick="startMemberEdit()">편집</button>' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'id="cancelMemberEditButton"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'closeQuickMemberMessage(true)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "await window.server('addMember'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MEMBER_SAVE_V2065__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "window.addMember=function(){return save('add');}" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "window.applyMemberEdit=function(){return save('edit');}" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "window.server(editing?'updateMemberProfile':'addMember',args)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F '.addMember(ADMIN_PIN_VALUE' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "selected.length!==2" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===1)" "$RUNNER_TEMP/apk-admin.html" >/dev/null

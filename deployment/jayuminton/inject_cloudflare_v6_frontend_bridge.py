@@ -159,13 +159,21 @@ if html.count(old_summary) != 1:
     raise SystemExit('member management summary mismatch')
 html = html.replace(old_summary, new_summary, 1)
 
-# Put member messaging beside Quick Assign so selected cards can be addressed
-# without leaving the court screen.
+# Keep member messaging close to Quick Assign without squeezing the title and
+# selected-count header onto multiple lines.
 quick_count = '<span id="quickSelectedCount" class="selection-pill">0명 선택</span>'
-quick_message = quick_count + '\n          <button id="quickMemberMessageButton" type="button" onclick="openQuickMemberMessage()">메시지 보내기</button>\n          <button id="quickClearSelectionButton" type="button" onclick="clearAdminMemberSelection()">선택 해제</button>'
 if html.count(quick_count) != 1:
     raise SystemExit('quick member message anchor mismatch')
-html = html.replace(quick_count, quick_message, 1)
+quick_filter = '        </div>\n        <div class="quick-filter-row md-only-quick-filter-row">'
+quick_actions = '''        </div>
+        <div class="jm-quick-member-actions" aria-label="선택 멤버 작업">
+          <button id="quickMemberMessageButton" type="button" onclick="openQuickMemberMessage()">메시지 보내기</button>
+          <button id="quickClearSelectionButton" type="button" onclick="clearAdminMemberSelection()">선택 해제</button>
+        </div>
+        <div class="quick-filter-row md-only-quick-filter-row">'''
+if html.count(quick_filter) != 1:
+    raise SystemExit('quick member action row anchor mismatch')
+html = html.replace(quick_filter, quick_actions, 1)
 
 # Restore the missing edit control in the existing administrator long-press
 # menu. The edit implementation itself is still part of the proven shell.
@@ -302,6 +310,17 @@ edit_exp_next = edit_exp + "\n  const combinedGradeExperience = document.getElem
 if html.count(edit_exp) != 1:
     raise SystemExit('edit grade/experience synchronization point mismatch')
 html = html.replace(edit_exp, edit_exp_next, 1)
+edit_sponsor = "  const sponsor=document.getElementById('newIsSponsor'); if(sponsor) sponsor.checked=!!member.isSponsor;"
+edit_metadata = edit_sponsor + "\n  const duplicate=document.getElementById('newIsDuplicate'); if(duplicate) duplicate.checked=!!member.isDuplicate;"
+if html.count(edit_sponsor) != 1:
+    raise SystemExit('edit duplicate synchronization point mismatch')
+html = html.replace(edit_sponsor, edit_metadata, 1)
+
+update_button = '      <button id="updateMemberButton" class="primary" type="button" onclick="applyMemberEdit()" disabled>수정</button>'
+update_buttons = update_button + '\n      <button id="cancelMemberEditButton" class="ghost-button hidden" type="button" onclick="cancelMemberEdit()">편집 취소</button>'
+if html.count(update_button) != 1:
+    raise SystemExit('member edit buttons anchor mismatch')
+html = html.replace(update_button, update_buttons, 1)
 
 management_patch = r'''
 <style id="jayuminton-admin-member-management-v202">
@@ -314,7 +333,18 @@ management_patch = r'''
 .md-team-member-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:5px!important;width:100%!important;margin-top:5px!important;overflow:visible!important}
 .md-team-member-actions button{width:100%!important;min-width:0!important;min-height:38px!important;padding:6px 4px!important;white-space:normal!important;font-size:11px!important;font-weight:950!important;color:#1d4ed8!important;border-color:#93b4ff!important;background:#eef4ff!important}
 .md-bulk-member-actions .danger{background:#c62828!important;color:#fff!important;border-color:#c62828!important}
-#quickMemberMessageButton{min-height:34px;padding:6px 10px;border-radius:10px;background:#315efb;color:#fff;border:1px solid #315efb;font-size:11px;font-weight:900;white-space:nowrap}
+#adminApp .quick-roster-header{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:8px!important}
+#adminApp .quick-roster-header>div{min-width:0!important}
+#adminApp .quick-roster-header h2{margin:2px 0 0!important;white-space:nowrap!important;word-break:keep-all!important;line-height:1.15!important}
+#adminApp .quick-roster-header .selection-pill{white-space:nowrap!important;word-break:keep-all!important;align-self:center!important}
+.jm-quick-member-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:6px!important;width:100%!important;margin-top:8px!important}
+.jm-quick-member-actions button{width:100%!important;min-width:0!important;min-height:34px!important;padding:6px 8px!important;border-radius:10px!important;font-size:11px!important;font-weight:900!important;white-space:nowrap!important;word-break:keep-all!important;line-height:1!important}
+#quickMemberMessageButton{background:#315efb!important;color:#fff!important;border:1px solid #315efb!important}
+#quickClearSelectionButton{background:#f1f5f9!important;color:#475569!important;border:1px solid #d8e0ec!important}
+#adminApp #quickMoveBar.quick-move-bar{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;align-items:stretch!important;gap:6px!important;overflow-x:hidden!important;overflow-y:visible!important;width:min(540px,calc(100vw - 16px))!important;max-width:calc(100vw - 16px)!important;padding:8px!important;box-sizing:border-box!important}
+#adminApp #quickMoveBar.quick-move-bar.hidden{display:none!important}
+#adminApp #quickMoveBar.quick-move-bar>button{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-width:0!important;min-height:40px!important;margin:0!important;padding:6px 4px!important;font-size:11px!important;font-weight:900!important;line-height:1!important;white-space:nowrap!important;word-break:keep-all!important;overflow:hidden!important;text-overflow:clip!important}
+#cancelMemberEditButton.hidden{display:none!important}
 .quick-message-modal{position:fixed;z-index:2147483500;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.55)}
 .quick-message-modal.hidden{display:none!important}.quick-message-card{width:min(92vw,480px);padding:16px;border-radius:16px;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .quick-message-card h3{margin:0 0 8px}.quick-message-card textarea{width:100%;box-sizing:border-box;min-height:110px;resize:vertical}.quick-message-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:10px}.quick-message-actions button{min-height:40px;padding:8px 14px;font-weight:900}.quick-message-send{background:#315efb!important;color:#fff!important;border-color:#315efb!important}
@@ -332,7 +362,7 @@ management_patch = r'''
 #adminApp .member.female,#adminApp .person.female,#adminApp .quick-member.female{background:#ffe7f0!important;color:#c51b4f!important;font-weight:900!important}
 #adminApp .member .name,#adminApp .person .name,#adminApp .quick-member-name{font-weight:950!important}
 #adminApp .member-team-badge{display:none!important}
-@media(max-width:620px){.admin-setup-details>summary{width:100%!important;box-sizing:border-box!important;justify-content:center!important}.admin-panel{padding:10px!important}.admin-panel h2{font-size:15px!important}.md-game-actions{gap:5px!important}.md-game-actions button{font-size:10px!important;padding:5px 7px!important}.md-bulk-member-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important}.md-bulk-member-actions button{min-width:0!important;font-size:10px!important;padding:5px 2px!important}}
+@media(max-width:620px){.admin-setup-details>summary{width:100%!important;box-sizing:border-box!important;justify-content:center!important}.admin-panel{padding:10px!important}.admin-panel h2{font-size:15px!important}.md-game-actions{gap:5px!important}.md-game-actions button{font-size:10px!important;padding:5px 7px!important}.md-bulk-member-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important}.md-bulk-member-actions button{min-width:0!important;font-size:10px!important;padding:5px 2px!important}#adminApp #quickMoveBar.quick-move-bar{grid-template-columns:repeat(2,minmax(0,1fr))!important}#adminApp .quick-roster-header h2{font-size:15px!important}}
 </style>
 <style id="jayuminton-announcement-controls-v2021">
 .court-voice-controls{display:flex!important;flex-wrap:wrap!important;gap:6px!important}
@@ -354,9 +384,81 @@ management_patch = r'''
     <h3 id="quickMemberMessageTitle">선택 회원에게 메시지</h3>
     <div id="quickMemberMessageRecipients" class="meta"></div>
     <textarea id="quickMemberMessageText" maxlength="300" placeholder="전송할 메시지를 입력하세요."></textarea>
-    <div class="quick-message-actions"><button type="button" onclick="closeQuickMemberMessage(true)">취소·선택해제</button><button class="quick-message-send" type="button" onclick="sendQuickMemberMessage()">전송</button></div>
+    <div class="quick-message-actions"><button type="button" onclick="closeQuickMemberMessage(true)">취소</button><button class="quick-message-send" type="button" onclick="sendQuickMemberMessage()">전송</button></div>
   </div>
 </div>
+<script id="jayuminton-admin-member-save-v2065">
+(function(){
+  'use strict';
+  if(window.__JAYUMINTON_ADMIN_MEMBER_SAVE_V2065__)return;
+  window.__JAYUMINTON_ADMIN_MEMBER_SAVE_V2065__=true;
+  function el(id){return document.getElementById(id);}
+  function payload(){return {
+    name:String(el('newName')&&el('newName').value||'').trim(),
+    gender:String(el('newGender')&&el('newGender').value||'').trim(),
+    grade:String(el('newGrade')&&el('newGrade').value||'').trim(),
+    experience:String(el('newExperience')&&el('newExperience').value||'').trim(),
+    meta:{isNew:!!(el('newIsNew')&&el('newIsNew').checked),publicMemo:String(el('newPublicMemo')&&el('newPublicMemo').value||'').trim(),isSponsor:!!(el('newIsSponsor')&&el('newIsSponsor').checked),isDuplicate:!!(el('newIsDuplicate')&&el('newIsDuplicate').checked)}
+  };}
+  function buttons(editing,busy){
+    var add=el('addMemberButton'),update=el('updateMemberButton'),cancel=el('cancelMemberEditButton');
+    if(add){add.disabled=!!busy||!!editing;add.textContent=busy&&!editing?'등록 중…':'등록';}
+    if(update){update.disabled=!!busy||!editing;update.textContent=busy&&editing?'수정 중…':'수정';}
+    if(cancel){cancel.classList.toggle('hidden',!editing||!!busy);cancel.disabled=!!busy;}
+  }
+  function resetForm(){
+    ['newName','newGender','newGrade','newExperience','newGradeExperience','newPublicMemo'].forEach(function(id){var node=el(id);if(node)node.value='';});
+    ['newIsNew','newIsSponsor','newIsDuplicate'].forEach(function(id){var node=el(id);if(node)node.checked=false;});
+    document.querySelectorAll('input[name="newGenderChoice"]').forEach(function(input){input.checked=false;});
+  }
+  function upsertLocal(member){
+    if(!member||!member.id)return false;
+    var normalized=typeof normalizeMemberProfile==='function'?normalizeMemberProfile(member):member;
+    var index=(STATE.members||[]).findIndex(function(item){return String(item.id)===String(normalized.id);});
+    if(index>=0)STATE.members[index]=normalized;else STATE.members.push(normalized);
+    return true;
+  }
+  function notify(text,bad){
+    var old=el('jmMemberSaveToast');if(old)old.remove();
+    var toast=document.createElement('div');toast.id='jmMemberSaveToast';toast.textContent=text;toast.style.cssText='position:fixed;z-index:2147483647;left:50%;top:max(12px,env(safe-area-inset-top));transform:translateX(-50%);padding:10px 14px;border-radius:12px;background:'+(bad?'#991b1b':'#166534')+';color:#fff;font-size:13px;font-weight:900;box-shadow:0 8px 28px rgba(0,0,0,.24);white-space:nowrap';document.body.appendChild(toast);setTimeout(function(){toast.remove();},1800);
+  }
+  async function save(mode){
+    var editing=mode==='edit',data=payload(),target='';
+    if(editing){try{target=String(EDIT_MEMBER_ID||'');}catch(_){}if(!target){alert('멤버를 길게 누른 뒤 편집을 선택해 주세요.');return;}}
+    if(!data.name){alert('이름 또는 닉네임을 입력하세요.');var name=el('newName');if(name)name.focus();return;}
+    if(data.gender!=='male'&&data.gender!=='female'){alert('성별을 선택하세요.');return;}
+    if(typeof window.server!=='function'){alert('Cloudflare 서버 연결을 찾을 수 없습니다.');return;}
+    if((editing&&ACTION_IN_FLIGHT)||(!editing&&ADD_MEMBER_IN_FLIGHT))return;
+    if(editing)ACTION_IN_FLIGHT=true;else ADD_MEMBER_IN_FLIGHT=true;buttons(editing,true);
+    try{
+      var args=editing?[ADMIN_PIN_VALUE,target,data.name,data.gender,data.grade,data.experience,data.meta]:[ADMIN_PIN_VALUE,data.name,data.gender,data.grade,data.experience,data.meta];
+      var result=await window.server(editing?'updateMemberProfile':'addMember',args);
+      if(!upsertLocal(result&&result.member)){
+        var fresh=await window.server('getPublicState',[ADMIN_PIN_VALUE]);
+        if(!fresh||!Array.isArray(fresh.members))throw new Error('저장 결과를 확인하지 못했습니다.');
+        STATE=fresh;
+      }else if(result&&result.updatedAt)STATE.updatedAt=result.updatedAt;
+      try{EDIT_MEMBER_ID=null;}catch(_){}
+      resetForm();
+      if(typeof closeMemberActionBar==='function')closeMemberActionBar();
+      if(typeof renderState==='function')renderState();
+      notify(editing?'멤버 정보를 수정했습니다.':'멤버를 등록했습니다.',false);
+    }catch(error){notify(String(error&&error.message||error||'저장에 실패했습니다.'),true);}
+    finally{if(editing)ACTION_IN_FLIGHT=false;else ADD_MEMBER_IN_FLIGHT=false;var active=false;try{active=!!EDIT_MEMBER_ID;}catch(_){}buttons(active,false);}
+  }
+  window.addMember=function(){return save('add');};
+  window.applyMemberEdit=function(){return save('edit');};
+  window.saveMemberEdit=window.applyMemberEdit;
+  var originalStart=window.startMemberEdit;
+  window.startMemberEdit=function(){var out=originalStart&&originalStart.apply(this,arguments);var active=false;try{active=!!EDIT_MEMBER_ID;}catch(_){}buttons(active,false);return out;};
+  window.cancelMemberEdit=function(){
+    try{EDIT_MEMBER_ID=null;}catch(_){}
+    resetForm();buttons(false,false);
+    if(typeof closeMemberActionBar==='function')closeMemberActionBar();
+  };
+  buttons(false,false);
+})();
+</script>
 <script id="jayuminton-pair-statistics-disclosure-v2028">
 (function(){
   'use strict';
@@ -532,6 +634,25 @@ if html.count('__JAYUMINTON_CLOUDFLARE_RPC_V6__') != 1: raise SystemExit('v6 bri
 if 'script.google.com/macros/s/' in html: raise SystemExit('direct GAS URL remains')
 if '.addMember(ADMIN_PIN_VALUE' in html: raise SystemExit('legacy google.script.run member registration survived')
 if "await window.server('addMember'" not in html: raise SystemExit('direct Cloudflare member registration missing')
+for required_member_contract in (
+    '__JAYUMINTON_ADMIN_MEMBER_SAVE_V2065__',
+    "window.addMember=function(){return save('add');}",
+    "window.applyMemberEdit=function(){return save('edit');}",
+    "window.server(editing?'updateMemberProfile':'addMember',args)",
+    'id="cancelMemberEditButton"',
+    'class="jm-quick-member-actions"',
+    '#adminApp #quickMoveBar.quick-move-bar{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important',
+    'overflow-x:hidden!important',
+):
+    if required_member_contract not in html:
+        raise SystemExit('member save/layout contract missing: ' + required_member_contract)
+quick_header_start = html.find('<div class="quick-roster-header">')
+quick_header_end = html.find('</div>', quick_header_start)
+if quick_header_start < 0 or quick_header_end < 0:
+    raise SystemExit('quick roster header missing')
+quick_header = html[quick_header_start:quick_header_end]
+if 'quickMemberMessageButton' in quick_header or 'quickClearSelectionButton' in quick_header:
+    raise SystemExit('quick member actions must not squeeze the title header')
 if "if (el.textContent !== nextText) el.textContent = nextText;" not in html:
     raise SystemExit('member count observer guard missing')
 if html.count('id="newIsNew"') != 1 or html.count('id="newIsSponsor"') != 1:

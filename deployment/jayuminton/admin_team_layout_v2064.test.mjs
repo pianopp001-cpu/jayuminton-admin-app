@@ -112,9 +112,17 @@ assert.match(interactionSource, /if\(!selected\.length\)clearMessageSelection\(\
 const injectorSource = await readFile(new URL('./inject_cloudflare_v6_frontend_bridge.py', import.meta.url), 'utf8');
 assert.match(injectorSource, /__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__/);
 assert.match(injectorSource, /id=\"quickClearSelectionButton\"/);
+assert.match(injectorSource, /class=\"jm-quick-member-actions\"/);
+assert.match(injectorSource, /#adminApp #quickMoveBar\.quick-move-bar\{display:grid!important;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)!important/);
+assert.match(injectorSource, /overflow-x:hidden!important/);
 assert.match(injectorSource, /onclick=\"startMemberEdit\(\)\">편집<\/button>/);
+assert.match(injectorSource, /id=\"cancelMemberEditButton\"/);
 assert.match(injectorSource, /closeQuickMemberMessage\(true\)/);
 assert.match(injectorSource, /await window\.server\('addMember'/);
+assert.match(injectorSource, /__JAYUMINTON_ADMIN_MEMBER_SAVE_V2065__/);
+assert.match(injectorSource, /window\.addMember=function\(\)\{return save\('add'\);\}/);
+assert.match(injectorSource, /window\.applyMemberEdit=function\(\)\{return save\('edit'\);\}/);
+assert.match(injectorSource, /window\.server\(editing\?'updateMemberProfile':'addMember',args\)/);
 assert.match(injectorSource, /legacy google\.script\.run member registration survived/);
 
-console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true selection-scope=true edit-button=true add-member-cloudflare=true');
+console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true selection-scope=true edit-button=true member-save-cloudflare=true compact-actions=true');
