@@ -85,12 +85,13 @@ if admin_html.exists():
             'jayuminton-admin-multi-action-v2053-style',
             '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__',
             '__JAYUMINTON_ADMIN_FAST_MULTI_MOVE_V2067__',
+            '__JAYUMINTON_ADMIN_FREE_2_TO_4_V2069__',
             'pointer-events:none', 'applyMoveOrSwapLocally', '명 이동 저장 중',
             '이동/교환','팀설정','#16a34a','#d4a017',
             "rpc('setTempPairs'", "runAction('sendMemberMessage'",
             'if(selected.length===1)', 'if(selected.length>=2&&selected.length<=4){beginAutoTarget',
             'selected.length===2&&samePlace(selected)',
-            'ids.length<2||ids.length>4||!samePlace(ids)',
+            "if(ids.length<2||ids.length>4)throw new Error('2~4명을 선택해 주세요.')",
             "if(ids.length!==2)throw new Error('팀설정은 2명 선택일 때만 사용할 수 있습니다.')",
             "if(targets.length===selected.length)executeMove();",
             'class="jm-do-active"',
@@ -105,8 +106,9 @@ if admin_html.exists():
             'padding-bottom:28px!important',
             'outline:1px solid var(--member-team-color',
             '.addMember(ADMIN_PIN_VALUE',
+            'ids.length<2||ids.length>4||!samePlace(ids)',
         ):
-            if forbidden in final_html: raise SystemExit('bundled admin left-stripe contract survived: '+forbidden)
+            if forbidden in final_html: raise SystemExit('bundled admin left-stripe/current contract survived: '+forbidden)
         if 'window.google&&window.google.script&&window.google.script.run' in card_js: raise SystemExit('team interaction must use direct Cloudflare window.server RPC')
         if 'window.confirm(' in card_js: raise SystemExit('team interaction must use in-app action panel, not browser confirm')
         print('BUNDLED_ADMIN_CURRENT_TEAM_CONTRACT_OK')
@@ -116,4 +118,4 @@ if admin_html.exists():
         print('BUNDLED_ADMIN_NEW_BADGE_NO_NAME_OVERLAP_OK')
 
 print('NATIVE_AUDIO_V2021_OK music=audible<=6 voice=max restore=original')
-# BUILD_TRIGGER: v2068-continuous-2-4-selection-behavior-20260828
+# BUILD_TRIGGER: v2071-free-2-4-bundled-contract-20260828
