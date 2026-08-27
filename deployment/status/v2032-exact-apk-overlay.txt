@@ -1,0 +1,6 @@
+status=success
+version=203.2
+base=exact-v203.0-apk
+change=overlay-only-two-person-panel
+run_id=33102972259
+sha256=bbb5d56c1449f0a78c5c3d8cef67a39f6e170ced7b2a690aeb5f7497090a0265
