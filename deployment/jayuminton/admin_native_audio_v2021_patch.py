@@ -70,6 +70,7 @@ if admin_html.exists():
             'id="quickClearSelectionButton"',
             'onclick="startMemberEdit()">편집</button>',
             'closeQuickMemberMessage(true)',
+            "await window.server('addMember'",
             'jayuminton-admin-multi-action-v2053-style',
             '녹색 = 이동선택','2명일 때만 이동/교환인지 팀설정인지 선택합니다.',
             '1명·3명·4명은 자동으로 이동/교환입니다.',
@@ -83,6 +84,7 @@ if admin_html.exists():
         for forbidden in (
             'box-shadow:inset 5px 0 0 var(--member-team-color)',
             'padding-left:10px!important',
+            '.addMember(ADMIN_PIN_VALUE',
         ):
             if forbidden in final_html: raise SystemExit('bundled admin left-stripe contract survived: '+forbidden)
         if 'window.google&&window.google.script&&window.google.script.run' in card_js: raise SystemExit('team interaction must use direct Cloudflare window.server RPC')

@@ -114,5 +114,7 @@ assert.match(injectorSource, /__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__/);
 assert.match(injectorSource, /id=\"quickClearSelectionButton\"/);
 assert.match(injectorSource, /onclick=\"startMemberEdit\(\)\">편집<\/button>/);
 assert.match(injectorSource, /closeQuickMemberMessage\(true\)/);
+assert.match(injectorSource, /await window\.server\('addMember'/);
+assert.match(injectorSource, /legacy google\.script\.run member registration survived/);
 
-console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true selection-scope=true edit-button=true');
+console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true selection-scope=true edit-button=true add-member-cloudflare=true');

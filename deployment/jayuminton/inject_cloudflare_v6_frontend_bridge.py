@@ -175,6 +175,42 @@ if html.count(quick_move_delete) != 1:
     raise SystemExit('long-press member edit button anchor mismatch')
 html = html.replace(quick_move_delete, quick_move_edit, 1)
 
+# Member registration was the last administrator mutation still calling the
+# legacy google.script.run compatibility object directly. Use the same
+# authenticated Cloudflare server() path as edit, movement, and messaging.
+legacy_add_member_rpc = '''    const result = await new Promise(function(resolve, reject) {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        .addMember(ADMIN_PIN_VALUE,
+          name,
+          gender,
+          grade,
+          experience,
+          {
+        isNew: !!(document.getElementById('newIsNew') && document.getElementById('newIsNew').checked),
+        publicMemo: String(document.getElementById('newPublicMemo') && document.getElementById('newPublicMemo').value || '').trim(),
+        isSponsor: !!(document.getElementById('newIsSponsor') && document.getElementById('newIsSponsor').checked),
+        isDuplicate: !!(document.getElementById('newIsDuplicate') && document.getElementById('newIsDuplicate').checked)
+      });
+    });'''
+cloudflare_add_member_rpc = '''    const result = await window.server('addMember', [
+      ADMIN_PIN_VALUE,
+      name,
+      gender,
+      grade,
+      experience,
+      {
+        isNew: temporaryMember.isNew,
+        publicMemo: temporaryMember.publicMemo,
+        isSponsor: temporaryMember.isSponsor,
+        isDuplicate: temporaryMember.isDuplicate
+      }
+    ]);'''
+if html.count(legacy_add_member_rpc) != 1:
+    raise SystemExit('legacy member registration RPC anchor mismatch')
+html = html.replace(legacy_add_member_rpc, cloudflare_add_member_rpc, 1)
+
 old_game_panel = '''    <div class="card admin-game-count-panel" style="box-shadow:none;margin-top:12px">
   <h2>게임횟수 카운트 조정</h2>
   <div class="toolbar section">
@@ -494,6 +530,8 @@ html = html[:marker.start()] + injected + html[marker.end():]
 
 if html.count('__JAYUMINTON_CLOUDFLARE_RPC_V6__') != 1: raise SystemExit('v6 bridge count mismatch')
 if 'script.google.com/macros/s/' in html: raise SystemExit('direct GAS URL remains')
+if '.addMember(ADMIN_PIN_VALUE' in html: raise SystemExit('legacy google.script.run member registration survived')
+if "await window.server('addMember'" not in html: raise SystemExit('direct Cloudflare member registration missing')
 if "if (el.textContent !== nextText) el.textContent = nextText;" not in html:
     raise SystemExit('member count observer guard missing')
 if html.count('id="newIsNew"') != 1 or html.count('id="newIsSponsor"') != 1:

@@ -107,6 +107,8 @@ jobs:
           grep -F 'id="quickClearSelectionButton"' "$HTML" >/dev/null
           grep -F 'onclick="startMemberEdit()">편집</button>' "$HTML" >/dev/null
           grep -F 'closeQuickMemberMessage(true)' "$HTML" >/dev/null
+          grep -F "await window.server('addMember'" "$HTML" >/dev/null
+          ! grep -F '.addMember(ADMIN_PIN_VALUE' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
           grep -F "selected.length!==2" "$HTML" >/dev/null
@@ -180,6 +182,8 @@ jobs:
           grep -F 'id="quickClearSelectionButton"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'onclick="startMemberEdit()">편집</button>' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'closeQuickMemberMessage(true)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "await window.server('addMember'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F '.addMember(ADMIN_PIN_VALUE' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "selected.length!==2" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===1)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===3||selected.length===4)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
