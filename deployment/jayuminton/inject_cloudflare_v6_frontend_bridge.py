@@ -597,6 +597,14 @@ management_patch = r'''
     if(!isSaveOverlayVisible())return;
     var allowed=event.target&&event.target.closest&&event.target.closest('#voiceSaveEmergency');
     if(allowed)return;
+    // The older save notice is shown during document capture, before the
+    // button's inline onclick executes. Let that first add/edit click reach
+    // addMember/applyMemberEdit; the in-flight flags then protect every
+    // subsequent interaction until the request completes.
+    var saveButton=event.target&&event.target.closest&&event.target.closest('#addMemberButton,#updateMemberButton,#applyMemberEditButton');
+    var saveBusy=false;
+    try{saveBusy=!!ADD_MEMBER_IN_FLIGHT||!!ACTION_IN_FLIGHT||!!window.__JAYUMINTON_ADMIN_SAVING__;}catch(error){}
+    if(saveButton&&!saveBusy)return;
     event.preventDefault();event.stopImmediatePropagation();event.stopPropagation();
   }
   ['pointerdown','touchstart','click','keydown'].forEach(function(type){
@@ -681,6 +689,7 @@ for required_voice_marker in [
     'function resumeSavedSession()',
     'resumeSavedSession();',
     "event.target.closest('#voiceSaveEmergency')",
+    "saveButton&&!saveBusy",
 ]:
     if required_voice_marker not in html:
         raise SystemExit('announcement voice control missing: ' + required_voice_marker)

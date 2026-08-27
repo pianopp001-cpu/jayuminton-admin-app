@@ -116,6 +116,7 @@ jobs:
           grep -F "window.addMember=function(){return save('add');}" "$HTML" >/dev/null
           grep -F "window.applyMemberEdit=function(){return save('edit');}" "$HTML" >/dev/null
           grep -F "window.server(editing?'updateMemberProfile':'addMember',args)" "$HTML" >/dev/null
+          grep -F 'saveButton&&!saveBusy' "$HTML" >/dev/null
           ! grep -F '.addMember(ADMIN_PIN_VALUE' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
@@ -199,6 +200,7 @@ jobs:
           grep -F "window.addMember=function(){return save('add');}" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "window.applyMemberEdit=function(){return save('edit');}" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "window.server(editing?'updateMemberProfile':'addMember',args)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'saveButton&&!saveBusy' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F '.addMember(ADMIN_PIN_VALUE' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "selected.length!==2" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===1)" "$RUNNER_TEMP/apk-admin.html" >/dev/null

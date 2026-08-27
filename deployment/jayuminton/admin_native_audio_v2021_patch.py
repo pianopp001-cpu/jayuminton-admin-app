@@ -79,6 +79,7 @@ if admin_html.exists():
             "window.addMember=function(){return save('add');}",
             "window.applyMemberEdit=function(){return save('edit');}",
             "window.server(editing?'updateMemberProfile':'addMember',args)",
+            'saveButton&&!saveBusy',
             'jayuminton-admin-multi-action-v2053-style',
             '녹색 = 이동선택','2명일 때만 이동/교환인지 팀설정인지 선택합니다.',
             '1명·3명·4명은 자동으로 이동/교환입니다.',

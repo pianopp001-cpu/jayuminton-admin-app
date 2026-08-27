@@ -123,6 +123,8 @@ assert.match(injectorSource, /__JAYUMINTON_ADMIN_MEMBER_SAVE_V2065__/);
 assert.match(injectorSource, /window\.addMember=function\(\)\{return save\('add'\);\}/);
 assert.match(injectorSource, /window\.applyMemberEdit=function\(\)\{return save\('edit'\);\}/);
 assert.match(injectorSource, /window\.server\(editing\?'updateMemberProfile':'addMember',args\)/);
+assert.match(injectorSource, /saveButton&&!saveBusy/);
+assert.match(injectorSource, /ADD_MEMBER_IN_FLIGHT\|\|!!ACTION_IN_FLIGHT/);
 assert.match(injectorSource, /legacy google\.script\.run member registration survived/);
 
 console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true selection-scope=true edit-button=true member-save-cloudflare=true compact-actions=true');
