@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/restore-member-full-screen.yml'
       - 'deployment/jayuminton/patch_member_stale_wait_id_v1.py'
+      - 'deployment/jayuminton/patch_member_single_tap_move_v1.py'
   workflow_dispatch: {}
 
 permissions:
@@ -61,6 +62,7 @@ jobs:
           python3 deployment/jayuminton/v130_firebase_member_preview.py build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$CLOUDFLARE_RPC_URL"
           python3 deployment/jayuminton/patch_member_stale_wait_id_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_login_recovery_addons.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_single_tap_move_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/remove_member_team_text_creators.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_team_visuals_v6.py "$PUBLIC/index.html"
@@ -68,8 +70,13 @@ jobs:
           grep -F 'function renderState' "$PUBLIC/index.html" >/dev/null
           grep -F 'waitGroups' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_STALE_WAIT_ID_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.handleMemberWaitEmptyTap=function' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.handleEmptySlotTap=function' "$PUBLIC/index.html" >/dev/null
+          grep -F "server('memberMoveSelf'" "$PUBLIC/index.html" >/dev/null
+          grep -F "server('getPublicState'" "$PUBLIC/index.html" >/dev/null
+          ! grep -F 'function applyOptimistic' "$PUBLIC/index.html"
           grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
-          ! grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V1' "$PUBLIC/index.html"
           python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-inline.js" <<'PY'
           from pathlib import Path
           import re,sys
@@ -95,5 +102,8 @@ jobs:
           grep -F 'function renderState' "$RUNNER_TEMP/live.html" >/dev/null
           grep -F 'waitGroups' "$RUNNER_TEMP/live.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_STALE_WAIT_ID_V1' "$RUNNER_TEMP/live.html" >/dev/null
-          ! grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V1' "$RUNNER_TEMP/live.html"
-          echo 'MEMBER_FULL_SCREEN_RESTORE_OK'
+          grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'window.handleMemberWaitEmptyTap=function' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'window.handleEmptySlotTap=function' "$RUNNER_TEMP/live.html" >/dev/null
+          ! grep -F 'function applyOptimistic' "$RUNNER_TEMP/live.html"
+          echo 'MEMBER_FULL_SCREEN_SINGLE_TAP_V2_OK'
