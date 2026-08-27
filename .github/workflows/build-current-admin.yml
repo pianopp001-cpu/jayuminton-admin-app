@@ -100,7 +100,6 @@ jobs:
           grep -F 'jayuminton-admin-multi-action-v2053-style' "$HTML" >/dev/null
           grep -F '녹색 = 이동선택' "$HTML" >/dev/null
           grep -F '3·4명 계속 선택 가능' "$HTML" >/dev/null
-          grep -F '팝업 바깥의 같은 코트·대기조 사람을 계속 눌러 3명·4명으로 선택하세요.' "$HTML" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__' "$HTML" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_FAST_MULTI_MOVE_V2067__' "$HTML" >/dev/null
           grep -F 'pointer-events:none' "$HTML" >/dev/null
@@ -129,9 +128,9 @@ jobs:
           ! grep -F '.addMember(ADMIN_PIN_VALUE' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
-          grep -F "selected.length!==2" "$HTML" >/dev/null
+          ! grep -F "selected.length!==2" "$HTML" >/dev/null
           grep -F "if(selected.length===1)" "$HTML" >/dev/null
-          grep -F "if(selected.length===3||selected.length===4)" "$HTML" >/dev/null
+          grep -F "if(selected.length>=2&&selected.length<=4){beginAutoTarget" "$HTML" >/dev/null
           grep -F "window.server!=='function'" "$HTML" >/dev/null
           grep -F "rpc('setTempPairs'" "$HTML" >/dev/null
           grep -F "runAction('sendMemberMessage'" "$HTML" >/dev/null
@@ -197,7 +196,6 @@ jobs:
           grep -F 'jayuminton-admin-multi-action-v2053-style' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '녹색 = 이동선택' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '3·4명 계속 선택 가능' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F '팝업 바깥의 같은 코트·대기조 사람을 계속 눌러 3명·4명으로 선택하세요.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_FAST_MULTI_MOVE_V2067__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'pointer-events:none' "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -224,9 +222,9 @@ jobs:
           grep -F "window.server(editing?'updateMemberProfile':'addMember',args)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'saveButton&&!saveBusy' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F '.addMember(ADMIN_PIN_VALUE' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "selected.length!==2" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F "selected.length!==2" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===1)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "if(selected.length===3||selected.length===4)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "if(selected.length>=2&&selected.length<=4){beginAutoTarget" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "rpc('setTempPairs'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "runAction('sendMemberMessage'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "executeSwap([left],[id])" "$RUNNER_TEMP/apk-admin.html" >/dev/null
