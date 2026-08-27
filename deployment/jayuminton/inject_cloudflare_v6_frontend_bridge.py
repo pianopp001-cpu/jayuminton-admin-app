@@ -162,10 +162,18 @@ html = html.replace(old_summary, new_summary, 1)
 # Put member messaging beside Quick Assign so selected cards can be addressed
 # without leaving the court screen.
 quick_count = '<span id="quickSelectedCount" class="selection-pill">0명 선택</span>'
-quick_message = quick_count + '\n          <button id="quickMemberMessageButton" type="button" onclick="openQuickMemberMessage()">메시지 보내기</button>'
+quick_message = quick_count + '\n          <button id="quickMemberMessageButton" type="button" onclick="openQuickMemberMessage()">메시지 보내기</button>\n          <button id="quickClearSelectionButton" type="button" onclick="clearAdminMemberSelection()">선택 해제</button>'
 if html.count(quick_count) != 1:
     raise SystemExit('quick member message anchor mismatch')
 html = html.replace(quick_count, quick_message, 1)
+
+# Restore the missing edit control in the existing administrator long-press
+# menu. The edit implementation itself is still part of the proven shell.
+quick_move_delete = '    <button type="button" class="danger" onclick="deleteLongPressedMembers()">삭제</button>'
+quick_move_edit = '    <button type="button" onclick="startMemberEdit()">편집</button>\n' + quick_move_delete
+if html.count(quick_move_delete) != 1:
+    raise SystemExit('long-press member edit button anchor mismatch')
+html = html.replace(quick_move_delete, quick_move_edit, 1)
 
 old_game_panel = '''    <div class="card admin-game-count-panel" style="box-shadow:none;margin-top:12px">
   <h2>게임횟수 카운트 조정</h2>
@@ -310,7 +318,7 @@ management_patch = r'''
     <h3 id="quickMemberMessageTitle">선택 회원에게 메시지</h3>
     <div id="quickMemberMessageRecipients" class="meta"></div>
     <textarea id="quickMemberMessageText" maxlength="300" placeholder="전송할 메시지를 입력하세요."></textarea>
-    <div class="quick-message-actions"><button type="button" onclick="closeQuickMemberMessage()">취소</button><button class="quick-message-send" type="button" onclick="sendQuickMemberMessage()">전송</button></div>
+    <div class="quick-message-actions"><button type="button" onclick="closeQuickMemberMessage(true)">취소·선택해제</button><button class="quick-message-send" type="button" onclick="sendQuickMemberMessage()">전송</button></div>
   </div>
 </div>
 <script id="jayuminton-pair-statistics-disclosure-v2028">
@@ -338,6 +346,19 @@ management_patch = r'''
 <script id="jayuminton-admin-member-management-v202-script">
 (function(){
   'use strict';
+  window.__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__=true;
+  window.clearAdminMemberSelection=function(){
+    try{if(typeof SELECTED!=='undefined'&&SELECTED&&typeof SELECTED.clear==='function')SELECTED.clear();}catch(e){}
+    try{if(typeof window.__JAYUMINTON_RESET_MULTI_SELECTION_V2057__==='function')window.__JAYUMINTON_RESET_MULTI_SELECTION_V2057__();}catch(e){}
+    document.querySelectorAll('#adminApp .selected,#adminApp .quick-picked,#adminApp .jm-source-selected,#adminApp .jm-target-selected').forEach(function(card){card.classList.remove('selected','quick-picked','jm-source-selected','jm-target-selected');});
+    var quick=document.getElementById('quickSelectedCount'),mobile=document.getElementById('mobileSelectedCount'),bulk=document.getElementById('mdBulkDeleteCount'),del=document.getElementById('mdBulkDeleteButton');
+    if(quick){quick.textContent='0명 선택';quick.classList.remove('has-selection');}
+    if(mobile)mobile.textContent='0명 선택';
+    if(bulk)bulk.textContent='0명 선택';
+    if(del)del.disabled=true;
+    try{if(typeof renderQuickRoster==='function')renderQuickRoster();}catch(e){}
+    try{if(typeof renderQuickMoveBar==='function')renderQuickMoveBar();}catch(e){}
+  };
   window.applyMdSelectedStatus=function(status){
     var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
     if(!ids.length){alert('먼저 멤버 카드를 선택해 주세요.');return;}
@@ -364,13 +385,13 @@ management_patch = r'''
     if(recipients)recipients.textContent=ids.length+'명 선택 · '+names.join(', ');
     if(modal)modal.classList.remove('hidden');if(text){text.value='';setTimeout(function(){text.focus();},50);}
   };
-  window.closeQuickMemberMessage=function(){var modal=document.getElementById('quickMemberMessageModal');if(modal)modal.classList.add('hidden');};
+  window.closeQuickMemberMessage=function(clearSelection){var modal=document.getElementById('quickMemberMessageModal');if(modal)modal.classList.add('hidden');if(clearSelection)clearAdminMemberSelection();};
   window.sendQuickMemberMessage=async function(){
     var ids=[];try{ids=Array.from(SELECTED||[]);}catch(e){}
     var text=document.getElementById('quickMemberMessageText'),message=String(text&&text.value||'').trim();
     if(!ids.length){alert('메시지를 받을 회원카드를 선택해 주세요.');return;}
     if(!message){alert('메시지를 입력해 주세요.');if(text)text.focus();return;}
-    closeQuickMemberMessage();
+    closeQuickMemberMessage(false);
     try{await runAction('sendMemberMessage',[ADMIN_PIN_VALUE,ids,message]);alert(ids.length+'명에게 메시지를 전송했습니다.');}
     catch(error){alert(error&&error.message?error.message:error);}
   };

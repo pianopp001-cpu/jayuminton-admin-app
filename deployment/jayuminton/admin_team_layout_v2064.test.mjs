@@ -103,4 +103,16 @@ assert.doesNotMatch(css, /padding-left/);
 assert.doesNotMatch(css, /border-left/);
 assert.doesNotMatch(css, /outline-offset:-/);
 
-console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true');
+const interactionSource = await readFile(new URL('./admin_card_interaction_v2042.js', import.meta.url), 'utf8');
+assert.match(interactionSource, /function clearMessageSelection\(\)/);
+assert.match(interactionSource, /SELECTED\.clear\(\)/);
+assert.match(interactionSource, /__JAYUMINTON_RESET_MULTI_SELECTION_V2057__/);
+assert.match(interactionSource, /if\(!selected\.length\)clearMessageSelection\(\)/);
+
+const injectorSource = await readFile(new URL('./inject_cloudflare_v6_frontend_bridge.py', import.meta.url), 'utf8');
+assert.match(injectorSource, /__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__/);
+assert.match(injectorSource, /id=\"quickClearSelectionButton\"/);
+assert.match(injectorSource, /onclick=\"startMemberEdit\(\)\">편집<\/button>/);
+assert.match(injectorSource, /closeQuickMemberMessage\(true\)/);
+
+console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true selection-scope=true edit-button=true');

@@ -102,6 +102,11 @@ jobs:
           grep -F '이동/교환' "$HTML" >/dev/null
           grep -F '팀설정' "$HTML" >/dev/null
           grep -F '메시지 보내기' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_RESET_MULTI_SELECTION_V2057__' "$HTML" >/dev/null
+          grep -F 'id="quickClearSelectionButton"' "$HTML" >/dev/null
+          grep -F 'onclick="startMemberEdit()">편집</button>' "$HTML" >/dev/null
+          grep -F 'closeQuickMemberMessage(true)' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
           grep -F "selected.length!==2" "$HTML" >/dev/null
@@ -170,6 +175,11 @@ jobs:
           grep -F '#16a34a' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#d4a017' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '메시지 보내기' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_RESET_MULTI_SELECTION_V2057__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'id="quickClearSelectionButton"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'onclick="startMemberEdit()">편집</button>' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'closeQuickMemberMessage(true)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "selected.length!==2" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===1)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "if(selected.length===3||selected.length===4)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
