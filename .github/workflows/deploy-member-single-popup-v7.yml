@@ -60,7 +60,10 @@ jobs:
           mkdir -p "$PUBLIC"
           curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?teamLines=$GITHUB_RUN_ID" -o "$PUBLIC/index.html"
 
-          if ! grep -F 'function initialize()' "$PUBLIC/index.html" >/dev/null || ! grep -F 'function server(name, args)' "$PUBLIC/index.html" >/dev/null; then
+          if ! grep -F 'function initialize()' "$PUBLIC/index.html" >/dev/null \
+            || ! grep -F 'function server(name, args)' "$PUBLIC/index.html" >/dev/null \
+            || ! grep -F '__JAYUMINTON_MEMBER_CURRENT_STATE_RPC__' "$PUBLIC/index.html" >/dev/null \
+            || ! grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null; then
             SOURCE_COMMIT=c41ab20
             WORK="$RUNNER_TEMP/member-login-recovery-source"
             mkdir -p "$WORK"
