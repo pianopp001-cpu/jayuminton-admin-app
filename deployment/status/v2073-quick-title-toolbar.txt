@@ -1,6 +1,6 @@
 status=success
-version=207.6
-feature=layout-wait4-compact-newbadge
+version=207.7
+feature=compact-status-action-toolbar
 base=v207.2-unlimited-selection
-run_id=33117678251
-sha256=5318986232844b2a5daa9192db143798cfaf39060b7ea6de426feaf0bfed853e
+run_id=33118278011
+sha256=9a7dbc58b38d7602e66e4065fd8a881f1fac68baf1b5d42916e67a428e462dbd
