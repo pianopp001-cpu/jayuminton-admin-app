@@ -1,6 +1,6 @@
 status=success
-version=207.3
-feature=quick-title-colored-toolbar
+version=207.6
+feature=layout-wait4-compact-newbadge
 base=v207.2-unlimited-selection
-run_id=33117020945
-sha256=376302ce25a2d2fe40d1ab310d4dd5b57e3b6447ecf6b04167581b95c7c896f1
+run_id=33117678251
+sha256=5318986232844b2a5daa9192db143798cfaf39060b7ea6de426feaf0bfed853e
