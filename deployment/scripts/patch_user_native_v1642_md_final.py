@@ -24,6 +24,25 @@ pairs = (
 for old, new in pairs:
     source = source.replace(old, new)
 
+# The final user APK must always enter the Firebase member page explicitly.
+# Do not allow a stale default route or any admin-mode query to leak into WebView.
+source = source.replace(
+    'USER_URL="https://jayuminton-push.web.app/"',
+    'USER_URL="https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42"',
+)
+source = source.replace(
+    'USER_URL="https://jayuminton-push.web.app/;',
+    'USER_URL="https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42";',
+)
+# Also normalize any previously parameterized Firebase URL.
+import re
+source = re.sub(
+    r'USER_URL="https://jayuminton-push\.web\.app/[^"\n]*"',
+    'USER_URL="https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42"',
+    source,
+    count=1,
+)
+
 required = (
     'VERSION="1.6.42"',
     'VERSION_CODE="2001642"',
@@ -31,7 +50,7 @@ required = (
     'NativePushRegistrar.isCurrentMember(this, targetMemberId)',
     'AlertVibrationController.stop(',
     'stopPreviousMemberAlert(app);',
-    'USER_URL="https://jayuminton-push.web.app/',
+    'USER_URL="https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42"',
     'com.jayuminton.user',
 )
 for marker in required:
@@ -39,6 +58,8 @@ for marker in required:
         raise SystemExit('v1642 MD final contract missing: ' + marker)
 if 'script.google.com' in source or 'MAIN_DEPLOYMENT_ID' in source:
     raise SystemExit('v1642 must remain Cloudflare/Firebase-only')
+if 'mode=admin' in source:
+    raise SystemExit('v1642 user APK must never contain admin mode routing')
 
 path.write_text(source, encoding='utf-8')
-print('Prepared v1.6.42 MD-final native user APK contract.')
+print('Prepared v1.6.42 MD-final native user APK contract with explicit Firebase member route.')
