@@ -1,0 +1,6 @@
+status=success
+version=203.3
+base=backup-main-before-v203-recovery-20260825/exact-v203.0-apk
+change=overlay-only-two-person-panel
+run_id=33103672203
+sha256=3f6bdb725006e3879265c555b50dbdde68628fd6bde821694ae0117f5c59e2ad
