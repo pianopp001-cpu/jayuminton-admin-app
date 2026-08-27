@@ -1,0 +1,6 @@
+status=success
+version=207.2
+feature=unlimited-selection-toolbar
+base=latest-admin-v203-release
+run_id=33113576003
+sha256=a0189625769690a7610912d1e6b6a86ab70c3c73d3cc03ab67bbd373310258fe
