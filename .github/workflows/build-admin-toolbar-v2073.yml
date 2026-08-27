@@ -7,6 +7,7 @@ on:
       - '.github/workflows/build-admin-toolbar-v2073.yml'
       - 'deployment/jayuminton/admin_toolbar_position_colors_v2073.js'
       - 'deployment/jayuminton/admin_layout_wait4_compact_v2076.js'
+      - 'deployment/jayuminton/admin_toolbar_actions_v2077.js'
   workflow_dispatch: {}
 
 permissions:
@@ -28,7 +29,7 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager --licenses >/dev/null || true
       - run: sdkmanager 'build-tools;35.0.0' >/dev/null
-      - name: Patch latest admin toolbar plus v2076 fixes
+      - name: Patch latest admin toolbar plus v2076 and v2077 fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -39,7 +40,7 @@ jobs:
           cp "$BASE" "$ROOT/base.apk"
           unzip -p "$BASE" assets/admin/index.html > "$ROOT/assets/admin/index.html"
           test -s "$ROOT/assets/admin/index.html"
-          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js <<'PY'
+          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js <<'PY'
           from pathlib import Path
           import sys
           html_path=Path(sys.argv[1])
@@ -54,6 +55,10 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_UNLIMITED_SELECTION_V2072__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_TOOLBAR_V2073__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2076__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TOOLBAR_ACTIONS_V2077__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '도착전' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '귀가' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '배정대기' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'data-jm-v2076-wait4-second' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-v2076-bottom-row' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-v2076-new-badge' "$ROOT/assets/admin/index.html" >/dev/null
@@ -68,6 +73,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk"
           unzip -p "$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2076__' "$ROOT/verify.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_TOOLBAR_ACTIONS_V2077__' "$ROOT/verify.html" >/dev/null
           grep -F 'assignMembersToWaitGroup' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
@@ -82,7 +88,7 @@ jobs:
           git reset --hard origin/main
           mkdir -p releases deployment/status
           cp "$APK" releases/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk
-          printf 'status=success\nversion=207.6\nfeature=layout-wait4-compact-newbadge\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2073-quick-title-toolbar.txt
+          printf 'status=success\nversion=207.7\nfeature=compact-status-action-toolbar\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2073-quick-title-toolbar.txt
           git add releases/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk deployment/status/v2073-quick-title-toolbar.txt
-          git commit -m 'Publish admin v207.6 layout wait4 compact APK' || exit 0
+          git commit -m 'Publish admin v207.7 compact status action toolbar APK' || exit 0
           git push origin HEAD:main
