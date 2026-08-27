@@ -1,3 +1,3 @@
-current-admin-v2055
+current-admin-v2063
 requested=2026-08-27
-reason=clear-temporary-yellow-after-court-finish-preserve-permanent-double-team-border
+reason=persist-yellow-temp-team-distinct-double-permanent-team-clear-yellow-after-court-finish
