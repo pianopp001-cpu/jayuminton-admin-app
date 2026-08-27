@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/restore-member-full-screen.yml'
+      - 'deployment/jayuminton/patch_member_stale_wait_id_v1.py'
   workflow_dispatch: {}
 
 permissions:
@@ -58,6 +59,7 @@ jobs:
             git show "$SOURCE_COMMIT:source-snapshot/current-main/$file" > "$WORK/$file"
           done
           python3 deployment/jayuminton/v130_firebase_member_preview.py build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$CLOUDFLARE_RPC_URL"
+          python3 deployment/jayuminton/patch_member_stale_wait_id_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_login_recovery_addons.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/remove_member_team_text_creators.py "$PUBLIC/index.html"
@@ -65,6 +67,7 @@ jobs:
           grep -F 'function initialize()' "$PUBLIC/index.html" >/dev/null
           grep -F 'function renderState' "$PUBLIC/index.html" >/dev/null
           grep -F 'waitGroups' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_STALE_WAIT_ID_V1' "$PUBLIC/index.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
           ! grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V1' "$PUBLIC/index.html"
           python3 - "$PUBLIC/index.html" "$RUNNER_TEMP/member-inline.js" <<'PY'
@@ -91,5 +94,6 @@ jobs:
           grep -F 'function initialize()' "$RUNNER_TEMP/live.html" >/dev/null
           grep -F 'function renderState' "$RUNNER_TEMP/live.html" >/dev/null
           grep -F 'waitGroups' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_STALE_WAIT_ID_V1' "$RUNNER_TEMP/live.html" >/dev/null
           ! grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V1' "$RUNNER_TEMP/live.html"
           echo 'MEMBER_FULL_SCREEN_RESTORE_OK'
