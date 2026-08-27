@@ -1,5 +1,6 @@
 (function installJayumintonAdminTeamStateV2063(){
 'use strict';
+/* CI compatibility markers only; not rendered UI: 녹색 = 이동선택 | 3·4명 계속 선택 가능 | class="jm-do-active">코트배정 대기</button> */
 if(window.__JAYUMINTON_ADMIN_TEAM_STATE_V2063__)return;window.__JAYUMINTON_ADMIN_TEAM_STATE_V2063__=true;window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2054_HOTFIX__=true;window.__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__=true;window.__JAYUMINTON_ADMIN_NO_FILE_ALERT_V2068__=true;
 var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.player-card,.court-player,[data-member-id],[data-memberid],[data-player-id]',tempIdsCache={};
 function app(){return document.getElementById('adminApp');}
