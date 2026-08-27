@@ -81,12 +81,14 @@ if admin_html.exists():
             "window.server(editing?'updateMemberProfile':'addMember',args)",
             'saveButton&&!saveBusy',
             'jayuminton-admin-multi-action-v2053-style',
-            '녹색 = 이동선택','2명일 때만 이동/교환인지 팀설정인지 선택합니다.',
+            '녹색 = 이동선택','이동/교환, 코트배정 대기 또는 팀설정을 선택하세요.',
             '1명·3명·4명은 자동으로 이동/교환입니다.',
             '이동/교환','팀설정','#16a34a','#d4a017',
             "rpc('setTempPairs'", "runAction('sendMemberMessage'",
             'if(selected.length===1)', 'if(selected.length===3||selected.length===4)',
-            "if(targets.length===selected.length)executeMove();"
+            "if(targets.length===selected.length)executeMove();",
+            'class="jm-do-active">코트배정 대기</button>',
+            "rpc('setMemberStatus',[null,ids,'active'])",
         )
         for marker in required:
             if marker not in final_html: raise SystemExit('bundled admin current-contract missing: '+marker)

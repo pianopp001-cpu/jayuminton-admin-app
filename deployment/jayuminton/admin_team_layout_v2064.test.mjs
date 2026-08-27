@@ -108,6 +108,10 @@ assert.match(interactionSource, /function clearMessageSelection\(\)/);
 assert.match(interactionSource, /SELECTED\.clear\(\)/);
 assert.match(interactionSource, /__JAYUMINTON_RESET_MULTI_SELECTION_V2057__/);
 assert.match(interactionSource, /if\(!selected\.length\)clearMessageSelection\(\)/);
+assert.match(interactionSource, /class=\"jm-do-active\">코트배정 대기/);
+assert.match(interactionSource, /function moveSelectedToActive\(ids\)/);
+assert.match(interactionSource, /rpc\('setMemberStatus',\[null,ids,'active'\]\)/);
+assert.match(interactionSource, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 
 const injectorSource = await readFile(new URL('./inject_cloudflare_v6_frontend_bridge.py', import.meta.url), 'utf8');
 assert.match(injectorSource, /__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__/);
