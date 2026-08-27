@@ -141,4 +141,34 @@ if '__JAYUMINTON_ADMIN_LOGIN_FALLBACK_V2051__' not in s or "window.server=functi
 
 p.write_text(s, encoding='utf-8')
 subprocess.run(['node', '--check', str(p)], check=True)
-print('PATCH_BRIDGE_ADMIN_MULTISELECT_V2051_DIRECT_LOGIN_OK')
+
+# Apply the same stale wait-id render guard that restored the member web.
+# The shared renderer is also used inside the administrator APK; without this
+# guard, one stale/deleted member id in waitGroups aborts rendering and makes
+# the lower wait groups look as if half the screen disappeared.
+admin_html = Path('app/src/main/assets/admin/index.html')
+if admin_html.exists():
+    h = admin_html.read_text(encoding='utf-8')
+    marker = 'JAYUMINTON_ADMIN_STALE_WAIT_ID_V1'
+    if marker not in h:
+        needle = """              const member =
+                memberById(id);
+
+              if (!IS_ADMIN) {
+                if (isSelfMember(member)) {"""
+        replacement_html = """              const member =
+                memberById(id);
+
+              /* JAYUMINTON_ADMIN_STALE_WAIT_ID_V1: stale wait ids must not abort admin render. */
+              if (!member) {
+                return memberWaitEmptySlotCard(groupIndex, slotIndex);
+              }
+
+              if (!IS_ADMIN) {
+                if (isSelfMember(member)) {"""
+        if needle not in h:
+            raise SystemExit('admin stale wait member render anchor missing')
+        h = h.replace(needle, replacement_html, 1)
+        admin_html.write_text(h, encoding='utf-8')
+
+print('PATCH_BRIDGE_ADMIN_MULTISELECT_V2051_DIRECT_LOGIN_OK ADMIN_STALE_WAIT_ID_GUARD_OK')
