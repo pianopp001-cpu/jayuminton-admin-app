@@ -75,6 +75,11 @@ if admin_html.exists():
         )
         for marker in required:
             if marker not in final_html: raise SystemExit('bundled admin current-contract missing: '+marker)
+        for forbidden in (
+            'box-shadow:inset 5px 0 0 var(--member-team-color)',
+            'padding-left:10px!important',
+        ):
+            if forbidden in final_html: raise SystemExit('bundled admin left-stripe contract survived: '+forbidden)
         if 'window.google&&window.google.script&&window.google.script.run' in card_js: raise SystemExit('team interaction must use direct Cloudflare window.server RPC')
         if 'window.confirm(' in card_js: raise SystemExit('team interaction must use in-app action panel, not browser confirm')
         print('BUNDLED_ADMIN_CURRENT_TEAM_CONTRACT_OK')

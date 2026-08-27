@@ -98,5 +98,9 @@ assert.match(css, /outline:1px solid var\(--member-team-color/);
 assert.match(css, /outline-offset:2px/);
 assert.match(css, /0 0 0 5px var\(--member-team-color/);
 assert.doesNotMatch(css, /inset 0 0 0/);
+assert.doesNotMatch(css, /inset\s+5px\s+0/);
+assert.doesNotMatch(css, /padding-left/);
+assert.doesNotMatch(css, /border-left/);
+assert.doesNotMatch(css, /outline-offset:-/);
 
 console.log('ADMIN_TEAM_LAYOUT_V2064_OK distinct=true double-thin=true outside=true');

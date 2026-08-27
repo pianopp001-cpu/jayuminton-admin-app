@@ -125,6 +125,8 @@ jobs:
           grep -F 'outline:1px solid var(--member-team-color' "$HTML" >/dev/null
           grep -F '0 0 0 5px var(--member-team-color' "$HTML" >/dev/null
           ! grep -F "card.style.setProperty('outline','2px solid var(--member-team-color)'" "$HTML" >/dev/null
+          ! grep -F 'box-shadow:inset 5px 0 0 var(--member-team-color)' "$HTML" >/dev/null
+          ! grep -F 'padding-left:10px!important' "$HTML" >/dev/null
           grep -F 'jayuminton-state.pianopp001.workers.dev/api/compat/rpc' "$HTML" >/dev/null
           ! grep -F 'window.google&&window.google.script&&window.google.script.run' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
           ! grep -F 'window.confirm(' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
@@ -186,6 +188,8 @@ jobs:
           grep -F 'outline:1px solid var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '0 0 0 5px var(--member-team-color' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F "card.style.setProperty('outline','2px solid var(--member-team-color)'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F 'box-shadow:inset 5px 0 0 var(--member-team-color)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F 'padding-left:10px!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jayuminton-state.pianopp001.workers.dev/api/compat/rpc' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           SHA=$(sha256sum "$APK" | awk '{print $1}')

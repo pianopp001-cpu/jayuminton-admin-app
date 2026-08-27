@@ -358,7 +358,7 @@ TEAM_CARD_LAYOUT_V3_ADDON = r'''
 <style id="jayuminton-member-team-card-layout-v5">
 /* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5 */
 #memberApp [data-member-id]{position:relative!important;inset:auto!important;transform:none!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:center!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:52px!important;max-height:none!important;box-sizing:border-box!important;overflow:hidden!important;contain:paint!important}
-#memberApp [data-member-id].jm-has-team{box-shadow:inset 4px 0 0 var(--jm-team-color)!important}
+#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}
 #memberApp [data-member-id]>.name,#memberApp [data-member-id]>.member-name,#memberApp [data-member-id]>.quick-member-name,#memberApp [data-member-id]>.member-info-detail,#memberApp [data-member-id]>.member-public-memo,#memberApp [data-member-id]>.jm-public-memo,#memberApp [data-member-id]>.member-status-list{position:static!important;inset:auto!important;transform:none!important;display:block!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;max-height:none!important;box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;text-align:center!important;white-space:normal!important;overflow:hidden!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
 #memberApp [data-member-id]>.member-self-star{top:2px!important;right:2px!important}
 #memberApp [data-member-id]>.jm-member-badges{position:static!important;inset:auto!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:center!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;box-sizing:border-box!important;margin:2px 0 0!important;padding:0!important;overflow:hidden!important}
@@ -468,9 +468,11 @@ def assert_auto_sync_contract(text: str) -> None:
 
 
 def assert_team_status_contract(text: str) -> None:
-    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team"]:
+    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team", "outline-offset:2px", "0 0 0 5px var(--jm-team-color"]:
         if needle not in text:
             raise SystemExit(f"member team/status contract missing: {needle}")
+    if "box-shadow:inset 4px 0 0 var(--jm-team-color)" in text:
+        raise SystemExit("member team/status left stripe survived")
 
 
 def assert_member_message_contract(text: str) -> None:
@@ -487,6 +489,10 @@ def assert_self_profile_contract(text: str) -> None:
 
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
+    text = text.replace(
+        "#memberApp [data-member-id].jm-has-team{box-shadow:inset 4px 0 0 var(--jm-team-color)!important}",
+        "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}",
+    )
     apk_url = (
         "https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/"
         "releases/jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk"

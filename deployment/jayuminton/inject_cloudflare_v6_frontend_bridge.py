@@ -287,7 +287,6 @@ management_patch = r'''
 #adminApp .member.male,#adminApp .person.male,#adminApp .quick-member.male{background:#e4f1ff!important;color:#0756b6!important;font-weight:900!important}
 #adminApp .member.female,#adminApp .person.female,#adminApp .quick-member.female{background:#ffe7f0!important;color:#c51b4f!important;font-weight:900!important}
 #adminApp .member .name,#adminApp .person .name,#adminApp .quick-member-name{font-weight:950!important}
-#adminApp .has-member-team{position:relative!important;box-shadow:inset 5px 0 0 var(--member-team-color)!important;padding-left:10px!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
 #adminApp .member-team-badge{display:none!important}
 @media(max-width:620px){.admin-setup-details>summary{width:100%!important;box-sizing:border-box!important;justify-content:center!important}.admin-panel{padding:10px!important}.admin-panel h2{font-size:15px!important}.md-game-actions{gap:5px!important}.md-game-actions button{font-size:10px!important;padding:5px 7px!important}.md-bulk-member-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important}.md-bulk-member-actions button{min-width:0!important;font-size:10px!important;padding:5px 2px!important}}
 </style>
