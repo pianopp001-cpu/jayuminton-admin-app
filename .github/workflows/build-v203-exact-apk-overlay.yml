@@ -1,0 +1,62 @@
+name: Build exact v203 APK overlay only
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/patch_v203_exact_apk_overlay.py'
+      - '.github/workflows/build-v203-exact-apk-overlay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager --licenses >/dev/null || true
+      - run: sdkmanager 'build-tools;35.0.0' >/dev/null
+
+      - name: Patch exact proven v203 APK only
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk
+          test -s "$BASE"
+          mkdir -p "$RUNNER_TEMP/jm/assets/admin"
+          unzip -p "$BASE" assets/admin/index.html > "$RUNNER_TEMP/jm/assets/admin/index.html"
+          test -s "$RUNNER_TEMP/jm/assets/admin/index.html"
+          python3 deployment/jayuminton/patch_v203_exact_apk_overlay.py "$RUNNER_TEMP/jm/assets/admin/index.html"
+          grep -F 'JAYUMINTON_V203_EXACT_APK_OVERLAY_ONLY' "$RUNNER_TEMP/jm/assets/admin/index.html" >/dev/null
+          cp "$BASE" "$RUNNER_TEMP/v203-patched-unsigned.apk"
+          zip -d "$RUNNER_TEMP/v203-patched-unsigned.apk" 'META-INF/*' 'assets/admin/index.html' >/dev/null || true
+          (cd "$RUNNER_TEMP/jm" && zip -q -u "$RUNNER_TEMP/v203-patched-unsigned.apk" assets/admin/index.html)
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$RUNNER_TEMP/v203-patched-unsigned.apk" "$RUNNER_TEMP/v203-aligned.apk"
+          base64 --decode signing/jayuminton-release.keystore.b64 > "$RUNNER_TEMP/jayuminton-release.jks"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$RUNNER_TEMP/jayuminton-release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$RUNNER_TEMP/jayuminton-admin-v203.2-exact-apk-overlay.apk" "$RUNNER_TEMP/v203-aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$RUNNER_TEMP/jayuminton-admin-v203.2-exact-apk-overlay.apk"
+          unzip -p "$RUNNER_TEMP/jayuminton-admin-v203.2-exact-apk-overlay.apk" assets/admin/index.html > "$RUNNER_TEMP/verify.html"
+          grep -F 'JAYUMINTON_V203_EXACT_APK_OVERLAY_ONLY' "$RUNNER_TEMP/verify.html" >/dev/null
+
+      - name: Publish exact-patched APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$RUNNER_TEMP/jayuminton-admin-v203.2-exact-apk-overlay.apk"
+          SHA=$(sha256sum "$APK" | awk '{print $1}')
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK" releases/jayuminton-admin-v203.2-exact-apk-overlay.apk
+          printf 'status=success\nversion=203.2\nbase=exact-v203.0-apk\nchange=overlay-only-two-person-panel\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2032-exact-apk-overlay.txt
+          git add releases/jayuminton-admin-v203.2-exact-apk-overlay.apk deployment/status/v2032-exact-apk-overlay.txt
+          git commit -m 'Publish v203.2 exact APK overlay-only fix' || exit 0
+          git push origin HEAD:main
