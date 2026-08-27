@@ -25,20 +25,23 @@ for old, new in pairs:
     source = source.replace(old, new)
 
 # The final user APK must always enter the Firebase member page explicitly.
-# Do not allow a stale default route or any admin-mode query to leak into WebView.
+# A cache-busting memberRoute marker prevents a stale WebView/admin document from
+# being restored after an APK update while keeping the user's saved auth storage.
+USER_ROUTE = 'https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42&memberRoute=20260827b'
 source = source.replace(
     'USER_URL="https://jayuminton-push.web.app/"',
-    'USER_URL="https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42"',
+    f'USER_URL="{USER_ROUTE}"',
 )
 source = source.replace(
     'USER_URL="https://jayuminton-push.web.app/;',
-    'USER_URL="https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42";',
+    f'USER_URL="{USER_ROUTE}";',
 )
-# Also normalize any previously parameterized Firebase URL.
+
+# Normalize every older Firebase user URL, including already-parameterized ones.
 import re
 source = re.sub(
     r'USER_URL="https://jayuminton-push\.web\.app/[^"\n]*"',
-    'USER_URL="https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42"',
+    f'USER_URL="{USER_ROUTE}"',
     source,
     count=1,
 )
@@ -50,7 +53,7 @@ required = (
     'NativePushRegistrar.isCurrentMember(this, targetMemberId)',
     'AlertVibrationController.stop(',
     'stopPreviousMemberAlert(app);',
-    'USER_URL="https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42"',
+    f'USER_URL="{USER_ROUTE}"',
     'com.jayuminton.user',
 )
 for marker in required:
@@ -60,6 +63,8 @@ if 'script.google.com' in source or 'MAIN_DEPLOYMENT_ID' in source:
     raise SystemExit('v1642 must remain Cloudflare/Firebase-only')
 if 'mode=admin' in source:
     raise SystemExit('v1642 user APK must never contain admin mode routing')
+if 'mode=user' not in source or 'memberRoute=20260827b' not in source:
+    raise SystemExit('v1642 fresh member route guard missing')
 
 path.write_text(source, encoding='utf-8')
-print('Prepared v1.6.42 MD-final native user APK contract with explicit Firebase member route.')
+print('Prepared v1.6.42 MD-final native user APK with fresh Firebase member route guard.')
