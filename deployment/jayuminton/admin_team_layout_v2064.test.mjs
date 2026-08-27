@@ -109,14 +109,17 @@ assert.match(interactionSource, /function clearMessageSelection\(\)/);
 assert.match(interactionSource, /SELECTED\.clear\(\)/);
 assert.match(interactionSource, /__JAYUMINTON_RESET_MULTI_SELECTION_V2057__/);
 assert.match(interactionSource, /if\(!selected\.length\)clearMessageSelection\(\)/);
-// The active button is dynamically disabled only when the current selection is not from one place.
+assert.match(interactionSource, /__JAYUMINTON_ADMIN_FREE_2_TO_4_V2069__/);
 assert.match(interactionSource, /class=\"jm-do-active\"/);
 assert.match(interactionSource, />코트배정 대기<\/button>/);
-assert.match(interactionSource, /canActive=samePlace\(selected\)/);
+assert.doesNotMatch(interactionSource, /canActive=samePlace\(selected\)/);
 assert.match(interactionSource, /function moveSelectedToActive\(ids\)/);
-assert.match(interactionSource, /ids\.length<2\|\|ids\.length>4\|\|!samePlace\(ids\)/);
+assert.match(interactionSource, /ids\.length<2\|\|ids\.length>4/);
+assert.doesNotMatch(interactionSource, /ids\.length<2\|\|ids\.length>4\|\|!samePlace\(ids\)/);
 assert.match(interactionSource, /rpc\('setMemberStatus',\[null,ids,'active'\]\)/);
 assert.match(interactionSource, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+assert.match(interactionSource, /selected\.length<4/);
+assert.match(interactionSource, /beginAutoTarget\(\{kind:'member',id:id\}\)/);
 
 const injectorSource = await readFile(new URL('./inject_cloudflare_v6_frontend_bridge.py', import.meta.url), 'utf8');
 assert.match(injectorSource, /__JAYUMINTON_ADMIN_SELECTION_SCOPE_V2057__/);
@@ -143,4 +146,4 @@ assert.match(userVisualSource, /0 0 0 2px rgba\(255,255,255/);
 assert.match(userVisualSource, /0 0 0 4px var\(--jm-team-color/);
 assert.match(userVisualSource, /'#7c3aed','#0891b2','#ea580c','#059669'/);
 
-console.log('ADMIN_TEAM_LAYOUT_V2066_OK distinct=true vivid-double=true size-stable=true user-admin-consistent=true');
+console.log('ADMIN_TEAM_LAYOUT_V2069_OK distinct=true free-2-4=true popup-nonblocking=true');
