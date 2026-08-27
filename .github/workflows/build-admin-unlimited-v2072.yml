@@ -1,0 +1,95 @@
+name: Build admin unlimited selection v2072
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-unlimited-v2072.yml'
+      - 'deployment/jayuminton/admin_unlimited_selection_v2072.js'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-unlimited-v2072
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager --licenses >/dev/null || true
+      - run: sdkmanager 'build-tools;35.0.0' >/dev/null
+      - name: Patch latest successful admin APK without changing existing team design
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk
+          test -s "$BASE"
+          ROOT="$RUNNER_TEMP/jm2072"
+          mkdir -p "$ROOT/assets/admin"
+          cp "$BASE" "$ROOT/base.apk"
+          unzip -p "$BASE" assets/admin/index.html > "$ROOT/assets/admin/index.html"
+          test -s "$ROOT/assets/admin/index.html"
+          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_unlimited_selection_v2072.js <<'PY'
+          from pathlib import Path
+          import sys
+          html_path=Path(sys.argv[1]); overlay_path=Path(sys.argv[2])
+          html=html_path.read_text(encoding='utf-8')
+          overlay=overlay_path.read_text(encoding='utf-8')
+          marker='__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__'
+          pos=html.find(marker)
+          if pos>=0:
+              start=html.rfind('<script',0,pos)
+              if start<0: raise SystemExit('old multiaction script tag not found')
+              html=html[:start]+'<script>\n'+overlay+'\n</script>\n'+html[start:]
+          else:
+              close=html.lower().rfind('</body>')
+              if close<0: raise SystemExit('body close not found')
+              html=html[:close]+'<script>\n'+overlay+'\n</script>\n'+html[close:]
+          html_path.write_text(html,encoding='utf-8')
+          PY
+          grep -F '__JAYUMINTON_ADMIN_UNLIMITED_SELECTION_V2072__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '영구팀설정' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '임시팀설정' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '코트배정대기로 보내기' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '회원삭제' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'window.__JAYUMINTON_ADMIN_MULTI_ACTION_V2053__=true' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'border:2px solid var(--member-team-color' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '#d4a017' "$ROOT/assets/admin/index.html" >/dev/null
+          cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
+          (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
+          base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v207.2-unlimited-selection.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v207.2-unlimited-selection.apk"
+          unzip -p "$ROOT/jayuminton-admin-v207.2-unlimited-selection.apk" assets/admin/index.html > "$ROOT/verify.html"
+          grep -F '__JAYUMINTON_ADMIN_UNLIMITED_SELECTION_V2072__' "$ROOT/verify.html" >/dev/null
+          grep -F 'admin-member-bulk-panel{display:none!important}' "$ROOT/verify.html" >/dev/null
+          grep -F 'jm-unlimited-check' "$ROOT/verify.html" >/dev/null
+          grep -F '영구팀해제' "$ROOT/verify.html" >/dev/null
+          grep -F '임시팀해제' "$ROOT/verify.html" >/dev/null
+      - name: Publish APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/jm2072"
+          APK="$ROOT/jayuminton-admin-v207.2-unlimited-selection.apk"
+          SHA=$(sha256sum "$APK" | awk '{print $1}')
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK" releases/jayuminton-admin-v207.2-unlimited-selection.apk
+          printf 'status=success\nversion=207.2\nfeature=unlimited-selection-toolbar\nbase=latest-admin-v203-release\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2072-unlimited-selection.txt
+          git add releases/jayuminton-admin-v207.2-unlimited-selection.apk deployment/status/v2072-unlimited-selection.txt
+          git commit -m 'Publish admin v207.2 unlimited selection APK' || exit 0
+          git push origin HEAD:main
