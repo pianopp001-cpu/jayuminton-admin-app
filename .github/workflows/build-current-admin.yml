@@ -12,6 +12,7 @@ on:
       - '.github/workflows/build-current-admin.yml'
       - 'deployment/jayuminton/current_admin_build.trigger'
       - 'deployment/jayuminton/admin_card_interaction_v2042.js'
+      - 'deployment/jayuminton/admin_multiaction_v2067.test.mjs'
       - 'deployment/jayuminton/admin_team_layout_v2038.js'
       - 'deployment/jayuminton/admin_team_layout_v2064.test.mjs'
       - 'deployment/jayuminton/admin_multiaction_v2054_hotfix.js'
@@ -69,6 +70,7 @@ jobs:
           PY
           node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/temp-pairs.test.mjs
+          node deployment/jayuminton/admin_multiaction_v2067.test.mjs
           grep -F "getCurrentMemberPassword" cloudflare/state-worker/worker.js >/dev/null
           grep -F "setTempPairs" cloudflare/state-worker/worker.js >/dev/null
           grep -F "sendMemberMessage" cloudflare/state-worker/worker.js >/dev/null
@@ -97,8 +99,13 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__' "$HTML" >/dev/null
           grep -F 'jayuminton-admin-multi-action-v2053-style' "$HTML" >/dev/null
           grep -F '녹색 = 이동선택' "$HTML" >/dev/null
-          grep -F '이동/교환, 코트배정 대기 또는 팀설정을 선택하세요.' "$HTML" >/dev/null
-          grep -F '1명·3명·4명은 자동으로 이동/교환입니다.' "$HTML" >/dev/null
+          grep -F '3·4명 계속 선택 가능' "$HTML" >/dev/null
+          grep -F '팝업 바깥의 같은 코트·대기조 사람을 계속 눌러 3명·4명으로 선택하세요.' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__' "$HTML" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_FAST_MULTI_MOVE_V2067__' "$HTML" >/dev/null
+          grep -F 'pointer-events:none' "$HTML" >/dev/null
+          grep -F 'applyMoveOrSwapLocally' "$HTML" >/dev/null
+          grep -F '명 이동 저장 중' "$HTML" >/dev/null
           grep -F '이동/교환' "$HTML" >/dev/null
           grep -F '팀설정' "$HTML" >/dev/null
           grep -F 'class="jm-do-active">코트배정 대기</button>' "$HTML" >/dev/null
@@ -189,8 +196,13 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_MESSAGE_ANYWHERE_V2056__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jayuminton-admin-multi-action-v2053-style' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '녹색 = 이동선택' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F '이동/교환, 코트배정 대기 또는 팀설정을 선택하세요.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F '1명·3명·4명은 자동으로 이동/교환입니다.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '3·4명 계속 선택 가능' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '팝업 바깥의 같은 코트·대기조 사람을 계속 눌러 3명·4명으로 선택하세요.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_CONTINUE_SELECTION_V2067__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_FAST_MULTI_MOVE_V2067__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'pointer-events:none' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'applyMoveOrSwapLocally' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '명 이동 저장 중' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#16a34a' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#d4a017' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'class="jm-do-active">코트배정 대기</button>' "$RUNNER_TEMP/apk-admin.html" >/dev/null

@@ -10,6 +10,8 @@ on:
       - 'deployment/jayuminton/remove_member_team_text_creators.py'
       - 'deployment/jayuminton/v130_firebase_member_preview.py'
       - 'deployment/jayuminton/patch_member_login_recovery_addons.py'
+      - 'deployment/jayuminton/patch_member_single_tap_move_v1.py'
+      - 'deployment/jayuminton/patch_member_single_tap_move_v1.test.mjs'
   workflow_dispatch: {}
 
 permissions:
@@ -74,7 +76,9 @@ jobs:
               build-frontend --work "$WORK" --out "$PUBLIC" --rpc-url "$CLOUDFLARE_RPC_URL"
           fi
 
+          node deployment/jayuminton/patch_member_single_tap_move_v1.test.mjs
           python3 deployment/jayuminton/patch_member_login_recovery_addons.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_single_tap_move_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_self_longpress_v6.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/remove_member_team_text_creators.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_team_visuals_v6.py "$PUBLIC/index.html"
@@ -88,6 +92,12 @@ jobs:
           grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
           grep -F '__JAYUMINTON_MEMBER_CURRENT_STATE_RPC__' "$PUBLIC/index.html" >/dev/null
           grep -F "method:'POST',cache:'no-store',credentials:'omit'" "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.handleMemberWaitEmptyTap=function' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.handleEmptySlotTap=function' "$PUBLIC/index.html" >/dev/null
+          grep -F "server('memberMoveSelf'" "$PUBLIC/index.html" >/dev/null
+          grep -F 'value&&value.state&&Array.isArray(value.state.members)' "$PUBLIC/index.html" >/dev/null
+          grep -F '한 번 터치하면 이 대기자리에 들어갑니다' "$PUBLIC/index.html" >/dev/null
           ! grep -F 'JAYUMINTON_MD7_SINGLE_ACTION_POPUP_V1' "$PUBLIC/index.html"
           ! grep -F 'jayuminton-md7-single-action-popup' "$PUBLIC/index.html"
           ! grep -F 'jayuminton-member-self-profile-edit-v1' "$PUBLIC/index.html"
@@ -142,6 +152,12 @@ jobs:
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F '__JAYUMINTON_MEMBER_CURRENT_STATE_RPC__' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F "method:'POST',cache:'no-store',credentials:'omit'" "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V1' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F 'window.handleMemberWaitEmptyTap=function' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F 'window.handleEmptySlotTap=function' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F "server('memberMoveSelf'" "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F 'value&&value.state&&Array.isArray(value.state.members)' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
+          grep -F '한 번 터치하면 이 대기자리에 들어갑니다' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F 'JAYUMINTON_TEAM_VISUALS_V8' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F '#memberApp [data-member-id].jm-has-team' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
           grep -F 'border:2px solid var(--jm-team-color' "$RUNNER_TEMP/member-original-popup-live.html" >/dev/null
