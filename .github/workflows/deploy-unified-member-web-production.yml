@@ -139,6 +139,149 @@ jobs:
           path.write_text(text, encoding='utf-8')
           PY
 
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1'
+          if marker not in text:
+              script = '''/* JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1 */
+          (function installMemberAnywhereSwapV1(){
+            if (typeof IS_ADMIN!=='undefined' && IS_ADMIN) return;
+            if (window.__JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1__) return;
+            window.__JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1__ = true;
+
+            function sessionArgs(){
+              try { return (typeof memberWaitSeatSessionArgs==='function') ? memberWaitSeatSessionArgs() : null; } catch(e){ return null; }
+            }
+            function findMember(id){
+              try { return (STATE.members||[]).find(function(m){ return m && String(m.id)===String(id); }) || null; } catch(e){ return null; }
+            }
+
+            async function requestSwap(targetId){
+              var a = sessionArgs(); if(!a) return;
+              var target = findMember(targetId);
+              if(!target) return;
+              if(!confirm(String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?')) return;
+              try{
+                await server('memberRequestAnywhereSwap',[a.token,String(a.member.id),String(targetId)]);
+                if(typeof showMemberSettingMessage==='function') showMemberSettingMessage('교환을 요청했어요. 5분 내 응답이 없으면 요청이 사라져요.');
+              }catch(e){ alert(String(e&&e.message||e||'교환 요청 실패')); }
+            }
+
+            window.handleAnywhereMemberTap = function(memberId, event){
+              if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;
+              if(event){ try{event.preventDefault();event.stopPropagation();}catch(e){} }
+              var a = sessionArgs(); if(!a) return;
+              if(String(memberId)===String(a.member.id)) return;
+              requestSwap(memberId);
+            };
+
+            var CHECKING=false, LAST_SHOWN_ID='';
+            async function pollIncoming(){
+              if((typeof IS_ADMIN!=='undefined'&&IS_ADMIN)||CHECKING) return;
+              var a = sessionArgs(); if(!a) return;
+              CHECKING=true;
+              try{
+                var req = await server('memberGetAnywhereSwapRequest',[a.token,String(a.member.id)]);
+                if(!req||!req.id||String(req.id)===LAST_SHOWN_ID) return;
+                LAST_SHOWN_ID=String(req.id);
+                var requester = findMember(req.requesterId);
+                var accepted = confirm(String(requester&&requester.name||'다른 회원')+'님이 자리 교환을 요청했어요.\\n\\n서로 상의하셨다면 확인을 눌러 교환하세요.');
+                var state = await server(accepted?'memberAcceptAnywhereSwap':'memberRejectAnywhereSwap',[a.token,String(a.member.id),String(req.requesterId),Number(req.createdAt||0)]);
+                if(state&&typeof renderState==='function') renderState(state);
+                if(!accepted&&typeof showMemberSettingMessage==='function') showMemberSettingMessage('자리 교환 요청을 거절했습니다.');
+              }catch(e){ try{console.warn(e);}catch(err){} } finally { CHECKING=false; }
+            }
+            setInterval(pollIncoming, 5000);
+
+            document.addEventListener('click', function(e){
+              if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;
+              var card = e.target.closest && e.target.closest('[data-member-id]');
+              if(!card) return;
+              if(card.getAttribute('onclick')) return;
+              var memberId = card.getAttribute('data-member-id');
+              if(!memberId) return;
+              window.handleAnywhereMemberTap(memberId, e);
+            }, true);
+
+            function isMyCard(card){
+              var a=sessionArgs(); if(!a) return false;
+              var id=card.getAttribute('data-member-id');
+              return !!id && String(id)===String(a.member.id);
+            }
+
+            var pressTimer=null;
+            function clearPress(){ if(pressTimer){clearTimeout(pressTimer);pressTimer=null;} }
+            document.addEventListener('pointerdown', function(e){
+              if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;
+              var card = e.target.closest && e.target.closest('[data-member-id]');
+              clearPress();
+              if(!card || !isMyCard(card)) return;
+              var memberId = card.getAttribute('data-member-id');
+              pressTimer = setTimeout(function(){
+                pressTimer=null;
+                try{ if(navigator.vibrate) navigator.vibrate(25); }catch(err){}
+                openSelfStatusMenu(memberId);
+              }, 600);
+            }, true);
+            document.addEventListener('pointerup', clearPress, true);
+            document.addEventListener('pointercancel', clearPress, true);
+            document.addEventListener('contextmenu', function(e){
+              var card = e.target.closest && e.target.closest('[data-member-id]');
+              if(card && isMyCard(card)) e.preventDefault();
+            }, true);
+
+            function closeSelfStatusMenu(){
+              var el=document.getElementById('jmMemberSelfStatusMenu'); if(el) el.remove();
+            }
+            function openSelfStatusMenu(memberId){
+              closeSelfStatusMenu();
+              var overlay=document.createElement('div');
+              overlay.id='jmMemberSelfStatusMenu';
+              overlay.style.cssText='position:fixed;inset:0;z-index:2147483500;background:rgba(15,23,42,.55);display:flex;align-items:flex-end;justify-content:center;padding:0';
+              function btnHtml(label,color){
+                return '<button type="button" data-action="'+label+'" style="width:100%;min-height:52px;border:0;border-top:1px solid #e5e7eb;background:#fff;font-size:16px;font-weight:800;color:'+(color||'#111827')+'">'+label+'</button>';
+              }
+              overlay.innerHTML =
+                '<div style="width:100%;max-width:480px;background:#fff;border-radius:16px 16px 0 0;overflow:hidden;padding-bottom:env(safe-area-inset-bottom)">'
+                + '<div style="padding:14px;text-align:center;color:#6b7280;font-size:13px;border-bottom:1px solid #f1f5f9">내 상태 변경</div>'
+                + btnHtml('코트배정대기로 가기')
+                + btnHtml('도착전')
+                + btnHtml('휴식')
+                + btnHtml('귀가')
+                + btnHtml('선택취소','#ef4444')
+                + '</div>';
+              document.body.appendChild(overlay);
+              overlay.addEventListener('click', function(ev){
+                if(ev.target===overlay){ closeSelfStatusMenu(); return; }
+                var b=ev.target.closest('button[data-action]'); if(!b) return;
+                var action=b.getAttribute('data-action');
+                closeSelfStatusMenu();
+                if(action==='선택취소') return;
+                applySelfStatus(memberId, action);
+              });
+            }
+            async function applySelfStatus(memberId, action){
+              var a=sessionArgs(); if(!a) return;
+              var map={'코트배정대기로 가기':'active','도착전':'before','휴식':'rest','귀가':'away'};
+              var status = map[action]; if(!status) return;
+              try{
+                var state = await server('memberMoveSelf',[a.token,String(a.member.id),{type:'status',status:status}]);
+                if(state&&typeof renderState==='function') renderState(state);
+              }catch(e){ alert(String(e&&e.message||e||'변경 실패')); }
+            }
+          })();'''
+              close = text.lower().rfind('</body>')
+              if close < 0:
+                  raise SystemExit('body close not found for anywhere-swap script injection')
+              text = text[:close] + '<script>\n' + script + '\n</script>\n' + text[close:]
+          if marker not in text:
+              raise SystemExit('anywhere-swap script injection did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
           grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' "$PUBLIC/index.html" >/dev/null
@@ -154,6 +297,7 @@ jobs:
           grep -F 'member.teamLabel' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'window.confirmJmDirectMessage=function()' "$PUBLIC/index.html" >/dev/null
           grep -F 'vibrationTimer=setInterval(vibrate,14500)' "$PUBLIC/index.html" >/dev/null
@@ -233,6 +377,7 @@ jobs:
             'member.teamLabel' \
             'JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1' \
             'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' \
+            'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \
             'vibrationTimer=setInterval(vibrate,14500)' \
