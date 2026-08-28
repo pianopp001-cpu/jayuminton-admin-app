@@ -400,6 +400,109 @@ jobs:
 
           grep -F 'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1' "$PUBLIC/index.html" >/dev/null
 
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1'
+          if marker not in text:
+              # Add a memo field directly into the existing self-settings panel
+              # instead of the separate long-press popup (#jmSelfCardAction ->
+              # #jmSelfProfileModal). That popup used its own long-press timer on
+              # the self card, racing the newer self-status-menu long-press
+              # (JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1's openSelfStatusMenu) bound to
+              # the exact same gesture -- both fired, showing two competing
+              # popups. Moving memo editing into the settings panel removes that
+              # conflict instead of trying to arbitrate two long-press handlers.
+              old_panel = (
+                  '        <button id="memberSelfDone" type="button" class="primary" onclick="compactMemberSelfSettings()">완료</button>\n'
+                  '      </div>\n'
+                  '    </div>\n'
+                  '    <div id="memberUnifiedSettingMessage" class="member-unified-setting-message" role="status" aria-live="polite"></div>\n'
+              )
+              new_panel = (
+                  '        <button id="memberSelfDone" type="button" class="primary" onclick="compactMemberSelfSettings()">완료</button>\n'
+                  '      </div>\n'
+                  '      <div class="member-self-memo-row" style="margin-top:8px">\n'
+                  '        <textarea id="jmMemberSelfMemoInput" maxlength="120" placeholder="메모 (급수·구력 등 자유롭게 적어보세요)" style="width:100%;min-height:44px;border:1px solid #d8dee9;border-radius:10px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>\n'
+                  '        <button type="button" id="jmMemberSelfMemoSaveBtn" style="margin-top:6px;width:100%;min-height:36px;border:0;border-radius:10px;background:#315efb;color:#fff;font-weight:800;font-size:13px">메모 저장</button>\n'
+                  '      </div>\n'
+                  '    </div>\n'
+                  '    <div id="memberUnifiedSettingMessage" class="member-unified-setting-message" role="status" aria-live="polite"></div>\n'
+              )
+              if old_panel not in text:
+                  raise SystemExit('memberSelfPanel anchor not found -- live page has drifted')
+              text = text.replace(old_panel, new_panel, 1)
+
+              script = '''<style id="jm-member-inline-memo-editor-v1-style">
+          /* JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1 */
+          #jmSelfCardAction{display:none!important}
+          .jm-public-memo{display:none!important}
+          </style>
+          <script>
+          /* JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1 */
+          (function installMemberInlineMemoEditorV1(){
+            if (typeof IS_ADMIN!=='undefined' && IS_ADMIN) return;
+            if (window.__JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1__) return;
+            window.__JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1__ = true;
+
+            function currentMember(){
+              try {
+                var stored = (typeof currentStoredWebPushMember==='function') ? currentStoredWebPushMember() : null;
+                if (!stored || !stored.id) return null;
+                return (STATE.members||[]).find(function(m){ return m && String(m.id)===String(stored.id); }) || null;
+              } catch(e) { return null; }
+            }
+
+            function sync(){
+              var input = document.getElementById('jmMemberSelfMemoInput');
+              if (!input || document.activeElement === input) return;
+              var member = currentMember();
+              var value = member ? String(member.publicMemo||'') : '';
+              if (input.value !== value) input.value = value;
+              input.disabled = !member;
+            }
+
+            async function save(){
+              var input = document.getElementById('jmMemberSelfMemoInput');
+              var member = currentMember();
+              if (!input || !member) return;
+              var memo = String(input.value||'').trim();
+              var btn = document.getElementById('jmMemberSelfMemoSaveBtn');
+              if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+              try {
+                await server('updateMyProfile', [null, String(member.id), memo]);
+                if (typeof showMemberSettingMessage === 'function') showMemberSettingMessage('메모를 저장했어요.');
+                if (typeof refreshMemberState === 'function') await refreshMemberState();
+              } catch (e) {
+                alert(String(e && e.message || e || '저장 실패'));
+              } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '메모 저장'; }
+              }
+            }
+
+            document.addEventListener('click', function(e){
+              var btn = e.target.closest && e.target.closest('#jmMemberSelfMemoSaveBtn');
+              if (btn) save();
+            }, true);
+
+            setInterval(sync, 500);
+            sync();
+          })();
+          </script>'''
+              close = text.lower().rfind('</body>')
+              if close < 0:
+                  raise SystemExit('body close not found for inline-memo-editor script injection')
+              text = text[:close] + script + '\n' + text[close:]
+          if marker not in text:
+              raise SystemExit('inline-memo-editor did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'jmMemberSelfMemoInput' "$PUBLIC/index.html" >/dev/null
+
           grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' "$PUBLIC/index.html" >/dev/null
