@@ -30,13 +30,33 @@ async function assign(ids,targets){if(assigning||!ids.length||!targets.length||t
 function assignSelectedToClicked(slot){var ids=selectedIds();if(!ids.length)return false;var free=freeAt(slot);if(free<=0)return toast('빈자리가 없습니다.',true),true;var n=Math.min(ids.length,free),targets=[];for(var i=0;i<n;i++)targets.push({type:slot.type,key:slot.key,slot:i,el:slot.el});assign(ids.slice(0,n),targets);return true;}
 function togglePendingSlot(slot){var key=slotKey(slot),i=pendingSlots.findIndex(function(x){return slotKey(x)===key;});if(i>=0)pendingSlots.splice(i,1);else pendingSlots.push(slot);paintSlots();toast(pendingSlots.length+'개 빈자리 선택');}
 function maybeAssignPendingAfterMember(){if(assigning||!pendingSlots.length)return;setTimeout(function(){var ids=selectedIds();if(!ids.length)return;var n=Math.min(ids.length,pendingSlots.length);assign(ids.slice(0,n),pendingSlots.slice(0,n));},0);}
-function installDirectPlacement(){if(window.__jmDirectPlacementV2076)return;window.__jmDirectPlacementV2076=true;document.addEventListener('click',function(e){var r=root();if(!r||!r.contains(e.target)||assigning)return;var empty=e.target.closest&&e.target.closest('.empty,.quick-empty-slot,[class*="empty"],[onclick*="handleEmptySlotTap"],[onclick*="handleMemberWaitEmptyTap"],[data-jm-wait4-second-fixed="1"]');var slot=parseSlot(empty);if(slot){var ids=selectedIds();if(ids.length){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();assignSelectedToClicked(slot);}
-/* Nothing selected: do NOT intercept. Let the page's own handleEmptySlotTap
-   run so it can set/toggle AUTO_ASSIGN_TARGET (the yellow highlight) --
-   both the real 자동배정 button and picking a target seat before choosing
-   members depend on that native state, and swallowing this click here
-   silently broke 자동배정 entirely. */
-return;}var card=e.target.closest&&e.target.closest('[data-member-id],[data-memberid],[data-player-id],[data-id],[data-member],.member,.person,.quick-member,.member-card,.member-item,.player-card,.court-player');if(card&&cardId(card)){setTimeout(function(){try{if(typeof AUTO_ASSIGN_TARGET==='undefined'||!AUTO_ASSIGN_TARGET)return;var ids2=selectedIds();if(!ids2.length)return;var target=AUTO_ASSIGN_TARGET;AUTO_ASSIGN_TARGET=null;assignSelectedToClicked({type:target.type,key:target.type==='wait'?String(Number(target.index)+1):String(target.index),el:null});}catch(_){}},0);}},true);}
+function installDirectPlacement(){if(window.__jmDirectPlacementV2076)return;window.__jmDirectPlacementV2076=true;document.addEventListener('click',function(e){var r=root();if(!r||!r.contains(e.target)||assigning)return;var empty=e.target.closest&&e.target.closest('.empty,.quick-empty-slot,[class*="empty"],[onclick*="handleEmptySlotTap"],[onclick*="handleMemberWaitEmptyTap"],[data-jm-wait4-second-fixed="1"]');var slot=parseSlot(empty);if(slot){var ids=selectedIds();if(ids.length){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();assignSelectedToClicked(slot);}else{
+/* Nothing selected in the current toolbar's own tracking: do NOT intercept,
+   let the page's own handleEmptySlotTap run so it can set/toggle
+   AUTO_ASSIGN_TARGET (the yellow highlight) -- both the real 자동배정
+   button and picking a target seat before choosing members depend on that
+   native state, and swallowing this click here silently broke 자동배정
+   entirely. BUT handleEmptySlotTap's OWN "nothing selected" check reads
+   the separate legacy SELECTED Set, not this toolbar's selection -- and
+   other code (messageSelected(), to call the message-send RPC) populates
+   that same legacy Set as a side effect and never clears it afterward. Left
+   alone, its leftover contents make handleEmptySlotTap think members ARE
+   selected and immediately auto-place them into whatever slot gets clicked
+   next, with no button press and no confirmation. Clear it here so the
+   native handler only ever takes the safe "mark target" branch. */
+try{if(typeof SELECTED!=='undefined'&&SELECTED&&SELECTED.size)SELECTED.clear();}catch(_){}
+}
+return;}
+/* v2073.1: there used to be a "select members after marking a target seat
+   completes the placement automatically" shortcut here. Removed: it fired
+   on ANY member-card click as long as AUTO_ASSIGN_TARGET was still set from
+   some earlier, unrelated slot click (minutes ago, for a totally different
+   purpose -- team setup, messaging, status change), silently shoving
+   whoever got selected next into that stale target instead of wherever the
+   admin actually clicked. Member-first placement (select, then click the
+   slot you want) already works correctly below via the branch above and
+   does not depend on AUTO_ASSIGN_TARGET at all -- use that. */
+},true);}
 function exclusionPanel(){var r=root();if(!r)return null;for(var h of r.querySelectorAll('h1,h2,h3,h4,strong,.title,summary')){if(String(h.textContent||'').trim().indexOf('코트배정 제외')===0)return h.closest('.card,section,details')||h.parentElement;}return null;}
 function cleanQuickLayout(){var card=quickCard(),panel=exclusionPanel();if(card&&panel&&card.parentNode&&panel!==card){if(panel.nextSibling!==card)card.parentNode.insertBefore(panel,card);}var r=root();if(!r)return;Array.from(r.querySelectorAll('button')).forEach(function(b){if(String(b.textContent||'').replace(/\s+/g,'').indexOf('코트배정대기로복귀')>=0&&!b.closest('#jmUnlimitedToolbar'))b.style.display='none';});['quickSelectedCount','mobileSelectedCount','mdBulkDeleteCount'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='none';});}
 function installStyle(){if(document.getElementById('jmToolbarV2076Style'))return;var s=document.createElement('style');s.id='jmToolbarV2076Style';s.textContent=''
