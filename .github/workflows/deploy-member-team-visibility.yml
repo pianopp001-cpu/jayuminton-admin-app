@@ -50,9 +50,11 @@ jobs:
           ROOT="$RUNNER_TEMP/team-visible"; mkdir -p "$ROOT/public"
           curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?team=$GITHUB_RUN_ID" -o "$ROOT/public/index.html"
           python3 deployment/jayuminton/patch_member_team_visibility_v1.py "$ROOT/public/index.html"
-          grep -F 'JAYUMINTON_MEMBER_TEAM_VISIBILITY_V1' "$ROOT/public/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_TEAM_VISIBILITY_V2' "$ROOT/public/index.html" >/dev/null
           grep -F 's.tempPairs' "$ROOT/public/index.html" >/dev/null
           grep -F 'm.teamLabel' "$ROOT/public/index.html" >/dev/null
+          grep -F 'jm-user-card-flag-new' "$ROOT/public/index.html" >/dev/null
+          grep -F 'jm-user-card-flag-sponsor' "$ROOT/public/index.html" >/dev/null
           cat > "$ROOT/firebase.json" <<'JSON'
           {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
           JSON
@@ -62,8 +64,10 @@ jobs:
         run: |
           set -euo pipefail
           sleep 5
-          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verifyTeam=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
-          grep -F 'JAYUMINTON_MEMBER_TEAM_VISIBILITY_V1' "$RUNNER_TEMP/live.html" >/dev/null
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verifyBadges=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F 'JAYUMINTON_MEMBER_TEAM_VISIBILITY_V2' "$RUNNER_TEMP/live.html" >/dev/null
           grep -F 'jm-user-permanent-team' "$RUNNER_TEMP/live.html" >/dev/null
           grep -F 'jm-user-temp-team' "$RUNNER_TEMP/live.html" >/dev/null
-          echo 'USER_WEB_AND_WEBVIEW_TEAM_VISIBILITY_OK'
+          grep -F 'jm-user-card-flag-new' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'jm-user-card-flag-sponsor' "$RUNNER_TEMP/live.html" >/dev/null
+          echo 'USER_WEB_AND_WEBVIEW_TEAM_BADGES_OK'
