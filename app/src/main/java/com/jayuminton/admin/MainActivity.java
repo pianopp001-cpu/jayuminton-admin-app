@@ -143,24 +143,46 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
             // which is meaningless to the admin and just clutters every
             // confirm()/alert() call (백업 저장, 백업 복원, 전체 초기화, ...).
             // Showing a plain AlertDialog with just the message removes that.
+            //
+            // confirm()/alert() BLOCK the WebView's JS thread until result.confirm()
+            // or result.cancel() is called -- no other script on the page (not even
+            // a setTimeout-based safety net) can run until then. If
+            // AlertDialog.Builder(...).show() ever throws (e.g. BadTokenException
+            // from calling it while the Activity's window isn't in a valid state --
+            // a well-known Android pitfall, and plausible if a confirm() fires
+            // during an awkward moment like a save or a lifecycle transition), the
+            // dialog callback that would call result.confirm()/cancel() never runs,
+            // so that JS call never returns and the ENTIRE page freezes permanently
+            // with no error and no recovery possible -- every other resilience fix
+            // shipped this session lives in JS and can't help here since the JS
+            // event loop itself is stuck. Guarantee result.cancel() fires even on
+            // failure so a broken dialog can never leave the page in that state.
             @Override
             public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {
-                new android.app.AlertDialog.Builder(MainActivity.this)
-                        .setMessage(message)
-                        .setCancelable(false)
-                        .setPositiveButton("확인", (dialog, which) -> result.confirm())
-                        .show();
+                try {
+                    new android.app.AlertDialog.Builder(MainActivity.this)
+                            .setMessage(message)
+                            .setCancelable(false)
+                            .setPositiveButton("확인", (dialog, which) -> result.confirm())
+                            .show();
+                } catch (Exception e) {
+                    result.confirm();
+                }
                 return true;
             }
 
             @Override
             public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
-                new android.app.AlertDialog.Builder(MainActivity.this)
-                        .setMessage(message)
-                        .setCancelable(false)
-                        .setPositiveButton("확인", (dialog, which) -> result.confirm())
-                        .setNegativeButton("취소", (dialog, which) -> result.cancel())
-                        .show();
+                try {
+                    new android.app.AlertDialog.Builder(MainActivity.this)
+                            .setMessage(message)
+                            .setCancelable(false)
+                            .setPositiveButton("확인", (dialog, which) -> result.confirm())
+                            .setNegativeButton("취소", (dialog, which) -> result.cancel())
+                            .show();
+                } catch (Exception e) {
+                    result.cancel();
+                }
                 return true;
             }
         });
