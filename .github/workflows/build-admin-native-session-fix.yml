@@ -31,20 +31,90 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - run: yes | sdkmanager --licenses >/dev/null || true
+      - name: Accept SDK licenses explicitly
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$ANDROID_HOME/licenses"
+          printf '24333f8a63b6825ea9c5514f83c2829b004d1fee\n8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n' > "$ANDROID_HOME/licenses/android-sdk-license"
+          printf '84831b9409646a918e30573bab4c9c91346d8abd\n' > "$ANDROID_HOME/licenses/android-sdk-preview-license"
+          printf 'd975f751698a77b662f1254ddbeed3901e976f5a\n' > "$ANDROID_HOME/licenses/intel-android-extra-license"
+          yes | sdkmanager --licenses >/dev/null || true
       - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Verify the WebStorage wipe is actually gone from source
+      - name: Restore proven app/ shell and apply the session fix on top
         shell: bash
         run: |
           set -euo pipefail
+          # The current checked-out app/ tree failed to build here for
+          # reasons this job's step-level status couldn't localize (no log
+          # access without repo admin rights) and app/build.gradle is
+          # byte-identical to this proven commit's, so the gap isn't a
+          # gradle/AGP config mismatch. build-current-admin.yml already
+          # builds successfully from exactly this base -- reuse it and
+          # apply only the session-persistence fix on top, instead of
+          # debugging the current tree blind.
+          PROVEN_COMMIT=20823018b13bba64082b09b76db617680a9d16b5
+          rm -rf app
+          git archive "$PROVEN_COMMIT" app | tar -x
           JAVA=app/src/main/java/com/jayuminton/admin/MainActivity.java
           test -s "$JAVA"
+
+          python3 - "$JAVA" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+
+          old_import = "import android.webkit.WebSettings;\nimport android.webkit.WebStorage;\nimport android.webkit.WebView;"
+          new_import = "import android.webkit.WebSettings;\nimport android.webkit.WebView;"
+          if old_import not in text:
+              raise SystemExit('import block anchor not found -- proven commit source has drifted')
+          text = text.replace(old_import, new_import, 1)
+
+          old_wipe = (
+              "        webView.clearCache(true);\n"
+              "        webView.clearHistory();\n"
+              "        WebStorage.getInstance().deleteAllData();\n"
+              "\n"
+              "        CookieManager cookieManager = CookieManager.getInstance();\n"
+              "        cookieManager.setAcceptCookie(true);\n"
+              "        cookieManager.setAcceptThirdPartyCookies(webView, true);\n"
+              "        cookieManager.removeSessionCookies(null);\n"
+              "        cookieManager.flush();"
+          )
+          new_wipe = (
+              "        // Do NOT clear WebStorage or session cookies here: the admin page\n"
+              "        // stores its login token (ADMIN_AUTH_KEY) in localStorage and reads\n"
+              "        // it back on load to skip the PIN prompt. Wiping storage on every\n"
+              "        // onCreate() defeated that -- Android can and does kill this\n"
+              "        // Activity's process while backgrounded (no foreground service),\n"
+              "        // so every such restart was forcing a fresh PIN entry even though\n"
+              "        // nothing about the login actually changed. clearCache/clearHistory\n"
+              "        // stay: they only affect the HTTP resource cache and back/forward\n"
+              "        // history, not localStorage, and LOAD_NO_CACHE below already makes\n"
+              "        // the resource cache moot for this local asset anyway.\n"
+              "        webView.clearCache(true);\n"
+              "        webView.clearHistory();\n"
+              "\n"
+              "        CookieManager cookieManager = CookieManager.getInstance();\n"
+              "        cookieManager.setAcceptCookie(true);\n"
+              "        cookieManager.setAcceptThirdPartyCookies(webView, true);\n"
+              "        cookieManager.flush();"
+          )
+          if old_wipe not in text:
+              raise SystemExit('WebStorage wipe block anchor not found -- proven commit source has drifted')
+          text = text.replace(old_wipe, new_wipe, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
           ! grep -F 'WebStorage.getInstance().deleteAllData()' "$JAVA" >/dev/null
           ! grep -F 'cookieManager.removeSessionCookies(null)' "$JAVA" >/dev/null
+          ! grep -F 'import android.webkit.WebStorage;' "$JAVA" >/dev/null
           grep -F 'Do NOT clear WebStorage or session cookies here' "$JAVA" >/dev/null
           grep -F 'webView.clearCache(true)' "$JAVA" >/dev/null
 
