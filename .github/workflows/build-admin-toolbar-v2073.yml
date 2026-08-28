@@ -32,7 +32,7 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager --licenses >/dev/null || true
       - run: sdkmanager 'build-tools;35.0.0' >/dev/null
-      - name: Patch v2083 swap button + excluded-list name fix
+      - name: Patch v2084 auto-assign fix
         shell: bash
         run: |
           set -euo pipefail
@@ -70,13 +70,14 @@ jobs:
           grep -F "setProperty('position','fixed','important')" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '자리교환' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'swapBtn.click()' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F "typeof AUTO_ASSIGN_TARGET==='undefined'" "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.3-swap-and-excluded-names.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.3-swap-and-excluded-names.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.3-swap-and-excluded-names.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.4-auto-assign-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.4-auto-assign-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.4-auto-assign-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -87,15 +88,15 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.3-swap-and-excluded-names.apk"
+          APK="$ROOT/jayuminton-admin-v208.4-auto-assign-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.3-swap-and-excluded-names.apk
-          printf 'status=success\nversion=208.3\nfeature=swap-and-excluded-names\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2083-swap-and-excluded-names.txt
-          git add releases/jayuminton-admin-v208.3-swap-and-excluded-names.apk deployment/status/v2083-swap-and-excluded-names.txt
-          git commit -m 'Publish admin v208.3 swap and excluded-names APK' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.4-auto-assign-fix.apk
+          printf 'status=success\nversion=208.4\nfeature=auto-assign-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2084-auto-assign-fix.txt
+          git add releases/jayuminton-admin-v208.4-auto-assign-fix.apk deployment/status/v2084-auto-assign-fix.txt
+          git commit -m 'Publish admin v208.4 auto-assign fix APK' || exit 0
           git push origin HEAD:main
