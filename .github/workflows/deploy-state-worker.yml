@@ -26,15 +26,27 @@ jobs:
       WORKER_URL: https://jayuminton-state.pianopp001.workers.dev
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Install Wrangler
         run: npm install --global wrangler@latest
-      - name: Verify worker repair
+      - name: Repair parser edge and verify worker repair
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare/state-worker/worker.js')
+          s=p.read_text(encoding='utf-8')
+          bad="try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) });\n      catch (error)"
+          good="try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) }); }\n      catch (error)"
+          if bad in s:
+              s=s.replace(bad,good,1)
+              p.write_text(s,encoding='utf-8')
+          PY
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test "${#INTERNAL_KEY}" -ge 32
