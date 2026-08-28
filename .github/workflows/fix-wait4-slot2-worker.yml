@@ -1,0 +1,69 @@
+name: Fix wait4 slot2 worker state
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-wait4-slot2-worker.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Repair stale wait/court occupancy normalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare/state-worker/worker.js')
+          s=p.read_text(encoding='utf-8')
+          old="""  const occupied = new Set();
+  for (const no of ['1', '2', '3', '4']) {
+    state.courts[no] = uniqueIds(state.courts[no]).filter(id => !occupied.has(id));
+    state.courts[no].forEach(id => occupied.add(id));
+  }
+  state.waitGroups = state.waitGroups.map(group => uniqueIds(group).filter(id => {
+    if (occupied.has(id)) return false;
+    occupied.add(id); return true;
+  }));"""
+          new="""  // Only real members may occupy a physical court/wait slot. Old/stale IDs used
+  // to survive normalization and could make a visually empty slot report location_full.
+  const validMemberIds = new Set(state.members.map(member => String(member?.id || '')).filter(Boolean));
+  const occupied = new Set();
+  for (const no of ['1', '2', '3', '4']) {
+    state.courts[no] = uniqueIds(state.courts[no]).filter(id => validMemberIds.has(id) && !occupied.has(id));
+    state.courts[no].forEach(id => occupied.add(id));
+  }
+  state.waitGroups = state.waitGroups.map(group => uniqueIds(group).filter(id => {
+    if (!validMemberIds.has(id) || occupied.has(id)) return false;
+    occupied.add(id); return true;
+  }));"""
+          if old not in s:
+              raise SystemExit('normalizeState target block not found')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          PY
+          grep -F 'validMemberIds' cloudflare/state-worker/worker.js >/dev/null
+          grep -F '!validMemberIds.has(id) || occupied.has(id)' cloudflare/state-worker/worker.js >/dev/null
+      - name: Run worker tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node cloudflare/state-worker/temp-pairs.test.mjs
+      - name: Commit worker repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add cloudflare/state-worker/worker.js
+          git commit -m 'fix: drop stale IDs blocking wait4 slot2'
+          git push origin HEAD:main
