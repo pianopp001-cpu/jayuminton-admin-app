@@ -1,0 +1,69 @@
+name: Deploy member team visibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/patch_member_team_visibility_v1.py'
+      - '.github/workflows/deploy-member-team-visibility.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-member-team-visibility
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LIVE_USER_URL: https://jayuminton-push.web.app/
+      JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Authenticate Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Resolve Firebase project
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$RUNNER_TEMP/deploy.json"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$RUNNER_TEMP/deploy.json")"
+          test -n "$FIREBASE_PROJECT_ID"
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+      - name: Patch current production page
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/team-visible"; mkdir -p "$ROOT/public"
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?team=$GITHUB_RUN_ID" -o "$ROOT/public/index.html"
+          python3 deployment/jayuminton/patch_member_team_visibility_v1.py "$ROOT/public/index.html"
+          grep -F 'JAYUMINTON_MEMBER_TEAM_VISIBILITY_V1' "$ROOT/public/index.html" >/dev/null
+          grep -F 's.tempPairs' "$ROOT/public/index.html" >/dev/null
+          grep -F 'm.teamLabel' "$ROOT/public/index.html" >/dev/null
+          cat > "$ROOT/firebase.json" <<'JSON'
+          {"hosting":{"public":"public","ignore":["firebase.json","**/.*","**/node_modules/**"],"headers":[{"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+          JSON
+          firebase deploy --only hosting --project "$FIREBASE_PROJECT_ID" --config "$ROOT/firebase.json" --non-interactive
+      - name: Verify live user web
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --location --retry 5 -H 'Cache-Control: no-cache, no-store' "$LIVE_USER_URL?verifyTeam=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live.html"
+          grep -F 'JAYUMINTON_MEMBER_TEAM_VISIBILITY_V1' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'jm-user-permanent-team' "$RUNNER_TEMP/live.html" >/dev/null
+          grep -F 'jm-user-temp-team' "$RUNNER_TEMP/live.html" >/dev/null
+          echo 'USER_WEB_AND_WEBVIEW_TEAM_VISIBILITY_OK'
