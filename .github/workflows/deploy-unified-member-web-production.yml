@@ -344,6 +344,62 @@ jobs:
 
           grep -F 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1' "$PUBLIC/index.html" >/dev/null
 
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1'
+          if marker not in text:
+              # server()'s underlying RPC (the jayuminton-v130-firebase-member-preview
+              # bridge's fetch() to the Cloudflare Worker) has no timeout. If that
+              # fetch hangs -- flaky mobile connection, slow Worker cold start -- the
+              # withSuccessHandler/withFailureHandler pair it drives never fires, so
+              # ACTION_IN_FLIGHT never clears and every button stays dead with no
+              # error shown, identical to the admin app's same-shaped bug. Wrap
+              # whatever window.server currently is so its promise always settles
+              # within TIMEOUT_MS, same fix as admin_server_timeout_v1.js.
+              script = '''/* JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1 */
+          (function installMemberServerTimeoutV1(){
+            if (window.__JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1__) return;
+            window.__JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1__ = true;
+            var TIMEOUT_MS = 20000;
+            function wrap(){
+              var cur = window.server;
+              if (typeof cur !== 'function' || cur.__jmMemberServerTimeoutV1) return;
+              var wrapped = function(name, args){
+                var call;
+                try { call = cur.apply(this, arguments); } catch (err) { return Promise.reject(err); }
+                return new Promise(function(resolve, reject){
+                  var settled = false;
+                  var timer = setTimeout(function(){
+                    if (settled) return; settled = true;
+                    reject(new Error('서버 응답이 없습니다 (' + (TIMEOUT_MS / 1000) + '초 초과). 네트워크를 확인하고 다시 시도하세요.'));
+                  }, TIMEOUT_MS);
+                  Promise.resolve(call).then(function(result){
+                    if (settled) return; settled = true; clearTimeout(timer); resolve(result);
+                  }, function(error){
+                    if (settled) return; settled = true; clearTimeout(timer); reject(error);
+                  });
+                });
+              };
+              wrapped.__jmMemberServerTimeoutV1 = true;
+              window.server = wrapped;
+            }
+            wrap();
+            var tries = 0, timer = setInterval(function(){ wrap(); if (++tries > 150) clearInterval(timer); }, 200);
+          })();'''
+              close = text.lower().rfind('</body>')
+              if close < 0:
+                  raise SystemExit('body close not found for server-timeout script injection')
+              text = text[:close] + '<script>\n' + script + '\n</script>\n' + text[close:]
+          if marker not in text:
+              raise SystemExit('server-timeout script injection did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1' "$PUBLIC/index.html" >/dev/null
+
           grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' "$PUBLIC/index.html" >/dev/null
@@ -441,6 +497,7 @@ jobs:
             'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' \
             'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1' \
             'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1' \
+            'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \
             'vibrationTimer=setInterval(vibrate,14500)' \
