@@ -67,13 +67,16 @@ export function normalizeState(input) {
   state.courts = state.courts && typeof state.courts === 'object' ? state.courts : base.courts;
   state.waitGroups = Array.isArray(state.waitGroups) ? state.waitGroups.slice(0, 5) : [];
   while (state.waitGroups.length < 5) state.waitGroups.push([]);
+  // Physical slots may only contain IDs that still exist in members.
+  // This removes stale/ghost IDs that made a visible empty wait slot return location_full.
+  const validMemberIds = new Set(state.members.map(member => String(member?.id || '')).filter(Boolean));
   const occupied = new Set();
   for (const no of ['1', '2', '3', '4']) {
-    state.courts[no] = uniqueIds(state.courts[no]).filter(id => !occupied.has(id));
+    state.courts[no] = uniqueIds(state.courts[no]).filter(id => validMemberIds.has(id) && !occupied.has(id));
     state.courts[no].forEach(id => occupied.add(id));
   }
   state.waitGroups = state.waitGroups.map(group => uniqueIds(group).filter(id => {
-    if (occupied.has(id)) return false;
+    if (!validMemberIds.has(id) || occupied.has(id)) return false;
     occupied.add(id); return true;
   }));
   state.courtStartedAt = Object.assign(base.courtStartedAt, state.courtStartedAt || {});
