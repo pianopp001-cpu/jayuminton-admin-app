@@ -1,4 +1,4 @@
-name: Build admin native session fix v208.4
+name: Build admin native session fix v208.5
 
 on:
   push:
@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE=releases/jayuminton-admin-v208.3-swap-and-excluded-names.apk
+          BASE=releases/jayuminton-admin-v208.4-auto-assign-fix.apk
           test -s "$BASE"
           mkdir -p app/src/main/assets/admin
           unzip -p "$BASE" assets/admin/index.html > app/src/main/assets/admin/index.html
@@ -82,11 +82,16 @@ jobs:
           gradle.write_text(g, encoding='utf-8')
           PY
 
-      - name: Build verify publish
+      - name: Gradle assembleRelease
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon :app:assembleRelease
+          gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Verify built APK
+        shell: bash
+        run: |
+          set -euo pipefail
           APK=app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
@@ -94,14 +99,19 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_SMART_PLACEMENT_V2081__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '자리교환' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
+      - name: Publish APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.4-native-session-fix.apk
-          printf 'status=success\nversion=208.4\nfeature=native-session-fix\nbase=source-build\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2084-native-session-fix.txt
-          git add releases/jayuminton-admin-v208.4-native-session-fix.apk deployment/status/v2084-native-session-fix.txt
-          git commit -m 'Publish admin v208.4 native session fix APK' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.5-native-session-fix.apk
+          printf 'status=success\nversion=208.5\nfeature=native-session-fix\nbase=source-build\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2085-native-session-fix.txt
+          git add releases/jayuminton-admin-v208.5-native-session-fix.apk deployment/status/v2085-native-session-fix.txt
+          git commit -m 'Publish admin v208.5 native session fix APK' || exit 0
           git push origin HEAD:main
