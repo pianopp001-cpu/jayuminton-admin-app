@@ -10,6 +10,7 @@ on:
       - 'app/build.gradle'
   workflow_dispatch: {}
 # retrigger: v208.9 base now published, first run of this version raced it
+# retrigger 2: second run failed on a transient setup-android flake, unrelated to code
 
 permissions:
   contents: write
