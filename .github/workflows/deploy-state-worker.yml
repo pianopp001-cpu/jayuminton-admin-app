@@ -5,38 +5,64 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/deploy-state-worker.yml'
-      - 'cloudflare/state-worker/worker.js'
-      - 'cloudflare/state-worker/worker-md-entry.js'
-      - 'cloudflare/state-worker/worker-md-compat-entry.js'
-      - 'cloudflare/state-worker/worker-md-final-entry.js'
-      - 'cloudflare/state-worker/wrangler.toml.template'
+      - 'cloudflare/state-worker/**'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-cloudflare-state
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      INTERNAL_KEY: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+      WORKER_URL: https://jayuminton-state.pianopp001.workers.dev
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Prepare wrangler config
+      - name: Install Wrangler
+        run: npm install --global wrangler@latest
+      - name: Verify worker repair
         shell: bash
-        env:
-          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
-        run: |
-          set -euo pipefail
-          test -n "$D1_DATABASE_ID"
-          cd cloudflare/state-worker
-          sed "s/__D1_DATABASE_ID__/$D1_DATABASE_ID/g" wrangler.toml.template > wrangler.toml
-      - name: Deploy Cloudflare Worker
-        shell: bash
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          cd cloudflare/state-worker
-          npx --yes wrangler@4 deploy --config wrangler.toml
+          test "${#INTERNAL_KEY}" -ge 32
+          node --check cloudflare/state-worker/worker.js
+          node cloudflare/state-worker/temp-pairs.test.mjs
+          grep -F 'validMemberIds' cloudflare/state-worker/worker.js >/dev/null
+          grep -F '!validMemberIds.has(id) || occupied.has(id)' cloudflare/state-worker/worker.js >/dev/null
+      - name: Resolve existing D1 and prepare config
+        shell: bash
+        run: |
+          set -euo pipefail
+          wrangler d1 list --json > "$RUNNER_TEMP/d1-list.json"
+          D1_ID="$(jq -r '.[] | select(.name=="jayuminton-state") | .uuid' "$RUNNER_TEMP/d1-list.json" | head -1)"
+          test -n "$D1_ID"
+          sed "s/__D1_DATABASE_ID__/$D1_ID/g" cloudflare/state-worker/wrangler.toml.template > "$RUNNER_TEMP/wrangler.toml"
+      - name: Deploy Cloudflare Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          wrangler d1 execute DB --remote --file cloudflare/state-worker/schema.sql --config "$RUNNER_TEMP/wrangler.toml"
+          cp cloudflare/state-worker/*.js "$RUNNER_TEMP/"
+          echo "::add-mask::$INTERNAL_KEY"
+          printf '%s' "$INTERNAL_KEY" | wrangler secret put INTERNAL_KEY --config "$RUNNER_TEMP/wrangler.toml" >/dev/null
+          wrangler deploy --config "$RUNNER_TEMP/wrangler.toml"
+      - name: Verify live Cloudflare service
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 8 --retry-delay 2 "$WORKER_URL/health?run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/health.json"
+          jq -e '.ok==true and .backend=="cloudflare-only" and .database=="d1" and .concurrency=="durable-object" and .gas==false' "$RUNNER_TEMP/health.json" >/dev/null
+          echo WAIT4_SLOT2_WORKER_LIVE
