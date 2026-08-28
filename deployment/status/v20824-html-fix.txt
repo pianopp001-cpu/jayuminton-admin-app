@@ -1,0 +1,6 @@
+status=success
+version=208.24
+feature=html-idempotent-mutation-fix
+base=v207.2-unlimited-selection
+run_id=33214098796
+sha256=52b54b2ec17fcc000e205fa6aaacea80417a3e2656fda380e2e1f7d17e7f1dbf
