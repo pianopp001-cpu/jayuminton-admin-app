@@ -3,50 +3,25 @@
 if(typeof IS_ADMIN!=='undefined'&&!IS_ADMIN)return;
 if(window.__JAYUMINTON_ADMIN_SMART_PLACEMENT_V2081__)return;
 window.__JAYUMINTON_ADMIN_SMART_PLACEMENT_V2081__=true;
-/* Replaces v2073's bulk-fill direct-placement with one-member-per-slot-click
-   placement in original selection order. Must win the race against v2073's
-   own deferred boot(). */
-window.__jmDirectPlacementV2076=true;
-var myOrder=[],pendingSlots=[],assigning=false;
-var ID_SELECTOR='[data-member-id],[data-memberid],[data-player-id],[data-id],[data-member]';
-var CARD_SELECTOR='.member,.person,.quick-member,.member-card,.member-item,.player-card,.court-player,'+ID_SELECTOR;
+/* v2081.1 EMERGENCY ROLLBACK: the order-preserving one-member-per-slot
+   placement (and its independent .jm-unlimited-check tracking) caused real
+   incidents in production -- the wrong member got moved, and stray clicks
+   moved leftover/unintended selections, because tracking could pick up
+   checkmarks left on-screen by unrelated selection UI elsewhere in #adminApp
+   (e.g. the game-count adjustment panel) instead of only the member the
+   admin just meant to move. That entire mechanism has been removed. This
+   file now ONLY carries the purely-visual, non-data-affecting fixes: hiding
+   the checkmark badge (it was rendering visible and covering member names),
+   forcing the "new" badge to stay in normal flow instead of overlapping
+   names, and pinning the bottom action row so it does not scroll away.
+   Placement/selection behavior is left untouched -- v2073's own
+   installDirectPlacement (which reads selection fresh from the DOM on every
+   click, so it cannot go stale) is intentionally NOT disabled here. */
 function root(){return document.getElementById('adminApp');}
-function state(){try{return typeof STATE!=='undefined'&&STATE?STATE:null;}catch(_){return null;}}
-function toast(text,bad){var old=document.getElementById('jmV2081Toast');if(old)old.remove();var n=document.createElement('div');n.id='jmV2081Toast';n.textContent=String(text||'');n.style.cssText='position:fixed;left:50%;top:max(10px,env(safe-area-inset-top));transform:translateX(-50%);z-index:2147483647;padding:9px 13px;border-radius:11px;background:'+(bad?'#991b1b':'#111827')+';color:#fff;font-size:13px;font-weight:900;box-shadow:0 8px 24px rgba(0,0,0,.25)';document.body.appendChild(n);setTimeout(function(){n.remove();},1800);}
-function cardId(card){if(!card)return '';for(var a of ['data-member-id','data-memberid','data-player-id','data-id','data-member']){var id=String(card.getAttribute&&card.getAttribute(a)||'');if(id)return id;}var n=card.querySelector&&card.querySelector(ID_SELECTOR);return n?cardId(n):'';}
-function isSlotEl(el){return !!(el&&el.classList&&(el.classList.contains('empty')||el.classList.contains('quick-empty-slot')));}
-function cardForAnyId(id){var r=root();if(!r)return null;var nodes=r.querySelectorAll(CARD_SELECTOR);for(var i=0;i<nodes.length;i++){var n=nodes[i];if(isSlotEl(n))continue;if(cardId(n)===String(id))return n;}return null;}
-function ensureBadge(card,on){if(!card)return;var badge=card.querySelector('.jm-unlimited-check');if(on){if(!badge){badge=document.createElement('span');badge.className='jm-unlimited-check';badge.textContent='✓';card.appendChild(badge);}badge.style.setProperty('display','none','important');card.classList.add('jm-v2074-selected');}else{if(badge)badge.remove();card.classList.remove('jm-v2074-selected');}}
-/* Selection tracking is DERIVED from the real .jm-unlimited-check markers that
-   v2072's own click handler owns (never independently toggled here) so this
-   overlay never fights v2072's private Set for authority over a card's state.
-   The only thing this file adds is: (a) order-of-click memory, since v2072
-   only exposes DOM presence, not sequence, and (b) restoring the marker after
-   a full re-render wipes it (v2072's own restore path does not reliably
-   survive renderState swapping the roster's innerHTML). */
-function restoreVisuals(){myOrder.forEach(function(id){var c=cardForAnyId(id);if(c)ensureBadge(c,true);});}
-function syncFromDom(){var r=root();if(!r)return;var present={};r.querySelectorAll('.jm-unlimited-check').forEach(function(chk){var card=chk.closest(CARD_SELECTOR);if(!card||isSlotEl(card))return;var id=cardId(card);if(id)present[id]=true;});var newlyAdded=[],removed=[];Object.keys(present).forEach(function(id){if(myOrder.indexOf(id)<0){myOrder.push(id);newlyAdded.push(id);}});myOrder=myOrder.filter(function(id){if(present[id])return true;removed.push(id);return false;});newlyAdded.forEach(function(id){var card=cardForAnyId(id);if(card)ensureBadge(card,true);if(pendingSlots.length)handleMemberPick(id);});removed.forEach(function(id){var card=cardForAnyId(id);if(card)ensureBadge(card,false);});}
-function wrapRerender(name){try{if(typeof window[name]!=='function'||window['__jmWrappedV2081_'+name])return;window['__jmWrappedV2081_'+name]=true;var orig=window[name];window[name]=function(){var ret=orig.apply(this,arguments);restoreVisuals();return ret;};}catch(_){}}
 function fixCheckOverlap(){var r=root();if(!r)return;r.querySelectorAll('.jm-unlimited-check').forEach(function(b){b.style.setProperty('display','none','important');});}
 function fixNewBadges(){var r=root();if(!r)return;Array.from(r.querySelectorAll('.new-badge,.member-vnext-badge')).forEach(function(el){el.style.setProperty('position','static','important');el.style.setProperty('top','auto','important');el.style.setProperty('right','auto','important');el.style.setProperty('display','inline-flex','important');el.style.setProperty('vertical-align','middle','important');el.style.setProperty('margin','0 4px 2px 0','important');el.style.setProperty('float','none','important');});Array.from(r.querySelectorAll('span,small,b,strong,em,div')).forEach(function(n){if(n.children.length!==0)return;var t=String(n.textContent||'').replace(/\s+/g,' ').trim();if(!/^(new\s*)?신규[.!·]?$/i.test(t))return;var cs=getComputedStyle(n);if(cs.position==='absolute'||cs.position==='fixed'){n.style.setProperty('position','static','important');n.style.setProperty('top','auto','important');n.style.setProperty('right','auto','important');}var p=n.parentElement;if(p){var pcs=getComputedStyle(p);if(pcs.position==='absolute'||pcs.position==='fixed'){p.style.setProperty('position','static','important');p.style.setProperty('top','auto','important');p.style.setProperty('right','auto','important');p.style.setProperty('display','inline-flex','important');}}});}
 function fixBottomBar(){var row=document.getElementById('jmBottomActionRowV2079');if(!row)return;row.style.setProperty('position','fixed','important');row.style.setProperty('left','0','important');row.style.setProperty('right','0','important');row.style.setProperty('bottom','0','important');row.style.setProperty('z-index','2147483000','important');row.style.setProperty('background','#fff','important');row.style.setProperty('box-shadow','0 -4px 14px rgba(0,0,0,.18)','important');row.style.setProperty('padding','6px 8px calc(6px + env(safe-area-inset-bottom))','important');row.style.setProperty('margin','0 auto','important');row.style.setProperty('max-width','640px','important');row.style.setProperty('box-sizing','border-box','important');var h=row.getBoundingClientRect().height;if(h>0)document.body.style.setProperty('padding-bottom',(h+10)+'px','important');}
-function parseSlot(el){if(!el)return null;var raw=String(el.getAttribute&&el.getAttribute('onclick')||'');var m=raw.match(/handleEmptySlotTap\(['"](court|wait)['"],['"]?([^,'")]+)['"]?,\s*(\d+)/);if(m)return {type:m[1],key:m[1]==='wait'?String(Number(m[2])+1):String(m[2]),slot:Number(m[3]),el:el};m=raw.match(/handleMemberWaitEmptyTap\((\d+),\s*(\d+)/);if(m)return {type:'wait',key:String(Number(m[1])+1),slot:Number(m[2]),el:el};if(el.getAttribute&&el.getAttribute('data-jm-wait4-second-fixed')==='1')return {type:'wait',key:'4',slot:1,el:el};if(el.getAttribute&&el.getAttribute('data-jm-v2079-wait4-index')!==null){var idx=Number(el.getAttribute('data-jm-v2079-wait4-index'));return {type:'wait',key:'4',slot:isNaN(idx)?0:idx,el:el};}return null;}
-function freeAt(t){var s=state();if(!s)return 1;var list=t.type==='court'?(s.courts&&s.courts[String(t.key)]):((s.waitGroups||[])[Number(t.key)-1]);return Math.max(0,4-(Array.isArray(list)?list.length:0));}
-function findSlotEl(t){var r=root();if(!r)return null;var candidates=r.querySelectorAll('.empty,.quick-empty-slot,[class*="empty"],[onclick*="handleEmptySlotTap"],[onclick*="handleMemberWaitEmptyTap"],[data-jm-wait4-second-fixed="1"],[data-jm-v2079-wait4-index]');for(var i=0;i<candidates.length;i++){var s=parseSlot(candidates[i]);if(s&&s.type===t.type&&s.key===t.key&&s.slot===t.slot)return candidates[i];}return null;}
-function paintSlots(){var r=root();if(!r)return;r.querySelectorAll('.jm-v2076-target-slot').forEach(function(x){x.classList.remove('jm-v2076-target-slot');});pendingSlots.forEach(function(t){var el=findSlotEl(t);if(el)el.classList.add('jm-v2076-target-slot');});}
-function deselectMine(id){myOrder=myOrder.filter(function(x){return x!==id;});var card=cardForAnyId(id);if(card)ensureBadge(card,false);}
-async function placeOne(id,slot){if(assigning)return false;assigning=true;try{if(typeof window.server!=='function')throw new Error('서버 연결 없음');await window.server('moveOrSwapMember',[null,String(id),String(slot.type),slot.type==='wait'?String(Number(slot.key)-1):String(slot.key),'']);try{var fresh=await window.server('getPublicState',[null]);if(typeof renderState==='function')renderState(fresh&&fresh.state?fresh.state:fresh);}catch(_){}toast('배정 완료');return true;}catch(e){toast(String(e&&e.message||e||'배정 실패'),true);return false;}finally{assigning=false;setTimeout(function(){paintSlots();restoreVisuals();},0);}}
-function handleSlotClick(slot){if(assigning)return;if(myOrder.length){var free=freeAt(slot);if(free<=0){toast('빈자리가 없습니다.',true);return;}var id=myOrder[0];placeOne(id,slot).then(function(ok){if(ok)deselectMine(id);});return;}var key=slot.type+'|'+slot.key+'|'+slot.slot;var i=pendingSlots.findIndex(function(x){return (x.type+'|'+x.key+'|'+x.slot)===key;});if(i>=0)pendingSlots.splice(i,1);else pendingSlots.push(slot);paintSlots();toast(pendingSlots.length+'개 빈자리 선택');}
-function handleMemberPick(id){if(!pendingSlots.length)return;var slot=pendingSlots[0];placeOne(id,slot).then(function(ok){if(ok){pendingSlots.shift();paintSlots();deselectMine(id);}});}
-function onDocClick(e){var r=root();if(!r||!r.contains(e.target)||assigning)return;var empty=e.target.closest&&e.target.closest('.empty,.quick-empty-slot,[class*="empty"],[onclick*="handleEmptySlotTap"],[onclick*="handleMemberWaitEmptyTap"],[data-jm-wait4-second-fixed="1"],[data-jm-v2079-wait4-index]');var slot=parseSlot(empty);if(slot){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();handleSlotClick(slot);return;}}
-function interceptAutoAssign(){document.addEventListener('click',function(e){var btn=e.target.closest&&e.target.closest('button');if(!btn)return;if(String(btn.textContent||'').trim()!=='자동배정')return;if(myOrder.length>0){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();toast('선택한 멤버는 빈자리를 눌러 배정하세요. 자동배정은 선택 없이 빈자리를 먼저 누르세요.',true);}},true);}
-function maintain(){syncFromDom();fixCheckOverlap();fixNewBadges();fixBottomBar();paintSlots();wrapRerender('renderState');wrapRerender('renderQuickRoster');wrapRerender('renderWaitGroups');wrapRerender('renderCourts');wrapRerender('renderActive');}
-function boot(){document.addEventListener('click',onDocClick,true);interceptAutoAssign();var tries=0;(function retry(){tries++;maintain();if(tries<150)setTimeout(retry,100);})();
-/* setInterval fallback: requestAnimationFrame-based debouncing can stall
-   while the WebView is backgrounded (screen off, app switched away), which
-   would otherwise freeze selection tracking until the next DOM mutation
-   happens to arrive after resume. This keeps syncing regardless. */
-setInterval(maintain,700);
-var r=root();if(r&&!r.__jmV2081Obs){var pending=false;r.__jmV2081Obs=new MutationObserver(function(){if(pending)return;pending=true;setTimeout(function(){pending=false;maintain();},50);});r.__jmV2081Obs.observe(r,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});}}
+function maintain(){fixCheckOverlap();fixNewBadges();fixBottomBar();}
+function boot(){var tries=0;(function retry(){tries++;maintain();if(tries<150)setTimeout(retry,100);})();var r=root();if(r&&!r.__jmV2081Obs){var q=false;r.__jmV2081Obs=new MutationObserver(function(){if(q)return;q=true;setTimeout(function(){q=false;maintain();},50);});r.__jmV2081Obs.observe(r,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else setTimeout(boot,0);
 })();
