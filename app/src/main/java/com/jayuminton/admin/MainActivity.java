@@ -23,7 +23,6 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
-import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
@@ -118,14 +117,22 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
         settings.setUserAgentString(settings.getUserAgentString() + " JayumintonNative/199.7 CloudflareAdmin/1997");
 
+        // Do NOT clear WebStorage or session cookies here: the admin page
+        // stores its login token (ADMIN_AUTH_KEY) in localStorage and reads
+        // it back on load to skip the PIN prompt. Wiping storage on every
+        // onCreate() defeated that -- Android can and does kill this
+        // Activity's process while backgrounded (no foreground service),
+        // so every such restart was forcing a fresh PIN entry even though
+        // nothing about the login actually changed. clearCache/clearHistory
+        // stay: they only affect the HTTP resource cache and back/forward
+        // history, not localStorage, and LOAD_NO_CACHE below already makes
+        // the resource cache moot for this local asset anyway.
         webView.clearCache(true);
         webView.clearHistory();
-        WebStorage.getInstance().deleteAllData();
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
-        cookieManager.removeSessionCookies(null);
         cookieManager.flush();
 
         webView.addJavascriptInterface(new VoiceBridge(), "NativeVoice");
