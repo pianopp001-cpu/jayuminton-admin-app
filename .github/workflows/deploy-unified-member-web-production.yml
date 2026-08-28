@@ -173,6 +173,16 @@ jobs:
             window.handleAnywhereMemberTap = function(memberId, event){
               if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;
               if(event){ try{event.preventDefault();event.stopPropagation();}catch(e){} }
+              var self = (typeof currentStoredWebPushMember==='function') ? currentStoredWebPushMember() : null;
+              if(!self||!self.id){
+                var target = findMember(memberId);
+                if(!target) return;
+                if(confirm(String(target.name||'선택한 회원')+'님이 본인인가요?')){
+                  selectMemberSelf(target.id);
+                  if(typeof showMemberSettingMessage==='function') showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');
+                }
+                return;
+              }
               var a = sessionArgs(); if(!a) return;
               if(String(memberId)===String(a.member.id)) return;
               requestSwap(memberId);
@@ -282,6 +292,58 @@ jobs:
           path.write_text(text, encoding='utf-8')
           PY
 
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1'
+          if marker not in text:
+              old_tap = (
+                  "  window.handleAnywhereMemberTap = function(memberId, event){\n"
+                  "    if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;\n"
+                  "    if(event){ try{event.preventDefault();event.stopPropagation();}catch(e){} }\n"
+                  "    var a = sessionArgs(); if(!a) return;\n"
+                  "    if(String(memberId)===String(a.member.id)) return;\n"
+                  "    requestSwap(memberId);\n"
+                  "  };"
+              )
+              # Cards in the active queue and courts render with no onclick at all
+              # (memberCard(..., clickable=false)) -- the anywhere-swap listener above
+              # is what makes tapping them do anything at all. Before self-identity is
+              # set, sessionArgs()/memberWaitSeatSessionArgs() just shows "먼저 내 이름을
+              # 선택하세요" and bails, so tapping your own card here silently failed to
+              # identify you (unlike wait-group cards, whose onclick already goes
+              # through handleMemberWaitOtherTap's own self-identify fallback). Mirror
+              # that same fallback here so card-tap self-identify works everywhere.
+              new_tap = (
+                  "  /* JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1 */\n"
+                  "  window.handleAnywhereMemberTap = function(memberId, event){\n"
+                  "    if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;\n"
+                  "    if(event){ try{event.preventDefault();event.stopPropagation();}catch(e){} }\n"
+                  "    var self = (typeof currentStoredWebPushMember==='function') ? currentStoredWebPushMember() : null;\n"
+                  "    if(!self||!self.id){\n"
+                  "      var target = findMember(memberId);\n"
+                  "      if(!target) return;\n"
+                  "      if(confirm(String(target.name||'선택한 회원')+'님이 본인인가요?')){\n"
+                  "        selectMemberSelf(target.id);\n"
+                  "        if(typeof showMemberSettingMessage==='function') showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');\n"
+                  "      }\n"
+                  "      return;\n"
+                  "    }\n"
+                  "    var a = sessionArgs(); if(!a) return;\n"
+                  "    if(String(memberId)===String(a.member.id)) return;\n"
+                  "    requestSwap(memberId);\n"
+                  "  };"
+              )
+              if old_tap not in text:
+                  raise SystemExit('handleAnywhereMemberTap anchor not found -- live page has drifted')
+              text = text.replace(old_tap, new_tap, 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1' "$PUBLIC/index.html" >/dev/null
+
           grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_NATIVE_IDENTITY_SYNC_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1' "$PUBLIC/index.html" >/dev/null
@@ -378,6 +440,7 @@ jobs:
             'JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1' \
             'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' \
             'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1' \
+            'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \
             'vibrationTimer=setInterval(vibrate,14500)' \
