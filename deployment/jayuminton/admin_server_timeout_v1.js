@@ -1,0 +1,42 @@
+(function installJayumintonAdminServerTimeoutV1(){
+'use strict';
+if(window.__JAYUMINTON_ADMIN_SERVER_TIMEOUT_V1__)return;
+window.__JAYUMINTON_ADMIN_SERVER_TIMEOUT_V1__=true;
+/* The Cloudflare RPC call (directServer's fetch, wrapped by the save-lock
+   layer above) has no timeout at all. If that fetch hangs -- a flaky mobile
+   connection, a slow Worker cold start, a dropped WebView network request --
+   the returned promise never resolves or rejects, so nothing downstream
+   (setBusy(false), setActionBusy(false), the initial loadState() render)
+   ever runs either: the "저장중" lock never lifts and no button responds,
+   or the app just shows nothing forever with no error to explain why. This
+   wraps whatever window.server currently is so its promise always settles
+   within TIMEOUT_MS, surfacing a clear error and releasing every lock layer
+   above it instead of freezing permanently. It does not (cannot, from out
+   here) cancel the underlying fetch -- only bounds how long the UI waits
+   on it. */
+var TIMEOUT_MS=20000;
+function wrap(){
+  var cur=window.server;
+  if(typeof cur!=='function'||cur.__jmServerTimeoutV1)return;
+  var wrapped=function(name,args){
+    var call;
+    try{call=cur.apply(this,arguments);}catch(err){return Promise.reject(err);}
+    return new Promise(function(resolve,reject){
+      var settled=false;
+      var timer=setTimeout(function(){
+        if(settled)return;settled=true;
+        reject(new Error('서버 응답이 없습니다 ('+(TIMEOUT_MS/1000)+'초 초과). 네트워크를 확인하고 다시 시도하세요.'));
+      },TIMEOUT_MS);
+      Promise.resolve(call).then(function(result){
+        if(settled)return;settled=true;clearTimeout(timer);resolve(result);
+      },function(error){
+        if(settled)return;settled=true;clearTimeout(timer);reject(error);
+      });
+    });
+  };
+  wrapped.__jmServerTimeoutV1=true;
+  window.server=wrapped;
+}
+wrap();
+var tries=0,timer=setInterval(function(){wrap();if(++tries>150)clearInterval(timer);},200);
+})();

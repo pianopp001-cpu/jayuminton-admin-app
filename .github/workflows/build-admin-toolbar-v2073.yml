@@ -11,6 +11,7 @@ on:
       - 'deployment/jayuminton/admin_wait4_v2079.trigger'
       - 'deployment/jayuminton/admin_dead_ui_cleanup_v2080.js'
       - 'deployment/jayuminton/admin_smart_placement_v2081.js'
+      - 'deployment/jayuminton/admin_server_timeout_v1.js'
   workflow_dispatch: {}
 
 permissions:
@@ -43,7 +44,7 @@ jobs:
           cp "$BASE" "$ROOT/base.apk"
           unzip -p "$BASE" assets/admin/index.html > "$ROOT/assets/admin/index.html"
           test -s "$ROOT/assets/admin/index.html"
-          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js <<'PY'
+          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js <<'PY'
           from pathlib import Path
           import sys
           p=Path(sys.argv[1]); html=p.read_text(encoding='utf-8')
@@ -72,32 +73,35 @@ jobs:
           grep -F 'swapBtn.click()' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F "SELECTED.clear()" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'window.__jmDuplicateNameFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SERVER_TIMEOUT_V1__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__jmServerTimeoutV1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.7-placement-safety-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.7-placement-safety-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.7-placement-safety-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.9-server-timeout-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.9-server-timeout-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.9-server-timeout-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_DEAD_UI_CLEANUP_V2080__' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SMART_PLACEMENT_V2081__' "$ROOT/verify.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SERVER_TIMEOUT_V1__' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.7-placement-safety-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.9-server-timeout-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.7-placement-safety-fix.apk
-          printf 'status=success\nversion=208.7\nfeature=placement-safety-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2087-placement-safety-fix.txt
-          git add releases/jayuminton-admin-v208.7-placement-safety-fix.apk deployment/status/v2087-placement-safety-fix.txt
-          git commit -m 'Publish admin v208.7 placement safety fix APK' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.9-server-timeout-fix.apk
+          printf 'status=success\nversion=208.9\nfeature=server-timeout-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2089-server-timeout-fix.txt
+          git add releases/jayuminton-admin-v208.9-server-timeout-fix.apk deployment/status/v2089-server-timeout-fix.txt
+          git commit -m 'Publish admin v208.9: fetch timeout so a hung RPC cannot freeze the whole app' || exit 0
           git push origin HEAD:main
