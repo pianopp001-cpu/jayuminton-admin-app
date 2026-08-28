@@ -8,6 +8,7 @@ on:
       - 'deployment/jayuminton/admin_toolbar_position_colors_v2073.js'
       - 'deployment/jayuminton/admin_layout_wait4_compact_v2076.js'
       - 'deployment/jayuminton/admin_toolbar_actions_v2077.js'
+      - 'deployment/jayuminton/admin_wait4_v2079.trigger'
   workflow_dispatch: {}
 
 permissions:
