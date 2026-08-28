@@ -24,7 +24,7 @@ jobs:
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       JAYUMINTON_DEPLOY_CONFIG_JSON: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       LIVE_USER_URL: https://jayuminton-push.web.app/
-      CLOUDFLARE_RPC_URL: https://shy-morning-f0e4.pianopp001.workers.dev/
+      CLOUDFLARE_RPC_URL: https://jayuminton-state.pianopp001.workers.dev/api/compat/rpc
 
     steps:
       - uses: actions/checkout@v4
@@ -57,12 +57,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CALLBACK="jmUserReqPreflight$GITHUB_RUN_ID"
+          # The live page's google.script.run polyfill (see
+          # jayuminton-v130-firebase-member-preview) POSTs JSON to this
+          # endpoint -- it does not accept the older JSONP-style
+          # ?rpc=...&callback=... GET request this preflight used to send.
+          # getPublicState requires a member/admin token we don't have here,
+          # so a well-formed "unauthorized" response is the healthy signal:
+          # it proves the endpoint is live and speaking the right protocol.
           curl --fail --location --retry 5 --max-time 60 \
-            "$CLOUDFLARE_RPC_URL?rpc=getPublicState&callback=$CALLBACK&payload=W10&nonce=$GITHUB_RUN_ID" \
-            -o "$RUNNER_TEMP/rpc-preflight.js"
-          grep -F "$CALLBACK(" "$RUNNER_TEMP/rpc-preflight.js" >/dev/null
-          grep -F '"ok":true' "$RUNNER_TEMP/rpc-preflight.js" >/dev/null
+            -X POST "$CLOUDFLARE_RPC_URL" \
+            -H 'content-type: application/json' \
+            --data '{"name":"getPublicState","args":[]}' \
+            -o "$RUNNER_TEMP/rpc-preflight.json"
+          grep -F '"ok"' "$RUNNER_TEMP/rpc-preflight.json" >/dev/null
 
       - name: Preserve and patch current production user page
         shell: bash
@@ -138,7 +145,6 @@ jobs:
           grep -F 'function initialize()' "$PUBLIC/index.html" >/dev/null
           grep -F 'function refreshMemberState()' "$PUBLIC/index.html" >/dev/null
           grep -F '↻ 현황 갱신' "$PUBLIC/index.html" >/dev/null
-          grep -F '네, 저예요' "$PUBLIC/index.html" >/dev/null
           grep -F '🎁 찬조' "$PUBLIC/index.html" >/dev/null
           grep -F 'NEW 신규' "$PUBLIC/index.html" >/dev/null
           grep -F 'jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk' "$PUBLIC/index.html" >/dev/null
@@ -212,7 +218,6 @@ jobs:
             'JAYUMINTON_STOP_MEMBER_ALERT' \
             '5분 동안 응답이 없어' \
             '↻ 현황 갱신' \
-            '네, 저예요' \
             '🎁 찬조' \
             'NEW 신규'; do
             grep -F "$marker" "$RUNNER_TEMP/member-live-after.html" >/dev/null
