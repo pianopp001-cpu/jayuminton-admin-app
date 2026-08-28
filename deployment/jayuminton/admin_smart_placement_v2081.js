@@ -28,8 +28,16 @@ function fixExcludedNames(){var c=document.getElementById('excludedMembers');if(
    ignoring isDuplicate -- duplicate-name members without isNew still got
    truncated to 2 characters, which is exactly the ambiguous case the
    full-name rule exists to prevent. */
-function fixDuplicateNameDisplay(){if(window.__jmDuplicateNameFixV1||typeof window.adminVnextCardName!=='function'||typeof window.compactMemberName!=='function'||typeof window.escapeMemberInfo!=='function')return;window.__jmDuplicateNameFixV1=true;var compact=window.compactMemberName,escapeInfo=window.escapeMemberInfo;window.adminVnextCardName=function(member){if(!member)return '';var storedName=String(member.name||'').trim();if(!member.isNew&&!member.isDuplicate)return compact(storedName);var open=storedName.indexOf('(');if(open<0)return '<span class="member-vnext-full-name">'+escapeInfo(storedName)+'</span>';var firstLine=storedName.slice(0,open).trim();var parenthetical=storedName.slice(open).trim();return '<span class="member-vnext-full-name"><span>'+escapeInfo(firstLine)+'</span><br><small>'+escapeInfo(parenthetical)+'</small></span>';};}
-function maintain(){fixCheckOverlap();fixNewBadges();fixBottomBar();fixExcludedNames();fixDuplicateNameDisplay();}
+function fixDuplicateNameDisplay(){if(window.__jmDuplicateNameFixV1||typeof window.adminVnextCardName!=='function'||typeof window.compactMemberName!=='function'||typeof window.escapeMemberInfo!=='function')return;window.__jmDuplicateNameFixV1=true;var original=window.adminVnextCardName,compact=window.compactMemberName,escapeInfo=window.escapeMemberInfo;window.adminVnextCardName=function(member){
+/* Any unexpected data shape here must never be able to break card
+   rendering (a render-loop throw can blank out an entire section, e.g.
+   a wait group, instead of just this one card) -- fall straight back to
+   the original implementation on any error rather than risk that. */
+try{
+if(!member)return '';var storedName=String(member.name||'').trim();if(!member.isNew&&!member.isDuplicate)return compact(storedName);var open=storedName.indexOf('(');if(open<0)return '<span class="member-vnext-full-name">'+escapeInfo(storedName)+'</span>';var firstLine=storedName.slice(0,open).trim();var parenthetical=storedName.slice(open).trim();return '<span class="member-vnext-full-name"><span>'+escapeInfo(firstLine)+'</span><br><small>'+escapeInfo(parenthetical)+'</small></span>';
+}catch(_){try{return original(member);}catch(__){return '';}}
+};}
+function maintain(){try{fixCheckOverlap();}catch(_){}try{fixNewBadges();}catch(_){}try{fixBottomBar();}catch(_){}try{fixExcludedNames();}catch(_){}try{fixDuplicateNameDisplay();}catch(_){}}
 function boot(){var tries=0;(function retry(){tries++;maintain();if(tries<150)setTimeout(retry,100);})();var r=root();if(r&&!r.__jmV2081Obs){var q=false;r.__jmV2081Obs=new MutationObserver(function(){if(q)return;q=true;setTimeout(function(){q=false;maintain();},50);});r.__jmV2081Obs.observe(r,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else setTimeout(boot,0);
 })();

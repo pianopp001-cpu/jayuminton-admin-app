@@ -1,4 +1,4 @@
-name: Build admin native session fix v208.5
+name: Build admin native session fix v208.8
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
           rm -rf app
           git archive "$PROVEN_COMMIT" app | tar -x
           mkdir -p app/src/main/assets/admin
-          BASE=releases/jayuminton-admin-v208.4-auto-assign-fix.apk
+          BASE=releases/jayuminton-admin-v208.7-placement-safety-fix.apk
           test -s "$BASE"
           unzip -p "$BASE" assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
@@ -109,11 +109,59 @@ jobs:
           path.write_text(text, encoding='utf-8')
           PY
 
+          python3 - "$JAVA" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+
+          old_chrome = "        webView.setWebChromeClient(new WebChromeClient());"
+          new_chrome = (
+              "        webView.setWebChromeClient(new WebChromeClient() {\n"
+              "            // Default WebView JS-dialog chrome prefixes the message with the\n"
+              "            // page's own URL (\"file:///android_asset/...\" says / 페이지 내용),\n"
+              "            // which is meaningless to the admin and just clutters every\n"
+              "            // confirm()/alert() call (백업 저장, 백업 복원, 전체 초기화, ...).\n"
+              "            // Showing a plain AlertDialog with just the message removes that.\n"
+              "            @Override\n"
+              "            public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {\n"
+              "                new android.app.AlertDialog.Builder(MainActivity.this)\n"
+              "                        .setMessage(message)\n"
+              "                        .setCancelable(false)\n"
+              "                        .setPositiveButton(\"확인\", (dialog, which) -> result.confirm())\n"
+              "                        .show();\n"
+              "                return true;\n"
+              "            }\n"
+              "\n"
+              "            @Override\n"
+              "            public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {\n"
+              "                new android.app.AlertDialog.Builder(MainActivity.this)\n"
+              "                        .setMessage(message)\n"
+              "                        .setCancelable(false)\n"
+              "                        .setPositiveButton(\"확인\", (dialog, which) -> result.confirm())\n"
+              "                        .setNegativeButton(\"취소\", (dialog, which) -> result.cancel())\n"
+              "                        .show();\n"
+              "                return true;\n"
+              "            }\n"
+              "        });"
+          )
+          if new_chrome.split('{')[0] in text and 'onJsAlert' in text:
+              pass
+          elif old_chrome not in text:
+              raise SystemExit('WebChromeClient anchor not found -- proven commit source has drifted')
+          else:
+              text = text.replace(old_chrome, new_chrome, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
           ! grep -F 'WebStorage.getInstance().deleteAllData()' "$JAVA" >/dev/null
           ! grep -F 'cookieManager.removeSessionCookies(null)' "$JAVA" >/dev/null
           ! grep -F 'import android.webkit.WebStorage;' "$JAVA" >/dev/null
           grep -F 'Do NOT clear WebStorage or session cookies here' "$JAVA" >/dev/null
           grep -F 'webView.clearCache(true)' "$JAVA" >/dev/null
+          grep -F 'onJsAlert' "$JAVA" >/dev/null
+          grep -F 'onJsConfirm' "$JAVA" >/dev/null
 
           grep -F '__JAYUMINTON_ADMIN_SMART_PLACEMENT_V2081__' "$HTML" >/dev/null
           grep -F '자리교환' "$HTML" >/dev/null
@@ -128,13 +176,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.5";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.8";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 15',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.5'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 16',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.6'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -159,8 +207,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.5-native-session-fix.apk
-          printf 'status=success\nversion=208.5\nfeature=native-session-fix\nbase=source-build\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2085-native-session-fix.txt
-          git add releases/jayuminton-admin-v208.5-native-session-fix.apk deployment/status/v2085-native-session-fix.txt
-          git commit -m 'Publish admin v208.5 native session fix APK' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.8-native-unified-fix.apk
+          printf 'status=success\nversion=208.8\nfeature=native-unified-fix\nbase=v208.7-placement-safety-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2088-native-unified-fix.txt
+          git add releases/jayuminton-admin-v208.8-native-unified-fix.apk deployment/status/v2088-native-unified-fix.txt
+          git commit -m 'Publish admin v208.8: native session fix + dialog chrome fix on top of v208.7 HTML' || exit 0
           git push origin HEAD:main

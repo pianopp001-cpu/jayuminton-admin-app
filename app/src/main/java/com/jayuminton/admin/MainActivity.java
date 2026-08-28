@@ -137,7 +137,33 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
 
         webView.addJavascriptInterface(new VoiceBridge(), "NativeVoice");
         webView.addJavascriptInterface(new BrowserBridge(), "NativeBrowser");
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            // Default WebView JS-dialog chrome prefixes the message with the
+            // page's own URL ("file:///android_asset/..." says / 페이지 내용),
+            // which is meaningless to the admin and just clutters every
+            // confirm()/alert() call (백업 저장, 백업 복원, 전체 초기화, ...).
+            // Showing a plain AlertDialog with just the message removes that.
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {
+                new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setMessage(message)
+                        .setCancelable(false)
+                        .setPositiveButton("확인", (dialog, which) -> result.confirm())
+                        .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
+                new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setMessage(message)
+                        .setCancelable(false)
+                        .setPositiveButton("확인", (dialog, which) -> result.confirm())
+                        .setNegativeButton("취소", (dialog, which) -> result.cancel())
+                        .show();
+                return true;
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
