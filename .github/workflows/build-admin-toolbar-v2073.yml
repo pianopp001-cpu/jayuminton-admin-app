@@ -80,6 +80,110 @@ jobs:
           PY
           grep -F 'jmSyncPublicMemosIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
 
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmUnlimitedPaintIdempotentFix'
+          if marker not in text:
+              # installJayumintonAdminUnlimitedSelectionV2072 -- the foundational
+              # selection toolbar every other overlay this session builds on top of.
+              # Its paint() is called from its own MutationObserver on #adminApp
+              # (childList+subtree) AND directly from handleClick on every member
+              # tap, so it is by far the hottest path of all the observer-triggered
+              # functions audited this session. It unconditionally rewrote
+              # #jmUnlimitedCount/#jmUnlimitedMode textContent on every single call,
+              # with zero value check and zero special state required (fires from
+              # the very first paint() after login) -- confirmed via live production
+              # state inspection and a real-browser mutation-count harness that this
+              # is a genuine, state-independent, self-sustaining loop distinct from
+              # the ones already fixed in v208.20/v208.22.
+              old = (
+                  "var c=document.getElementById('jmUnlimitedCount');"
+                  "if(c)c.textContent=selected.size+'명 선택';"
+                  "var m=document.getElementById('jmUnlimitedMode');"
+                  "if(m)m.textContent=mode==='move'?'자리이동 대상 '+targets.length+'/'+selected.size:"
+                  "mode==='swap'?'교환 대상 '+targets.length+'/'+selected.size:'원하는 멤버를 계속 선택하세요';}"
+              )
+              new = (
+                  "var c=document.getElementById('jmUnlimitedCount');"
+                  "if(c){var __jmCText=selected.size+'명 선택';"
+                  "/* jmUnlimitedPaintIdempotentFix */if(c.textContent!==__jmCText)c.textContent=__jmCText;}"
+                  "var m=document.getElementById('jmUnlimitedMode');"
+                  "if(m){var __jmMText=mode==='move'?'자리이동 대상 '+targets.length+'/'+selected.size:"
+                  "mode==='swap'?'교환 대상 '+targets.length+'/'+selected.size:'원하는 멤버를 계속 선택하세요';"
+                  "if(m.textContent!==__jmMText)m.textContent=__jmMText;}}"
+              )
+              if old not in text:
+                  raise SystemExit('v2072 paint() anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('v2072 paint() idempotent fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmUnlimitedPaintIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmTempTeamVisualStyleIdempotentFix'
+          if marker not in text:
+              # installAdminTempTeamVisualV2048's style() rewrote a <style> tag's
+              # textContent to the same constant string on every call, and its
+              # observer watches document.documentElement -- the entire page, the
+              # broadest possible scope, so it re-fired on any mutation anywhere.
+              # Compare against the desired content (not just existence of the tag)
+              # so it still self-heals if anything else ever alters this style tag,
+              # while becoming a true no-op once the content already matches --
+              # confirmed via a full-codebase grep that nothing else currently
+              # reads/writes this specific tag's id, so this is belt-and-suspenders
+              # rather than a live risk, but costs nothing to keep.
+              old = (
+                  "  function style(){\n"
+                  "    var s=document.getElementById(id);\n"
+                  "    if(!s){s=document.createElement('style');s.id=id;(document.head||document.documentElement).appendChild(s);}\n"
+                  "    s.textContent=''\n"
+                  "      +'#adminApp .jm-temp-team-v2047,'\n"
+                  "      +'#adminApp .jm-temp-team-v2047.jm-temp-pair,'\n"
+                  "      +'#adminApp .has-member-team.jm-temp-team-v2047,'\n"
+                  "      +'#adminApp .has-member-team.jm-temp-team-v2047.jm-temp-pair{'\n"
+                  "      +'box-shadow:0 0 0 4px #d4a017!important;'\n"
+                  "      +'outline:2px solid rgba(212,160,23,.28)!important;outline-offset:1px!important}'\n"
+                  "      +'#adminApp .jm-source-selected:not(.jm-temp-team-v2047),#adminApp .jm-target-selected:not(.jm-temp-team-v2047){box-shadow:0 0 0 4px #16a34a!important}'\n"
+                  "      +'#adminApp .jm-temp-pair-pending{outline:none!important}'\n"
+                  "      +'#adminApp .jm-temp-team-v2047 .member-team-badge{display:none!important}';\n"
+                  "  }\n"
+              )
+              new = (
+                  "  function style(){\n"
+                  "    /* jmTempTeamVisualStyleIdempotentFix */\n"
+                  "    var s=document.getElementById(id);\n"
+                  "    if(!s){s=document.createElement('style');s.id=id;(document.head||document.documentElement).appendChild(s);}\n"
+                  "    var __jmDesired=''\n"
+                  "      +'#adminApp .jm-temp-team-v2047,'\n"
+                  "      +'#adminApp .jm-temp-team-v2047.jm-temp-pair,'\n"
+                  "      +'#adminApp .has-member-team.jm-temp-team-v2047,'\n"
+                  "      +'#adminApp .has-member-team.jm-temp-team-v2047.jm-temp-pair{'\n"
+                  "      +'box-shadow:0 0 0 4px #d4a017!important;'\n"
+                  "      +'outline:2px solid rgba(212,160,23,.28)!important;outline-offset:1px!important}'\n"
+                  "      +'#adminApp .jm-source-selected:not(.jm-temp-team-v2047),#adminApp .jm-target-selected:not(.jm-temp-team-v2047){box-shadow:0 0 0 4px #16a34a!important}'\n"
+                  "      +'#adminApp .jm-temp-pair-pending{outline:none!important}'\n"
+                  "      +'#adminApp .jm-temp-team-v2047 .member-team-badge{display:none!important}';\n"
+                  "    if(s.textContent!==__jmDesired)s.textContent=__jmDesired;\n"
+                  "  }\n"
+              )
+              if old not in text:
+                  raise SystemExit('v2048 style() anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('v2048 style() idempotent fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmTempTeamVisualStyleIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
+
           python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js <<'PY'
           from pathlib import Path
           import sys
@@ -98,11 +202,13 @@ jobs:
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-v2079-new-badge' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmBadgesIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F "for(var key of ['4','3'])" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'moveOrSwapMember' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_DEAD_UI_CLEANUP_V2080__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmDeadUiCleanupV2080Style' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '#quickSelectedCount,#mobileSelectedCount,#mdBulkDeleteCount,.admin-member-bulk-panel,.jm-v2080-return-btn{display:none!important}' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmTagReturnButtonIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SMART_PLACEMENT_V2081__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F "setProperty('position','fixed','important')" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '자리교환' "$ROOT/assets/admin/index.html" >/dev/null
@@ -121,9 +227,9 @@ jobs:
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.22-idempotent-observers-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.22-idempotent-observers-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.22-idempotent-observers-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.24-html-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.24-html-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.24-html-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -134,20 +240,24 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_LOGIN_LOAD_RESILIENCE_V1__' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_LOCK_WATCHDOG_V1__' "$ROOT/verify.html" >/dev/null
           grep -F 'jmSyncPublicMemosIdempotentFix' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmUnlimitedPaintIdempotentFix' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmTempTeamVisualStyleIdempotentFix' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmBadgesIdempotentFix' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmTagReturnButtonIdempotentFix' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.22-idempotent-observers-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.24-html-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.22-idempotent-observers-fix.apk
-          printf 'status=success\nversion=208.22\nfeature=idempotent-observers-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20822-idempotent-observers-fix.txt
-          git add releases/jayuminton-admin-v208.22-idempotent-observers-fix.apk deployment/status/v20822-idempotent-observers-fix.txt
-          git commit -m 'Publish admin v208.22: make v2073/v2076/v2077 observer-triggered DOM writes idempotent' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.24-html-fix.apk
+          printf 'status=success\nversion=208.24\nfeature=html-idempotent-mutation-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20824-html-fix.txt
+          git add releases/jayuminton-admin-v208.24-html-fix.apk deployment/status/v20824-html-fix.txt
+          git commit -m 'Publish admin v208.24-html-fix: idempotent paint()/style()/badges()/tagReturnButton() mutation fixes' || exit 0
           git push origin HEAD:main

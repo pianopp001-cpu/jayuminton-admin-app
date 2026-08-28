@@ -19,10 +19,11 @@ s.textContent='#quickSelectedCount,#mobileSelectedCount,#mdBulkDeleteCount,.admi
 (document.head||document.documentElement).appendChild(s);
 }
 function tagReturnButton(){
+/* jmTagReturnButtonIdempotentFix */
 var r=root();if(!r)return;
 Array.from(r.querySelectorAll('button')).forEach(function(b){
 if(String(b.textContent||'').replace(/\s+/g,'').indexOf('코트배정대기로복귀')>=0&&!b.closest('#jmUnlimitedToolbar')){
-b.classList.add('jm-v2080-return-btn');
+if(!b.classList.contains('jm-v2080-return-btn'))b.classList.add('jm-v2080-return-btn');
 }
 });
 }
