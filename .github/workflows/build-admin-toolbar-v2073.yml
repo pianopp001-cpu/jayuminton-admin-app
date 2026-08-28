@@ -184,6 +184,256 @@ jobs:
           PY
           grep -F 'jmTempTeamVisualStyleIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
 
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmAdminLoginDiagnosticV1'
+          if marker not in text:
+              # Diagnostic-only, v208.25: adminLogin() -> openAdminApp() -> loadState()
+              # has zero error handling anywhere in the base app. adminApp is made
+              # visible BEFORE getCurrentMemberPassword/getPublicState/renderState run,
+              # so if any one of those throws or rejects, the screen is left showing
+              # only the static chrome (header/quick-assign shell) with courts/members/
+              # wait-groups never painted, and NO error is ever shown -- an unhandled
+              # promise rejection is invisible without devtools. This tags each step
+              # with its own name and re-throws, so the single alert this file's global
+              # unhandledrejection/window.onerror handler shows carries a full
+              # function:step breadcrumb pointing at exactly where it failed. No
+              # behavior changes on the success path -- purely additive error surfacing.
+              old_load = (
+                  "async function loadState() {\n"
+                  "  const nextState = await server('getPublicState', []);\n"
+                  "  if (!IS_ADMIN && LAST_PUBLIC_STATE) {\n"
+                  "    detectMemberForegroundTransition(LAST_PUBLIC_STATE, nextState);\n"
+                  "  }\n"
+                  "  renderState(nextState);\n"
+                  "  if (!IS_ADMIN) {\n"
+                  "    LAST_PUBLIC_STATE = JSON.parse(JSON.stringify(nextState));\n"
+                  "  }\n"
+                  "}\n"
+              )
+              new_load = (
+                  "async function loadState() {\n"
+                  "  /* jmAdminLoginDiagnosticV1 */\n"
+                  "  const nextState = await server('getPublicState', []).catch(function(__jmE){\n"
+                  "    throw new Error('[loadState:getPublicState] ' + (__jmE && __jmE.message || __jmE));\n"
+                  "  });\n"
+                  "  if (!IS_ADMIN && LAST_PUBLIC_STATE) {\n"
+                  "    detectMemberForegroundTransition(LAST_PUBLIC_STATE, nextState);\n"
+                  "  }\n"
+                  "  try {\n"
+                  "    renderState(nextState);\n"
+                  "  } catch (__jmE2) {\n"
+                  "    throw new Error('[loadState:renderState] ' + (__jmE2 && __jmE2.message || __jmE2));\n"
+                  "  }\n"
+                  "  if (!IS_ADMIN) {\n"
+                  "    LAST_PUBLIC_STATE = JSON.parse(JSON.stringify(nextState));\n"
+                  "  }\n"
+                  "}\n"
+              )
+              if old_load not in text:
+                  raise SystemExit('loadState() anchor not found -- base HTML has drifted')
+              text = text.replace(old_load, new_load, 1)
+
+              old_admin_login = (
+                  "async function adminLogin() {\n"
+                  "  const pin =\n"
+                  "    document\n"
+                  "      .getElementById(\n"
+                  "        'adminPinInput'\n"
+                  "      )\n"
+                  "      .value\n"
+                  "      .trim();\n"
+                  "\n"
+                  "  const result =\n"
+                  "    await server(\n"
+                  "      'createAdminSession',\n"
+                  "      [pin]\n"
+                  "    );\n"
+                  "\n"
+                  "  if (!result || !result.ok) {\n"
+                  "    alert('관리자 PIN이 틀렸습니다.');\n"
+                  "    return;\n"
+                  "  }\n"
+                  "\n"
+                  "  localStorage.setItem(\n"
+                  "    ADMIN_AUTH_KEY,\n"
+                  "    String(result.token)\n"
+                  "  );\n"
+                  "\n"
+                  "  await openAdminApp(\n"
+                  "    String(result.token)\n"
+                  "  );\n"
+                  "}\n"
+              )
+              new_admin_login = (
+                  "async function adminLogin() {\n"
+                  "  const pin =\n"
+                  "    document\n"
+                  "      .getElementById(\n"
+                  "        'adminPinInput'\n"
+                  "      )\n"
+                  "      .value\n"
+                  "      .trim();\n"
+                  "\n"
+                  "  let result;\n"
+                  "  try {\n"
+                  "    result = await server('createAdminSession', [pin]);\n"
+                  "  } catch (__jmE) {\n"
+                  "    alert('[진단] adminLogin:createAdminSession 실패 - ' + (__jmE && __jmE.message || __jmE));\n"
+                  "    return;\n"
+                  "  }\n"
+                  "\n"
+                  "  if (!result || !result.ok) {\n"
+                  "    alert('관리자 PIN이 틀렸습니다.');\n"
+                  "    return;\n"
+                  "  }\n"
+                  "\n"
+                  "  localStorage.setItem(\n"
+                  "    ADMIN_AUTH_KEY,\n"
+                  "    String(result.token)\n"
+                  "  );\n"
+                  "\n"
+                  "  try {\n"
+                  "    await openAdminApp(String(result.token));\n"
+                  "  } catch (__jmE2) {\n"
+                  "    throw new Error('[adminLogin:openAdminApp] ' + (__jmE2 && __jmE2.message || __jmE2));\n"
+                  "  }\n"
+                  "}\n"
+              )
+              if old_admin_login not in text:
+                  raise SystemExit('adminLogin() anchor not found -- base HTML has drifted')
+              text = text.replace(old_admin_login, new_admin_login, 1)
+
+              old_open = (
+                  "async function openAdminApp(credential) {\n"
+                  "  ADMIN_PIN_VALUE = credential;\n"
+                  "  updateVoiceGuideButton();\n"
+                  "  updateReplayVoiceButton();\n"
+                  "  updateVoiceRepeatButton();\n"
+                  "  updateSoundUnlockButton();\n"
+                  "\n"
+                  "  document\n"
+                  "    .getElementById(\n"
+                  "      'adminLoginBox'\n"
+                  "    )\n"
+                  "    .classList\n"
+                  "    .add('hidden');\n"
+                  "\n"
+                  "  document\n"
+                  "    .getElementById(\n"
+                  "      'adminApp'\n"
+                  "    )\n"
+                  "    .classList\n"
+                  "    .remove('hidden');\n"
+                  "\n"
+                  "  document\n"
+                  "    .getElementById(\n"
+                  "      'currentMemberPassword'\n"
+                  "    )\n"
+                  "    .textContent =\n"
+                  "      await server(\n"
+                  "        'getCurrentMemberPassword',\n"
+                  "        [credential]\n"
+                  "      );\n"
+                  "\n"
+                  "  await loadState();\n"
+                  "  await loadSystemStatus();\n"
+                  "}\n"
+              )
+              new_open = (
+                  "async function openAdminApp(credential) {\n"
+                  "  ADMIN_PIN_VALUE = credential;\n"
+                  "  updateVoiceGuideButton();\n"
+                  "  updateReplayVoiceButton();\n"
+                  "  updateVoiceRepeatButton();\n"
+                  "  updateSoundUnlockButton();\n"
+                  "\n"
+                  "  document\n"
+                  "    .getElementById(\n"
+                  "      'adminLoginBox'\n"
+                  "    )\n"
+                  "    .classList\n"
+                  "    .add('hidden');\n"
+                  "\n"
+                  "  document\n"
+                  "    .getElementById(\n"
+                  "      'adminApp'\n"
+                  "    )\n"
+                  "    .classList\n"
+                  "    .remove('hidden');\n"
+                  "\n"
+                  "  try {\n"
+                  "    document.getElementById('currentMemberPassword').textContent =\n"
+                  "      await server('getCurrentMemberPassword', [credential]);\n"
+                  "  } catch (__jmE) {\n"
+                  "    throw new Error('[openAdminApp:getCurrentMemberPassword] ' + (__jmE && __jmE.message || __jmE));\n"
+                  "  }\n"
+                  "\n"
+                  "  try {\n"
+                  "    await loadState();\n"
+                  "  } catch (__jmE2) {\n"
+                  "    throw new Error('[openAdminApp:loadState] ' + (__jmE2 && __jmE2.message || __jmE2));\n"
+                  "  }\n"
+                  "  try {\n"
+                  "    await loadSystemStatus();\n"
+                  "  } catch (__jmE3) {\n"
+                  "    throw new Error('[openAdminApp:loadSystemStatus] ' + (__jmE3 && __jmE3.message || __jmE3));\n"
+                  "  }\n"
+                  "}\n"
+              )
+              if old_open not in text:
+                  raise SystemExit('openAdminApp() anchor not found -- base HTML has drifted')
+              text = text.replace(old_open, new_open, 1)
+          if marker not in text:
+              raise SystemExit('admin login diagnostic patch did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmAdminLoginDiagnosticV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmGlobalErrorDiagnosticV1'
+          if marker not in text:
+              # Diagnostic-only, v208.25: there is currently no window.onerror or
+              # unhandledrejection handler anywhere in the app -- any uncaught
+              # exception or promise rejection is completely silent (no error box,
+              # matching what's been reported). Surface it once, visibly.
+              close = text.lower().rfind('</body>')
+              if close < 0:
+                  raise SystemExit('body close not found for global diagnostic handler')
+              script = (
+                  '<script>\n'
+                  '/* jmGlobalErrorDiagnosticV1 */\n'
+                  '(function installJmGlobalErrorDiagnosticV1(){\n'
+                  "  if (window.__JM_GLOBAL_ERROR_DIAGNOSTIC_V1__) return;\n"
+                  "  window.__JM_GLOBAL_ERROR_DIAGNOSTIC_V1__ = true;\n"
+                  "  window.addEventListener('error', function(e){\n"
+                  "    try {\n"
+                  "      alert('[진단] 처리되지 않은 오류: ' + (e && e.message || e) + (e && e.filename ? (' @' + e.filename + ':' + e.lineno) : ''));\n"
+                  "    } catch (_e) {}\n"
+                  "  });\n"
+                  "  window.addEventListener('unhandledrejection', function(e){\n"
+                  "    try {\n"
+                  "      var r = e && e.reason;\n"
+                  "      alert('[진단] 처리되지 않은 Promise 거부: ' + (r && r.message || r));\n"
+                  "    } catch (_e) {}\n"
+                  "  });\n"
+                  '})();\n'
+                  '</script>\n'
+              )
+              text = text[:close] + script + text[close:]
+          if marker not in text:
+              raise SystemExit('global error diagnostic handler did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmGlobalErrorDiagnosticV1' "$ROOT/assets/admin/index.html" >/dev/null
+
           python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js <<'PY'
           from pathlib import Path
           import sys
@@ -227,9 +477,9 @@ jobs:
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.24-html-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.24-html-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.24-html-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.25-diagnostic.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.25-diagnostic.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.25-diagnostic.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -244,20 +494,22 @@ jobs:
           grep -F 'jmTempTeamVisualStyleIdempotentFix' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBadgesIdempotentFix' "$ROOT/verify.html" >/dev/null
           grep -F 'jmTagReturnButtonIdempotentFix' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmAdminLoginDiagnosticV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmGlobalErrorDiagnosticV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.24-html-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.25-diagnostic.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.24-html-fix.apk
-          printf 'status=success\nversion=208.24\nfeature=html-idempotent-mutation-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20824-html-fix.txt
-          git add releases/jayuminton-admin-v208.24-html-fix.apk deployment/status/v20824-html-fix.txt
-          git commit -m 'Publish admin v208.24-html-fix: idempotent paint()/style()/badges()/tagReturnButton() mutation fixes' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.25-diagnostic.apk
+          printf 'status=success\nversion=208.25\nfeature=diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20825-diagnostic.txt
+          git add releases/jayuminton-admin-v208.25-diagnostic.apk deployment/status/v20825-diagnostic.txt
+          git commit -m 'Publish admin v208.25-diagnostic: surface adminLogin/openAdminApp/loadState errors and add global error handlers (no logic changes)' || exit 0
           git push origin HEAD:main

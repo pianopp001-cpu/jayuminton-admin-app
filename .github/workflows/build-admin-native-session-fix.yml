@@ -1,5 +1,5 @@
-name: Build admin native session fix v208.24
-# retrigger: rebuild unified APK against the newly published v208.24-html-fix base
+name: Build admin native session fix v208.25
+# retrigger: rebuild unified APK against the newly published v208.25-diagnostic base
 
 on:
   push:
@@ -49,7 +49,7 @@ jobs:
           rm -rf app
           git archive "$PROVEN_COMMIT" app | tar -x
           mkdir -p app/src/main/assets/admin
-          BASE=releases/jayuminton-admin-v208.24-html-fix.apk
+          BASE=releases/jayuminton-admin-v208.25-diagnostic.apk
           test -s "$BASE"
           unzip -p "$BASE" assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
@@ -194,6 +194,8 @@ jobs:
           grep -F 'jmTempTeamVisualStyleIdempotentFix' "$HTML" >/dev/null
           grep -F 'jmBadgesIdempotentFix' "$HTML" >/dev/null
           grep -F 'jmTagReturnButtonIdempotentFix' "$HTML" >/dev/null
+          grep -F 'jmAdminLoginDiagnosticV1' "$HTML" >/dev/null
+          grep -F 'jmGlobalErrorDiagnosticV1' "$HTML" >/dev/null
 
       - name: Set APK identity and signer
         shell: bash
@@ -204,13 +206,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.24";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.25";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 25',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.15'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 26',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.16'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -237,6 +239,8 @@ jobs:
           grep -F 'jmTempTeamVisualStyleIdempotentFix' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmBadgesIdempotentFix' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmTagReturnButtonIdempotentFix' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmAdminLoginDiagnosticV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmGlobalErrorDiagnosticV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -244,8 +248,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.24-unified-fix.apk
-          printf 'status=success\nversion=208.24\nfeature=native-unified-fix+html-idempotent-mutation-fix+idempotent-observers-fix+dialog-freeze-fix\nbase=v208.24-html-fix+v208.22-idempotent-observers-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20824-unified-fix.txt
-          git add releases/jayuminton-admin-v208.24-unified-fix.apk deployment/status/v20824-unified-fix.txt
-          git commit -m 'Publish admin v208.24: adds idempotent paint()/style()/badges()/tagReturnButton() mutation fixes on top of v208.23 unified fix' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.25-unified-diagnostic.apk
+          printf 'status=success\nversion=208.25\nfeature=native-unified-fix+diagnostic-error-surfacing+html-idempotent-mutation-fix+idempotent-observers-fix+dialog-freeze-fix\nbase=v208.25-diagnostic+v208.24-html-fix+v208.22-idempotent-observers-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20825-unified-diagnostic.txt
+          git add releases/jayuminton-admin-v208.25-unified-diagnostic.apk deployment/status/v20825-unified-diagnostic.txt
+          git commit -m 'Publish admin v208.25: adds diagnostic error surfacing (adminLogin/openAdminApp/loadState + global handlers) on top of v208.24 unified fix, no logic changes' || exit 0
           git push origin HEAD:main
