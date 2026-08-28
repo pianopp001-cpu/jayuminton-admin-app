@@ -47,6 +47,39 @@ jobs:
           cp "$BASE" "$ROOT/base.apk"
           unzip -p "$BASE" assets/admin/index.html > "$ROOT/assets/admin/index.html"
           test -s "$ROOT/assets/admin/index.html"
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmSyncPublicMemosIdempotentFix'
+          if marker not in text:
+              # syncPublicMemos() (JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24) is called
+              # from its OWN MutationObserver watching document.documentElement for any
+              # childList/subtree change, with zero debouncing. It unconditionally does
+              # node.textContent=memo -- setting textContent to a string ALWAYS mutates
+              # the DOM (replaces the text node) even when the value is unchanged, which
+              # itself is a childList mutation that the SAME observer is watching for.
+              # The instant any member card has a non-empty publicMemo, this becomes a
+              # true infinite loop: mutate -> observer fires -> mutate again -> forever,
+              # saturating the event loop with zero error and zero visible symptom other
+              # than the page going completely unresponsive within seconds. Confirmed via
+              # the actual live production state (fetched with the admin PIN): one member
+              # already has a non-empty publicMemo, so this fires on every real load.
+              # Guarding both assignments with a value check breaks the cycle -- once the
+              # text/hidden state matches, the next call becomes a true no-op.
+              old = "if(node){node.textContent=memo;node.hidden=!memo;}"
+              new = "if(node){if(node.textContent!==memo)node.textContent=memo;/* jmSyncPublicMemosIdempotentFix */if(node.hidden!==!memo)node.hidden=!memo;}"
+              if old not in text:
+                  raise SystemExit('syncPublicMemos anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('syncPublicMemos idempotent fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmSyncPublicMemosIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
+
           python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js <<'PY'
           from pathlib import Path
           import sys
@@ -88,9 +121,9 @@ jobs:
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.20-mutation-loop-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.20-mutation-loop-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.20-mutation-loop-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -100,20 +133,21 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_RENDER_RESILIENCE_V1__' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_LOGIN_LOAD_RESILIENCE_V1__' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_LOCK_WATCHDOG_V1__' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmSyncPublicMemosIdempotentFix' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.20-mutation-loop-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk
-          printf 'status=success\nversion=208.17\nfeature=login-timeout-selfcontained-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20817-login-timeout-selfcontained-fix.txt
-          git add releases/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk deployment/status/v20817-login-timeout-selfcontained-fix.txt
-          git commit -m 'Publish admin v208.17: login/state-load timeout no longer depends on another script wrapping window.server first' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.20-mutation-loop-fix.apk
+          printf 'status=success\nversion=208.20\nfeature=mutation-loop-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20820-mutation-loop-fix.txt
+          git add releases/jayuminton-admin-v208.20-mutation-loop-fix.apk deployment/status/v20820-mutation-loop-fix.txt
+          git commit -m 'Publish admin v208.20: fix an infinite MutationObserver feedback loop that froze the whole app when a member has a memo' || exit 0
           git push origin HEAD:main
