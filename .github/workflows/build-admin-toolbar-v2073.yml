@@ -88,9 +88,9 @@ jobs:
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.15-lock-watchdog-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.15-lock-watchdog-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.15-lock-watchdog-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -105,15 +105,15 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.15-lock-watchdog-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.15-lock-watchdog-fix.apk
-          printf 'status=success\nversion=208.15\nfeature=lock-watchdog-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20815-lock-watchdog-fix.txt
-          git add releases/jayuminton-admin-v208.15-lock-watchdog-fix.apk deployment/status/v20815-lock-watchdog-fix.txt
-          git commit -m 'Publish admin v208.15: force-release a stuck saving lock instead of leaving every button dead forever' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk
+          printf 'status=success\nversion=208.17\nfeature=login-timeout-selfcontained-fix\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20817-login-timeout-selfcontained-fix.txt
+          git add releases/jayuminton-admin-v208.17-login-timeout-selfcontained-fix.apk deployment/status/v20817-login-timeout-selfcontained-fix.txt
+          git commit -m 'Publish admin v208.17: login/state-load timeout no longer depends on another script wrapping window.server first' || exit 0
           git push origin HEAD:main

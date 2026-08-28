@@ -19,6 +19,35 @@ if(typeof window.openAdminApp!=='function'||typeof window.loadState!=='function'
    instead of a silent, permanent blank screen. */
 var originalOpen=window.openAdminApp;
 var originalLoad=window.loadState;
+var SELF_TIMEOUT_MS=15000;
+/* Do not rely on admin_server_timeout_v1.js having already wrapped
+   window.server by the time login runs -- that script wraps on its own
+   200ms poll and can race with V24's own independent re-wrapping, so there
+   is no guarantee the outermost window.server has a timeout applied yet at
+   the exact moment openAdminApp() calls it (e.g. a fast login right after
+   page load, before that poll's first tick). Without its own timeout here,
+   a hang in getCurrentMemberPassword or loadState's underlying fetch would
+   never reject and never resolve -- attemptLoad()'s try/catch only fires on
+   rejection, so a true hang produces neither the render-resilience fallback
+   nor this file's own error+retry UI: exactly a silent permanent blank
+   screen with frozen buttons and no explanation, which is what was actually
+   reported. Race every awaited call in this path against its own timeout so
+   this file's recovery guarantee holds regardless of what window.server
+   currently is. */
+function withTimeout(promise,ms,label){
+  return new Promise(function(resolve,reject){
+    var settled=false;
+    var timer=setTimeout(function(){
+      if(settled)return;settled=true;
+      reject(new Error(label+'이(가) 응답하지 않습니다 ('+(ms/1000)+'초 초과).'));
+    },ms);
+    Promise.resolve(promise).then(function(v){
+      if(settled)return;settled=true;clearTimeout(timer);resolve(v);
+    },function(e){
+      if(settled)return;settled=true;clearTimeout(timer);reject(e);
+    });
+  });
+}
 
 function statusBox(){
   var el=document.getElementById('jmAdminLoginLoadStatus');
@@ -53,13 +82,13 @@ function hideStatus(){
 
 async function attemptLoad(retryCount){
   try{
-    await originalLoad();
+    await withTimeout(originalLoad(),SELF_TIMEOUT_MS,'상태 불러오기');
     hideStatus();
-    try{ if(typeof loadSystemStatus==='function') await loadSystemStatus(); }catch(err){ console.error('[jm-login-load-resilience] loadSystemStatus failed',err); }
+    try{ if(typeof loadSystemStatus==='function') await withTimeout(loadSystemStatus(),SELF_TIMEOUT_MS,'시스템 상태'); }catch(err){ console.error('[jm-login-load-resilience] loadSystemStatus failed',err); }
   }catch(err){
     console.error('[jm-login-load-resilience] loadState failed',err);
-    if(retryCount<2){
-      showStatus('상태를 불러오지 못했습니다. 다시 시도하는 중... ('+(retryCount+1)+'/3)',false);
+    if(retryCount<1){
+      showStatus('상태를 불러오지 못했습니다. 다시 시도하는 중... ('+(retryCount+1)+'/2)',false);
       setTimeout(function(){ attemptLoad(retryCount+1); },1500);
     }else{
       showStatus('상태를 불러오지 못했습니다: '+String(err&&err.message||err||'알 수 없는 오류'),true);
@@ -78,11 +107,11 @@ window.openAdminApp=async function(credential){
   document.getElementById('adminApp').classList.remove('hidden');
 
   try{
-    var pw=await server('getCurrentMemberPassword',[credential]);
+    var pw=await withTimeout(server('getCurrentMemberPassword',[credential]),SELF_TIMEOUT_MS,'비밀번호 조회');
     var el=document.getElementById('currentMemberPassword');
     if(el)el.textContent=pw;
   }catch(err){
-    console.error('[jm-login-load-resilience] getCurrentMemberPassword failed, continuing to load state anyway',err);
+    console.error('[jm-login-load-resilience] getCurrentMemberPassword failed/timed out, continuing to load state anyway',err);
   }
 
   await attemptLoad(0);
