@@ -1,4 +1,5 @@
 name: Build admin native session fix v208.24
+# retrigger: rebuild unified APK against the newly published v208.24-html-fix base
 
 on:
   push:
