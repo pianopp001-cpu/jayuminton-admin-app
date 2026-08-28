@@ -1,4 +1,4 @@
-name: Build admin quick-title toolbar v2073
+name: Build admin wait4 slot2 v2079
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-admin-toolbar-v2073
+  group: jayuminton-admin-wait4-v2079
   cancel-in-progress: true
 
 jobs:
@@ -29,13 +29,13 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager --licenses >/dev/null || true
       - run: sdkmanager 'build-tools;35.0.0' >/dev/null
-      - name: Patch latest admin toolbar plus v2078 wait4 repair
+      - name: Patch v2079 wait4 slot2 repair
         shell: bash
         run: |
           set -euo pipefail
           BASE=releases/jayuminton-admin-v207.2-unlimited-selection.apk
           test -s "$BASE"
-          ROOT="$RUNNER_TEMP/jm2073"
+          ROOT="$RUNNER_TEMP/jm2079"
           mkdir -p "$ROOT/assets/admin"
           cp "$BASE" "$ROOT/base.apk"
           unzip -p "$BASE" assets/admin/index.html > "$ROOT/assets/admin/index.html"
@@ -43,52 +43,47 @@ jobs:
           python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js <<'PY'
           from pathlib import Path
           import sys
-          html_path=Path(sys.argv[1])
-          html=html_path.read_text(encoding='utf-8')
-          for overlay_name in sys.argv[2:]:
-              overlay=Path(overlay_name).read_text(encoding='utf-8')
+          p=Path(sys.argv[1]); html=p.read_text(encoding='utf-8')
+          for name in sys.argv[2:]:
+              overlay=Path(name).read_text(encoding='utf-8')
               close=html.lower().rfind('</body>')
-              if close<0: raise SystemExit('body close not found')
+              if close < 0: raise SystemExit('body close not found')
               html=html[:close]+'<script>\n'+overlay+'\n</script>\n'+html[close:]
-          html_path.write_text(html,encoding='utf-8')
+          p.write_text(html,encoding='utf-8')
           PY
           grep -F '__JAYUMINTON_ADMIN_UNLIMITED_SELECTION_V2072__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_TOOLBAR_V2073__' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2078__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_TOOLBAR_ACTIONS_V2077__' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'data-jm-v2078-wait4-slot2' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'jm-v2078-bottom' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'assignMembersToWaitGroup' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'data-jm-v2079-wait4-index' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmBottomActionRowV2079' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jm-v2079-new-badge' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F "for(var key of ['4','3'])" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'moveOrSwapMember' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F '도착전' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F '귀가' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F '배정대기' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'border:2px solid var(--member-team-color' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F '#d4a017' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk"
-          unzip -p "$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk" assets/admin/index.html > "$ROOT/verify.html"
-          grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2078__' "$ROOT/verify.html" >/dev/null
-          grep -F '__JAYUMINTON_ADMIN_TOOLBAR_ACTIONS_V2077__' "$ROOT/verify.html" >/dev/null
-          grep -F 'data-jm-v2078-wait4-slot2' "$ROOT/verify.html" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v207.9-wait4-slot2.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v207.9-wait4-slot2.apk"
+          unzip -p "$ROOT/jayuminton-admin-v207.9-wait4-slot2.apk" assets/admin/index.html > "$ROOT/verify.html"
+          grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
+          grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="$RUNNER_TEMP/jm2073"
-          APK="$ROOT/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk"
+          ROOT="$RUNNER_TEMP/jm2079"
+          APK="$ROOT/jayuminton-admin-v207.9-wait4-slot2.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk
-          printf 'status=success\nversion=207.8\nfeature=layout-wait4-location-full-repair\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2073-quick-title-toolbar.txt
-          git add releases/jayuminton-admin-v207.3-quick-title-colored-toolbar.apk deployment/status/v2073-quick-title-toolbar.txt
-          git commit -m 'Publish admin v207.8 wait4 repair APK' || exit 0
+          cp "$APK" releases/jayuminton-admin-v207.9-wait4-slot2.apk
+          printf 'status=success\nversion=207.9\nfeature=wait4-slot2-repair\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2079-wait4-slot2.txt
+          git add releases/jayuminton-admin-v207.9-wait4-slot2.apk deployment/status/v2079-wait4-slot2.txt
+          git commit -m 'Publish admin v207.9 wait4 slot2 APK' || exit 0
           git push origin HEAD:main
