@@ -104,6 +104,28 @@ jobs:
           import sys
           path = Path(sys.argv[1])
           text = path.read_text(encoding='utf-8')
+          old = "function playMemberAlertCue(type, title, body, eventId) {\n  const repeatCount = memberAlertRepeatCount(type);\n  for (let index = 0; index < repeatCount; index += 1) {\n    setTimeout(function() {\n      playSingleMemberAlertCue(type);\n      showSingleNativeMemberNotification(title, body, eventId, index + 1);\n    }, index * 1700);\n  }\n}"
+          new = "var __jmMemberAlertTimersV1 = [];\nfunction playMemberAlertCue(type, title, body, eventId) {\n  const repeatCount = memberAlertRepeatCount(type);\n  for (let index = 0; index < repeatCount; index += 1) {\n    __jmMemberAlertTimersV1.push(setTimeout(function() {\n      playSingleMemberAlertCue(type);\n      showSingleNativeMemberNotification(title, body, eventId, index + 1);\n    }, index * 1700));\n  }\n}"
+          if old not in text:
+              raise SystemExit('playMemberAlertCue anchor text not found -- live source has drifted, aborting to avoid corrupting the page')
+          text = text.replace(old, new, 1)
+
+          old2 = "function closeMemberForegroundAlert() {\n  const box = document.getElementById('memberForegroundAlert');\n  if (box) box.classList.add('hidden');\n}"
+          new2 = "function closeMemberForegroundAlert() {\n  /* JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1: mid-repeat confirm must stop\n     the vibration immediately, not just hide the popup and let the\n     remaining scheduled rounds keep buzzing. */\n  __jmMemberAlertTimersV1.forEach(function(timerId) { clearTimeout(timerId); });\n  __jmMemberAlertTimersV1 = [];\n  try { if (navigator.vibrate) navigator.vibrate(0); } catch (error) {}\n  const box = document.getElementById('memberForegroundAlert');\n  if (box) box.classList.add('hidden');\n}"
+          if old2 not in text:
+              raise SystemExit('closeMemberForegroundAlert anchor text not found -- live source has drifted, aborting to avoid corrupting the page')
+          text = text.replace(old2, new2, 1)
+
+          if 'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' not in text:
+              raise SystemExit('alert vibration-stop patch did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
           old = "function handleMemberWaitOtherTap(groupIndex,targetMemberId,event){\n  if(IS_ADMIN)return;\n  if(event){event.preventDefault();event.stopPropagation();}\n  const target=(STATE.members||[]).find(function(item){return item&&String(item.id)===String(targetMemberId);});\n  if(!target)return;\n  const selected=currentStoredWebPushMember();\n  if(!selected||!selected.id){\n    if(confirm(String(target.name||'선택한 회원')+'님이 본인인가요?')){\n      selectMemberSelf(target.id);\n      showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');\n    }\n    return;\n  }\n  const a=memberWaitSeatSessionArgs(); if(!a)return;\n  if(String(targetMemberId)===String(a.member.id))return;\n  if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){\n    MEMBER_WAIT_SEAT_PICK={type:'other',groupIndex:Number(groupIndex),memberId:String(targetMemberId),fromSelf:true};\n    renderWaitGroups();\n    setTimeout(function(){\n      const ok=confirm(String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?');\n      if(ok){memberRequestWaitSwap(targetMemberId);return;}\n      MEMBER_WAIT_SEAT_PICK={type:'self',groupIndex:Number(groupIndex)};\n      renderWaitGroups();\n    },0);\n    return;\n  }\n  MEMBER_WAIT_SEAT_PICK={type:'other',groupIndex:Number(groupIndex),memberId:String(targetMemberId)};\n  renderWaitGroups();\n  showMemberSettingMessage('내 자리를 선택하면 '+String(target.name||'상대')+'님과 자리 바꾸기를 요청할 수 있어요.');\n}"
           new = "function handleMemberWaitOtherTap(groupIndex,targetMemberId,event){\n  if(IS_ADMIN)return;\n  if(event){event.preventDefault();event.stopPropagation();}\n  const target=(STATE.members||[]).find(function(item){return item&&String(item.id)===String(targetMemberId);});\n  if(!target)return;\n  const selected=currentStoredWebPushMember();\n  if(!selected||!selected.id){\n    if(confirm(String(target.name||'선택한 회원')+'님이 본인인가요?')){\n      selectMemberSelf(target.id);\n      showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');\n    }\n    return;\n  }\n  const a=memberWaitSeatSessionArgs(); if(!a)return;\n  if(String(targetMemberId)===String(a.member.id))return;\n  /* JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1: self identity is already known from login, so tapping the other member alone is enough -- no separate 'select my own seat' step. */\n  clearMemberWaitSeatPick();\n  const ok=confirm(String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?');\n  if(ok){memberRequestWaitSwap(targetMemberId);}\n}"
           if old not in text:
@@ -128,6 +150,7 @@ jobs:
           grep -F "server('updateMyProfile',[null,String(member.id),memo])" "$PUBLIC/index.html" >/dev/null
           grep -F 'member.teamLabel' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'window.confirmJmDirectMessage=function()' "$PUBLIC/index.html" >/dev/null
           grep -F 'vibrationTimer=setInterval(vibrate,14500)' "$PUBLIC/index.html" >/dev/null
@@ -206,6 +229,7 @@ jobs:
             "server('updateMyProfile',[null,String(member.id),memo])" \
             'member.teamLabel' \
             'JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1' \
+            'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \
             'vibrationTimer=setInterval(vibrate,14500)' \
