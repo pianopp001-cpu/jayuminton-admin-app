@@ -9,6 +9,7 @@ on:
       - 'app/src/main/AndroidManifest.xml'
       - 'app/build.gradle'
   workflow_dispatch: {}
+# retrigger: v208.9 base now published, first run of this version raced it
 
 permissions:
   contents: write
