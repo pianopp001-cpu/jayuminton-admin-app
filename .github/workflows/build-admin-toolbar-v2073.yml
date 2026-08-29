@@ -353,6 +353,124 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmAutoAssignTargetFillFixV1'
+          if marker not in text:
+              # v208.35: reported as "탭해서 지정한 빈자리에 사람을 눌러도 안
+              # 들어간다" -- the base app has ANOTHER, older placement flow
+              # besides select-then-click-empty: tap an empty court/wait slot
+              # FIRST (with nothing selected) to arm AUTO_ASSIGN_TARGET (a
+              # yellow-highlighted "chosen empty seat"), then tap a MEMBER card
+              # to drop them into it one at a time -- handled natively by
+              # assignMemberToChosenEmpty()/handleSelectableMemberClick(),
+              # wired via each member button's own inline onclick attribute.
+              # But this toolbar's handleClick is a CAPTURE-phase listener on
+              # #adminApp, installed ahead of the target's own bubble-phase
+              # onclick -- its final branch (mode==='', c is a member card)
+              # unconditionally calls stopImmediatePropagation() and just
+              # toggles this toolbar's OWN checkbox selection, which stops the
+              # event before it ever reaches the native onclick. So tapping
+              # the member after arming a target only adds a checkmark; the
+              # native fill code never runs, and the armed target is left
+              # stuck highlighted with nobody placed -- reproduced live for
+              # both 대기1 and court targets, not location-specific. Fix:
+              # when a target is armed, this branch must not intercept at
+              # all -- return before preventDefault/stopImmediatePropagation
+              # so the click reaches the member's real onclick normally.
+              old = (
+                  "if(!c)return;var id=memberId(c);ev.preventDefault();ev.stopImmediatePropagation();"
+                  "if(selected.has(id))selected.delete(id);else selected.add(id);paint();}"
+              )
+              new = (
+                  "if(!c)return;var id=memberId(c);/* jmAutoAssignTargetFillFixV1 */"
+                  "if(typeof AUTO_ASSIGN_TARGET!=='undefined'&&AUTO_ASSIGN_TARGET)return;"
+                  "ev.preventDefault();ev.stopImmediatePropagation();"
+                  "if(selected.has(id))selected.delete(id);else selected.add(id);paint();}"
+              )
+              if old not in text:
+                  raise SystemExit('handleClick final branch anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+
+              # Second half of the same fix: the base HTML also has an entirely
+              # separate, unrelated multigroup-swap script that overrides
+              # window.handleCourtMemberTap/handleWaitMemberTap -- meaning EVERY
+              # member card's real click handler is this file's tap(), not
+              # assignMemberToChosenEmpty(). Freeing handleClick above (so the
+              # click reaches the card's own onclick) isn't enough by itself --
+              # tap() has to know about an armed AUTO_ASSIGN_TARGET too, or it
+              # just treats the tap as a group-swap source/target pick instead.
+              old_tap = (
+                  "function tap(location,id,event){\n"
+                  "    if(event&&event.target&&event.target.closest('button.small'))return;\n"
+                  "    if(event){event.preventDefault();event.stopPropagation();}\n"
+                  "    id=String(id); location={type:String(location.type),index:String(location.index||'')};\n"
+                  "    if(sourcePick&&sourcePick.ids.indexOf(id)>=0){\n"
+                  "      toggleIn(sourcePick,id);\n"
+                  "      if(!sourcePick.ids.length){sourcePick=targetPick;targetPick=null;}\n"
+                  "      sync();return;\n"
+                  "    }\n"
+                  "    if(targetPick&&targetPick.ids.indexOf(id)>=0){\n"
+                  "      toggleIn(targetPick,id);\n"
+                  "      if(!targetPick.ids.length)targetPick=null;\n"
+                  "      sync();return;\n"
+                  "    }\n"
+                  "    if(!sourcePick){sourcePick={location:location,ids:[id]};sync();return;}\n"
+                  "    if(same(sourcePick.location,location)){\n"
+                  "      if(targetPick){alert('교환 상대를 선택 중입니다. 상대 선택을 다시 눌러 취소한 뒤 선택하세요.');return;}\n"
+                  "      toggleIn(sourcePick,id);sync();return;\n"
+                  "    }\n"
+                  "    if(!targetPick)targetPick={location:location,ids:[]};\n"
+                  "    if(!same(targetPick.location,location)){\n"
+                  "      alert('교환 상대도 한 곳에서만 선택하세요. 선택한 상대를 다시 눌러 취소할 수 있습니다.');return;\n"
+                  "    }\n"
+                  "    if(targetPick.ids.length>=sourcePick.ids.length){\n"
+                  "      alert('양쪽에서 같은 인원수만 선택할 수 있습니다.');return;\n"
+                  "    }\n"
+                  "    toggleIn(targetPick,id);sync();execute();\n"
+                  "  }"
+              )
+              if old_tap not in text:
+                  raise SystemExit('tap() anchor not found -- base HTML has drifted')
+              fill_fn = (
+                  "function fillAutoAssignTarget(id){\n"
+                  "    var t=AUTO_ASSIGN_TARGET;if(!t)return;\n"
+                  "    var group=t.type==='court'?(STATE.courts[t.index]||[]):(STATE.waitGroups[t.index]||[]);\n"
+                  "    if(group.indexOf(id)>=0){alert('이미 선택한 위치에 있는 멤버입니다.');return;}\n"
+                  "    if(group.length>=4){AUTO_ASSIGN_TARGET=null;alert('선택한 위치에는 빈자리가 없습니다.');if(typeof renderState==='function')renderState();return;}\n"
+                  "    var method=t.type==='court'?'assignMembersToCourt':'assignMembersToWaitGroup';\n"
+                  "    (async function(){\n"
+                  "      try{\n"
+                  "        var result=await window.server(method,[ADMIN_PIN_VALUE,t.index,[id]]);\n"
+                  "        if(group.length+1>=4)AUTO_ASSIGN_TARGET=null;\n"
+                  "        if(typeof renderState==='function')renderState(result&&result.state?result.state:result);\n"
+                  "      }catch(error){alert(error&&error.message||error);}\n"
+                  "    })();\n"
+                  "  }\n"
+                  "  "
+              )
+              new_tap = old_tap.replace(
+                  "    if(event&&event.target&&event.target.closest('button.small'))return;\n",
+                  "    if(event&&event.target&&event.target.closest('button.small'))return;\n"
+                  "    /* jmAutoAssignTargetFillFixV1 */\n"
+                  "    if(typeof AUTO_ASSIGN_TARGET!=='undefined'&&AUTO_ASSIGN_TARGET){\n"
+                  "      if(event){event.preventDefault();event.stopPropagation();}\n"
+                  "      fillAutoAssignTarget(String(id));\n"
+                  "      return;\n"
+                  "    }\n",
+                  1
+              )
+              text = text.replace(old_tap, fill_fn + new_tap, 1)
+          if marker not in text:
+              raise SystemExit('auto-assign target fill fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmAutoAssignTargetFillFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'function fillAutoAssignTarget' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmUnlimitedPaintIdempotentFix'
           if marker not in text:
               # installJayumintonAdminUnlimitedSelectionV2072 -- the foundational
@@ -897,13 +1015,15 @@ jobs:
           grep -F 'jmBatchAssignSingleRpcV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmBottomActiveButtonV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmBottomActiveButton' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmAutoAssignTargetFillFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'function fillAutoAssignTarget' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.34-bottom-active-button.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.34-bottom-active-button.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.34-bottom-active-button.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.35-target-fill-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.35-target-fill-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.35-target-fill-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -931,20 +1051,22 @@ jobs:
           grep -F 'jmBatchAssignSingleRpcV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActiveButtonV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActiveButton' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmAutoAssignTargetFillFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'function fillAutoAssignTarget' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.34-bottom-active-button.apk"
+          APK="$ROOT/jayuminton-admin-v208.35-target-fill-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.34-bottom-active-button.apk
-          printf 'status=success\nversion=208.34\nfeature=bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20834-bottom-active-button.txt
-          git add releases/jayuminton-admin-v208.34-bottom-active-button.apk deployment/status/v20834-bottom-active-button.txt
-          git commit -m 'Publish admin v208.34: add 코트배정대기로 to the bottom fixed action row (order: 코트배정대기로/실행취소/수동배정/자동배정/새로고침, per the operations spec)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.35-target-fill-fix.apk
+          printf 'status=success\nversion=208.35\nfeature=auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20835-target-fill-fix.txt
+          git add releases/jayuminton-admin-v208.35-target-fill-fix.apk deployment/status/v20835-target-fill-fix.txt
+          git commit -m 'Publish admin v208.35: fix tap-empty-slot-then-tap-member placement so it actually fills the armed target instead of silently doing nothing' || exit 0
           git push origin HEAD:main
