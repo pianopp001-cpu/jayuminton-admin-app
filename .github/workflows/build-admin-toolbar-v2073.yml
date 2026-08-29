@@ -192,6 +192,97 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmUnifiedSwapMoveFixV1'
+          if marker not in text:
+              # v208.30: the multi-select toolbar has two separate modes -- 'move'
+              # (click an empty court/wait slot to place selected members there) and
+              # 'swap' (click an occupied card to exchange positions with it) -- but
+              # the always-visible bottom "자리교환" button only ever triggers 'swap'
+              # mode (it clicks the toolbar's [data-a="swap"] button). Since 'swap'
+              # mode's handleClick branch only recognizes clicks on member cards
+              # (mode==='swap'&&c), clicking an EMPTY court/wait slot while in swap
+              # mode does nothing at all -- exactly "코트에 멤버가 안들어가". 'move'
+              # mode already handles empty slots correctly, but nothing in the
+              # current UI exposes it as an always-visible button the way swap is.
+              # Requested fix: one button that does both -- click an empty slot to
+              # move there, click an occupied card to swap with it. Extend 'swap'
+              # mode's click handling to also recognize empty slots (reusing the
+              # exact same detection 'move' mode already uses), collecting a target
+              # list that can contain a mix of member-id strings (swap) and
+              # {type,key} location objects (move), then dispatch each target to the
+              # right RPC in executeSwapTargets(). 'move' mode and
+              # executeMoveTargets() are untouched -- kept as-is for anything that
+              # still starts 'move' mode directly.
+              old_exec = (
+                  "async function executeSwapTargets(){var src=Array.from(selected);if(src.length!==targets.length)return;setBusy(true);"
+                  "try{for(var i=0;i<src.length;i++)await rpc('swapMembers',[null,[src[i]],[targets[i]]]);"
+                  "await refresh();clearSelection();toast(src.length+'명 교환 완료');}"
+                  "catch(e){toast(e&&e.message||e,true);mode='';targets=[];}finally{setBusy(false);paint();}}"
+              )
+              new_exec = (
+                  "async function executeSwapTargets(){/* jmUnifiedSwapMoveFixV1 */var src=Array.from(selected);if(src.length!==targets.length)return;setBusy(true);"
+                  "try{for(var i=0;i<src.length;i++){var t=targets[i];"
+                  "if(t&&typeof t==='object'){await rpc('moveOrSwapMember',[null,src[i],t.type,t.type==='wait'?String(Number(t.key)-1):String(t.key),'']);}"
+                  "else{await rpc('swapMembers',[null,[src[i]],[t]]);}}"
+                  "await refresh();clearSelection();toast(src.length+'명 처리 완료');}"
+                  "catch(e){toast(e&&e.message||e,true);mode='';targets=[];}finally{setBusy(false);paint();}}"
+              )
+              if old_exec not in text:
+                  raise SystemExit('executeSwapTargets anchor not found -- base HTML has drifted')
+              text = text.replace(old_exec, new_exec, 1)
+
+              old_start = (
+                  "function startMode(next){if(!selected.size)return toast('멤버를 먼저 선택하세요.',true);"
+                  "mode=next;targets=[];paint();toast(next==='move'?'이동할 빈자리를 선택하세요.':'교환할 상대 멤버를 선택하세요.');}"
+              )
+              new_start = (
+                  "function startMode(next){if(!selected.size)return toast('멤버를 먼저 선택하세요.',true);"
+                  "mode=next;targets=[];paint();toast(next==='move'?'이동할 빈자리를 선택하세요.':'빈자리(이동) 또는 상대 멤버(교환)를 선택하세요.');}"
+              )
+              if old_start not in text:
+                  raise SystemExit('startMode anchor not found -- base HTML has drifted')
+              text = text.replace(old_start, new_start, 1)
+
+              old_click = (
+                  "function handleClick(ev){if(busy)return;var r=root();if(!r||!r.contains(ev.target))return;var c=cardFrom(ev.target);"
+                  "if(mode==='swap'&&c){var id=memberId(c);if(selected.has(id)||targets.indexOf(id)>=0)return;"
+                  "ev.preventDefault();ev.stopImmediatePropagation();targets.push(id);paint();"
+                  "if(targets.length===selected.size)executeSwapTargets();return;}"
+                  "if(mode==='move'){var empty=ev.target.closest&&ev.target.closest('.empty,.quick-empty-slot,[onclick*=\"handleEmptySlotTap\"],[onclick*=\"handleMemberWaitEmptyTap\"]');"
+                  "var t=parseEmpty(empty);if(t){ev.preventDefault();ev.stopImmediatePropagation();targets.push(t);paint();"
+                  "if(targets.length===selected.size)executeMoveTargets();}return;}"
+                  "if(!c)return;var id=memberId(c);ev.preventDefault();ev.stopImmediatePropagation();"
+                  "if(selected.has(id))selected.delete(id);else selected.add(id);paint();}"
+              )
+              new_click = (
+                  "function handleClick(ev){/* jmUnifiedSwapMoveFixV1 */if(busy)return;var r=root();if(!r||!r.contains(ev.target))return;var c=cardFrom(ev.target);"
+                  "if(mode==='swap'){"
+                  "if(c){var id=memberId(c);if(selected.has(id)||targets.indexOf(id)>=0)return;"
+                  "ev.preventDefault();ev.stopImmediatePropagation();targets.push(id);paint();"
+                  "if(targets.length===selected.size)executeSwapTargets();return;}"
+                  "var emptyS=ev.target.closest&&ev.target.closest('.empty,.quick-empty-slot,[onclick*=\"handleEmptySlotTap\"],[onclick*=\"handleMemberWaitEmptyTap\"]');"
+                  "var tS=parseEmpty(emptyS);if(tS){ev.preventDefault();ev.stopImmediatePropagation();targets.push(tS);paint();"
+                  "if(targets.length===selected.size)executeSwapTargets();}return;}"
+                  "if(mode==='move'){var empty=ev.target.closest&&ev.target.closest('.empty,.quick-empty-slot,[onclick*=\"handleEmptySlotTap\"],[onclick*=\"handleMemberWaitEmptyTap\"]');"
+                  "var t=parseEmpty(empty);if(t){ev.preventDefault();ev.stopImmediatePropagation();targets.push(t);paint();"
+                  "if(targets.length===selected.size)executeMoveTargets();}return;}"
+                  "if(!c)return;var id=memberId(c);ev.preventDefault();ev.stopImmediatePropagation();"
+                  "if(selected.has(id))selected.delete(id);else selected.add(id);paint();}"
+              )
+              if old_click not in text:
+                  raise SystemExit('handleClick anchor not found -- base HTML has drifted')
+              text = text.replace(old_click, new_click, 1)
+          if marker not in text:
+              raise SystemExit('unified swap/move fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmUnifiedSwapMoveFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmUnlimitedPaintIdempotentFix'
           if marker not in text:
               # installJayumintonAdminUnlimitedSelectionV2072 -- the foundational
@@ -730,13 +821,14 @@ jobs:
           grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmSyncPublicMemosDisabledDuplicateFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmUnifiedSwapMoveFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.29-memo-dedup.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.29-memo-dedup.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.29-memo-dedup.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.30-unified-swap-move.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.30-unified-swap-move.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.30-unified-swap-move.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -758,20 +850,21 @@ jobs:
           grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmSyncPublicMemosDisabledDuplicateFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmUnifiedSwapMoveFixV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.29-memo-dedup.apk"
+          APK="$ROOT/jayuminton-admin-v208.30-unified-swap-move.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.29-memo-dedup.apk
-          printf 'status=success\nversion=208.29\nfeature=memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20829-memo-dedup.txt
-          git add releases/jayuminton-admin-v208.29-memo-dedup.apk deployment/status/v20829-memo-dedup.txt
-          git commit -m 'Publish admin v208.29: fix member memo showing 3x on cards (disable two redundant render paths, keep adminVnextMemberBadges as the single source)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.30-unified-swap-move.apk
+          printf 'status=success\nversion=208.30\nfeature=unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20830-unified-swap-move.txt
+          git add releases/jayuminton-admin-v208.30-unified-swap-move.apk deployment/status/v20830-unified-swap-move.txt
+          git commit -m 'Publish admin v208.30: unify the swap button to also handle placing selected members into empty court/wait slots' || exit 0
           git push origin HEAD:main
