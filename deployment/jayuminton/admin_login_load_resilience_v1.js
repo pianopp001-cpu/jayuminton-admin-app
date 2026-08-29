@@ -84,16 +84,18 @@ async function attemptLoad(retryCount){
   try{
     await withTimeout(originalLoad(),SELF_TIMEOUT_MS,'상태 불러오기');
     hideStatus();
-    try{ if(typeof loadSystemStatus==='function') await withTimeout(loadSystemStatus(),SELF_TIMEOUT_MS,'시스템 상태'); }catch(err){
-      console.error('[jm-login-load-resilience] loadSystemStatus failed',err);
-      /* jmLoginLoadDiagnosticV1: this is the exact call that was observed
-         hanging completely (a corrupted window.server wrap chain producing
-         a microtask-starvation loop that even this file's own withTimeout
-         could never recover from -- fixed by jmServerWrapChainFixV1). Keep
-         the whole app usable (main render already succeeded above) but
-         alert so a system-status failure is never silently invisible. */
-      try{alert('[진단] openAdminApp:loadSystemStatus 실패 - '+String(err&&err.message||err));}catch(_e){}
-    }
+    /* jmSkipAutoSystemStatusV1: loadSystemStatus() only refreshes the minor
+       "최근 백업/저장 시각" status text -- nothing else in the app depends on
+       it. Repeatedly and reliably reproduced (live, against real production
+       data, instrumented) that calling it here freezes the entire JS main
+       thread completely -- even a setInterval heartbeat stops firing, and
+       no JS-level timeout (this file's own withTimeout included) can ever
+       recover from that, since a real hang here isn't a rejection this
+       code could catch. The exact internal cause wasn't pinned down, but
+       since nothing depends on this call succeeding, the safe fix is to
+       stop calling it automatically on every login instead of continuing
+       to guess. Main render (courts/members/wait-groups) already completed
+       above and does not depend on this. */
   }catch(err){
     console.error('[jm-login-load-resilience] loadState failed',err);
     if(retryCount<1){

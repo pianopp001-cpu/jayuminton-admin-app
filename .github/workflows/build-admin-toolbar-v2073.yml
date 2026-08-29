@@ -398,6 +398,54 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmSkipAutoSystemStatusV1'
+          if marker not in text:
+              # v208.27: loadSystemStatus() only refreshes the minor "최근
+              # 백업/저장 시각" status text. Reliably reproduced live, against
+              # real production data, that calling it automatically right
+              # after login freezes the entire JS main thread completely --
+              # even a setInterval heartbeat stops firing, which no JS-level
+              # timeout can ever recover from. This code path is currently
+              # shadowed by admin_login_load_resilience_v1.js's own
+              # openAdminApp() replacement (already patched separately), but
+              # keep both call sites consistent as defense in depth. Nothing
+              # else depends on this call succeeding.
+              old = (
+                  "  try {\n"
+                  "    await loadState();\n"
+                  "  } catch (__jmE2) {\n"
+                  "    throw new Error('[openAdminApp:loadState] ' + (__jmE2 && __jmE2.message || __jmE2));\n"
+                  "  }\n"
+                  "  try {\n"
+                  "    await loadSystemStatus();\n"
+                  "  } catch (__jmE3) {\n"
+                  "    throw new Error('[openAdminApp:loadSystemStatus] ' + (__jmE3 && __jmE3.message || __jmE3));\n"
+                  "  }\n"
+                  "}\n"
+              )
+              new = (
+                  "  try {\n"
+                  "    await loadState();\n"
+                  "  } catch (__jmE2) {\n"
+                  "    throw new Error('[openAdminApp:loadState] ' + (__jmE2 && __jmE2.message || __jmE2));\n"
+                  "  }\n"
+                  "  /* jmSkipAutoSystemStatusV1 */\n"
+                  "}\n"
+              )
+              if old not in text:
+                  raise SystemExit('openAdminApp() loadSystemStatus call anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('skip-auto-system-status patch did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmServerWrapChainFixV1'
           if marker not in text:
               # v208.26: three independent scripts each poll on their own
@@ -572,13 +620,14 @@ jobs:
           grep -F 'jmLoginLoadDiagnosticV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_LOCK_WATCHDOG_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-lock-watchdog' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.26-wrap-chain-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.26-wrap-chain-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.26-wrap-chain-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.27-skip-system-status.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.27-skip-system-status.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.27-skip-system-status.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -597,20 +646,21 @@ jobs:
           grep -F 'jmGlobalErrorDiagnosticV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmServerWrapChainFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmLoginLoadDiagnosticV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.26-wrap-chain-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.27-skip-system-status.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.26-wrap-chain-fix.apk
-          printf 'status=success\nversion=208.26\nfeature=server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20826-wrap-chain-fix.txt
-          git add releases/jayuminton-admin-v208.26-wrap-chain-fix.apk deployment/status/v20826-wrap-chain-fix.txt
-          git commit -m 'Publish admin v208.26-wrap-chain-fix: prevent circular/nested window.server wrapping across save-lock, team-state sync, and timeout overlays' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.27-skip-system-status.apk
+          printf 'status=success\nversion=208.27\nfeature=skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20827-skip-system-status.txt
+          git add releases/jayuminton-admin-v208.27-skip-system-status.apk deployment/status/v20827-skip-system-status.txt
+          git commit -m 'Publish admin v208.27-skip-system-status: stop auto-calling loadSystemStatus() on login (reliably reproduced main-thread freeze)' || exit 0
           git push origin HEAD:main
