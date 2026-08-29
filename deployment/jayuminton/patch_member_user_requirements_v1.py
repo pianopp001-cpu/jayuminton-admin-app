@@ -676,6 +676,10 @@ def assert_self_profile_contract(text: str) -> None:
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     text = text.replace(
+        "releases/jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk",
+        "releases/jayuminton-courtstatus-v1.6.42-md-final.apk",
+    )
+    text = text.replace(
         "#memberApp [data-member-id].jm-has-team{box-shadow:inset 4px 0 0 var(--jm-team-color)!important}",
         "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}",
     )
@@ -685,7 +689,7 @@ def patch(path: Path) -> None:
         text = text.replace(permanent_team_css, permanent_team_css + temporary_team_css, 1)
     apk_url = (
         "https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/"
-        "releases/jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk"
+        "releases/jayuminton-courtstatus-v1.6.42-md-final.apk"
     )
     text = text.replace(
         "https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/"

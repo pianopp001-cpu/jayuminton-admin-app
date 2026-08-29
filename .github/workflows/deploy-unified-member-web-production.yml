@@ -564,7 +564,7 @@ jobs:
           grep -F '↻ 현황 갱신' "$PUBLIC/index.html" >/dev/null
           grep -F '🎁 찬조' "$PUBLIC/index.html" >/dev/null
           grep -F 'NEW 신규' "$PUBLIC/index.html" >/dev/null
-          grep -F 'jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk' "$PUBLIC/index.html" >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.6.42-md-final.apk' "$PUBLIC/index.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$PUBLIC/index.html" >/dev/null
           ! grep -Eqi '<iframe' "$PUBLIC/index.html"
           ! grep -F 'script.google.com/macros/s/' "$PUBLIC/index.html"
@@ -648,7 +648,7 @@ jobs:
             grep -F "$marker" "$RUNNER_TEMP/member-live-after.html" >/dev/null
           done
           ! grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)' "$RUNNER_TEMP/member-live-after.html"
-          grep -F 'jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk' "$RUNNER_TEMP/member-live-after.html" >/dev/null
+          grep -F 'jayuminton-courtstatus-v1.6.42-md-final.apk' "$RUNNER_TEMP/member-live-after.html" >/dev/null
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/member-live-after.html" >/dev/null
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/member-live-after.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/member-live-after.html"
