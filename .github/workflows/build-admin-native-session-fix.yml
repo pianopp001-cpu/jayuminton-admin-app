@@ -1,5 +1,5 @@
 name: Build admin native session fix v208.34
-# base v208.34 toolbar APK (bottom 코트배정대기로 button)
+# retrigger: base v208.34 toolbar APK now published on main
 
 on:
   push:
