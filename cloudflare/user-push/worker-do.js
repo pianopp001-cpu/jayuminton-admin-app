@@ -119,8 +119,13 @@ function authorized(request, env, body, url) {
   return Boolean(env.INTERNAL_KEY) && supplied === String(env.INTERNAL_KEY);
 }
 function textFor(event, member) {
-  if (event.type === 'wait1_ready') return { title: '대기 1 안내', body: `${member.name || ''}님, 대기 1입니다. 라켓 들고 준비해 주세요.` };
   const roster = String(event.rosterNames || '').trim();
+  if (event.type === 'wait1_ready') return {
+    title: '대기 1 안내',
+    body: roster
+      ? `대기 1순위는 ${roster}님입니다. 라켓 들고 준비해 주세요.`
+      : `${member.name || ''}님, 대기 1입니다. 라켓 들고 준비해 주세요.`,
+  };
   return {
     title: '코트 입장 안내',
     body: roster

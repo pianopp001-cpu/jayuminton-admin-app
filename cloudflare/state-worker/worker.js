@@ -374,7 +374,10 @@ async function hmac(value, secret) {
   return bytesToBase64Url(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value))));
 }
 async function issueMemberSession(env, state, memberId) {
-  const payload = stringToBase64Url(JSON.stringify({ memberId: String(memberId || ''), passwordVersion: Number(state.settings.memberPasswordVersion || 1), expiresAt: Date.now() + 30 * 86400000 }));
+  // Member access remains valid until the administrator changes the member
+  // password.  The password version is the revocation boundary; never retain
+  // or re-send the raw password on the client.
+  const payload = stringToBase64Url(JSON.stringify({ memberId: String(memberId || ''), passwordVersion: Number(state.settings.memberPasswordVersion || 1), issuedAt: Date.now() }));
   return `${payload}.${await hmac(payload, String(env.INTERNAL_KEY || ''))}`;
 }
 async function issueAdminSession(env, state) {
@@ -388,7 +391,7 @@ async function verifyMemberSession(request, env, state) {
   const [payload, signature] = token.split('.');
   if (!payload || !signature || signature !== await hmac(payload, String(env.INTERNAL_KEY || ''))) throw new Error('unauthorized');
   const session = JSON.parse(base64UrlToString(payload));
-  if (Number(session.expiresAt) <= Date.now() || Number(session.passwordVersion) !== Number(state.settings.memberPasswordVersion || 1)) throw new Error('session_expired');
+  if (Number(session.passwordVersion) !== Number(state.settings.memberPasswordVersion || 1)) throw new Error('session_expired');
   if (session.memberId && !state.members.some(m => String(m.id) === String(session.memberId))) throw new Error('member_not_found');
   return session;
 }

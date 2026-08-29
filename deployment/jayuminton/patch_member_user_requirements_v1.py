@@ -19,6 +19,7 @@ REFRESH_STATUS_MARKER = "JAYUMINTON_MEMBER_REFRESH_STATUS_V1"
 SELF_INFO_MENU_MARKER = "JAYUMINTON_MEMBER_SELF_INFO_MENU_V1"
 MEMBER_FLAGS_MARKER = "JAYUMINTON_MEMBER_FLAGS_V1"
 MEMO_DEDUPE_MARKER = "JAYUMINTON_MEMBER_MEMO_DEDUPE_V1"
+COMPLETION_MARKER = "JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1"
 
 ADDON = r'''
 <script>
@@ -575,6 +576,39 @@ MEMO_DEDUPE_ADDON = r'''
 </script>
 '''
 
+COMPLETION_ADDON = r'''
+<style>
+/* JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1 */
+#memberApp [data-member-id].is-self-member{border:2px solid #facc15!important;outline:2px solid #facc15!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 6px #facc15!important;overflow:visible!important}
+#memberApp [data-member-id].is-self-member>.member-self-star{position:absolute!important;top:2px!important;right:2px!important;left:auto!important;width:auto!important;min-width:22px!important;height:15px!important;min-height:15px!important;padding:0 3px!important;border:1px solid #fff!important;border-radius:999px!important;background:#111827!important;color:#fff!important;font-size:7px!important;font-weight:950!important;line-height:13px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;white-space:nowrap!important;z-index:30!important;box-shadow:0 1px 3px rgba(15,23,42,.35)!important}
+#memberApp [data-member-id]>.member-public-memo{color:#d946ef!important;font-size:10px!important;font-weight:900!important;text-shadow:0 0 8px rgba(217,70,239,.18)!important}
+#jmMemberSelfMemoInput{font-size:11px!important;line-height:1.35!important;color:#d946ef!important;font-weight:850!important}
+</style>
+<script>
+(function installMemberRequirementsCompletionV1(){
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;if(window.__JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1__)return;window.__JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1__=true;
+  var queued=false;
+  function current(){try{var selected=typeof currentStoredWebPushMember==='function'?currentStoredWebPushMember():null,state=window.STATE||(typeof STATE!=='undefined'?STATE:null);return selected&&state&&Array.isArray(state.members)?state.members.find(function(member){return member&&String(member.id)===String(selected.id);})||null:null;}catch(error){return null;}}
+  function sync(){
+    queued=false;var member=current(),hasMemo=!!String(member&&member.publicMemo||'').trim();
+    document.querySelectorAll('#jmMemberSelfStatusMenu [data-action="내 정보 입력"]').forEach(function(button){button.textContent=hasMemo?'내 정보 수정':'내 정보 입력';});
+    var save=document.getElementById('jmMemberSelfMemoSaveBtn');if(save&&!save.disabled)save.textContent=hasMemo?'메모 수정':'메모 저장';
+    var input=document.getElementById('jmMemberSelfMemoInput');if(input)input.placeholder='간단한 내 메모 (예: C조, 구력4년, 생일)';
+  }
+  function schedule(){if(queued)return;queued=true;requestAnimationFrame(sync);}
+  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('DOMContentLoaded',schedule,{once:true});setInterval(schedule,1200);schedule();
+
+  window.detectMemberForegroundTransition=function(previousState,nextState){
+    if(IS_ADMIN||!previousState||!nextState)return;normalizeStateMemberProfiles(previousState);normalizeStateMemberProfiles(nextState);
+    var member=selectedWebPushMember();if(!member)return;var before=memberLocation(previousState,member.id),after=memberLocation(nextState,member.id),updatedAt=String(nextState.updatedAt||Date.now());
+    function names(state){var ids=state&&Array.isArray(state.waitGroups)&&Array.isArray(state.waitGroups[0])?state.waitGroups[0].slice(0,4):[];return ids.map(function(id){var item=(state.members||[]).find(function(candidate){return candidate&&String(candidate.id)===String(id);});return item?String(item.name||''):'';}).filter(Boolean);}
+    if(before.type==='wait'&&before.index===1&&after.type==='wait'&&after.index===0){var ready=names(nextState);showMemberForegroundAlert('대기 1순위 안내','대기1순위 입니다. 라켓 들고 준비해주세요.'+(ready.length?' 대기1: '+ready.join(', ')+'님':''),'wait1_'+member.id+'_'+updatedAt,'wait1_ready');}
+    if(before.type==='wait'&&before.index===0&&after.type==='court'){var courtNo=Number(after.index),roster=names(previousState);showMemberForegroundAlert('코트 배정 안내',courtNo+'번 코트 나왔습니다.'+(roster.length?' 대기1: '+roster.join(', ')+'님':'')+' '+courtNo+'번 코트로 들어가주세요.','court_'+courtNo+'_'+member.id+'_'+updatedAt,'court_assignment');}
+  };
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -703,6 +737,8 @@ def patch(path: Path) -> None:
         text = text.replace(marker, MEMBER_FLAGS_ADDON + "\n" + marker, 1)
     if MEMO_DEDUPE_MARKER not in text:
         text = text.replace(marker, MEMO_DEDUPE_ADDON + "\n" + marker, 1)
+    if COMPLETION_MARKER not in text:
+        text = text.replace(marker, COMPLETION_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)

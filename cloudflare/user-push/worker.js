@@ -166,8 +166,9 @@ async function memberRecords(env, memberId) {
 }
 
 function notificationText(event, member) {
+  const roster = String(event.rosterNames || '').trim();
   if (event.type === 'wait1_ready') {
-    return { title: '대기 1 안내', body: `${member.name || ''}님, 대기 1입니다. 라켓 들고 준비해 주세요.` };
+    return { title: '대기 1 안내', body: roster ? `대기 1순위는 ${roster}님입니다. 라켓 들고 준비해 주세요.` : `${member.name || ''}님, 대기 1입니다. 라켓 들고 준비해 주세요.` };
   }
   return { title: '코트 입장 안내', body: `${member.name || ''}님, ${Number(event.courtNo || 0)}번 코트로 입장해 주세요.` };
 }
@@ -191,6 +192,7 @@ async function sendFcm(env, accessToken, projectId, event, member, record) {
     body: copy.body,
     courtNo: String(event.courtNo || ''),
     expectedCourtNo: String(event.expectedCourtNo || ''),
+    rosterNames: String(event.rosterNames || ''),
     repeatCount: '1',
   };
   const android = { priority: 'high', ttl: '600s' };
@@ -222,6 +224,7 @@ async function sendEvent(request, env, body, url) {
     assignmentId: clean(body.assignmentId, 500) || `${type}-${Date.now()}`,
     courtNo: Number(body.courtNo || 0),
     expectedCourtNo: Number(body.expectedCourtNo || 0),
+    rosterNames: members.map(member => member.name).filter(Boolean).join(', '),
   };
   const credentials = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON || '{}');
   const accessToken = await googleAccessToken(env);

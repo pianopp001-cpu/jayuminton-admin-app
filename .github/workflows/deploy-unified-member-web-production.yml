@@ -525,6 +525,7 @@ jobs:
           grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_IDENTITY_BIND_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_REFRESH_STATUS_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1' "$PUBLIC/index.html" >/dev/null
           grep -F '내 정보 입력' "$PUBLIC/index.html" >/dev/null
           grep -F 'jmMemberSelfMemoInput' "$PUBLIC/index.html" >/dev/null
 
@@ -628,6 +629,7 @@ jobs:
             'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' \
             'JAYUMINTON_MEMBER_IDENTITY_BIND_V2' \
             'JAYUMINTON_MEMBER_REFRESH_STATUS_V1' \
+            'JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1' \
             'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \

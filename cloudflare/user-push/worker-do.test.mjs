@@ -9,6 +9,8 @@ assert.ok(src.includes("const memberById = Object.fromEntries(members.map(m => [
 assert.ok(src.includes("repeatCount: '8'"), '8 vibration groups payload missing');
 assert.ok(src.includes("pulsesPerGroup: '3'"), '3 pulses per group payload missing');
 assert.ok(src.includes("stopOnConfirm: 'true'"), 'confirm-stop payload missing');
+assert.ok(src.includes("rosterNames: members.map(member => member.name).filter(Boolean).join(', ')"), 'wait-1 roster payload missing');
+assert.ok(src.includes('대기 1순위는 ${roster}님입니다.'), 'wait-1 roster notification copy missing');
 assert.ok(src.includes("restricted_package_name = 'com.jayuminton.user'"), 'current user app package restriction missing');
 assert.ok(src.includes("url.pathname === '/api/push/event'"), 'push event endpoint missing');
 assert.ok(src.includes("if (!members.length || members.length > 4)"), 'assignment target cardinality guard missing');
