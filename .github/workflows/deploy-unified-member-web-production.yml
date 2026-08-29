@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -344,10 +344,23 @@ jobs:
                   "    requestSwap(memberId);\n"
                   "  };"
               )
-              if old_tap not in text:
-                  raise SystemExit('handleAnywhereMemberTap anchor not found -- live page has drifted')
-              text = text.replace(old_tap, new_tap, 1)
-              path.write_text(text, encoding='utf-8')
+              already_safe = (
+                  "window.handleAnywhereMemberTap = function(memberId, event)" in text
+                  and "currentStoredWebPushMember" in text
+                  and "if(!self||!self.id)" in text
+              )
+              if already_safe:
+                  text = text.replace(
+                      "window.handleAnywhereMemberTap = function(memberId, event)",
+                      "/* JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1 */\n  window.handleAnywhereMemberTap = function(memberId, event)",
+                      1,
+                  )
+                  path.write_text(text, encoding='utf-8')
+              elif old_tap not in text:
+                  raise SystemExit('handleAnywhereMemberTap anchor not found and equivalent self-identify guard is absent')
+              else:
+                  text = text.replace(old_tap, new_tap, 1)
+                  path.write_text(text, encoding='utf-8')
           PY
 
           grep -F 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1' "$PUBLIC/index.html" >/dev/null
