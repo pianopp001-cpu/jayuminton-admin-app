@@ -1,0 +1,6 @@
+status=success
+version=208.36
+feature=render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing
+base=v207.2-unlimited-selection
+run_id=33280692466
+sha256=43c57dcba2690ead3d361b0aa9d2f178d3aa71da2aea0ed54812319c78918683
