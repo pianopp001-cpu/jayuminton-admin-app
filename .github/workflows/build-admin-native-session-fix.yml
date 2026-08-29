@@ -1,4 +1,5 @@
 name: Build admin native session fix v208.26
+# retrigger: rebuild unified APK against the newly published v208.26-wrap-chain-fix base
 
 on:
   push:
