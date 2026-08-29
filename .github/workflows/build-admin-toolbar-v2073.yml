@@ -874,7 +874,7 @@ jobs:
           grep -F 'jmTagReturnButtonIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SMART_PLACEMENT_V2081__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F "setProperty('position','fixed','important')" "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F '자리교환' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '수동배정' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'swapBtn.click()' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F "SELECTED.clear()" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'window.__jmDuplicateNameFixV1' "$ROOT/assets/admin/index.html" >/dev/null
@@ -899,9 +899,9 @@ jobs:
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.32-assign-single-rpc.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.32-assign-single-rpc.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.32-assign-single-rpc.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.33-manual-assign-label.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.33-manual-assign-label.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.33-manual-assign-label.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -932,15 +932,15 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.32-assign-single-rpc.apk"
+          APK="$ROOT/jayuminton-admin-v208.33-manual-assign-label.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.32-assign-single-rpc.apk
-          printf 'status=success\nversion=208.32\nfeature=batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20832-assign-single-rpc.txt
-          git add releases/jayuminton-admin-v208.32-assign-single-rpc.apk deployment/status/v20832-assign-single-rpc.txt
-          git commit -m 'Publish admin v208.32: fix the real production empty-slot handler (admin_toolbar_position_colors_v2073.js assign()) to batch-place selected members with one atomic RPC call instead of one per member, and fix a court-slot onclick corruption bug in wait4Box()' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.33-manual-assign-label.apk
+          printf 'status=success\nversion=208.33\nfeature=manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20833-manual-assign-label.txt
+          git add releases/jayuminton-admin-v208.33-manual-assign-label.apk deployment/status/v20833-manual-assign-label.txt
+          git commit -m 'Publish admin v208.33: rename the bottom 자리교환 button to 수동배정 (behavior unchanged -- select members then click one empty slot already batch-places them; the button only additionally enables card-to-card swap mode)' || exit 0
           git push origin HEAD:main
