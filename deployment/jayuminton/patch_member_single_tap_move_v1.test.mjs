@@ -63,8 +63,9 @@ context.STATE.courts['1'] = [];
 context.window.handleMemberWaitEmptyTap(1, 0, event);
 await new Promise(resolve => setTimeout(resolve, 0));
 
-assert.equal(calls[1].name, 'memberMoveSelf');
-assert.equal(JSON.stringify(calls[1].args[2]), JSON.stringify({ type: 'wait', key: '2' }));
+const moveCalls = calls.filter(call => call.name === 'memberMoveSelf');
+assert.equal(moveCalls[1].name, 'memberMoveSelf');
+assert.equal(JSON.stringify(moveCalls[1].args[2]), JSON.stringify({ type: 'wait', key: '2' }));
 assert.deepEqual(context.STATE.waitGroups[1], ['member-1']);
 assert.equal(alerts.length, 0);
 

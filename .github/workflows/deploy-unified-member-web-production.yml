@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/deploy-unified-member-web-production.yml'
       - 'deployment/jayuminton/patch_member_user_requirements_v1.py'
+      - 'deployment/jayuminton/patch_member_single_tap_move_v1.py'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
   workflow_dispatch: {}
 
@@ -85,6 +86,7 @@ jobs:
 
           cp "$PUBLIC/index.html" "$RUNNER_TEMP/member-before.html"
           python3 deployment/jayuminton/patch_member_user_requirements_v1.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_single_tap_move_v1.py "$PUBLIC/index.html"
           python3 - "$PUBLIC/index.html" <<'PY'
           from pathlib import Path
           import sys
@@ -261,6 +263,7 @@ jobs:
                 + btnHtml('도착전')
                 + btnHtml('휴식')
                 + btnHtml('귀가')
+                + btnHtml('내 정보 입력')
                 + btnHtml('선택취소','#ef4444')
                 + '</div>';
               document.body.appendChild(overlay);
@@ -270,6 +273,11 @@ jobs:
                 var action=b.getAttribute('data-action');
                 closeSelfStatusMenu();
                 if(action==='선택취소') return;
+                if(action==='내 정보 입력'){
+                  if(typeof openMemberSelfSettings==='function')openMemberSelfSettings();
+                  setTimeout(function(){var input=document.getElementById('jmMemberSelfMemoInput');if(input){input.scrollIntoView({block:'center'});input.focus();}},80);
+                  return;
+                }
                 applySelfStatus(memberId, action);
               });
             }
@@ -501,6 +509,10 @@ jobs:
           PY
 
           grep -F 'JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_IDENTITY_BIND_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_REFRESH_STATUS_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F '내 정보 입력' "$PUBLIC/index.html" >/dev/null
           grep -F 'jmMemberSelfMemoInput' "$PUBLIC/index.html" >/dev/null
 
           grep -F 'JAYUMINTON_MEMBER_USER_REQUIREMENTS_V1' "$PUBLIC/index.html" >/dev/null
@@ -600,6 +612,9 @@ jobs:
             'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' \
             'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1' \
             'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1' \
+            'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' \
+            'JAYUMINTON_MEMBER_IDENTITY_BIND_V2' \
+            'JAYUMINTON_MEMBER_REFRESH_STATUS_V1' \
             'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \

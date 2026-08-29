@@ -14,6 +14,8 @@ SELF_PROFILE_MARKER = "JAYUMINTON_MEMBER_SELF_PROFILE_EDIT_V1"
 TEAM_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_TEAM_ONLY_BADGES_V2"
 SELF_MEMO_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2"
 TEAM_CARD_LAYOUT_V3_MARKER = "JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5"
+IDENTITY_BIND_MARKER = "JAYUMINTON_MEMBER_IDENTITY_BIND_V2"
+REFRESH_STATUS_MARKER = "JAYUMINTON_MEMBER_REFRESH_STATUS_V1"
 
 ADDON = r'''
 <script>
@@ -359,6 +361,8 @@ TEAM_CARD_LAYOUT_V3_ADDON = r'''
 /* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5 */
 #memberApp [data-member-id]{position:relative!important;inset:auto!important;transform:none!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:center!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:52px!important;max-height:none!important;box-sizing:border-box!important;overflow:hidden!important;contain:paint!important}
 #memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}
+#memberApp [data-member-id].jm-temp-pair{outline:0!important;box-shadow:0 0 0 4px #facc15!important;border:2px solid #facc15!important}
+#memberApp [data-member-id].jm-has-team.jm-temp-pair{outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:3px!important;box-shadow:0 0 0 6px #facc15!important;border:2px solid #facc15!important}
 #memberApp [data-member-id]>.name,#memberApp [data-member-id]>.member-name,#memberApp [data-member-id]>.quick-member-name,#memberApp [data-member-id]>.member-info-detail,#memberApp [data-member-id]>.member-public-memo,#memberApp [data-member-id]>.jm-public-memo,#memberApp [data-member-id]>.member-status-list{position:static!important;inset:auto!important;transform:none!important;display:block!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;max-height:none!important;box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;text-align:center!important;white-space:normal!important;overflow:hidden!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
 #memberApp [data-member-id]>.member-self-star{top:2px!important;right:2px!important}
 #memberApp [data-member-id]>.jm-member-badges{position:static!important;inset:auto!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:center!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;box-sizing:border-box!important;margin:2px 0 0!important;padding:0!important;overflow:hidden!important}
@@ -419,6 +423,77 @@ MEMBER_MESSAGE_ADDON = r'''
   window.confirmJmDirectMessage=function(){if(activeId)remember(activeId);activeId='';stop();var box=document.getElementById('jmDirectMessageAlert');if(box)box.classList.add('hidden');};
   function check(){var me=selected(),s=state();if(!me||!s||!Array.isArray(s.memberMessages)||activeId)return;var done=seen();var next=s.memberMessages.filter(function(item){return item&&done.indexOf(String(item.id||''))<0;}).slice(-1)[0];if(next)show(next);}
   setInterval(check,1200);document.addEventListener('visibilitychange',function(){if(document.hidden)stop();else check();});window.addEventListener('pagehide',stop);setTimeout(check,300);
+})();
+</script>
+'''
+
+IDENTITY_BIND_ADDON = r'''
+<style id="jayuminton-member-identity-confirm-v2-style">
+#jmMemberIdentityConfirm{position:fixed;z-index:2147483647;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.58)}
+#jmMemberIdentityConfirm.hidden{display:none!important}.jm-identity-confirm-card{width:min(92vw,420px);padding:18px;border-radius:16px;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.38);text-align:center}.jm-identity-confirm-card p{margin:0 0 16px;font-size:17px;font-weight:900}.jm-identity-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.jm-identity-confirm-actions button{min-height:46px;border:0;border-radius:11px;font-size:15px;font-weight:900}.jm-identity-confirm-cancel{background:#e2e8f0;color:#334155}.jm-identity-confirm-ok{background:#315efb;color:#fff}
+</style>
+<div id="jmMemberIdentityConfirm" class="hidden" role="dialog" aria-modal="true"><div class="jm-identity-confirm-card"><p id="jmMemberIdentityConfirmText"></p><div class="jm-identity-confirm-actions"><button type="button" class="jm-identity-confirm-cancel">취소</button><button type="button" class="jm-identity-confirm-ok">네, 저예요</button></div></div></div>
+<script>
+/* JAYUMINTON_MEMBER_IDENTITY_BIND_V2 */
+(function installMemberIdentityBindV2(){
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+  if(window.__JAYUMINTON_MEMBER_IDENTITY_BIND_V2__)return;
+  window.__JAYUMINTON_MEMBER_IDENTITY_BIND_V2__=true;
+  var originalSelect=window.selectMemberSelf,binding=false,boundKey='jayuminton_member_bound_session_v2';
+  function find(id){try{return (STATE.members||[]).find(function(m){return m&&String(m.id)===String(id);})||null;}catch(_){return null;}}
+  function ask(member){return new Promise(function(resolve){
+    var box=document.getElementById('jmMemberIdentityConfirm'),label=document.getElementById('jmMemberIdentityConfirmText');
+    if(!box||!label){resolve(confirm(String(member.name||'선택한 회원')+'님이 본인인가요?'));return;}
+    label.textContent=String(member.name||'선택한 회원')+'님이 본인인가요?';box.classList.remove('hidden');
+    var cancel=box.querySelector('.jm-identity-confirm-cancel'),ok=box.querySelector('.jm-identity-confirm-ok');
+    function done(value){box.classList.add('hidden');cancel.onclick=null;ok.onclick=null;resolve(value);}
+    cancel.onclick=function(){done(false);};ok.onclick=function(){done(true);};
+  });}
+  async function bind(member,quiet){
+    if(binding||!member||!member.id)return false;
+    var token=typeof currentMemberSessionToken==='function'?String(currentMemberSessionToken()||''):'';
+    if(!token)return false;
+    var signature=String(member.id)+'|'+token;
+    try{if(quiet&&localStorage.getItem(boundKey)===signature)return true;}catch(_){}
+    binding=true;
+    try{
+      var result=await server('bindMemberIdentity',[token,String(member.id)]),nextToken=String(result&&result.sessionToken||'');
+      if(!nextToken)throw new Error('본인 인증 세션을 만들지 못했습니다.');
+      if(typeof storeMemberSessionToken==='function')storeMemberSessionToken(nextToken);
+      try{localStorage.setItem(boundKey,String(member.id)+'|'+nextToken);}catch(_){}
+      return true;
+    }catch(error){if(!quiet)alert(String(error&&error.message||error||'본인 확인에 실패했습니다.'));return false;}
+    finally{binding=false;}
+  }
+  window.selectMemberSelf=async function(memberId,options){
+    var member=find(memberId);if(!member)return false;
+    if(!(options&&options.skipConfirm===true)&&!(await ask(member)))return false;
+    if(!(await bind(member,false)))return false;
+    if(typeof originalSelect==='function')originalSelect.call(window,String(member.id));
+    if(typeof refreshMemberState==='function')await refreshMemberState();
+    return true;
+  };
+  async function migrate(){var stored=typeof currentStoredWebPushMember==='function'?currentStoredWebPushMember():null,member=stored&&find(stored.id);if(member&&await bind(member,true)&&typeof refreshMemberState==='function')refreshMemberState();}
+  setTimeout(migrate,600);setTimeout(migrate,2200);
+})();
+</script>
+'''
+
+REFRESH_STATUS_ADDON = r'''
+<script>
+/* JAYUMINTON_MEMBER_REFRESH_STATUS_V1 */
+(function installMemberRefreshStatusV1(){
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+  if(window.__JAYUMINTON_MEMBER_REFRESH_STATUS_V1__)return;
+  window.__JAYUMINTON_MEMBER_REFRESH_STATUS_V1__=true;
+  var original=window.refreshMemberState,busy=false;if(typeof original!=='function')return;
+  window.refreshMemberState=async function(){
+    if(busy)return;busy=true;var button=document.getElementById('memberRefreshButton');
+    if(button){button.disabled=true;button.textContent='↻ 동기화 중...';}
+    try{var result=await original.apply(this,arguments);if(button)button.textContent='✓ 동기화 완료';setTimeout(function(){if(button)button.textContent='↻ 현황 갱신';},1200);return result;}
+    catch(error){if(button)button.textContent='! 동기화 실패';setTimeout(function(){if(button)button.textContent='↻ 현황 갱신';},1800);throw error;}
+    finally{if(button)button.disabled=false;busy=false;}
+  };
 })();
 </script>
 '''
@@ -493,6 +568,10 @@ def patch(path: Path) -> None:
         "#memberApp [data-member-id].jm-has-team{box-shadow:inset 4px 0 0 var(--jm-team-color)!important}",
         "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}",
     )
+    permanent_team_css = "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}"
+    temporary_team_css = "\n#memberApp [data-member-id].jm-temp-pair{outline:0!important;box-shadow:0 0 0 4px #facc15!important;border:2px solid #facc15!important}\n#memberApp [data-member-id].jm-has-team.jm-temp-pair{outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:3px!important;box-shadow:0 0 0 6px #facc15!important;border:2px solid #facc15!important}"
+    if "#memberApp [data-member-id].jm-temp-pair{outline:0!important" not in text and permanent_team_css in text:
+        text = text.replace(permanent_team_css, permanent_team_css + temporary_team_css, 1)
     apk_url = (
         "https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/"
         "releases/jayuminton-courtstatus-v1.3.4-cloudflare-complete.apk"
@@ -537,6 +616,10 @@ def patch(path: Path) -> None:
         text = text.replace(marker, SELF_MEMO_ONLY_V2_ADDON + "\n" + marker, 1)
     if TEAM_CARD_LAYOUT_V3_MARKER not in text:
         text = text.replace(marker, TEAM_CARD_LAYOUT_V3_ADDON + "\n" + marker, 1)
+    if IDENTITY_BIND_MARKER not in text:
+        text = text.replace(marker, IDENTITY_BIND_ADDON + "\n" + marker, 1)
+    if REFRESH_STATUS_MARKER not in text:
+        text = text.replace(marker, REFRESH_STATUS_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)

@@ -122,6 +122,28 @@ addon = r'''
   window.memberWaitEmptySlotCard=function(groupIndex,slotIndex){
     return '<div class="person empty" onclick="return handleMemberWaitEmptyTap('+Number(groupIndex)+','+Number(slotIndex)+',event)" title="한 번 터치하면 이 대기자리에 들어갑니다"><span class="empty-slot-label">비어 있음</span><small>한번 탭</small></div>';
   };
+
+  function wireCourtEmptySlots(){
+    if(typeof document==='undefined')return;
+    var root=document.getElementById('memberCourts');if(!root)return;
+    for(var courtNo=1;courtNo<=4;courtNo+=1){
+      (function(no){
+        var court=root.querySelector('.court-'+no);if(!court)return;
+        court.querySelectorAll('.person.empty').forEach(function(slot,slotIndex){
+          if(slot.dataset.jmSingleTapMoveV2==='1')return;
+          slot.dataset.jmSingleTapMoveV2='1';
+          slot.title='한 번 터치하면 이 코트 자리에 들어갑니다';
+          slot.style.cursor='pointer';
+          slot.addEventListener('click',function(event){handleEmptySlotTap('court',no,slotIndex,event);});
+        });
+      })(courtNo);
+    }
+  }
+  if(typeof document!=='undefined'){
+    if(typeof MutationObserver!=='undefined')new MutationObserver(wireCourtEmptySlots).observe(document.documentElement,{childList:true,subtree:true});
+    document.addEventListener('DOMContentLoaded',wireCourtEmptySlots,{once:true});
+    setInterval(wireCourtEmptySlots,1800);wireCourtEmptySlots();
+  }
 })();
 </script>
 '''
@@ -141,6 +163,7 @@ required = [
     "server('memberMoveSelf'",
     "server('getPublicState'",
     "한 번 터치하면 이 대기자리에 들어갑니다",
+    "wireCourtEmptySlots",
 ]
 for needle in required:
     if needle not in text:

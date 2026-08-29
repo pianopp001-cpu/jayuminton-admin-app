@@ -576,6 +576,17 @@ export async function legacyRpc(request, env, name, args) {
     const session = await verifyMemberSession(bearerRequest(request, token), env, state);
     return { ok: true, version: String(state.settings.memberPasswordVersion || 1), memberId: String(session.memberId || ''), sessionToken: token };
   }
+  if (name === 'bindMemberIdentity') {
+    await verifyMemberSession(bearerRequest(request, token), env, state);
+    const memberId = String(values[1] || '');
+    if (!memberId || !state.members.some(member => String(member.id) === memberId)) throw new Error('member_not_found');
+    return {
+      ok: true,
+      version: String(state.settings.memberPasswordVersion || 1),
+      memberId,
+      sessionToken: await issueMemberSession(env, state, memberId),
+    };
+  }
   if (name === 'getPublicState') {
     try { await verifyAdminSession(bearerRequest(request, token), env, state); return adminState(state); }
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
@@ -630,7 +641,7 @@ export async function legacyRpc(request, env, name, args) {
 
   const memberNames = new Set(['updateMyProfile','memberMoveSelf','memberReturnSelfToWait','memberMoveToWaitGroup','memberLeaveWaitGroup','memberRequestAnywhereSwap','memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap','memberCancelAnywhereSwap','memberAcceptAnywhereSwap','memberRejectAnywhereSwap']);
   if (memberNames.has(name)) {
-    const session = await verifyMemberSession(bearerRequest(request, token), env, state); const memberId = String(session.memberId || values[1] || '');
+    const session = await verifyMemberSession(bearerRequest(request, token), env, state); const memberId = String(session.memberId || '');
     if (!memberId || (values[1] && String(values[1]) !== memberId)) throw new Error('member_identity_required');
     if (name === 'memberGetAnywhereSwapRequest') return latestSwap(state, r => r.targetId === memberId);
     if (name === 'memberGetAnywhereOutgoingSwap') return latestSwap(state, r => r.requesterId === memberId);
@@ -715,7 +726,7 @@ export default {
       return reply({ ok: true, token: await issueAdminSession(env, state), state: adminState(state) });
     }
     if (url.pathname === '/api/admin/state' && request.method === 'GET') {
-      try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) });
+      try { const state = await readState(env.DB); await verifyAdminSession(request, env, state); return reply({ ok: true, state: adminState(state) }); }
       catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
     }
     if (url.pathname === '/api/admin/rpc' && request.method === 'POST') {
