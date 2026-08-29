@@ -1,0 +1,6 @@
+status=success
+version=208.30
+feature=unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing
+base=v207.2-unlimited-selection
+run_id=33232640043
+sha256=0f0172c714fa031a5addd02683f4e94f3a0d7a5b73d7e79684fd558f600e7d63
