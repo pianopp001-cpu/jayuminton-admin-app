@@ -78,6 +78,57 @@ jobs:
               raise SystemExit('syncPublicMemos idempotent fix did not apply')
           p.write_text(text, encoding='utf-8')
           PY
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmSyncPublicMemosNodePlacementFixV1'
+          if marker not in text:
+              # v208.28: THE actual root cause of the "freezes right after login,
+              # every time, on any real data" bug -- found via elimination testing
+              # (bisecting out save-lock/team-state/refreshCurrentMemberPassword one
+              # at a time against real production data with heartbeat+entry/exit
+              # instrumented logging) and confirmed by reading exactly what this
+              # branch does. When a member has a non-empty publicMemo but their card
+              # has no '.member-info-detail' element (happens whenever both grade
+              # and experience are empty -- memberInfoDetailHtml() returns '' in
+              # that case, so the span is never rendered at all), `target` falls
+              # back to `card` itself, and insertAdjacentElement('afterend', node)
+              # inserts the new memo span as CARD'S OWN NEXT SIBLING -- outside of
+              # card, not inside it. The next syncPublicMemos() call (triggered by
+              # this very insertion, via the file's own MutationObserver on
+              # document.documentElement) does card.querySelector('.member-public-
+              # memo',...) which can never find a node that lives outside card, so
+              # it inserts ANOTHER one, forever: real production data has exactly
+              # one member with a memo and no grade/experience, so this fires on
+              # every single login. jmSyncPublicMemosIdempotentFix (v208.20) only
+              # guarded the update-existing-node path; this create-node path was
+              # never idempotent to begin with. Fix: append directly to card when
+              # there's no '.member-info-detail' anchor, so the node is always a
+              # findable descendant of card on the next pass. Empirically verified
+              # against real production data with heartbeat instrumentation: with
+              # only this fix (save-lock/team-state left fully intact), the login
+              # completes and heartbeat keeps running indefinitely -- courts,
+              # members and wait1-5 all render correctly.
+              old = (
+                  "if(memo&&!node){node=document.createElement('span');node.className='member-public-memo';"
+                  "var target=card.querySelector('.member-info-detail')||card;target.insertAdjacentElement('afterend',node);}"
+              )
+              new = (
+                  "if(memo&&!node){node=document.createElement('span');node.className='member-public-memo';"
+                  "/* jmSyncPublicMemosNodePlacementFixV1 */var target=card.querySelector('.member-info-detail');"
+                  "if(target)target.insertAdjacentElement('afterend',node);else card.appendChild(node);}"
+              )
+              if old not in text:
+                  raise SystemExit('syncPublicMemos node-placement anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('syncPublicMemos node-placement fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmSyncPublicMemosIdempotentFix' "$ROOT/assets/admin/index.html" >/dev/null
 
           python3 - "$ROOT/assets/admin/index.html" <<'PY'
@@ -621,13 +672,14 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_LOCK_WATCHDOG_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-lock-watchdog' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.27-skip-system-status.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.27-skip-system-status.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.27-skip-system-status.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.28-memo-loop-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.28-memo-loop-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.28-memo-loop-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -647,20 +699,21 @@ jobs:
           grep -F 'jmServerWrapChainFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmLoginLoadDiagnosticV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.27-skip-system-status.apk"
+          APK="$ROOT/jayuminton-admin-v208.28-memo-loop-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.27-skip-system-status.apk
-          printf 'status=success\nversion=208.27\nfeature=skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20827-skip-system-status.txt
-          git add releases/jayuminton-admin-v208.27-skip-system-status.apk deployment/status/v20827-skip-system-status.txt
-          git commit -m 'Publish admin v208.27-skip-system-status: stop auto-calling loadSystemStatus() on login (reliably reproduced main-thread freeze)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.28-memo-loop-fix.apk
+          printf 'status=success\nversion=208.28\nfeature=memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20828-memo-loop-fix.txt
+          git add releases/jayuminton-admin-v208.28-memo-loop-fix.apk deployment/status/v20828-memo-loop-fix.txt
+          git commit -m 'Publish admin v208.28: fix syncPublicMemos() infinite DOM-insertion loop for members with a memo but no grade/experience (root cause of the login freeze)' || exit 0
           git push origin HEAD:main
