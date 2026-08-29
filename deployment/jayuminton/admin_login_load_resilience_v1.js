@@ -84,7 +84,16 @@ async function attemptLoad(retryCount){
   try{
     await withTimeout(originalLoad(),SELF_TIMEOUT_MS,'상태 불러오기');
     hideStatus();
-    try{ if(typeof loadSystemStatus==='function') await withTimeout(loadSystemStatus(),SELF_TIMEOUT_MS,'시스템 상태'); }catch(err){ console.error('[jm-login-load-resilience] loadSystemStatus failed',err); }
+    try{ if(typeof loadSystemStatus==='function') await withTimeout(loadSystemStatus(),SELF_TIMEOUT_MS,'시스템 상태'); }catch(err){
+      console.error('[jm-login-load-resilience] loadSystemStatus failed',err);
+      /* jmLoginLoadDiagnosticV1: this is the exact call that was observed
+         hanging completely (a corrupted window.server wrap chain producing
+         a microtask-starvation loop that even this file's own withTimeout
+         could never recover from -- fixed by jmServerWrapChainFixV1). Keep
+         the whole app usable (main render already succeeded above) but
+         alert so a system-status failure is never silently invisible. */
+      try{alert('[진단] openAdminApp:loadSystemStatus 실패 - '+String(err&&err.message||err));}catch(_e){}
+    }
   }catch(err){
     console.error('[jm-login-load-resilience] loadState failed',err);
     if(retryCount<1){
@@ -92,6 +101,13 @@ async function attemptLoad(retryCount){
       setTimeout(function(){ attemptLoad(retryCount+1); },1500);
     }else{
       showStatus('상태를 불러오지 못했습니다: '+String(err&&err.message||err||'알 수 없는 오류'),true);
+      /* jmLoginLoadDiagnosticV1: this status banner is easy to miss/dismiss
+         without reading it, and it's the ONLY place this failure was ever
+         surfaced -- window.openAdminApp is fully replaced by this file, so
+         v208.25's diagnostic alert()s on the original function never run
+         for the real login path. Force an alert too so a final failure
+         here can't go unnoticed again. */
+      try{alert('[진단] openAdminApp:loadState 최종 실패 - '+String(err&&err.message||err||'알 수 없는 오류'));}catch(_e){}
     }
   }
 }
@@ -112,6 +128,8 @@ window.openAdminApp=async function(credential){
     if(el)el.textContent=pw;
   }catch(err){
     console.error('[jm-login-load-resilience] getCurrentMemberPassword failed/timed out, continuing to load state anyway',err);
+    /* jmLoginLoadDiagnosticV1 */
+    try{alert('[진단] openAdminApp:getCurrentMemberPassword 실패(계속 진행) - '+String(err&&err.message||err));}catch(_e){}
   }
 
   await attemptLoad(0);

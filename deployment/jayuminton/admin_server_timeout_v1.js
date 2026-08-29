@@ -15,9 +15,26 @@ window.__JAYUMINTON_ADMIN_SERVER_TIMEOUT_V1__=true;
    here) cancel the underlying fetch -- only bounds how long the UI waits
    on it. */
 var TIMEOUT_MS=20000;
+/* jmServerWrapChainFixV1: previously only checked the OUTERMOST window.server
+   for cur.__jmServerTimeoutV1. If the save-lock or team-state wrappers
+   re-wrapped window.server on top in between polls (each has its own
+   independent setInterval, none aware of the others), the outer function
+   lacked this flag, so this poll wrapped AGAIN underneath -- nesting this
+   timeout layer multiple times per real call. Walk the chain via __jmInner
+   instead of checking only the top, so this wrapper applies exactly once
+   regardless of what else has wrapped window.server since. */
+function jmChainHasTimeoutV1(fn){
+  var depth=0;
+  while(typeof fn==='function'&&depth<50){
+    if(fn.__jmServerTimeoutV1)return true;
+    fn=fn.__jmInner||fn.__original;
+    depth++;
+  }
+  return false;
+}
 function wrap(){
   var cur=window.server;
-  if(typeof cur!=='function'||cur.__jmServerTimeoutV1)return;
+  if(typeof cur!=='function'||jmChainHasTimeoutV1(cur))return;
   var wrapped=function(name,args){
     var call;
     try{call=cur.apply(this,arguments);}catch(err){return Promise.reject(err);}
@@ -35,6 +52,7 @@ function wrap(){
     });
   };
   wrapped.__jmServerTimeoutV1=true;
+  wrapped.__jmInner=cur;
   window.server=wrapped;
 }
 wrap();

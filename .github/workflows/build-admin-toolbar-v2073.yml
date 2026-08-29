@@ -398,6 +398,103 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmServerWrapChainFixV1'
+          if marker not in text:
+              # v208.26: three independent scripts each poll on their own
+              # setInterval and re-wrap window.server, checking only their OWN
+              # flag on the OUTERMOST current window.server -- save-lock
+              # (__jmCloudflareSaveLockV24, base HTML), team-state sync
+              # (__jmV2063, base HTML), and the timeout wrapper
+              # (__jmServerTimeoutV1, admin_server_timeout_v1.js, patched
+              # separately). None of them are aware of the others, so whichever
+              # one's poll fires last "wins" a round and buries the others'
+              # flags under a fresh wrapper lacking them -- their next poll
+              # then wraps AGAIN underneath, nesting the same wrapper multiple
+              # times. Live-reproduced via an instrumented real-PIN login
+              # against production data: loadSystemStatus()'s single await
+              # server(...) call hung completely, and even the page's own
+              # setInterval heartbeat stopped firing -- consistent with a
+              # circular Promise.resolve(cur(...)).then(...) wrap starving the
+              # microtask queue, which defeats every setTimeout-based timeout
+              # this app already has (a macrotask callback can never run while
+              # microtasks keep re-queuing themselves). Fix: each wrapper
+              # stores a reference to what it wrapped (__jmInner) and walks
+              # that chain looking for its OWN flag before deciding to wrap,
+              # instead of checking only the outermost function. This makes
+              # each of the three wrappers apply exactly once, in any order,
+              # regardless of what else has wrapped window.server since.
+              old_savelock = (
+                  "  function wrapServer(){\n"
+                  "    var original=window.server;\n"
+                  "    if(typeof original!=='function'||original.__jmCloudflareSaveLockV24)return false;\n"
+                  "    function wrapped(name,args){\n"
+                  "      var mutation=MUTATIONS.has(String(name||''));\n"
+                  "      if(!mutation)return original.apply(this,arguments);\n"
+                  "      setBusy(true);\n"
+                  "      try{\n"
+                  "        var result=original.apply(this,arguments);\n"
+                  "        return Promise.resolve(result).finally(function(){setBusy(false);});\n"
+                  "      }catch(error){setBusy(false);throw error;}\n"
+                  "    }\n"
+                  "    wrapped.__jmCloudflareSaveLockV24=true;wrapped.__original=original;window.server=wrapped;return true;\n"
+                  "  }\n"
+              )
+              new_savelock = (
+                  "  function jmChainHasV24(fn){\n"
+                  "    /* jmServerWrapChainFixV1 */\n"
+                  "    var depth=0;\n"
+                  "    while(typeof fn==='function'&&depth<50){\n"
+                  "      if(fn.__jmCloudflareSaveLockV24)return true;\n"
+                  "      fn=fn.__jmInner||fn.__original;\n"
+                  "      depth++;\n"
+                  "    }\n"
+                  "    return false;\n"
+                  "  }\n"
+                  "  function wrapServer(){\n"
+                  "    var original=window.server;\n"
+                  "    if(typeof original!=='function'||jmChainHasV24(original))return false;\n"
+                  "    function wrapped(name,args){\n"
+                  "      var mutation=MUTATIONS.has(String(name||''));\n"
+                  "      if(!mutation)return original.apply(this,arguments);\n"
+                  "      setBusy(true);\n"
+                  "      try{\n"
+                  "        var result=original.apply(this,arguments);\n"
+                  "        return Promise.resolve(result).finally(function(){setBusy(false);});\n"
+                  "      }catch(error){setBusy(false);throw error;}\n"
+                  "    }\n"
+                  "    wrapped.__jmCloudflareSaveLockV24=true;wrapped.__original=original;wrapped.__jmInner=original;window.server=wrapped;return true;\n"
+                  "  }\n"
+              )
+              if old_savelock not in text:
+                  raise SystemExit('save-lock wrapServer() anchor not found -- base HTML has drifted')
+              text = text.replace(old_savelock, new_savelock, 1)
+
+              old_teamstate = (
+                  "function wrap(){var cur=window.server;if(typeof cur!=='function'||cur.__jmV2063)return;"
+                  "var w=function(n,a){return Promise.resolve(cur(n,a)).then(function(r){commit(r);return r;});};"
+                  "w.__jmV2063=true;window.server=w;}"
+              )
+              new_teamstate = (
+                  "function jmChainHasV2063(fn){var depth=0;while(typeof fn==='function'&&depth<50){"
+                  "if(fn.__jmV2063)return true;fn=fn.__jmInner||fn.__original;depth++;}return false;}"
+                  "function wrap(){/* jmServerWrapChainFixV1 */var cur=window.server;if(typeof cur!=='function'||jmChainHasV2063(cur))return;"
+                  "var w=function(n,a){return Promise.resolve(cur(n,a)).then(function(r){commit(r);return r;});};"
+                  "w.__jmV2063=true;w.__jmInner=cur;window.server=w;}"
+              )
+              if old_teamstate not in text:
+                  raise SystemExit('team-state wrap() anchor not found -- base HTML has drifted')
+              text = text.replace(old_teamstate, new_teamstate, 1)
+          if marker not in text:
+              raise SystemExit('server wrap chain fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmServerWrapChainFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmGlobalErrorDiagnosticV1'
           if marker not in text:
               # Diagnostic-only, v208.25: there is currently no window.onerror or
@@ -467,19 +564,21 @@ jobs:
           grep -F 'window.__jmDuplicateNameFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SERVER_TIMEOUT_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__jmServerTimeoutV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmServerWrapChainFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_RENDER_RESILIENCE_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-render-resilience' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_LOGIN_LOAD_RESILIENCE_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-login-load-resilience' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmLoginLoadDiagnosticV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_LOCK_WATCHDOG_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-lock-watchdog' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.25-diagnostic.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.25-diagnostic.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.25-diagnostic.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.26-wrap-chain-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.26-wrap-chain-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.26-wrap-chain-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -496,20 +595,22 @@ jobs:
           grep -F 'jmTagReturnButtonIdempotentFix' "$ROOT/verify.html" >/dev/null
           grep -F 'jmAdminLoginDiagnosticV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmGlobalErrorDiagnosticV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmServerWrapChainFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmLoginLoadDiagnosticV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.25-diagnostic.apk"
+          APK="$ROOT/jayuminton-admin-v208.26-wrap-chain-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.25-diagnostic.apk
-          printf 'status=success\nversion=208.25\nfeature=diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20825-diagnostic.txt
-          git add releases/jayuminton-admin-v208.25-diagnostic.apk deployment/status/v20825-diagnostic.txt
-          git commit -m 'Publish admin v208.25-diagnostic: surface adminLogin/openAdminApp/loadState errors and add global error handlers (no logic changes)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.26-wrap-chain-fix.apk
+          printf 'status=success\nversion=208.26\nfeature=server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20826-wrap-chain-fix.txt
+          git add releases/jayuminton-admin-v208.26-wrap-chain-fix.apk deployment/status/v20826-wrap-chain-fix.txt
+          git commit -m 'Publish admin v208.26-wrap-chain-fix: prevent circular/nested window.server wrapping across save-lock, team-state sync, and timeout overlays' || exit 0
           git push origin HEAD:main
