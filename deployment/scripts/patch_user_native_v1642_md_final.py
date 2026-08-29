@@ -52,7 +52,10 @@ for marker in required:
         raise SystemExit('v1642 MD final contract missing: ' + marker)
 if 'script.google.com' in source or 'MAIN_DEPLOYMENT_ID' in source:
     raise SystemExit('v1642 must remain Cloudflare/Firebase-only')
-if 'mode=admin' in source:
+# Only reject an actual Android entry URL routed to admin.  The build script
+# intentionally contains a negative grep for '?mode=admin'; matching that
+# guard text itself made every otherwise-correct user build fail.
+if re.search(r'USER_URL="[^"\n]*[?&]mode=admin(?:[&#"\n]|$)', source):
     raise SystemExit('v1642 user APK must never contain admin mode routing')
 if 'mode=user' not in source or ROUTE_MARKER not in source:
     raise SystemExit('v1642 fresh member route guard missing')
