@@ -16,6 +16,7 @@ SELF_MEMO_ONLY_V2_MARKER = "JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2"
 TEAM_CARD_LAYOUT_V3_MARKER = "JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5"
 IDENTITY_BIND_MARKER = "JAYUMINTON_MEMBER_IDENTITY_BIND_V2"
 REFRESH_STATUS_MARKER = "JAYUMINTON_MEMBER_REFRESH_STATUS_V1"
+SELF_INFO_MENU_MARKER = "JAYUMINTON_MEMBER_SELF_INFO_MENU_V1"
 
 ADDON = r'''
 <script>
@@ -498,6 +499,32 @@ REFRESH_STATUS_ADDON = r'''
 </script>
 '''
 
+SELF_INFO_MENU_ADDON = r'''
+<script>
+/* JAYUMINTON_MEMBER_SELF_INFO_MENU_V1 */
+(function installMemberSelfInfoMenuV1(){
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+  if(window.__JAYUMINTON_MEMBER_SELF_INFO_MENU_V1__)return;
+  window.__JAYUMINTON_MEMBER_SELF_INFO_MENU_V1__=true;
+  function ensure(){
+    var menu=document.getElementById('jmMemberSelfStatusMenu');if(!menu||menu.querySelector('[data-action="내 정보 입력"]'))return;
+    var cancel=menu.querySelector('[data-action="선택취소"]'),button=document.createElement('button');
+    button.type='button';button.setAttribute('data-action','내 정보 입력');button.textContent='내 정보 입력';
+    button.style.cssText='width:100%;min-height:52px;border:0;border-top:1px solid #e5e7eb;background:#fff;font-size:16px;font-weight:800;color:#315efb';
+    if(cancel&&cancel.parentNode)cancel.parentNode.insertBefore(button,cancel);else{var card=menu.firstElementChild||menu;card.appendChild(button);}
+  }
+  document.addEventListener('click',function(event){
+    var button=event.target.closest&&event.target.closest('[data-action="내 정보 입력"]');if(!button)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    var menu=document.getElementById('jmMemberSelfStatusMenu');if(menu)menu.remove();
+    if(typeof openMemberSelfSettings==='function')openMemberSelfSettings();
+    setTimeout(function(){var input=document.getElementById('jmMemberSelfMemoInput');if(input){input.scrollIntoView({block:'center'});input.focus();}},80);
+  },true);
+  new MutationObserver(ensure).observe(document.documentElement,{childList:true,subtree:true});ensure();
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -620,6 +647,8 @@ def patch(path: Path) -> None:
         text = text.replace(marker, IDENTITY_BIND_ADDON + "\n" + marker, 1)
     if REFRESH_STATUS_MARKER not in text:
         text = text.replace(marker, REFRESH_STATUS_ADDON + "\n" + marker, 1)
+    if SELF_INFO_MENU_MARKER not in text:
+        text = text.replace(marker, SELF_INFO_MENU_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
