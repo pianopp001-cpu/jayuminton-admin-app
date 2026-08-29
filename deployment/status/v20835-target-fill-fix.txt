@@ -1,6 +1,6 @@
 status=success
 version=208.35
-feature=auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing
-base=v207.2-unlimited-selection
-run_id=33279870250
-sha256=7f79ab9434cbd4cd1fbc73c2d9f323ba9428f65c918fc8021207d7ac1bbce2e1
+feature=native-unified-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing
+base=v208.35-target-fill-fix+v208.34-bottom-active-button+v208.33-manual-assign-label+v208.32-assign-single-rpc+v208.31-batch-fill+v208.30-unified-swap-move+v208.29-memo-dedup+v208.28-memo-loop-fix+v208.27-skip-system-status+v208.26-wrap-chain-fix+v208.25-diagnostic+v208.24-html-fix+v208.22-idempotent-observers-fix+native-session-fix+dialog-chrome-fix
+run_id=33279935795
+sha256=a87a921e9cd777fcb9de9b1e0fed3f8f397090388f35f81a654fe88b77691e0d
