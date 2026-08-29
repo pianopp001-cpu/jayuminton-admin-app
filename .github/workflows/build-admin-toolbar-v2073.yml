@@ -283,6 +283,76 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmBatchFillEmptyLocationV1'
+          if marker not in text:
+              # v208.31: v208.30 made clicking an empty slot in 'swap' mode
+              # recognized at all, but it still required exactly one click per
+              # selected member -- select 4, click 4 different empty slots one at
+              # a time, waiting on a full RPC round trip in between each (the
+              # loop in executeSwapTargets() awaits sequentially). Reported as
+              # both too slow and inconsistent (a later click's RPC can complete
+              # while an earlier one is still resolving/failing, so what's shown
+              # doesn't always match what's actually saved). The server already
+              # supports batch placement: assignMembersToCourt/
+              # assignMembersToWaitGroup take a memberIds ARRAY and move all of
+              # them in one atomic moveMutation call (one capacity check for the
+              # whole group, not one check per person). Change: clicking ANY
+              # empty slot while in 'swap' mode with members selected now places
+              # the ENTIRE current selection into that one location with a
+              # single RPC call -- one click, one request, all-or-nothing. The
+              # per-target collection loop (targets.push, 1:1 count matching) is
+              # kept only for the occupied-card swap path, where a 1:1
+              # correspondence is the actual intended semantics (member A
+              # trades with member B) and batching doesn't apply.
+              old_exec2 = (
+                  "async function executeSwapTargets(){/* jmUnifiedSwapMoveFixV1 */var src=Array.from(selected);if(src.length!==targets.length)return;setBusy(true);"
+                  "try{for(var i=0;i<src.length;i++){var t=targets[i];"
+                  "if(t&&typeof t==='object'){await rpc('moveOrSwapMember',[null,src[i],t.type,t.type==='wait'?String(Number(t.key)-1):String(t.key),'']);}"
+                  "else{await rpc('swapMembers',[null,[src[i]],[t]]);}}"
+                  "await refresh();clearSelection();toast(src.length+'명 처리 완료');}"
+                  "catch(e){toast(e&&e.message||e,true);mode='';targets=[];}finally{setBusy(false);paint();}}"
+              )
+              new_exec2 = (
+                  "async function executeSwapTargets(){/* jmUnifiedSwapMoveFixV1 */var src=Array.from(selected);if(src.length!==targets.length)return;setBusy(true);"
+                  "try{for(var i=0;i<src.length;i++){var t=targets[i];"
+                  "if(t&&typeof t==='object'){await rpc('moveOrSwapMember',[null,src[i],t.type,t.type==='wait'?String(Number(t.key)-1):String(t.key),'']);}"
+                  "else{await rpc('swapMembers',[null,[src[i]],[t]]);}}"
+                  "await refresh();clearSelection();toast(src.length+'명 처리 완료');}"
+                  "catch(e){toast(e&&e.message||e,true);mode='';targets=[];}finally{setBusy(false);paint();}}"
+                  "async function executeBatchFillLocation(loc){/* jmBatchFillEmptyLocationV1 */var ids=Array.from(selected);if(!ids.length)return;setBusy(true);"
+                  "try{if(loc.type==='court'){await rpc('assignMembersToCourt',[null,loc.key,ids]);}"
+                  "else{await rpc('assignMembersToWaitGroup',[null,String(Number(loc.key)-1),ids]);}"
+                  "await refresh();clearSelection();toast(ids.length+'명 배치 완료');}"
+                  "catch(e){toast(e&&e.message||e,true);}finally{mode='';targets=[];setBusy(false);paint();}}"
+              )
+              if old_exec2 not in text:
+                  raise SystemExit('executeSwapTargets (v208.30 output) anchor not found -- base HTML has drifted')
+              text = text.replace(old_exec2, new_exec2, 1)
+
+              old_click2 = (
+                  "var emptyS=ev.target.closest&&ev.target.closest('.empty,.quick-empty-slot,[onclick*=\"handleEmptySlotTap\"],[onclick*=\"handleMemberWaitEmptyTap\"]');"
+                  "var tS=parseEmpty(emptyS);if(tS){ev.preventDefault();ev.stopImmediatePropagation();targets.push(tS);paint();"
+                  "if(targets.length===selected.size)executeSwapTargets();}return;}"
+              )
+              new_click2 = (
+                  "var emptyS=ev.target.closest&&ev.target.closest('.empty,.quick-empty-slot,[onclick*=\"handleEmptySlotTap\"],[onclick*=\"handleMemberWaitEmptyTap\"]');"
+                  "var tS=parseEmpty(emptyS);if(tS){ev.preventDefault();ev.stopImmediatePropagation();"
+                  "/* jmBatchFillEmptyLocationV1 */executeBatchFillLocation(tS);}return;}"
+              )
+              if old_click2 not in text:
+                  raise SystemExit('handleClick empty-slot branch (v208.30 output) anchor not found -- base HTML has drifted')
+              text = text.replace(old_click2, new_click2, 1)
+          if marker not in text:
+              raise SystemExit('batch-fill empty location fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmBatchFillEmptyLocationV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmUnlimitedPaintIdempotentFix'
           if marker not in text:
               # installJayumintonAdminUnlimitedSelectionV2072 -- the foundational
@@ -822,13 +892,14 @@ jobs:
           grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmSyncPublicMemosDisabledDuplicateFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmUnifiedSwapMoveFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmBatchFillEmptyLocationV1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.30-unified-swap-move.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.30-unified-swap-move.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.30-unified-swap-move.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.31-batch-fill.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.31-batch-fill.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.31-batch-fill.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -851,20 +922,21 @@ jobs:
           grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmSyncPublicMemosDisabledDuplicateFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmUnifiedSwapMoveFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmBatchFillEmptyLocationV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.30-unified-swap-move.apk"
+          APK="$ROOT/jayuminton-admin-v208.31-batch-fill.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.30-unified-swap-move.apk
-          printf 'status=success\nversion=208.30\nfeature=unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20830-unified-swap-move.txt
-          git add releases/jayuminton-admin-v208.30-unified-swap-move.apk deployment/status/v20830-unified-swap-move.txt
-          git commit -m 'Publish admin v208.30: unify the swap button to also handle placing selected members into empty court/wait slots' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.31-batch-fill.apk
+          printf 'status=success\nversion=208.31\nfeature=batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20831-batch-fill.txt
+          git add releases/jayuminton-admin-v208.31-batch-fill.apk deployment/status/v20831-batch-fill.txt
+          git commit -m 'Publish admin v208.31: clicking an empty slot in swap mode now batch-places the whole selection in one atomic request instead of one click per member' || exit 0
           git push origin HEAD:main
