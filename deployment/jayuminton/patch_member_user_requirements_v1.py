@@ -17,6 +17,7 @@ TEAM_CARD_LAYOUT_V3_MARKER = "JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5"
 IDENTITY_BIND_MARKER = "JAYUMINTON_MEMBER_IDENTITY_BIND_V2"
 REFRESH_STATUS_MARKER = "JAYUMINTON_MEMBER_REFRESH_STATUS_V1"
 SELF_INFO_MENU_MARKER = "JAYUMINTON_MEMBER_SELF_INFO_MENU_V1"
+MEMBER_FLAGS_MARKER = "JAYUMINTON_MEMBER_FLAGS_V1"
 
 ADDON = r'''
 <script>
@@ -525,6 +526,35 @@ SELF_INFO_MENU_ADDON = r'''
 </script>
 '''
 
+MEMBER_FLAGS_ADDON = r'''
+<style>
+/* JAYUMINTON_MEMBER_FLAGS_V1 */
+#memberApp [data-member-id] .jm-member-flags{display:flex!important;justify-content:center!important;align-items:center!important;gap:3px!important;flex-wrap:wrap!important;width:100%!important;margin:2px 0 0!important;pointer-events:none!important}
+#memberApp [data-member-id] .jm-member-flag{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:15px!important;padding:1px 5px!important;border-radius:999px!important;font-size:8px!important;font-weight:950!important;line-height:1.15!important;white-space:nowrap!important;box-sizing:border-box!important}
+#memberApp [data-member-id] .jm-member-flag-new{background:#fff1f2!important;color:#be123c!important;border:1px solid #fda4af!important}
+#memberApp [data-member-id] .jm-member-flag-sponsor{background:#fff7ed!important;color:#c2410c!important;border:1px solid #fdba74!important}
+</style>
+<script>
+(function installMemberFlagsV1(){
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;if(window.__JAYUMINTON_MEMBER_FLAGS_V1__)return;window.__JAYUMINTON_MEMBER_FLAGS_V1__=true;
+  var queued=false;
+  function sync(){
+    queued=false;var state=null;try{state=window.STATE||(typeof STATE!=='undefined'?STATE:null);}catch(error){}if(!state||!Array.isArray(state.members))return;
+    var members={};state.members.forEach(function(member){if(member&&member.id!=null)members[String(member.id)]=member;});
+    document.querySelectorAll('#memberApp [data-member-id]').forEach(function(card){
+      var member=members[String(card.getAttribute('data-member-id')||'')];if(!member)return;
+      var name=card.querySelector('.name');if(name&&member.isNew===true)name.textContent=String(member.name||'');
+      var html='';if(member.isNew===true)html+='<span class="jm-member-flag jm-member-flag-new">NEW 신규</span>';if(member.isSponsor===true)html+='<span class="jm-member-flag jm-member-flag-sponsor">🎁 찬조</span>';
+      var flags=card.querySelector(':scope > .jm-member-flags');if(!html){if(flags)flags.remove();return;}if(!flags){flags=document.createElement('span');flags.className='jm-member-flags';card.appendChild(flags);}if(flags.innerHTML!==html)flags.innerHTML=html;
+    });
+  }
+  function schedule(){if(queued)return;queued=true;requestAnimationFrame(sync);}
+  new MutationObserver(schedule).observe(document.getElementById('memberApp')||document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',schedule,{once:true});setInterval(schedule,1200);schedule();
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -649,6 +679,8 @@ def patch(path: Path) -> None:
         text = text.replace(marker, REFRESH_STATUS_ADDON + "\n" + marker, 1)
     if SELF_INFO_MENU_MARKER not in text:
         text = text.replace(marker, SELF_INFO_MENU_ADDON + "\n" + marker, 1)
+    if MEMBER_FLAGS_MARKER not in text:
+        text = text.replace(marker, MEMBER_FLAGS_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
