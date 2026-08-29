@@ -1,0 +1,6 @@
+status=success
+version=208.35
+feature=auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing
+base=v207.2-unlimited-selection
+run_id=33279870250
+sha256=7f79ab9434cbd4cd1fbc73c2d9f323ba9428f65c918fc8021207d7ac1bbce2e1
