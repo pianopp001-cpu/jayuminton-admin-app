@@ -136,6 +136,62 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmSyncPublicMemosDisabledDuplicateFixV1'
+          if marker not in text:
+              # v208.29: every real card template pairs memberInfoDetailHtml(member)
+              # with adminVnextMemberBadges(member) (6 call sites: courts, wait
+              # groups, exclusion panel, etc.) -- adminVnextMemberBadges() already
+              # renders a member's publicMemo. Two OTHER, later-added code paths
+              # independently render the SAME publicMemo a second and third time:
+              # the md-card-timer overlay's memberInfoDetailHtml() override adds its
+              # own '.member-md-memo' span, and syncPublicMemos() (already fixed
+              # for its infinite-loop bug in v208.28) adds a third '.member-public-
+              # memo' span via direct DOM insertion. Net effect: any member with a
+              # memo shows it three times on the same card. Disable both of the
+              # later, redundant paths -- adminVnextMemberBadges() remains the
+              # single, consistently-used source of truth for memo display; no
+              # existing caller reads syncPublicMemos()'s or mdProfileParts' memo
+              # output for anything else.
+              old_md = (
+                  "    var memo=String(member.publicMemo||member.memo||'').trim();\n"
+                  "    if(grade)parts.push(escapeMemberInfo(grade));\n"
+                  "    if(exp)parts.push(escapeMemberInfo('구력 '+exp));\n"
+                  "    if(memo)parts.push('<span class=\"member-md-memo\">'+escapeMemberInfo(memo)+'</span>');\n"
+              )
+              new_md = (
+                  "    /* jmSyncPublicMemosDisabledDuplicateFixV1: memo is already shown once via adminVnextMemberBadges() */\n"
+                  "    if(grade)parts.push(escapeMemberInfo(grade));\n"
+                  "    if(exp)parts.push(escapeMemberInfo('구력 '+exp));\n"
+              )
+              if old_md not in text:
+                  raise SystemExit('mdProfileParts memo anchor not found -- base HTML has drifted')
+              text = text.replace(old_md, new_md, 1)
+
+              old_sync = "  function syncPublicMemos(){\n    var s=null;"
+              new_sync = (
+                  "  function syncPublicMemos(){\n"
+                  "    /* jmSyncPublicMemosDisabledDuplicateFixV1: this overlay's own\n"
+                  "       memo span duplicated what adminVnextMemberBadges() already\n"
+                  "       renders on every real card template; disabled entirely rather\n"
+                  "       than leave dead insertion logic idempotency-guarded for no\n"
+                  "       reason. */\n"
+                  "    return;\n"
+                  "    var s=null;"
+              )
+              if old_sync not in text:
+                  raise SystemExit('syncPublicMemos entry anchor not found -- base HTML has drifted')
+              text = text.replace(old_sync, new_sync, 1)
+          if marker not in text:
+              raise SystemExit('duplicate-memo disable fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmSyncPublicMemosDisabledDuplicateFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmUnlimitedPaintIdempotentFix'
           if marker not in text:
               # installJayumintonAdminUnlimitedSelectionV2072 -- the foundational
@@ -673,13 +729,14 @@ jobs:
           grep -F 'jm-lock-watchdog' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmSyncPublicMemosDisabledDuplicateFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.28-memo-loop-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.28-memo-loop-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.28-memo-loop-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.29-memo-dedup.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.29-memo-dedup.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.29-memo-dedup.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -700,20 +757,21 @@ jobs:
           grep -F 'jmLoginLoadDiagnosticV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmSkipAutoSystemStatusV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmSyncPublicMemosNodePlacementFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmSyncPublicMemosDisabledDuplicateFixV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.28-memo-loop-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.29-memo-dedup.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.28-memo-loop-fix.apk
-          printf 'status=success\nversion=208.28\nfeature=memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20828-memo-loop-fix.txt
-          git add releases/jayuminton-admin-v208.28-memo-loop-fix.apk deployment/status/v20828-memo-loop-fix.txt
-          git commit -m 'Publish admin v208.28: fix syncPublicMemos() infinite DOM-insertion loop for members with a memo but no grade/experience (root cause of the login freeze)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.29-memo-dedup.apk
+          printf 'status=success\nversion=208.29\nfeature=memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20829-memo-dedup.txt
+          git add releases/jayuminton-admin-v208.29-memo-dedup.apk deployment/status/v20829-memo-dedup.txt
+          git commit -m 'Publish admin v208.29: fix member memo showing 3x on cards (disable two redundant render paths, keep adminVnextMemberBadges as the single source)' || exit 0
           git push origin HEAD:main
