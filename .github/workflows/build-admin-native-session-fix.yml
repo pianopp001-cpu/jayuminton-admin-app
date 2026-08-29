@@ -1,5 +1,5 @@
 name: Build admin native session fix v208.33
-# base v208.33 toolbar APK (manual-assign label rename)
+# retrigger: base v208.33 toolbar APK now published on main
 
 on:
   push:
