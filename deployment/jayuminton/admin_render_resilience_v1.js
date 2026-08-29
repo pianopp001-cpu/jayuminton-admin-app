@@ -38,10 +38,36 @@ window.renderState=function(state){
       window.parent.postMessage({type:'JAYUMINTON_MEMBER_LIST',members:(STATE.members||[]).map(function(item){return {id:String(item.id),name:String(item.name||'')};})},'*');
     }catch(err){console.error('[jm-render-resilience] postMessage failed',err);}
   }
-  var steps=[renderCourts,renderWaitGroups,renderActive,renderExcluded,renderInactive,renderStats,updateCourtTimers,renderWebPushMemberOptions,renderMemberSelfSettings,renderSelectionCount,renderQuickRoster,renderQuickMoveBar,renderWholeSwapBar];
-  steps.forEach(function(fn){
-    try{fn();}catch(err){console.error('[jm-render-resilience] '+(fn&&fn.name||'render step')+' failed, continuing',err);}
-  });
+  /* jmRenderResilienceChainFixV1: `original` used to be captured and then
+     never called -- this wrapper always ran ITS OWN hardcoded step list
+     instead, which silently discarded every wrapper installed BEFORE this
+     one in document order (admin-self-alert's popup+3x8-vibration detector,
+     the yellow-team-stable wrapper, and anything else that wraps
+     window.renderState earlier). Confirmed live: arming the admin's own
+     "내 알림" member and simulating their 대기2->대기1 move produced no
+     popup and no vibrate() call, even though the popup/vibration code
+     itself is present and correct -- because window.renderState by then was
+     THIS function, and this function never invoked the chain that leads
+     back to it. Fix: try the full chain first (so every earlier wrapper's
+     side effects still run), and only fall back to the manual per-step
+     resilient render -- this file's actual original purpose -- if the
+     chain throws synchronously, which is the exact failure mode this file
+     was written to guard against in the first place. */
+  var ranViaChain=false;
+  if(typeof original==='function'){
+    try{
+      original.apply(this,arguments);
+      ranViaChain=true;
+    }catch(err){
+      console.error('[jm-render-resilience] chained renderState threw, falling back to per-step resilient render',err);
+    }
+  }
+  if(!ranViaChain){
+    var steps=[renderCourts,renderWaitGroups,renderActive,renderExcluded,renderInactive,renderStats,updateCourtTimers,renderWebPushMemberOptions,renderMemberSelfSettings,renderSelectionCount,renderQuickRoster,renderQuickMoveBar,renderWholeSwapBar];
+    steps.forEach(function(fn){
+      try{fn();}catch(err){console.error('[jm-render-resilience] '+(fn&&fn.name||'render step')+' failed, continuing',err);}
+    });
+  }
   try{
     if(QUICK_PICK){
       document.querySelectorAll('[data-member-id="'+QUICK_PICK.memberId+'"]').forEach(function(element){element.classList.add('quick-picked');});
