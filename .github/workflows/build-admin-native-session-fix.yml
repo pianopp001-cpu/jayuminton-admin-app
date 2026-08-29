@@ -1,5 +1,5 @@
 name: Build admin native session fix v208.36
-# base v208.36 toolbar APK (render-resilience chain fix)
+# retrigger: base v208.36 toolbar APK now published on main
 
 on:
   push:
