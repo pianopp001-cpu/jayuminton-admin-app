@@ -18,7 +18,27 @@ function quickCard(){var q=document.getElementById('quickSelectedCount');if(q){v
 function quickHeader(card){if(!card)return null;return card.querySelector('.quick-roster-header')||Array.from(card.children).find(function(el){return /빠른 코트배정/.test(String(el.textContent||''));})||card.firstElementChild;}
 function ensureToolbar(){var bar=document.getElementById('jmUnlimitedToolbar');if(!bar)return false;var title=bar.querySelector('.jm-u-head strong');if(title&&title.textContent!=='멤버 팀, 교환, 메세지')title.textContent='멤버 팀, 교환, 메세지';['status','move','swap'].forEach(function(a){var b=bar.querySelector('[data-a="'+a+'"]');if(b)b.style.display='none';});var ss=bar.querySelector('#jmUnlimitedStatus');if(ss)ss.remove();var grid=bar.querySelector('.jm-u-grid');if(grid&&!grid.querySelector('[data-a="message"]')){var b=document.createElement('button');b.type='button';b.setAttribute('data-a','message');b.textContent='메시지보내기';var clear=grid.querySelector('[data-a="clear"]');if(clear)grid.insertBefore(b,clear);else grid.appendChild(b);b.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();messageSelected();},true);}var card=quickCard(),head=quickHeader(card);if(card){if(head&&head.parentNode===card){if(head.nextSibling!==bar)card.insertBefore(bar,head.nextSibling);}else if(bar.parentNode!==card)card.insertBefore(bar,card.firstChild);if(!bar.classList.contains('jm-toolbar-under-quick-title'))bar.classList.add('jm-toolbar-under-quick-title');}return true;}
 function syncSelectionVisual(){var r=root();if(!r)return;var shouldBeSelected=new Set();r.querySelectorAll('.jm-unlimited-check').forEach(function(check){var card=check.closest('[data-member-id],[data-memberid],[data-player-id],[data-id],[data-member],.member,.person,.quick-member,.member-card,.member-item,.player-card,.court-player');if(card)shouldBeSelected.add(card);});r.querySelectorAll('.jm-v2074-selected').forEach(function(c){if(!shouldBeSelected.has(c))c.classList.remove('jm-v2074-selected');});shouldBeSelected.forEach(function(card){if(!card.classList.contains('jm-v2074-selected'))card.classList.add('jm-v2074-selected');});}
-function wait4Box(){var r=root();if(!r)return null;for(var n of r.querySelectorAll('section,.card,div')){var heads=n.querySelectorAll('h1,h2,h3,h4,strong,.title,.wait-title');for(var h of heads){if(/^대기\s*4\b/.test(String(h.textContent||'').trim()))return n;}}return null;}
+function wait4Box(){
+  /* jmWait4BoxScopeFixV1: the old version scanned CONTAINERS first (outer to
+     inner, since querySelectorAll returns document order) and returned the
+     FIRST one whose DESCENDANTS anywhere included a '대기4' heading -- for a
+     large enough outer wrapper (e.g. the whole admin body), that's every
+     ancestor of the real 대기4 card, including one that also contains the
+     COURTS section. fixWait4Second() then treated a court's own empty slot
+     as "대기4's second slot" and tagged it with the wrong onclick, making
+     that court slot silently do nothing (or the wrong thing) when tapped.
+     Find the '대기4' HEADING first instead (a small, specific element), then
+     walk up to its own closest card/section -- same proven-safe pattern
+     admin_layout_wait4_compact_v2076.js's wait4Row() already uses. */
+  var r=root();if(!r)return null;
+  var heads=r.querySelectorAll('h1,h2,h3,h4,strong,.title,.wait-title');
+  for(var h of heads){
+    if(!/^대기\s*4\b/.test(String(h.textContent||'').trim()))continue;
+    var row=h.closest('.card,section,[class*="wait"]')||h.parentElement;
+    if(row)return row;
+  }
+  return null;
+}
 function fixWait4Second(){var box=wait4Box();if(!box)return false;var list=Array.from(box.querySelectorAll('.empty,.quick-empty-slot,[class*="empty"],[onclick]')).filter(function(el){return /비어\s*있음/.test(String(el.textContent||''))||el.classList.contains('empty')||el.classList.contains('quick-empty-slot');});var slot=list[1];if(!slot)return false;slot.disabled=false;slot.removeAttribute('disabled');slot.removeAttribute('aria-disabled');slot.removeAttribute('inert');if(slot.classList.contains('disabled')||slot.classList.contains('is-disabled')||slot.classList.contains('inactive')||slot.classList.contains('non-clickable'))slot.classList.remove('disabled','is-disabled','inactive','non-clickable');slot.style.setProperty('pointer-events','auto','important');slot.style.setProperty('opacity','1','important');slot.style.setProperty('cursor','pointer','important');slot.setAttribute('data-jm-wait4-second-fixed','1');var raw=String(slot.getAttribute('onclick')||'');if(!/handleEmptySlotTap|handleMemberWaitEmptyTap/.test(raw))slot.setAttribute('onclick',"handleEmptySlotTap('wait','3',1)");return true;}
 function findButton(text){var r=root();if(!r)return null;return Array.from(r.querySelectorAll('button')).find(function(b){return String(b.textContent||'').trim()===text;})||null;}
 function ensureBottomMove(){var r=root();if(!r)return false;var existing=document.getElementById('jmBottomMoveButton'),refresh=findButton('새로고침'),auto=findButton('자동배정');if(!refresh||!auto)return false;var parent=refresh.parentElement;if(!parent||auto.parentElement!==parent)return false;if(!existing){existing=document.createElement('button');existing.id='jmBottomMoveButton';existing.type='button';existing.textContent='자리교환';existing.className=refresh.className||'';existing.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();var swapBtn=document.querySelector('#jmUnlimitedToolbar [data-a="swap"]');if(swapBtn)swapBtn.click();else toast('멤버를 먼저 선택하세요.',true);});}if(existing.textContent!=='자리교환')existing.textContent='자리교환';if(existing.parentElement!==parent||existing.nextSibling!==refresh)parent.insertBefore(existing,refresh);if(!parent.classList.contains('jm-bottom-four-actions'))parent.classList.add('jm-bottom-four-actions');return true;}
@@ -26,7 +46,25 @@ function parseSlot(el){if(!el)return null;var raw=String(el.getAttribute&&el.get
 function slotKey(t){return t.type+'|'+t.key+'|'+t.slot;}
 function paintSlots(){var r=root();if(!r)return;var shouldBeTargeted=new Set();pendingSlots.forEach(function(t){if(t.el&&document.contains(t.el))shouldBeTargeted.add(t.el);});r.querySelectorAll('.jm-v2076-target-slot').forEach(function(x){if(!shouldBeTargeted.has(x))x.classList.remove('jm-v2076-target-slot');});shouldBeTargeted.forEach(function(el){if(!el.classList.contains('jm-v2076-target-slot'))el.classList.add('jm-v2076-target-slot');});}
 function freeAt(t){var s=state();if(!s)return 1;var list=t.type==='court'?(s.courts&&s.courts[String(t.key)]):((s.waitGroups||[])[Number(t.key)-1]);return Math.max(0,4-(Array.isArray(list)?list.length:0));}
-async function assign(ids,targets){if(assigning||!ids.length||!targets.length||typeof window.server!=='function')return;assigning=true;var done=0;try{for(var i=0;i<ids.length&&i<targets.length;i++){var t=targets[i];await window.server('moveOrSwapMember',[null,String(ids[i]),String(t.type),t.type==='wait'?String(Number(t.key)-1):String(t.key),'']);done++;}pendingSlots=pendingSlots.filter(function(p){return targets.indexOf(p)<0;});clearLegacySelection();try{var fresh=await window.server('getPublicState',[null]);if(typeof renderState==='function')renderState(fresh&&fresh.state?fresh.state:fresh);}catch(_){}toast(done+'명 빈자리에 배정 완료');}catch(e){toast(String(e&&e.message||e||'자리배정 실패'),true);}finally{assigning=false;setTimeout(function(){paintSlots();syncSelectionVisual();},0);}}
+async function assign(ids,targets){if(assigning||!ids.length||!targets.length||typeof window.server!=='function')return;assigning=true;var done=0;try{
+/* jmBatchAssignSingleRpcV1: this used to await window.server('moveOrSwapMember',...)
+   once per member in a for-loop -- for N selected members that's N sequential
+   round-trips (visibly slow, "한자리씩... 너무 느리네"), and if the server
+   rejected any call partway through (e.g. a capacity race), the members from
+   earlier iterations were already committed on the server while the catch
+   block below showed a single failure toast for the whole batch -- so the UI
+   could report failure/success that didn't match what actually landed.
+   All targets built by assignSelectedToClicked() share the same {type,key}
+   (only the per-slot index differs), so the whole batch is really one
+   placement into one court/wait group -- exactly what assignMembersToCourt /
+   assignMembersToWaitGroup already do server-side as a single atomic call
+   with one capacity check. Use that instead of the sequential loop. */
+var t0=targets[0];var n=Math.min(ids.length,targets.length);var batchIds=ids.slice(0,n);
+var method=t0.type==='court'?'assignMembersToCourt':'assignMembersToWaitGroup';
+var key=t0.type==='wait'?String(Number(t0.key)-1):String(t0.key);
+await window.server(method,[null,key,batchIds]);
+done=n;
+pendingSlots=pendingSlots.filter(function(p){return targets.indexOf(p)<0;});clearLegacySelection();try{var fresh=await window.server('getPublicState',[null]);if(typeof renderState==='function')renderState(fresh&&fresh.state?fresh.state:fresh);}catch(_){}toast(done+'명 빈자리에 배정 완료');}catch(e){toast(String(e&&e.message||e||'자리배정 실패'),true);}finally{assigning=false;setTimeout(function(){paintSlots();syncSelectionVisual();},0);}}
 function assignSelectedToClicked(slot){var ids=selectedIds();if(!ids.length)return false;var free=freeAt(slot);if(free<=0)return toast('빈자리가 없습니다.',true),true;var n=Math.min(ids.length,free),targets=[];for(var i=0;i<n;i++)targets.push({type:slot.type,key:slot.key,slot:i,el:slot.el});assign(ids.slice(0,n),targets);return true;}
 function togglePendingSlot(slot){var key=slotKey(slot),i=pendingSlots.findIndex(function(x){return slotKey(x)===key;});if(i>=0)pendingSlots.splice(i,1);else pendingSlots.push(slot);paintSlots();toast(pendingSlots.length+'개 빈자리 선택');}
 function maybeAssignPendingAfterMember(){if(assigning||!pendingSlots.length)return;setTimeout(function(){var ids=selectedIds();if(!ids.length)return;var n=Math.min(ids.length,pendingSlots.length);assign(ids.slice(0,n),pendingSlots.slice(0,n));},0);}
