@@ -1,5 +1,5 @@
-name: Build admin native session fix v208.33
-# retrigger: base v208.33 toolbar APK now published on main
+name: Build admin native session fix v208.34
+# base v208.34 toolbar APK (bottom 코트배정대기로 button)
 
 on:
   push:
@@ -49,7 +49,7 @@ jobs:
           rm -rf app
           git archive "$PROVEN_COMMIT" app | tar -x
           mkdir -p app/src/main/assets/admin
-          BASE=releases/jayuminton-admin-v208.33-manual-assign-label.apk
+          BASE=releases/jayuminton-admin-v208.34-bottom-active-button.apk
           test -s "$BASE"
           unzip -p "$BASE" assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
@@ -205,6 +205,8 @@ jobs:
           grep -F 'jmBatchFillEmptyLocationV1' "$HTML" >/dev/null
           grep -F 'jmWait4BoxScopeFixV1' "$HTML" >/dev/null
           grep -F 'jmBatchAssignSingleRpcV1' "$HTML" >/dev/null
+          grep -F 'jmBottomActiveButtonV1' "$HTML" >/dev/null
+          grep -F 'jmBottomActiveButton' "$HTML" >/dev/null
 
       - name: Set APK identity and signer
         shell: bash
@@ -215,13 +217,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.33";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.34";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 34',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.24'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 35',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.25'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -259,6 +261,8 @@ jobs:
           grep -F 'jmBatchFillEmptyLocationV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmWait4BoxScopeFixV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmBatchAssignSingleRpcV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmBottomActiveButtonV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmBottomActiveButton' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -266,8 +270,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.33-manual-assign-label-native.apk
-          printf 'status=success\nversion=208.33\nfeature=native-unified-fix+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v208.33-manual-assign-label+v208.32-assign-single-rpc+v208.31-batch-fill+v208.30-unified-swap-move+v208.29-memo-dedup+v208.28-memo-loop-fix+v208.27-skip-system-status+v208.26-wrap-chain-fix+v208.25-diagnostic+v208.24-html-fix+v208.22-idempotent-observers-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20833-manual-assign-label.txt
-          git add releases/jayuminton-admin-v208.33-manual-assign-label-native.apk deployment/status/v20833-manual-assign-label.txt
-          git commit -m 'Publish admin v208.33: rename bottom 자리교환 button to 수동배정 (label only, behavior unchanged)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.34-bottom-active-button-native.apk
+          printf 'status=success\nversion=208.34\nfeature=native-unified-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v208.34-bottom-active-button+v208.33-manual-assign-label+v208.32-assign-single-rpc+v208.31-batch-fill+v208.30-unified-swap-move+v208.29-memo-dedup+v208.28-memo-loop-fix+v208.27-skip-system-status+v208.26-wrap-chain-fix+v208.25-diagnostic+v208.24-html-fix+v208.22-idempotent-observers-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20834-bottom-active-button.txt
+          git add releases/jayuminton-admin-v208.34-bottom-active-button-native.apk deployment/status/v20834-bottom-active-button.txt
+          git commit -m 'Publish admin v208.34: add 코트배정대기로 to the bottom fixed action row (order per operations spec: 코트배정대기로/실행취소/수동배정/자동배정/새로고침)' || exit 0
           git push origin HEAD:main
