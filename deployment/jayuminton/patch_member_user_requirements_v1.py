@@ -18,6 +18,7 @@ IDENTITY_BIND_MARKER = "JAYUMINTON_MEMBER_IDENTITY_BIND_V2"
 REFRESH_STATUS_MARKER = "JAYUMINTON_MEMBER_REFRESH_STATUS_V1"
 SELF_INFO_MENU_MARKER = "JAYUMINTON_MEMBER_SELF_INFO_MENU_V1"
 MEMBER_FLAGS_MARKER = "JAYUMINTON_MEMBER_FLAGS_V1"
+MEMO_DEDUPE_MARKER = "JAYUMINTON_MEMBER_MEMO_DEDUPE_V1"
 
 ADDON = r'''
 <script>
@@ -555,6 +556,25 @@ MEMBER_FLAGS_ADDON = r'''
 </script>
 '''
 
+MEMO_DEDUPE_ADDON = r'''
+<style>
+/* JAYUMINTON_MEMBER_MEMO_DEDUPE_V1
+   The canonical card renderer already outputs .member-public-memo.
+   Suppress and remove the legacy self-profile decorator's duplicate copy. */
+#memberApp [data-member-id]>.jm-public-memo{display:none!important}
+</style>
+<script>
+(function installMemberMemoDedupeV1(){
+  if(window.__JAYUMINTON_MEMBER_MEMO_DEDUPE_V1__)return;window.__JAYUMINTON_MEMBER_MEMO_DEDUPE_V1__=true;
+  var queued=false;
+  function clean(){queued=false;document.querySelectorAll('#memberApp [data-member-id]>.jm-public-memo').forEach(function(node){node.remove();});}
+  function schedule(){if(queued)return;queued=true;requestAnimationFrame(clean);}
+  new MutationObserver(schedule).observe(document.getElementById('memberApp')||document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',schedule,{once:true});schedule();
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -681,6 +701,8 @@ def patch(path: Path) -> None:
         text = text.replace(marker, SELF_INFO_MENU_ADDON + "\n" + marker, 1)
     if MEMBER_FLAGS_MARKER not in text:
         text = text.replace(marker, MEMBER_FLAGS_ADDON + "\n" + marker, 1)
+    if MEMO_DEDUPE_MARKER not in text:
+        text = text.replace(marker, MEMO_DEDUPE_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
