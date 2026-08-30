@@ -1,0 +1,6 @@
+status=success
+version=208.44
+feature=quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing
+base=v207.2-unlimited-selection
+run_id=33292594307
+sha256=16ed24162a70f7c6c4d2d87031082061445d68c65f15af07e5981382d53b51d1
