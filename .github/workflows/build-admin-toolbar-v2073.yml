@@ -471,6 +471,97 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmAutoAssignTargetToastV1'
+          if marker not in text:
+              # v208.45: "자동배정때문에 수동배정 버튼 선택이 너무 불편했어."
+              # jmAutoAssignTargetFillFixV1 (v208.35) made tap() silently drop
+              # every tapped member into AUTO_ASSIGN_TARGET whenever it is
+              # armed -- correct per the base app's own native
+              # assignMemberToChosenEmpty() behavior, but AUTO_ASSIGN_TARGET
+              # only ever clears itself when that target seat is full (4
+              # members) or the admin taps the SAME empty slot again to
+              # cancel. Tap one empty slot, place one or two people, then
+              # move on to unrelated manual selection elsewhere (수동배정) --
+              # every subsequent member tap keeps silently vanishing into that
+              # stale target instead of registering as a normal selection,
+              # with zero on-screen explanation of what just happened or how
+              # to escape it. The underlying targeting feature is intentional
+              # (tap several members in a row to fill one seat) and the
+              # tap-same-slot-to-cancel escape already exists natively, so the
+              # fix here is not to remove either -- it's to make every
+              # placement visibly say what happened and how to cancel,
+              # instead of a silent no-op-looking tap.
+              old_fill_fn = (
+                  "function fillAutoAssignTarget(id){\n"
+                  "    var t=AUTO_ASSIGN_TARGET;if(!t)return;\n"
+                  "    var group=t.type==='court'?(STATE.courts[t.index]||[]):(STATE.waitGroups[t.index]||[]);\n"
+                  "    if(group.indexOf(id)>=0){alert('이미 선택한 위치에 있는 멤버입니다.');return;}\n"
+                  "    if(group.length>=4){AUTO_ASSIGN_TARGET=null;alert('선택한 위치에는 빈자리가 없습니다.');if(typeof renderState==='function')renderState();return;}\n"
+                  "    var method=t.type==='court'?'assignMembersToCourt':'assignMembersToWaitGroup';\n"
+                  "    (async function(){\n"
+                  "      try{\n"
+                  "        var result=await window.server(method,[ADMIN_PIN_VALUE,t.index,[id]]);\n"
+                  "        if(group.length+1>=4)AUTO_ASSIGN_TARGET=null;\n"
+                  "        if(typeof renderState==='function')renderState(result&&result.state?result.state:result);\n"
+                  "      }catch(error){alert(error&&error.message||error);}\n"
+                  "    })();\n"
+                  "  }\n"
+                  "  "
+              )
+              if old_fill_fn not in text:
+                  raise SystemExit('fillAutoAssignTarget anchor not found -- base HTML has drifted')
+              new_fill_fn = (
+                  "function jmAutoAssignFillToast(text){\n"
+                  "    /* jmAutoAssignTargetToastV1 */\n"
+                  "    try{\n"
+                  "      var t=document.getElementById('jmAutoAssignFillToast');\n"
+                  "      if(!t){\n"
+                  "        t=document.createElement('div');t.id='jmAutoAssignFillToast';\n"
+                  "        t.style.cssText='position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:2147483000;padding:9px 14px;border-radius:10px;background:#166534;color:#fff;font-size:12px;font-weight:900;box-shadow:0 8px 24px rgba(0,0,0,.28);max-width:88vw;text-align:center;transition:opacity .2s;pointer-events:none';\n"
+                  "        document.body.appendChild(t);\n"
+                  "      }\n"
+                  "      t.textContent=text;t.style.opacity='1';\n"
+                  "      window.clearTimeout(t.__jmTimer);\n"
+                  "      t.__jmTimer=window.setTimeout(function(){t.style.opacity='0';},2600);\n"
+                  "    }catch(_){}\n"
+                  "  }\n"
+                  "  function fillAutoAssignTarget(id){\n"
+                  "    var t=AUTO_ASSIGN_TARGET;if(!t)return;\n"
+                  "    var group=t.type==='court'?(STATE.courts[t.index]||[]):(STATE.waitGroups[t.index]||[]);\n"
+                  "    if(group.indexOf(id)>=0){alert('이미 선택한 위치에 있는 멤버입니다.');return;}\n"
+                  "    if(group.length>=4){AUTO_ASSIGN_TARGET=null;alert('선택한 위치에는 빈자리가 없습니다.');if(typeof renderState==='function')renderState();return;}\n"
+                  "    var method=t.type==='court'?'assignMembersToCourt':'assignMembersToWaitGroup';\n"
+                  "    var targetMember=(STATE.members||[]).find(function(m){return String(m.id)===String(id);});\n"
+                  "    var targetName=targetMember?String(targetMember.name||''):'';\n"
+                  "    var targetLabel=t.type==='court'?('코트 '+(t.index+1)):('대기 '+(t.index+1));\n"
+                  "    (async function(){\n"
+                  "      try{\n"
+                  "        var result=await window.server(method,[ADMIN_PIN_VALUE,t.index,[id]]);\n"
+                  "        if(group.length+1>=4){\n"
+                  "          AUTO_ASSIGN_TARGET=null;\n"
+                  "          jmAutoAssignFillToast((targetName?targetName+'님을 ':'')+targetLabel+'에 배정했습니다 (가득 참)');\n"
+                  "        }else{\n"
+                  "          jmAutoAssignFillToast((targetName?targetName+'님을 ':'')+targetLabel+'에 배정했습니다. 다른 곳을 선택하려면 그 빈자리를 다시 눌러 취소하세요.');\n"
+                  "        }\n"
+                  "        if(typeof renderState==='function')renderState(result&&result.state?result.state:result);\n"
+                  "      }catch(error){alert(error&&error.message||error);}\n"
+                  "    })();\n"
+                  "  }\n"
+                  "  "
+              )
+              text = text.replace(old_fill_fn, new_fill_fn, 1)
+          if marker not in text:
+              raise SystemExit('auto-assign target toast fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmAutoAssignTargetToastV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'function jmAutoAssignFillToast' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmMemberFormSingleFieldV1'
           if marker not in text:
               # v208.37: "급수/구력/롱서브금지/스매시금지/부상/특이사항 등 입력하는
@@ -1273,13 +1364,15 @@ jobs:
           grep -F 'jmBottomTeamButton' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmVnextMemoFontSizeFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'function fillAutoAssignTarget' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmAutoAssignTargetToastV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'function jmAutoAssignFillToast' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.44-quick-roster-specificity-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.44-quick-roster-specificity-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.44-quick-roster-specificity-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.45-auto-assign-toast.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.45-auto-assign-toast.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.45-auto-assign-toast.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1320,20 +1413,22 @@ jobs:
           grep -F 'jmQuickRosterGridV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmRemoveDuplicateCheckboxV1' "$ROOT/verify.html" >/dev/null
           grep -F 'function fillAutoAssignTarget' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmAutoAssignTargetToastV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'function jmAutoAssignFillToast' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.44-quick-roster-specificity-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.45-auto-assign-toast.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.44-quick-roster-specificity-fix.apk
-          printf 'status=success\nversion=208.44\nfeature=quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20844-quick-roster-specificity-fix.txt
-          git add releases/jayuminton-admin-v208.44-quick-roster-specificity-fix.apk deployment/status/v20844-quick-roster-specificity-fix.txt
-          git commit -m 'Publish admin v208.44: the quick-roster grid style was losing to a hidden, higher-specificity #adminApp .v4-quick-roster cascade already baked into the base app -- raise our own selectors to two IDs so name text/card height overrides actually win, fixing clipped names' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.45-auto-assign-toast.apk
+          printf 'status=success\nversion=208.45\nfeature=auto-assign-target-toast+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20845-auto-assign-toast.txt
+          git add releases/jayuminton-admin-v208.45-auto-assign-toast.apk deployment/status/v20845-auto-assign-toast.txt
+          git commit -m 'Publish admin v208.45: show a toast on every auto-assign-target placement (who, where, how to cancel) instead of a silent tap that made manual selection feel broken' || exit 0
           git push origin HEAD:main
