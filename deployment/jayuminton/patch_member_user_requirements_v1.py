@@ -364,7 +364,7 @@ TEAM_CARD_LAYOUT_V3_ADDON = r'''
 <style id="jayuminton-member-team-card-layout-v5">
 /* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5 */
 #memberApp [data-member-id]{position:relative!important;inset:auto!important;transform:none!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:center!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:52px!important;max-height:none!important;box-sizing:border-box!important;overflow:hidden!important;contain:paint!important}
-#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}
+#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:3px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}
 #memberApp [data-member-id].jm-temp-pair{outline:0!important;box-shadow:0 0 0 4px #facc15!important;border:2px solid #facc15!important}
 #memberApp [data-member-id].jm-has-team.jm-temp-pair{outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:3px!important;box-shadow:0 0 0 6px #facc15!important;border:2px solid #facc15!important}
 #memberApp [data-member-id]>.name,#memberApp [data-member-id]>.member-name,#memberApp [data-member-id]>.quick-member-name,#memberApp [data-member-id]>.member-info-detail,#memberApp [data-member-id]>.member-public-memo,#memberApp [data-member-id]>.jm-public-memo,#memberApp [data-member-id]>.member-status-list{position:static!important;inset:auto!important;transform:none!important;display:block!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;max-height:none!important;box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;text-align:center!important;white-space:normal!important;overflow:hidden!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
@@ -683,7 +683,22 @@ def patch(path: Path) -> None:
         "#memberApp [data-member-id].jm-has-team{box-shadow:inset 4px 0 0 var(--jm-team-color)!important}",
         "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}",
     )
-    permanent_team_css = "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}"
+    # "영구팀들도 너무 얇게 두줄이라 사용자앱이랑 웹에서 확실히 구별이 잘
+    # 안갔고" -- the 1px outline plus a 4px-white/5px-color box-shadow pair
+    # renders as a hairline colored sliver (the white shadow layer visually
+    # covers most of the color ring). Confirmed by rendering the exact live
+    # CSS side by side with member-card-colored (blue/pink) backgrounds in a
+    # browser: the current ring all but disappears against a same-hue card,
+    # while a 3px outline with a single 5px color shadow (no competing white
+    # layer) stays clearly visible on every background tested. This keeps
+    # outline-offset:2px and the "0 0 0 5px var(--jm-team-color" shadow ring
+    # unchanged so it does not disturb assert_team_status_contract, and only
+    # widens the outline itself and drops the white inner ring.
+    text = text.replace(
+        "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}",
+        "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:3px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}",
+    )
+    permanent_team_css = "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:3px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}"
     temporary_team_css = "\n#memberApp [data-member-id].jm-temp-pair{outline:0!important;box-shadow:0 0 0 4px #facc15!important;border:2px solid #facc15!important}\n#memberApp [data-member-id].jm-has-team.jm-temp-pair{outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:3px!important;box-shadow:0 0 0 6px #facc15!important;border:2px solid #facc15!important}"
     if "#memberApp [data-member-id].jm-temp-pair{outline:0!important" not in text and permanent_team_css in text:
         text = text.replace(permanent_team_css, permanent_team_css + temporary_team_css, 1)
