@@ -46,12 +46,25 @@ if(!member)return '';var storedName=String(member.name||'').trim();return '<span
    invocation -- the same technique already relied on above for
    adminVnextCardName. */
 function fixGlobalCompactName(){if(window.__jmFullNameEverywhereV1||typeof window.compactMemberName!=='function')return;window.__jmFullNameEverywhereV1=true;window.compactMemberName=function(name){return String(name||'').trim();};}
-/* Spec: "코트배정대기 줄에 최대한 한줄에 5명이 나오게 해야지." The base
-   app hardcodes the quick-roster grid to 2 columns at every width. Widen
-   it responsively instead -- up to 5 columns once there is room, fewer on
-   narrow phones -- and shrink the per-card padding/font to match. */
-function ensureQuickRosterGridStyle(){if(document.getElementById('jmQuickRosterGridV1'))return;var style=document.createElement('style');style.id='jmQuickRosterGridV1';style.textContent='#quickActiveRoster.v4-quick-roster{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important}@media(min-width:520px){#quickActiveRoster.v4-quick-roster{grid-template-columns:repeat(5,minmax(0,1fr))!important}}@media(max-width:359px){#quickActiveRoster.v4-quick-roster{grid-template-columns:repeat(2,minmax(0,1fr))!important}}#quickActiveRoster .quick-member{padding:5px 4px!important;min-height:42px!important;gap:3px!important}#quickActiveRoster .quick-member-name{font-size:clamp(9px,2.4vw,12px)!important;line-height:1.15!important}#quickActiveRoster .quick-member-games{font-size:7px!important;margin-top:-1px!important}#quickActiveRoster .member-info-detail{font-size:6.5px!important;margin-top:1px!important}#quickActiveRoster .member-vnext-memo{font-size:6.5px!important}#quickActiveRoster .member-vnext-badge.new-badge{padding:1px 3px!important;font-size:6.5px!important}';(document.head||document.documentElement).appendChild(style);}
-function maintain(){try{fixCheckOverlap();}catch(_){}try{fixNewBadges();}catch(_){}try{fixBottomBar();}catch(_){}try{fixExcludedNames();}catch(_){}try{fixDuplicateNameDisplay();}catch(_){}try{fixGlobalCompactName();}catch(_){}try{ensureQuickRosterGridStyle();}catch(_){}}
+/* markAdminNewCards() -- a THIRD, independent name-decoration path, driven
+   by its own requestAnimationFrame-scheduled pass over every rendered card
+   -- re-applies usesAdminFullName()'s isNew/isDuplicate gate AFTER initial
+   render and directly overwrites the name element's textContent/innerHTML,
+   silently undoing both fixes above the instant it next runs. It is the
+   actual reason members kept losing their full name (including the
+   parenthetical nickname) even after adminVnextCardName/compactMemberName
+   were fixed. usesAdminFullName and fullAdminNameHtml are, like the others,
+   plain top-level function declarations, so overriding them here reaches
+   every caller, including this decorator. */
+function fixUsesAdminFullNameGate(){if(window.__jmUsesAdminFullNameFixV1||typeof window.usesAdminFullName!=='function'||typeof window.fullAdminNameHtml!=='function')return;window.__jmUsesAdminFullNameFixV1=true;var escapeName=typeof window.escapeAdminName==='function'?window.escapeAdminName:function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};window.usesAdminFullName=function(){return true;};window.fullAdminNameHtml=function(value){try{return '<span class="member-vnext-full-name">'+escapeName(String(value||'').trim())+'</span>';}catch(_){return String(value||'');}};}
+/* Spec: "한줄에 5명 나오게 해주라고. 이름과 설명 다 가리지 않고 세로가
+   약간 길어지게 하면 되잖아." Always 5 columns, regardless of width --
+   the previous responsive stepping (3 columns, only 5 above 520px) left
+   narrow phones stuck at 2-3. Height stays auto and text wraps instead of
+   clipping, so a narrower card just grows taller rather than hiding
+   anything. */
+function ensureQuickRosterGridStyle(){if(document.getElementById('jmQuickRosterGridV1'))return;var style=document.createElement('style');style.id='jmQuickRosterGridV1';style.textContent='#quickActiveRoster.v4-quick-roster{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important;align-items:start!important}#quickActiveRoster .quick-member{padding:4px 3px!important;min-height:40px!important;height:auto!important;gap:2px!important}#quickActiveRoster .quick-member-name{font-size:clamp(8.5px,2.3vw,11px)!important;line-height:1.15!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:keep-all!important}#quickActiveRoster .quick-member-games{font-size:6.5px!important;margin-top:-1px!important}#quickActiveRoster .member-info-detail{font-size:6.5px!important;margin-top:1px!important;white-space:normal!important}#quickActiveRoster .member-vnext-memo{font-size:6.5px!important;white-space:normal!important}#quickActiveRoster .member-vnext-badge.new-badge{position:static!important;display:inline-flex!important;width:auto!important;margin:1px auto 0!important;padding:1px 3px!important;font-size:6.5px!important;box-shadow:none!important}';(document.head||document.documentElement).appendChild(style);}
+function maintain(){try{fixCheckOverlap();}catch(_){}try{fixNewBadges();}catch(_){}try{fixBottomBar();}catch(_){}try{fixExcludedNames();}catch(_){}try{fixDuplicateNameDisplay();}catch(_){}try{fixGlobalCompactName();}catch(_){}try{fixUsesAdminFullNameGate();}catch(_){}try{ensureQuickRosterGridStyle();}catch(_){}}
 function boot(){var tries=0;(function retry(){tries++;maintain();if(tries<150)setTimeout(retry,100);})();var r=root();if(r&&!r.__jmV2081Obs){var q=false;r.__jmV2081Obs=new MutationObserver(function(){if(q)return;q=true;setTimeout(function(){q=false;maintain();},50);});r.__jmV2081Obs.observe(r,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else setTimeout(boot,0);
 })();
