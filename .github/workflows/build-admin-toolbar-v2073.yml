@@ -389,173 +389,37 @@ jobs:
               if old not in text:
                   raise SystemExit('handleClick final branch anchor not found -- base HTML has drifted')
               text = text.replace(old, new, 1)
-
-              # Second half of the same fix: the base HTML also has an entirely
-              # separate, unrelated multigroup-swap script that overrides
-              # window.handleCourtMemberTap/handleWaitMemberTap -- meaning EVERY
-              # member card's real click handler is this file's tap(), not
-              # assignMemberToChosenEmpty(). Freeing handleClick above (so the
-              # click reaches the card's own onclick) isn't enough by itself --
-              # tap() has to know about an armed AUTO_ASSIGN_TARGET too, or it
-              # just treats the tap as a group-swap source/target pick instead.
-              old_tap = (
-                  "function tap(location,id,event){\n"
-                  "    if(event&&event.target&&event.target.closest('button.small'))return;\n"
-                  "    if(event){event.preventDefault();event.stopPropagation();}\n"
-                  "    id=String(id); location={type:String(location.type),index:String(location.index||'')};\n"
-                  "    if(sourcePick&&sourcePick.ids.indexOf(id)>=0){\n"
-                  "      toggleIn(sourcePick,id);\n"
-                  "      if(!sourcePick.ids.length){sourcePick=targetPick;targetPick=null;}\n"
-                  "      sync();return;\n"
-                  "    }\n"
-                  "    if(targetPick&&targetPick.ids.indexOf(id)>=0){\n"
-                  "      toggleIn(targetPick,id);\n"
-                  "      if(!targetPick.ids.length)targetPick=null;\n"
-                  "      sync();return;\n"
-                  "    }\n"
-                  "    if(!sourcePick){sourcePick={location:location,ids:[id]};sync();return;}\n"
-                  "    if(same(sourcePick.location,location)){\n"
-                  "      if(targetPick){alert('교환 상대를 선택 중입니다. 상대 선택을 다시 눌러 취소한 뒤 선택하세요.');return;}\n"
-                  "      toggleIn(sourcePick,id);sync();return;\n"
-                  "    }\n"
-                  "    if(!targetPick)targetPick={location:location,ids:[]};\n"
-                  "    if(!same(targetPick.location,location)){\n"
-                  "      alert('교환 상대도 한 곳에서만 선택하세요. 선택한 상대를 다시 눌러 취소할 수 있습니다.');return;\n"
-                  "    }\n"
-                  "    if(targetPick.ids.length>=sourcePick.ids.length){\n"
-                  "      alert('양쪽에서 같은 인원수만 선택할 수 있습니다.');return;\n"
-                  "    }\n"
-                  "    toggleIn(targetPick,id);sync();execute();\n"
-                  "  }"
-              )
-              if old_tap not in text:
-                  raise SystemExit('tap() anchor not found -- base HTML has drifted')
-              fill_fn = (
-                  "function fillAutoAssignTarget(id){\n"
-                  "    var t=AUTO_ASSIGN_TARGET;if(!t)return;\n"
-                  "    var group=t.type==='court'?(STATE.courts[t.index]||[]):(STATE.waitGroups[t.index]||[]);\n"
-                  "    if(group.indexOf(id)>=0){alert('이미 선택한 위치에 있는 멤버입니다.');return;}\n"
-                  "    if(group.length>=4){AUTO_ASSIGN_TARGET=null;alert('선택한 위치에는 빈자리가 없습니다.');if(typeof renderState==='function')renderState();return;}\n"
-                  "    var method=t.type==='court'?'assignMembersToCourt':'assignMembersToWaitGroup';\n"
-                  "    (async function(){\n"
-                  "      try{\n"
-                  "        var result=await window.server(method,[ADMIN_PIN_VALUE,t.index,[id]]);\n"
-                  "        if(group.length+1>=4)AUTO_ASSIGN_TARGET=null;\n"
-                  "        if(typeof renderState==='function')renderState(result&&result.state?result.state:result);\n"
-                  "      }catch(error){alert(error&&error.message||error);}\n"
-                  "    })();\n"
-                  "  }\n"
-                  "  "
-              )
-              new_tap = old_tap.replace(
-                  "    if(event&&event.target&&event.target.closest('button.small'))return;\n",
-                  "    if(event&&event.target&&event.target.closest('button.small'))return;\n"
-                  "    /* jmAutoAssignTargetFillFixV1 */\n"
-                  "    if(typeof AUTO_ASSIGN_TARGET!=='undefined'&&AUTO_ASSIGN_TARGET){\n"
-                  "      if(event){event.preventDefault();event.stopPropagation();}\n"
-                  "      fillAutoAssignTarget(String(id));\n"
-                  "      return;\n"
-                  "    }\n",
-                  1
-              )
-              text = text.replace(old_tap, fill_fn + new_tap, 1)
           if marker not in text:
               raise SystemExit('auto-assign target fill fix did not apply')
           p.write_text(text, encoding='utf-8')
           PY
           grep -F 'jmAutoAssignTargetFillFixV1' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'function fillAutoAssignTarget' "$ROOT/assets/admin/index.html" >/dev/null
-
-          python3 - "$ROOT/assets/admin/index.html" <<'PY'
-          from pathlib import Path
-          import sys
-          p = Path(sys.argv[1])
-          text = p.read_text(encoding='utf-8')
-          marker = 'jmAutoAssignTargetToastV1'
-          if marker not in text:
-              # v208.45: "자동배정때문에 수동배정 버튼 선택이 너무 불편했어."
-              # jmAutoAssignTargetFillFixV1 (v208.35) made tap() silently drop
-              # every tapped member into AUTO_ASSIGN_TARGET whenever it is
-              # armed -- correct per the base app's own native
-              # assignMemberToChosenEmpty() behavior, but AUTO_ASSIGN_TARGET
-              # only ever clears itself when that target seat is full (4
-              # members) or the admin taps the SAME empty slot again to
-              # cancel. Tap one empty slot, place one or two people, then
-              # move on to unrelated manual selection elsewhere (수동배정) --
-              # every subsequent member tap keeps silently vanishing into that
-              # stale target instead of registering as a normal selection,
-              # with zero on-screen explanation of what just happened or how
-              # to escape it. The underlying targeting feature is intentional
-              # (tap several members in a row to fill one seat) and the
-              # tap-same-slot-to-cancel escape already exists natively, so the
-              # fix here is not to remove either -- it's to make every
-              # placement visibly say what happened and how to cancel,
-              # instead of a silent no-op-looking tap.
-              old_fill_fn = (
-                  "function fillAutoAssignTarget(id){\n"
-                  "    var t=AUTO_ASSIGN_TARGET;if(!t)return;\n"
-                  "    var group=t.type==='court'?(STATE.courts[t.index]||[]):(STATE.waitGroups[t.index]||[]);\n"
-                  "    if(group.indexOf(id)>=0){alert('이미 선택한 위치에 있는 멤버입니다.');return;}\n"
-                  "    if(group.length>=4){AUTO_ASSIGN_TARGET=null;alert('선택한 위치에는 빈자리가 없습니다.');if(typeof renderState==='function')renderState();return;}\n"
-                  "    var method=t.type==='court'?'assignMembersToCourt':'assignMembersToWaitGroup';\n"
-                  "    (async function(){\n"
-                  "      try{\n"
-                  "        var result=await window.server(method,[ADMIN_PIN_VALUE,t.index,[id]]);\n"
-                  "        if(group.length+1>=4)AUTO_ASSIGN_TARGET=null;\n"
-                  "        if(typeof renderState==='function')renderState(result&&result.state?result.state:result);\n"
-                  "      }catch(error){alert(error&&error.message||error);}\n"
-                  "    })();\n"
-                  "  }\n"
-                  "  "
-              )
-              if old_fill_fn not in text:
-                  raise SystemExit('fillAutoAssignTarget anchor not found -- base HTML has drifted')
-              new_fill_fn = (
-                  "function jmAutoAssignFillToast(text){\n"
-                  "    /* jmAutoAssignTargetToastV1 */\n"
-                  "    try{\n"
-                  "      var t=document.getElementById('jmAutoAssignFillToast');\n"
-                  "      if(!t){\n"
-                  "        t=document.createElement('div');t.id='jmAutoAssignFillToast';\n"
-                  "        t.style.cssText='position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:2147483000;padding:9px 14px;border-radius:10px;background:#166534;color:#fff;font-size:12px;font-weight:900;box-shadow:0 8px 24px rgba(0,0,0,.28);max-width:88vw;text-align:center;transition:opacity .2s;pointer-events:none';\n"
-                  "        document.body.appendChild(t);\n"
-                  "      }\n"
-                  "      t.textContent=text;t.style.opacity='1';\n"
-                  "      window.clearTimeout(t.__jmTimer);\n"
-                  "      t.__jmTimer=window.setTimeout(function(){t.style.opacity='0';},2600);\n"
-                  "    }catch(_){}\n"
-                  "  }\n"
-                  "  function fillAutoAssignTarget(id){\n"
-                  "    var t=AUTO_ASSIGN_TARGET;if(!t)return;\n"
-                  "    var group=t.type==='court'?(STATE.courts[t.index]||[]):(STATE.waitGroups[t.index]||[]);\n"
-                  "    if(group.indexOf(id)>=0){alert('이미 선택한 위치에 있는 멤버입니다.');return;}\n"
-                  "    if(group.length>=4){AUTO_ASSIGN_TARGET=null;alert('선택한 위치에는 빈자리가 없습니다.');if(typeof renderState==='function')renderState();return;}\n"
-                  "    var method=t.type==='court'?'assignMembersToCourt':'assignMembersToWaitGroup';\n"
-                  "    var targetMember=(STATE.members||[]).find(function(m){return String(m.id)===String(id);});\n"
-                  "    var targetName=targetMember?String(targetMember.name||''):'';\n"
-                  "    var targetLabel=t.type==='court'?('코트 '+(t.index+1)):('대기 '+(t.index+1));\n"
-                  "    (async function(){\n"
-                  "      try{\n"
-                  "        var result=await window.server(method,[ADMIN_PIN_VALUE,t.index,[id]]);\n"
-                  "        if(group.length+1>=4){\n"
-                  "          AUTO_ASSIGN_TARGET=null;\n"
-                  "          jmAutoAssignFillToast((targetName?targetName+'님을 ':'')+targetLabel+'에 배정했습니다 (가득 참)');\n"
-                  "        }else{\n"
-                  "          jmAutoAssignFillToast((targetName?targetName+'님을 ':'')+targetLabel+'에 배정했습니다. 다른 곳을 선택하려면 그 빈자리를 다시 눌러 취소하세요.');\n"
-                  "        }\n"
-                  "        if(typeof renderState==='function')renderState(result&&result.state?result.state:result);\n"
-                  "      }catch(error){alert(error&&error.message||error);}\n"
-                  "    })();\n"
-                  "  }\n"
-                  "  "
-              )
-              text = text.replace(old_fill_fn, new_fill_fn, 1)
-          if marker not in text:
-              raise SystemExit('auto-assign target toast fix did not apply')
-          p.write_text(text, encoding='utf-8')
-          PY
-          grep -F 'jmAutoAssignTargetToastV1' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'function jmAutoAssignFillToast' "$ROOT/assets/admin/index.html" >/dev/null
+          # v208.46 removed this fix's ORIGINAL second half here, which had
+          # made tap() (the court/wait swap-selection script) also drop every
+          # tapped member into AUTO_ASSIGN_TARGET whenever it was armed, and
+          # the jmAutoAssignTargetToastV1 patch (v208.45) that later
+          # papered over the resulting confusion with a toast. "자동배정
+          # 수동배정이 뒤엉켜서 잘 안돼" led to actually tracing what
+          # assignMemberToChosenEmpty() -- the native function this v208.35
+          # fix was modeled on -- currently resolves to: a LATER, ALREADY-
+          # PRESENT native reassignment (installAdminCourtMultiFill(),
+          # window.assignMemberToChosenEmpty = function(){ return false; })
+          # had already turned it into a no-op, specifically so that arming
+          # an empty target does not hijack ordinary member taps -- the base
+          # app moved to a cleaner design where tapping empty slots only adds
+          # them to EMPTY_SLOT_TARGETS (a proper multi-select, up to 4) and
+          # the actual fill happens explicitly, either by selecting members
+          # first and tapping ONE slot (handleEmptySlotTap's ids.length
+          # branch, unaffected by any of this) or by pressing the 자동배정
+          # button (smartAssignSelected(), which fills every marked target
+          # from SELECTED if non-empty else auto-picks). v208.35's tap()
+          # change reintroduced the exact hijack-on-every-tap pattern the
+          # native code had already deliberately abandoned, but only for
+          # court/wait taps -- quick-roster taps were already unaffected by
+          # it via that same no-op. Removing it makes court/wait consistent
+          # with quick-roster and restores "select members normally, then
+          # place them" as the always-available default, with 자동배정
+          # staying exactly what pressing that button already does.
 
           python3 - "$ROOT/assets/admin/index.html" <<'PY'
           from pathlib import Path
@@ -1363,16 +1227,13 @@ jobs:
           grep -F 'jmBottomTeamButtonV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmBottomTeamButton' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmVnextMemoFontSizeFixV1' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'function fillAutoAssignTarget' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'jmAutoAssignTargetToastV1' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'function jmAutoAssignFillToast' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.45-auto-assign-toast.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.45-auto-assign-toast.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.45-auto-assign-toast.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.46-remove-tap-hijack.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.46-remove-tap-hijack.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.46-remove-tap-hijack.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1412,23 +1273,20 @@ jobs:
           grep -F 'jmMarkAdminNewCardsFullNameFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmQuickRosterGridV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmRemoveDuplicateCheckboxV1' "$ROOT/verify.html" >/dev/null
-          grep -F 'function fillAutoAssignTarget' "$ROOT/verify.html" >/dev/null
-          grep -F 'jmAutoAssignTargetToastV1' "$ROOT/verify.html" >/dev/null
-          grep -F 'function jmAutoAssignFillToast' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.45-auto-assign-toast.apk"
+          APK="$ROOT/jayuminton-admin-v208.46-remove-tap-hijack.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.45-auto-assign-toast.apk
-          printf 'status=success\nversion=208.45\nfeature=auto-assign-target-toast+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20845-auto-assign-toast.txt
-          git add releases/jayuminton-admin-v208.45-auto-assign-toast.apk deployment/status/v20845-auto-assign-toast.txt
-          git commit -m 'Publish admin v208.45: show a toast on every auto-assign-target placement (who, where, how to cancel) instead of a silent tap that made manual selection feel broken' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.46-remove-tap-hijack.apk
+          printf 'status=success\nversion=208.46\nfeature=remove-tap-auto-assign-hijack+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20846-remove-tap-hijack.txt
+          git add releases/jayuminton-admin-v208.46-remove-tap-hijack.apk deployment/status/v20846-remove-tap-hijack.txt
+          git commit -m 'Publish admin v208.46: manual selection always wins, 자동배정 only ever happens by pressing the button -- remove the tap() hijack that silently dropped every member tap into a stale armed target' || exit 0
           git push origin HEAD:main
