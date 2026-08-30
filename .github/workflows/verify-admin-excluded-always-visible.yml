@@ -40,7 +40,7 @@ jobs:
           excluded=html.index('class="card excluded-panel admin-excluded-always-visible"')
           assert not start < excluded < end
           assert html.count('id="excludedMembers"') == 1
-          assert '멤버 등록·비밀번호·게임횟수 관리' in html
+          assert '멤버등록·비밀번호·게임횟수·제외인원 관리' in html
           assert '게임횟수 카운트 조정' in html[start:end]
           wait=html.index('class="v4-wait-summary"',excluded)
           block=html[excluded:wait]
