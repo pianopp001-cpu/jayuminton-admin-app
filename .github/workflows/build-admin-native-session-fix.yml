@@ -1,5 +1,5 @@
 name: Build admin native session fix v208.39
-# base v208.39 toolbar APK (memo font-size fix)
+# retrigger: base v208.39 toolbar APK now published on main
 
 on:
   push:
