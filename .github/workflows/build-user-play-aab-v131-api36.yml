@@ -1,4 +1,5 @@
 name: Build Google Play AAB v1.3.1 API36
+# retry: previous run failed at the Firebase config lookup step, unrelated to the v1.3.2 code change
 
 on:
   push:
