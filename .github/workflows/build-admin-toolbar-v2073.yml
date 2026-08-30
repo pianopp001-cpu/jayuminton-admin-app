@@ -638,37 +638,41 @@ jobs:
           text = p.read_text(encoding='utf-8')
           marker = 'jmMarkAdminNewCardsFullNameFixV1'
           if marker not in text:
-              # v208.42: v208.40/v208.41 patched adminVnextCardName and
-              # compactMemberName (both genuinely global, top-level function
-              # declarations in the shared script) to always show the full
-              # name -- but a THIRD, independent decorator kept winning the
-              # last write. <script id="adminVnextNewCardSizer"> wraps its own
+              # v208.40/v208.41 patched adminVnextCardName and compactMemberName
+              # (both genuinely global, top-level function declarations in the
+              # shared script) to always show the full name -- but a THIRD,
+              # independent decorator kept winning the last write.
+              # <script id="adminVnextNewCardSizer"> wraps its own
               # (function(){...})() IIFE containing usesAdminFullName() and
               # fullAdminNameHtml(), and markAdminNewCards() -- scheduled on
               # every render via requestAnimationFrame -- calls THOSE closure-
               # local functions directly to set every card's name element,
               # unconditionally overwriting whatever adminVnextCardName/
-              # compactMemberName had just rendered. Because usesAdminFullName
-              # and fullAdminNameHtml live inside that IIFE's closure (not at
-              # the shared script's top level), window.usesAdminFullName=...
-              # from an overlay script only creates an unrelated global
-              # property and can never reach what markAdminNewCards() actually
-              # calls -- the only fix point that works is this function's own
-              # source text, patched here.
-              old_uses_full_name = (
-                  "  function usesAdminFullName(member) {\n"
-                  "    return isAdminNewMember(member) || isAdminDuplicateMember(member);\n"
-                  "  }"
-              )
-              if old_uses_full_name not in text:
-                  raise SystemExit('usesAdminFullName anchor not found -- base HTML has drifted')
-              new_uses_full_name = (
-                  "  function usesAdminFullName(member) {\n"
-                  "    /* jmMarkAdminNewCardsFullNameFixV1 */\n"
-                  "    return true;\n"
-                  "  }"
-              )
-              text = text.replace(old_uses_full_name, new_uses_full_name, 1)
+              # compactMemberName had just rendered.
+              #
+              # v208.42 made usesAdminFullName() always return true to force
+              # this, but that function ALSO gates
+              # card.classList.add('is-new-member') -- and
+              # .quick-member.is-new-member{grid-column:1/-1!important} makes
+              # a card span the ENTIRE grid row. Forcing every card into that
+              # branch made every quick-roster card claim a full row by
+              # itself, collapsing "5 per row" down to 1 per row. Confirmed by
+              # rendering the actual shipped v208.42 HTML in a browser with
+              # synthetic member data and reading getComputedStyle -- the grid
+              # itself was still 5 columns, but every card's own grid-column
+              # was "1 / -1".
+              #
+              # The correct fix leaves usesAdminFullName()'s isNew/isDuplicate
+              # gate (and therefore is-new-member/grid-column:1/-1) untouched,
+              # and instead patches ONLY the two places that actually decide
+              # what text a name element gets: fullAdminNameHtml() (drop the
+              # <br><small> two-line split) and the "compact" branch inside
+              # markAdminNewCards() (show the full name instead of a
+              # 2-character, parenthetical-stripped slice). The
+              # quick-roster's own grid-column:1/-1 override for is-new-member
+              # cards is handled separately, in admin_smart_placement_v2081.js
+              # (jmQuickRosterGridV1), so a genuinely new member's card still
+              # fits into the 5-column grid instead of spanning the full row.
               old_full_html = (
                   "function fullAdminNameHtml(value) {\n"
                   "    var stored = String(value || '').trim();\n"
@@ -682,10 +686,26 @@ jobs:
                   raise SystemExit('fullAdminNameHtml anchor not found -- base HTML has drifted')
               new_full_html = (
                   "function fullAdminNameHtml(value) {\n"
+                  "    /* jmMarkAdminNewCardsFullNameFixV1 */\n"
                   "    return '<span class=\"member-vnext-full-name\">' + escapeAdminName(String(value || '').trim()) + '</span>';\n"
                   "  }"
               )
               text = text.replace(old_full_html, new_full_html, 1)
+              old_compact_branch = (
+                  "        if (name.getAttribute('data-admin-name-mode') !== 'compact') {\n"
+                  "          name.textContent = String(member.name || '').replace(/\\s*\\(.*/, '').trim().slice(0, 2);\n"
+                  "          name.setAttribute('data-admin-name-mode', 'compact');\n"
+                  "        }"
+              )
+              if old_compact_branch not in text:
+                  raise SystemExit('markAdminNewCards compact-name branch anchor not found -- base HTML has drifted')
+              new_compact_branch = (
+                  "        if (name.getAttribute('data-admin-name-mode') !== 'compact') {\n"
+                  "          name.textContent = String(member.name || '').trim();\n"
+                  "          name.setAttribute('data-admin-name-mode', 'compact');\n"
+                  "        }"
+              )
+              text = text.replace(old_compact_branch, new_compact_branch, 1)
           if marker not in text:
               raise SystemExit('markAdminNewCards full-name fix did not apply')
           p.write_text(text, encoding='utf-8')
@@ -1257,9 +1277,9 @@ jobs:
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.42-mark-new-cards-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.42-mark-new-cards-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.42-mark-new-cards-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.43-quick-roster-column-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.43-quick-roster-column-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.43-quick-roster-column-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1305,15 +1325,15 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.42-mark-new-cards-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.43-quick-roster-column-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.42-mark-new-cards-fix.apk
-          printf 'status=success\nversion=208.42\nfeature=mark-admin-new-cards-full-name-source-fix+uses-admin-full-name-decorator-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20842-mark-new-cards-fix.txt
-          git add releases/jayuminton-admin-v208.42-mark-new-cards-fix.apk deployment/status/v20842-mark-new-cards-fix.txt
-          git commit -m 'Publish admin v208.42: patch usesAdminFullName/fullAdminNameHtml source text directly -- the actual closure-local functions markAdminNewCards() calls, unreachable by any window-level override' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.43-quick-roster-column-fix.apk
+          printf 'status=success\nversion=208.43\nfeature=quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20843-quick-roster-column-fix.txt
+          git add releases/jayuminton-admin-v208.43-quick-roster-column-fix.apk deployment/status/v20843-quick-roster-column-fix.txt
+          git commit -m 'Publish admin v208.43: usesAdminFullName forcing every card into is-new-member collapsed the 5-column quick-roster grid to 1 per row (grid-column:1/-1); revert that gate, patch only the name text, cancel grid-column for is-new-member in the quick-roster' || exit 0
           git push origin HEAD:main
