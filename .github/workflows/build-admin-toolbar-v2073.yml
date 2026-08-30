@@ -600,6 +600,42 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmRemoveDuplicateCheckboxV1'
+          if marker not in text:
+              # v208.40: "신규가 아니더라도 모든 목록 이름(닉네임) 다 나오니까
+              # 동명이인 버튼은 없어도 돼." compactMemberName/adminVnextCardName
+              # are now patched (admin_smart_placement_v2081.js) to always show
+              # the full stored name for every member, so the "동명이인" checkbox
+              # -- which only ever existed to force full-name display for
+              # ambiguous same-name members -- no longer serves any purpose.
+              # Its isDuplicate reads/writes elsewhere are already null-safe
+              # (document.getElementById returning null), so removing only the
+              # visible control is sufficient and does not require touching
+              # those call sites.
+              target = (
+                  '      <label class="md-member-check">'
+                  '<input id="newIsDuplicate" type="checkbox"> 동명이인</label>\n'
+              )
+              if target not in text:
+                  raise SystemExit('duplicate-name checkbox anchor not found -- base HTML has drifted')
+              text = text.replace(
+                  target,
+                  '      <!-- jmRemoveDuplicateCheckboxV1: removed, all cards always show the full name -->\n',
+                  1,
+              )
+          if marker not in text:
+              raise SystemExit('duplicate-name checkbox removal did not apply')
+          if 'id="newIsDuplicate"' in text:
+              raise SystemExit('duplicate-name checkbox still present after removal')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmRemoveDuplicateCheckboxV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmUnlimitedPaintIdempotentFix'
           if marker not in text:
               # installJayumintonAdminUnlimitedSelectionV2072 -- the foundational
@@ -1125,6 +1161,9 @@ jobs:
           grep -F 'swapBtn.click()' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F "SELECTED.clear()" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'window.__jmDuplicateNameFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__jmFullNameEverywhereV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmQuickRosterGridV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmRemoveDuplicateCheckboxV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SERVER_TIMEOUT_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__jmServerTimeoutV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmServerWrapChainFixV1' "$ROOT/assets/admin/index.html" >/dev/null
@@ -1156,9 +1195,9 @@ jobs:
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.39-memo-font-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.39-memo-font-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.39-memo-font-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.40-full-name-grid-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.40-full-name-grid-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.40-full-name-grid-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1193,21 +1232,25 @@ jobs:
           grep -F 'jmBottomTeamButtonV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomTeamButton' "$ROOT/verify.html" >/dev/null
           grep -F 'jmVnextMemoFontSizeFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'window.__jmDuplicateNameFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F '__jmFullNameEverywhereV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmQuickRosterGridV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmRemoveDuplicateCheckboxV1' "$ROOT/verify.html" >/dev/null
           grep -F 'function fillAutoAssignTarget' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.39-memo-font-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.40-full-name-grid-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.39-memo-font-fix.apk
-          printf 'status=success\nversion=208.39\nfeature=vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20839-memo-font-fix.txt
-          git add releases/jayuminton-admin-v208.39-memo-font-fix.apk deployment/status/v20839-memo-font-fix.txt
-          git commit -m 'Publish admin v208.39: fix unstyled .member-vnext-memo span rendering larger than the member name' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.40-full-name-grid-fix.apk
+          printf 'status=success\nversion=208.40\nfeature=full-name-everywhere+quick-roster-5-column-grid+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20840-full-name-grid-fix.txt
+          git add releases/jayuminton-admin-v208.40-full-name-grid-fix.apk deployment/status/v20840-full-name-grid-fix.txt
+          git commit -m 'Publish admin v208.40: always show full member names everywhere, fit up to 5 per row in quick-assign roster, remove duplicate-name checkbox' || exit 0
           git push origin HEAD:main
