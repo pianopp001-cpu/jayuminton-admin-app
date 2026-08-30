@@ -312,14 +312,17 @@ TEAM_STATUS_ADDON = r'''
   function decorate(){
     scheduled=false;var s=state();if(!s||!Array.isArray(s.members))return;
     var map={};s.members.forEach(function(m){map[String(m.id)]=m;});
+    var tempIds={};(Array.isArray(s.tempPairs)?s.tempPairs:[]).forEach(function(g){(Array.isArray(g&&g.members)?g.members:[]).forEach(function(id){tempIds[String(id)]=true;});});
     document.querySelectorAll('[data-member-id]').forEach(function(card){
-      var member=map[String(card.getAttribute('data-member-id')||'')];if(!member)return;
+      var id=String(card.getAttribute('data-member-id')||'');
+      var member=map[id];if(!member)return;
       var host=card.querySelector('.name,.member-name,.quick-member-name')||card;
       var wrap=card.querySelector('.jm-member-badges');if(!wrap){wrap=document.createElement('span');wrap.className='jm-member-badges';host.insertAdjacentElement('afterend',wrap);}
       var team=String(member.teamLabel||'').trim();
       var next=team?'<span class="jm-member-badge jm-team-badge" style="--jm-team-color:'+color(team)+'">'+team.replace(/[&<>]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[x];})+'</span>':'';
       if(wrap.innerHTML!==next)wrap.innerHTML=next;
       wrap.hidden=!wrap.innerHTML;
+      card.classList.toggle('jm-temp-pair',!!tempIds[id]);
     });
   }
   function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(decorate);}
@@ -579,7 +582,7 @@ MEMO_DEDUPE_ADDON = r'''
 COMPLETION_ADDON = r'''
 <style>
 /* JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1 */
-#memberApp [data-member-id].is-self-member{border:2px solid #facc15!important;outline:2px solid #facc15!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 6px #facc15!important;overflow:visible!important}
+#memberApp [data-member-id].is-self-member{border:2px solid #2563eb!important;outline:2px solid #2563eb!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 6px #2563eb!important;overflow:visible!important}
 #memberApp [data-member-id].is-self-member>.member-self-star{position:absolute!important;top:2px!important;right:2px!important;left:auto!important;width:auto!important;min-width:22px!important;height:15px!important;min-height:15px!important;padding:0 3px!important;border:1px solid #fff!important;border-radius:999px!important;background:#111827!important;color:#fff!important;font-size:7px!important;font-weight:950!important;line-height:13px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;white-space:nowrap!important;z-index:30!important;box-shadow:0 1px 3px rgba(15,23,42,.35)!important}
 #memberApp [data-member-id]>.member-public-memo{color:#d946ef!important;font-size:10px!important;font-weight:900!important;text-shadow:0 0 8px rgba(217,70,239,.18)!important}
 #jmMemberSelfMemoInput{font-size:11px!important;line-height:1.35!important;color:#d946ef!important;font-weight:850!important}
@@ -731,6 +734,68 @@ def patch(path: Path) -> None:
     text = text.replace(
         "setInterval(pollIncoming, 5000);",
         "setInterval(pollIncoming, 9000);",
+    )
+
+    # "1회성 팀 설정했을 때 사용자 앱, 웹에서 안보이는 부분 고쳐주고." The
+    # .jm-temp-pair CSS class has real style rules (see temporary_team_css
+    # above), but nothing on the member/user side ever adds that class to a
+    # card -- confirmed by fetching the live page and finding zero
+    # occurrences of "tempPairs" anywhere in its JavaScript. decorate() (the
+    # same loop that already renders each member's permanent teamLabel
+    # badge) never looked at state.tempPairs at all. Extend it to build a
+    # lookup of every member id currently in any tempPairs group (each
+    # normalized group always has a `.members` array server-side, per
+    # normalizeTempPairs() in cloudflare/state-worker/worker.js) and toggle
+    # .jm-temp-pair accordingly, right alongside the existing team-badge
+    # logic that already runs on every render/poll cycle.
+    old_decorate = (
+        "function decorate(){\n"
+        "    scheduled=false;var s=state();if(!s||!Array.isArray(s.members))return;\n"
+        "    var map={};s.members.forEach(function(m){map[String(m.id)]=m;});\n"
+        "    document.querySelectorAll('[data-member-id]').forEach(function(card){\n"
+        "      var member=map[String(card.getAttribute('data-member-id')||'')];if(!member)return;\n"
+        "      var host=card.querySelector('.name,.member-name,.quick-member-name')||card;\n"
+        "      var wrap=card.querySelector('.jm-member-badges');if(!wrap){wrap=document.createElement('span');wrap.className='jm-member-badges';host.insertAdjacentElement('afterend',wrap);}\n"
+        "      var team=String(member.teamLabel||'').trim();\n"
+        "      var next=team?'<span class=\"jm-member-badge jm-team-badge\" style=\"--jm-team-color:'+color(team)+'\">'+team.replace(/[&<>]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[x];})+'</span>':'';\n"
+        "      if(wrap.innerHTML!==next)wrap.innerHTML=next;\n"
+        "      wrap.hidden=!wrap.innerHTML;\n"
+        "    });\n"
+        "  }"
+    )
+    new_decorate = (
+        "function decorate(){\n"
+        "    scheduled=false;var s=state();if(!s||!Array.isArray(s.members))return;\n"
+        "    var map={};s.members.forEach(function(m){map[String(m.id)]=m;});\n"
+        "    var tempIds={};(Array.isArray(s.tempPairs)?s.tempPairs:[]).forEach(function(g){(Array.isArray(g&&g.members)?g.members:[]).forEach(function(id){tempIds[String(id)]=true;});});\n"
+        "    document.querySelectorAll('[data-member-id]').forEach(function(card){\n"
+        "      var id=String(card.getAttribute('data-member-id')||'');\n"
+        "      var member=map[id];if(!member)return;\n"
+        "      var host=card.querySelector('.name,.member-name,.quick-member-name')||card;\n"
+        "      var wrap=card.querySelector('.jm-member-badges');if(!wrap){wrap=document.createElement('span');wrap.className='jm-member-badges';host.insertAdjacentElement('afterend',wrap);}\n"
+        "      var team=String(member.teamLabel||'').trim();\n"
+        "      var next=team?'<span class=\"jm-member-badge jm-team-badge\" style=\"--jm-team-color:'+color(team)+'\">'+team.replace(/[&<>]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[x];})+'</span>':'';\n"
+        "      if(wrap.innerHTML!==next)wrap.innerHTML=next;\n"
+        "      wrap.hidden=!wrap.innerHTML;\n"
+        "      card.classList.toggle('jm-temp-pair',!!tempIds[id]);\n"
+        "    });\n"
+        "  }"
+    )
+    text = text.replace(old_decorate, new_decorate, 1)
+
+    # "나라고 지정할 때 생기는 테두리 노란색과는 겹치면 헷깔리지 않을까
+    # 싶어." Confirmed: .is-self-member's active style and .jm-temp-pair's
+    # active style are BOTH #facc15 -- literally the same yellow, with a
+    # near-identical border+ring treatment, so "this is me" and "this is a
+    # one-time team" would look the same on screen. The admin app's own
+    # spec already fixes temp-team as yellow ("1회성팀... 노란 굵은 테두리
+    # 1줄"), so recolor the self-marker instead -- it is a member-app-only
+    # concept with no admin-side color convention to stay consistent with.
+    # #2563eb is far from both the yellow/gold family and every hash-picked
+    # permanent team color in color() above.
+    text = text.replace(
+        "#memberApp [data-member-id].is-self-member{border:2px solid #facc15!important;outline:2px solid #facc15!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 6px #facc15!important;overflow:visible!important}",
+        "#memberApp [data-member-id].is-self-member{border:2px solid #2563eb!important;outline:2px solid #2563eb!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 6px #2563eb!important;overflow:visible!important}",
     )
     apk_url = (
         "https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/"
