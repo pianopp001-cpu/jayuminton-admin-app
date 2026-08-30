@@ -79,21 +79,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # jmDropUnusedDeployConfigFieldsV1: mainDeploymentId/pushUrl used to be
-          # validated here but are never actually read by anything later in this
-          # workflow -- only firebaseProjectId is used (for the `firebase
-          # apps:list --project` call below). This is leftover from an older,
-          # unrelated deployment script this step's shape was copied from
-          # (pushUrl was never added to JAYUMINTON_DEPLOY_CONFIG_JSON, since this
-          # AAB build never needed it), and its presence-check was blocking every
-          # build with an opaque `set -e` exit and no error text. Only validate
-          # the one field this step actually uses.
+          # jmDropUnusedDeployConfigFieldsV1: this step used to require
+          # mainDeploymentId/pushUrl from JAYUMINTON_DEPLOY_CONFIG_JSON, but
+          # neither is actually read anywhere in THIS workflow -- only
+          # firebaseProjectId is used (for the `firebase apps:list --project`
+          # call below). pushUrl was never added to the secret at all (this
+          # AAB build never needed it), so validating it as non-null aborted
+          # every run under `set -e` with no error text. build_user_native_
+          # push_fresh_v110.sh itself still has a defensive `:?required` guard
+          # on both env vars even though it never reads their values either
+          # (confirmed: neither name appears anywhere past that guard in the
+          # script) -- rather than edit that shared script (many older,
+          # inactive workflows also invoke it), export harmless placeholders
+          # here so its guard is satisfied without depending on a field the
+          # secret doesn't have.
           C="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$C")"
           test -n "$FIREBASE_PROJECT_ID"
           test "$FIREBASE_PROJECT_ID" != null
-          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
+          {
+            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            echo "MAIN_DEPLOYMENT_ID=unused-not-in-deploy-config"
+            echo "PUSH_URL=unused-not-in-deploy-config"
+          } >> "$GITHUB_ENV"
 
           PACKAGE='com.jayuminton.user'
           firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
