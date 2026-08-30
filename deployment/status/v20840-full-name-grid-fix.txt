@@ -1,0 +1,6 @@
+status=success
+version=208.40
+feature=full-name-everywhere+quick-roster-5-column-grid+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing
+base=v207.2-unlimited-selection
+run_id=33288756110
+sha256=12250c810939465d8c182b0e2bbfb81c991d882f49c27397dbefd52f6ce27772
