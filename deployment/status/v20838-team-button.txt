@@ -1,0 +1,6 @@
+status=success
+version=208.38
+feature=bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing
+base=v207.2-unlimited-selection
+run_id=33282906227
+sha256=621b7504fa4f492dad656053929688453fd4756255518b5f7c4f4c91e70be10c
