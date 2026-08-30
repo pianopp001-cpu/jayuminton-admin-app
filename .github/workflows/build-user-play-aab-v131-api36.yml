@@ -1,5 +1,4 @@
 name: Build Google Play AAB v1.3.1 API36
-# retry: previous run failed at the Firebase config lookup step, unrelated to the v1.3.2 code change
 
 on:
   push:
@@ -80,20 +79,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # jmDropUnusedDeployConfigFieldsV1: mainDeploymentId/pushUrl used to be
+          # validated here but are never actually read by anything later in this
+          # workflow -- only firebaseProjectId is used (for the `firebase
+          # apps:list --project` call below). This is leftover from an older,
+          # unrelated deployment script this step's shape was copied from
+          # (pushUrl was never added to JAYUMINTON_DEPLOY_CONFIG_JSON, since this
+          # AAB build never needed it), and its presence-check was blocking every
+          # build with an opaque `set -e` exit and no error text. Only validate
+          # the one field this step actually uses.
           C="$RUNNER_TEMP/deploy.json"
           printf '%s' "$JAYUMINTON_DEPLOY_CONFIG_JSON" > "$C"
-          MAIN_DEPLOYMENT_ID="$(jq -r '.mainDeploymentId' "$C")"
-          PUSH_URL="$(jq -r '.pushUrl' "$C")"
           FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId' "$C")"
-          for value in "$MAIN_DEPLOYMENT_ID" "$PUSH_URL" "$FIREBASE_PROJECT_ID"; do
-            test -n "$value"
-            test "$value" != null
-          done
-          {
-            echo "MAIN_DEPLOYMENT_ID=$MAIN_DEPLOYMENT_ID"
-            echo "PUSH_URL=$PUSH_URL"
-            echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
-          } >> "$GITHUB_ENV"
+          test -n "$FIREBASE_PROJECT_ID"
+          test "$FIREBASE_PROJECT_ID" != null
+          echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" >> "$GITHUB_ENV"
 
           PACKAGE='com.jayuminton.user'
           firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
