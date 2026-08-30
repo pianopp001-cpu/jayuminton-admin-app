@@ -559,6 +559,47 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
+          marker = 'jmVnextMemoFontSizeFixV1'
+          if marker not in text:
+              # v208.39: "관리자앱에서 급수등 작은 메모가 사용자이름보다 글씨가
+              # 크면 안돼." adminVnextMemberBadges() renders member.publicMemo
+              # inside <span class="member-vnext-memo">...</span> -- but that
+              # class has ZERO CSS rules anywhere in the base HTML (confirmed by
+              # grep: the only occurrence of the string is where the JS creates
+              # the span). With no font-size set, it inherits the browser
+              # default (~13-16px), while the member name right above it is
+              # explicitly sized at 14-17px (.v4-court-card/.v4-wait-card .name)
+              # and grade/experience (.member-info-detail) is deliberately tiny
+              # (clamp 6.5-9px). This was always unstyled, but went unnoticed
+              # while publicMemo only ever held short optional notes; v208.37's
+              # single-field member form now routes the ENTIRE 급수/구력/
+              # 특이사항 text through this exact same span for every edited
+              # member, making the missing size rule immediately visible.
+              # Give it the same small treatment as memberInfoDetailHtml()'s
+              # .member-info-detail so it can never render larger than the name.
+              if '</body>' not in text:
+                  raise SystemExit('body close tag not found')
+              addon = (
+                  "<style id=\"jm-vnext-memo-font-size-v1\">\n"
+                  "/* jmVnextMemoFontSizeFixV1 */\n"
+                  "#adminApp .member-vnext-memo{display:block!important;width:100%!important;"
+                  "font-size:clamp(7px,1.7vw,9px)!important;font-weight:800!important;"
+                  "line-height:1.15!important;color:#657087!important;opacity:.92!important;"
+                  "white-space:normal!important;overflow-wrap:anywhere!important;word-break:keep-all!important;}\n"
+                  "</style>\n"
+              )
+              text = text.replace('</body>', addon + '</body>', 1)
+          if marker not in text:
+              raise SystemExit('vnext memo font-size fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmVnextMemoFontSizeFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
           marker = 'jmUnlimitedPaintIdempotentFix'
           if marker not in text:
               # installJayumintonAdminUnlimitedSelectionV2072 -- the foundational
@@ -1109,14 +1150,15 @@ jobs:
           grep -F 'jmHideBrokenQuickMessageButtonV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmBottomTeamButtonV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmBottomTeamButton' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmVnextMemoFontSizeFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'function fillAutoAssignTarget' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.38-team-button.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.38-team-button.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.38-team-button.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.39-memo-font-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.39-memo-font-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.39-memo-font-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1150,21 +1192,22 @@ jobs:
           grep -F 'jmHideBrokenQuickMessageButtonV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomTeamButtonV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomTeamButton' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmVnextMemoFontSizeFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'function fillAutoAssignTarget' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.38-team-button.apk"
+          APK="$ROOT/jayuminton-admin-v208.39-memo-font-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.38-team-button.apk
-          printf 'status=success\nversion=208.38\nfeature=bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20838-team-button.txt
-          git add releases/jayuminton-admin-v208.38-team-button.apk deployment/status/v20838-team-button.txt
-          git commit -m 'Publish admin v208.38: add 팀설정 on/off toggle to the bottom fixed action row (order: 배정대기/실행취소/수동배정/팀설정/자동배정/새로고침)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.39-memo-font-fix.apk
+          printf 'status=success\nversion=208.39\nfeature=vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20839-memo-font-fix.txt
+          git add releases/jayuminton-admin-v208.39-memo-font-fix.apk deployment/status/v20839-memo-font-fix.txt
+          git commit -m 'Publish admin v208.39: fix unstyled .member-vnext-memo span rendering larger than the member name' || exit 0
           git push origin HEAD:main
