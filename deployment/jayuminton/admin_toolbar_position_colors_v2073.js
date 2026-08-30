@@ -112,7 +112,20 @@ return;}
    does not depend on AUTO_ASSIGN_TARGET at all -- use that. */
 },true);}
 function exclusionPanel(){var r=root();if(!r)return null;for(var h of r.querySelectorAll('h1,h2,h3,h4,strong,.title,summary')){if(String(h.textContent||'').trim().indexOf('코트배정 제외')===0)return h.closest('.card,section,details')||h.parentElement;}return null;}
-function cleanQuickLayout(){var card=quickCard(),panel=exclusionPanel();if(card&&panel&&card.parentNode&&panel!==card){if(panel.nextSibling!==card)card.parentNode.insertBefore(panel,card);}var r=root();if(!r)return;Array.from(r.querySelectorAll('button')).forEach(function(b){if(String(b.textContent||'').replace(/\s+/g,'').indexOf('코트배정대기로복귀')>=0&&!b.closest('#jmUnlimitedToolbar'))b.style.display='none';});['quickSelectedCount','mobileSelectedCount','mdBulkDeleteCount'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='none';});}
+function cleanQuickLayout(){var card=quickCard(),panel=exclusionPanel();if(card&&panel&&card.parentNode&&panel!==card){if(panel.nextSibling!==card)card.parentNode.insertBefore(panel,card);}var r=root();if(!r)return;Array.from(r.querySelectorAll('button')).forEach(function(b){if(String(b.textContent||'').replace(/\s+/g,'').indexOf('코트배정대기로복귀')>=0&&!b.closest('#jmUnlimitedToolbar'))b.style.display='none';});['quickSelectedCount','mobileSelectedCount','mdBulkDeleteCount'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='none';});
+/* jmHideBrokenQuickMessageButtonV1: #quickMemberMessageButton is the base
+   app's OWN "메시지 보내기" button, calling openQuickMemberMessage()
+   directly -- but that function reads the LEGACY `SELECTED` Set, which
+   nothing populates any more (every member-card tap goes through this
+   toolbar's OWN selection tracking, .jm-unlimited-check, a completely
+   separate variable). Confirmed live: selecting a member via the normal
+   flow then tapping this native button does nothing -- the message modal
+   never opens. #jmUnlimitedToolbar's OWN [data-a="message"] button already
+   does this correctly (messageSelected() bridges selectedIds() into
+   SELECTED before calling openQuickMemberMessage()), so hide the native
+   duplicate instead of leaving two same-purpose buttons where only one
+   works. Same reasoning for #quickClearSelectionButton vs [data-a="clear"]. */
+['quickMemberMessageButton','quickClearSelectionButton'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='none';});}
 function installStyle(){if(document.getElementById('jmToolbarV2076Style'))return;var s=document.createElement('style');s.id='jmToolbarV2076Style';s.textContent=''
 +'#jmUnlimitedToolbar.jm-toolbar-under-quick-title{margin:7px 0 10px!important;padding:9px!important;border:1px solid #dbe4f0!important;border-radius:12px!important;background:#f8fafc!important;box-shadow:none!important}'
 +'#jmUnlimitedToolbar .jm-u-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important}'
