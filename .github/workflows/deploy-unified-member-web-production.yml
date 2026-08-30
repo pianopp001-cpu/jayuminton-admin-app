@@ -206,7 +206,7 @@ jobs:
                 if(!accepted&&typeof showMemberSettingMessage==='function') showMemberSettingMessage('자리 교환 요청을 거절했습니다.');
               }catch(e){ try{console.warn(e);}catch(err){} } finally { CHECKING=false; }
             }
-            setInterval(pollIncoming, 5000);
+            setInterval(pollIncoming, 9000);
 
             document.addEventListener('click', function(e){
               if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;

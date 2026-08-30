@@ -288,7 +288,7 @@ AUTO_SYNC_ADDON = r'''
   }
 
   rememberRevision();
-  setInterval(pollRevision, 1800);
+  setInterval(pollRevision, 3500);
   window.addEventListener('focus', pollRevision);
   document.addEventListener('visibilitychange', function(){ if (!document.hidden) pollRevision(); });
 })();
@@ -643,7 +643,7 @@ def assert_native_sync_contract(text: str) -> None:
 def assert_auto_sync_contract(text: str) -> None:
     required = [
         AUTO_SYNC_MARKER,
-        "setInterval(pollRevision, 1800)",
+        "setInterval(pollRevision, 3500)",
         "server('getPublicState', [])",
         "refreshMemberState()",
         "Number(next.revision)",
@@ -702,6 +702,36 @@ def patch(path: Path) -> None:
     temporary_team_css = "\n#memberApp [data-member-id].jm-temp-pair{outline:0!important;box-shadow:0 0 0 4px #facc15!important;border:2px solid #facc15!important}\n#memberApp [data-member-id].jm-has-team.jm-temp-pair{outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:3px!important;box-shadow:0 0 0 6px #facc15!important;border:2px solid #facc15!important}"
     if "#memberApp [data-member-id].jm-temp-pair{outline:0!important" not in text and permanent_team_css in text:
         text = text.replace(permanent_team_css, permanent_team_css + temporary_team_css, 1)
+
+    # "이런식으로 서버 차단이 자주 발생하면 어떡해" -- investigated why
+    # Cloudflare's automated abuse mitigation (HTTP 429, error 1027) blocked
+    # the whole Worker domain. This page runs THREE independent, overlapping
+    # background poll loops per member device: pollRevision every 1.8s
+    # (getPublicState), checkMemberWaitSwapRequest every 5s
+    # (memberGetWaitSwapRequest -- the older, wait-group-only swap feature),
+    # and pollIncoming every 5s (memberGetAnywhereSwapRequest -- the newer
+    # swap-with-anyone feature that superseded it, but the old poll was
+    # never removed). That is roughly 1 request/second/device just from
+    # idle background polling, before counting any real user action --
+    # with 20-30 members' phones open during a session, on the order of
+    # 1,000+ requests/minute of pure background noise, which is exactly the
+    # kind of sustained many-identical-POSTs pattern automated edge
+    # abuse-detection flags. Slowing all three down materially cuts the
+    # standing request volume without removing either swap feature or
+    # making state feel stale (a few extra seconds of latency on an
+    # infrequent "someone wants to swap seats" check is imperceptible).
+    text = text.replace(
+        "setInterval(pollRevision, 1800);",
+        "setInterval(pollRevision, 3500);",
+    )
+    text = text.replace(
+        "setInterval(checkMemberWaitSwapRequest,5000);",
+        "setInterval(checkMemberWaitSwapRequest,9000);",
+    )
+    text = text.replace(
+        "setInterval(pollIncoming, 5000);",
+        "setInterval(pollIncoming, 9000);",
+    )
     apk_url = (
         "https://github.com/pianopp001-cpu/jayuminton-admin-app/raw/refs/heads/main/"
         "releases/jayuminton-courtstatus-v1.6.42-md-final.apk"
