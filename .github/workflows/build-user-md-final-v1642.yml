@@ -87,9 +87,11 @@ jobs:
           python3 deployment/scripts/patch_user_native_v133_install_safe.py "$BUILD"
           python3 deployment/scripts/patch_user_native_v134_cloudflare_complete.py "$BUILD"
           python3 deployment/scripts/patch_user_native_v1642_md_final.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_target_sdk35_v1.py "$BUILD"
           grep -F 'VERSION="1.6.42"' "$BUILD" >/dev/null
           grep -F 'MAX_GROUPS = 8' "$BUILD" >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember' "$BUILD" >/dev/null
+          grep -F 'targetSdk 35' "$BUILD" >/dev/null
           bash "$BUILD"
 
           # Play Console has already accepted a release signed with the
