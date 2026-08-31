@@ -116,6 +116,21 @@ function ensureQuickRosterGridStyle(){if(document.getElementById('jmQuickRosterG
    it always sorts after every rule already in the document) resolves the
    tie without needing to go to 2 IDs like quick-roster did. */
 function ensureWaitCardNameStyle(){if(document.getElementById('jmWaitCardNameFixV1'))return;var style=document.createElement('style');style.id='jmWaitCardNameFixV1';style.textContent='#adminApp .v4-wait-card .person{height:auto!important;overflow:visible!important}#adminApp .v4-wait-card .person .name{white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important;word-break:keep-all!important}';(document.head||document.documentElement).appendChild(style);}
+/* Spec: "색깔만 그런 게 아니라. 테두리 모양도 좀 구별이 되면 안될까 -- 영구팀은
+   코트에서 나와도 그대로 유지, 임시팀은 코트에서 나올 때 테두리 해제 되잖아."
+   Color alone (even after the amber-vs-gold palette fix) is not a robust
+   signal, so make the underlying permanence difference visible as a border
+   STYLE difference too: .has-member-team (permanent) already renders a
+   solid 2px border; every .jm-temp-team-v2047/.jm-temp-pair variant across
+   this app's several historically-layered temp-team style rules also
+   renders a border (solid, sharing the exact same visual shape as
+   permanent) at the same 1-ID-plus-classes specificity -- switch it to
+   dashed. Runtime-appended, so it always sorts after every static rule and
+   wins any specificity tie regardless of which historical layer would
+   otherwise win. Matches the identical fix on the member web app
+   (patch_member_user_requirements_v1.py's
+   JAYUMINTON_MEMBER_TEMP_TEAM_DASHED_BORDER_V1). */
+function ensureTempTeamDashedBorderStyle(){if(document.getElementById('jmTempTeamDashedBorderV1'))return;var style=document.createElement('style');style.id='jmTempTeamDashedBorderV1';style.textContent='#adminApp .jm-temp-team-v2047,#adminApp .jm-temp-team-v2047.jm-temp-pair,#adminApp .has-member-team.jm-temp-team-v2047,#adminApp .has-member-team.jm-temp-team-v2047.jm-temp-pair,#adminApp .jm-temp-pair{border-style:dashed!important}';(document.head||document.documentElement).appendChild(style);}
 /* Spec: "화면 스크롤만 해도 멤버카드를 길게 누르면 나오는... 버튼이 떠..
    너무너무 방해된다." startMemberLongPress()'s only cancel-guard is
    moveMemberLongPress(), which cancels the 600ms timer only once the
@@ -133,7 +148,7 @@ function ensureWaitCardNameStyle(){if(document.getElementById('jmWaitCardNameFix
    Re-verified after adding this: the same synthetic scroll now correctly
    cancels the pending timer before it can fire. */
 function installLongPressScrollCancel(){if(window.__jmLongPressScrollCancelV1)return;window.__jmLongPressScrollCancelV1=true;window.addEventListener('scroll',function(){if(typeof window.finishMemberLongPress==='function')window.finishMemberLongPress();},true);}
-function maintain(){try{fixCheckOverlap();}catch(_){}try{fixNewBadges();}catch(_){}try{fixBottomBar();}catch(_){}try{fixExcludedNames();}catch(_){}try{fixDuplicateNameDisplay();}catch(_){}try{fixGlobalCompactName();}catch(_){}try{ensureQuickRosterGridStyle();}catch(_){}try{ensureWaitCardNameStyle();}catch(_){}try{installLongPressScrollCancel();}catch(_){}}
+function maintain(){try{fixCheckOverlap();}catch(_){}try{fixNewBadges();}catch(_){}try{fixBottomBar();}catch(_){}try{fixExcludedNames();}catch(_){}try{fixDuplicateNameDisplay();}catch(_){}try{fixGlobalCompactName();}catch(_){}try{ensureQuickRosterGridStyle();}catch(_){}try{ensureWaitCardNameStyle();}catch(_){}try{ensureTempTeamDashedBorderStyle();}catch(_){}try{installLongPressScrollCancel();}catch(_){}}
 function boot(){var tries=0;(function retry(){tries++;maintain();if(tries<150)setTimeout(retry,100);})();var r=root();if(r&&!r.__jmV2081Obs){var q=false;r.__jmV2081Obs=new MutationObserver(function(){if(q)return;q=true;setTimeout(function(){q=false;maintain();},50);});r.__jmV2081Obs.observe(r,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else setTimeout(boot,0);
 })();
