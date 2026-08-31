@@ -697,6 +697,18 @@ def assert_pretty_confirm_contract(text: str) -> None:
         raise SystemExit("dead checkMemberWaitSwapRequest poll survived")
 
 
+def assert_save_feedback_contract(text: str) -> None:
+    for needle in [
+        "JAYUMINTON_MEMBER_WAIT_EMPTY_ARM_FEEDBACK_V1",
+        "JAYUMINTON_MEMBER_MUTATION_NAMES_V1",
+        "'memberMoveSelf','bindMemberIdentity','updateMyProfile'",
+        "'memberRequestAnywhereSwap','memberCancelAnywhereSwap'",
+        "'memberAcceptAnywhereSwap','memberRejectAnywhereSwap'",
+    ]:
+        if needle not in text:
+            raise SystemExit(f"save-feedback contract missing: {needle}")
+
+
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     text = text.replace(
@@ -898,6 +910,83 @@ def patch(path: Path) -> None:
     if marker_thick not in text:
         raise SystemExit("thick team-border fix did not apply")
 
+    # "빈자리 클릭하면 저장중이라는 말도 안뜨고 있으니 사람들이 계속 여기저기
+    # 빠르게 눌러서 먹통이 되는 거 같다." Tracing handleMemberWaitEmptyTap: a
+    # single tap on an empty wait-group slot does NOT call the server at all
+    # -- it only arms MEMBER_WAIT_SEAT_PICK (waiting for either a follow-up
+    # double-tap on the same slot, or a tap on the member's own card) via a
+    # 430ms setTimeout, with zero visual feedback that the tap registered.
+    # The actual server mutation (memberMoveToWaitGroup, on a real double-
+    # tap) DOES correctly show the existing "저장 중" overlay -- the busy
+    # overlay/ACTION_IN_FLIGHT guard themselves are not broken. The gap is
+    # earlier: a member who single-taps and sees nothing happen has no way
+    # to know whether the tap worked, so they tap again (and again,
+    # elsewhere) -- exactly the reported symptom. The sibling flow,
+    # handleMemberWaitOtherTap's arm-a-swap-target branch, already calls
+    # showMemberSettingMessage(...) at the equivalent step; extend the same
+    # pattern here for symmetry, purely additive (no change to the actual
+    # tap/timing logic).
+    marker_empty_feedback = "JAYUMINTON_MEMBER_WAIT_EMPTY_ARM_FEEDBACK_V1"
+    if marker_empty_feedback not in text:
+        old_empty_tap = (
+            "  MEMBER_WAIT_EMPTY_TAP.timer=setTimeout(function(){\n"
+            "    MEMBER_WAIT_EMPTY_TAP.timer=null;\n"
+            "    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){clearMemberWaitSeatPick();memberMoveToWaitGroup(groupIndex);return;}\n"
+            "    MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};\n"
+            "  },430);"
+        )
+        new_empty_tap = (
+            "  MEMBER_WAIT_EMPTY_TAP.timer=setTimeout(function(){\n"
+            "    MEMBER_WAIT_EMPTY_TAP.timer=null;\n"
+            "    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){clearMemberWaitSeatPick();memberMoveToWaitGroup(groupIndex);return;}\n"
+            "    MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};\n"
+            "    /* JAYUMINTON_MEMBER_WAIT_EMPTY_ARM_FEEDBACK_V1 */\n"
+            "    if(typeof showMemberSettingMessage==='function')showMemberSettingMessage('이 자리를 선택했어요. 내 카드를 탭하면 여기로 이동해요.');\n"
+            "  },430);"
+        )
+        if old_empty_tap not in text:
+            raise SystemExit("handleMemberWaitEmptyTap anchor not found -- live source has drifted")
+        text = text.replace(old_empty_tap, new_empty_tap, 1)
+    if marker_empty_feedback not in text:
+        raise SystemExit("empty-slot arm feedback fix did not apply")
+
+    # Same report ("저장중이라는 말도 안뜨고") also traces to a second, wider
+    # gap: server()'s own mutationNames allowlist (which gates both the
+    # "저장 중" busy overlay AND the ACTION_IN_FLIGHT double-submit guard)
+    # was never updated as this session added new member-side Cloudflare
+    # RPCs -- memberMoveSelf (내 상태 변경: 도착전/휴식/귀가/코트배정대기),
+    # the whole Anywhere-swap family, bindMemberIdentity, and updateMyProfile
+    # are all real writes that go through server() today but are absent
+    # from this list, so isMutation is false for every one of them: no
+    # overlay, no re-tap guard, silently. Deliberately NOT adding the
+    # read-only member RPCs (memberGetAnywhereSwapRequest,
+    # memberGetAnywhereOutgoingSwap, getPublicState, etc.) -- those run on
+    # frequent background polls and would show a distracting overlay for
+    # normal polling if included.
+    marker_mutation_names = "JAYUMINTON_MEMBER_MUTATION_NAMES_V1"
+    if marker_mutation_names not in text:
+        old_mutation_names = (
+            "    'memberMoveToWaitGroup','memberLeaveWaitGroup',\n"
+            "    'memberRequestWaitSwap','memberRespondWaitSwap',\n"
+            "    'createManualBackup','restoreManualBackup','changeMemberPassword'\n"
+            "  ];"
+        )
+        new_mutation_names = (
+            "    'memberMoveToWaitGroup','memberLeaveWaitGroup',\n"
+            "    'memberRequestWaitSwap','memberRespondWaitSwap',\n"
+            "    'memberMoveSelf','bindMemberIdentity','updateMyProfile',\n"
+            "    'memberRequestAnywhereSwap','memberCancelAnywhereSwap',\n"
+            "    'memberAcceptAnywhereSwap','memberRejectAnywhereSwap',\n"
+            "    /* JAYUMINTON_MEMBER_MUTATION_NAMES_V1 */\n"
+            "    'createManualBackup','restoreManualBackup','changeMemberPassword'\n"
+            "  ];"
+        )
+        if old_mutation_names not in text:
+            raise SystemExit("mutationNames anchor not found -- live source has drifted")
+        text = text.replace(old_mutation_names, new_mutation_names, 1)
+    if marker_mutation_names not in text:
+        raise SystemExit("mutationNames extension did not apply")
+
     # "1회성 팀 설정했을 때 사용자 앱, 웹에서 안보이는 부분 고쳐주고." The
     # .jm-temp-pair CSS class has real style rules (see temporary_team_css
     # above), but nothing on the member/user side ever adds that class to a
@@ -1023,6 +1112,7 @@ def patch(path: Path) -> None:
     assert_member_message_contract(text)
     assert_self_profile_contract(text)
     assert_pretty_confirm_contract(text)
+    assert_save_feedback_contract(text)
     path.write_text(text, encoding="utf-8")
 
 
