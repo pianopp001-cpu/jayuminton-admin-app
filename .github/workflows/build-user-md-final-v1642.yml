@@ -28,8 +28,12 @@ jobs:
       FIREBASE_PROJECT_CONFIG: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
       WORKER_URL: https://jayuminton-user-push.pianopp001.workers.dev
       APK_PATH: releases/jayuminton-courtstatus-v1.6.42-md-final.apk
+      AAB_PATH: releases/jayuminton-courtstatus-v1.6.42-md-final.aab
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+      PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+      PLAY_UPLOAD_KEYSTORE_B64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_B64 }}
     steps:
       - uses: actions/checkout@v4
         with: {ref: main, fetch-depth: 0}
@@ -87,7 +91,29 @@ jobs:
           grep -F 'MAX_GROUPS = 8' "$BUILD" >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember' "$BUILD" >/dev/null
           bash "$BUILD"
-          gradle --no-daemon bundleRelease
+
+          # Play Console has already accepted a release signed with the
+          # dedicated "Jayuminton Play Upload" key (fingerprint
+          # 6B:3A:77:5B:54:B1:EB:F8:26:C9:3C:73:F8:6A:FD:E1:41:CB:C6:8D:49:8A:
+          # 22:43:BC:0A:69:D8:A8:7C:A6:6F) -- Play requires every future
+          # upload for this app to keep using that exact key, so the AAB
+          # CANNOT reuse signing/jayuminton-release.jks (that one signs the
+          # sideload APK and the admin app; confirmed by inspecting its own
+          # cert, subject CN=Jayuminton/OU=Admin App, a completely different
+          # certificate). android.injected.signing.* properties override
+          # build.gradle's signingConfigs.release for just this one gradle
+          # invocation without needing a second product flavor, so the
+          # sideload APK above is unaffected.
+          test -n "$PLAY_UPLOAD_KEYSTORE_B64"
+          test -n "$PLAY_UPLOAD_KEY_ALIAS"
+          test -n "$PLAY_UPLOAD_KEY_PASSWORD"
+          printf '%s' "$PLAY_UPLOAD_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/play-upload.jks"
+          test -s "$RUNNER_TEMP/play-upload.jks"
+          gradle --no-daemon bundleRelease \
+            "-Pandroid.injected.signing.store.file=$RUNNER_TEMP/play-upload.jks" \
+            "-Pandroid.injected.signing.store.password=$PLAY_UPLOAD_KEY_PASSWORD" \
+            "-Pandroid.injected.signing.key.alias=$PLAY_UPLOAD_KEY_ALIAS" \
+            "-Pandroid.injected.signing.key.password=$PLAY_UPLOAD_KEY_PASSWORD"
       - name: Verify and publish APK + AAB
         shell: bash
         run: |
@@ -103,16 +129,25 @@ jobs:
           SHA="$(sha256sum "$APK_PATH" | awk '{print $1}')"
 
           # Play Console (공개/비공개 테스트 등 모든 트랙) requires an .aab
-          # upload for new releases -- bundleRelease reuses the exact same
-          # signingConfig/versionCode/versionName already applied to the APK
-          # above by the same gradle invocation, so the two artifacts are
-          # guaranteed to match (same code, same version, same signing key).
-          AAB_PATH="releases/jayuminton-courtstatus-v1.6.42-md-final.aab"
+          # upload for new releases. Unlike the APK above, this AAB is
+          # deliberately signed with a DIFFERENT key (PLAY_UPLOAD_KEY_* in
+          # the previous step) -- Play Console already accepted a release
+          # under the dedicated "Jayuminton Play Upload" cert and will
+          # reject any future upload signed with a different one, so the
+          # fingerprint is verified below rather than assumed.
           AAB_SRC=app/build/outputs/bundle/release/app-release.aab
           test -s "$AAB_SRC"
           cp "$AAB_SRC" "$AAB_PATH"
           if unzip -p "$AAB_PATH" base/dex/classes.dex 2>/dev/null | strings | grep -F 'script.google.com/macros/s/' >/dev/null; then
             echo 'Forbidden GAS URL detected in final user AAB' >&2
+            exit 1
+          fi
+          EXPECTED_AAB_FINGERPRINT='6B:3A:77:5B:54:B1:EB:F8:26:C9:3C:73:F8:6A:FD:E1:41:CB:C6:8D:49:8A:22:43:BC:0A:69:D8:A8:7C:A6:6F'
+          unzip -p "$AAB_PATH" 'META-INF/*.RSA' > "$RUNNER_TEMP/aab-signer.rsa"
+          test -s "$RUNNER_TEMP/aab-signer.rsa"
+          ACTUAL_AAB_FINGERPRINT="$(openssl pkcs7 -inform DER -in "$RUNNER_TEMP/aab-signer.rsa" -print_certs 2>/dev/null | openssl x509 -noout -fingerprint -sha256 | sed 's/^sha256 Fingerprint=//')"
+          if [ "$ACTUAL_AAB_FINGERPRINT" != "$EXPECTED_AAB_FINGERPRINT" ]; then
+            echo "AAB signed with the wrong key: expected $EXPECTED_AAB_FINGERPRINT, got $ACTUAL_AAB_FINGERPRINT" >&2
             exit 1
           fi
           AAB_SHA="$(sha256sum "$AAB_PATH" | awk '{print $1}')"
