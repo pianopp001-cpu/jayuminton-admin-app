@@ -1166,6 +1166,105 @@ jobs:
           PY
           grep -F 'jmGlobalErrorDiagnosticV1' "$ROOT/assets/admin/index.html" >/dev/null
 
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmCommitEmptyTargetsAutoFireFixV1'
+          if marker not in text:
+              # v208.48: "여전히 꼬임" -- after v208.46 removed the tap()
+              # hijack, ANOTHER, completely separate auto-fire path was still
+              # live inside the base app's own installAdminCourtMultiFill():
+              # tapping an empty court/wait slot with nothing selected arms
+              # it into EMPTY_SLOT_TARGETS (a stable, correct, opt-in feature
+              # for multi-selecting several empty slots in a row). But
+              # window.toggleSelected was ALSO overridden here to call
+              # commitSelectedEmptyTargets() via setTimeout after every
+              # single member selection -- and that function auto-assigns
+              # the instant SELECTED.size happens to equal
+              # EMPTY_SLOT_TARGETS.length, with no tap on the slot and no
+              # 자동배정 button press required. Reproduced: arm an empty
+              # slot, walk away, come back later and select one member for
+              # an unrelated reason -- the moment the count matches, that
+              # member gets silently placed into the stale armed slot. This
+              # is the actual remaining "자동배정 수동배정이 뒤엉킴" source --
+              # selecting members must never by itself cause a placement;
+              # placement only happens via an explicit tap on a slot
+              # (handleEmptySlotTap's ids.length branch, untouched by this)
+              # or by pressing 자동배정. Fix: strip the auto-commit side
+              # effect from toggleSelected, leaving multi-slot arming/
+              # highlighting and everything else in installAdminCourtMultiFill
+              # exactly as-is.
+              old = (
+                  "    window.toggleSelected = function(id) {\n"
+                  "      var result = originalToggleSelected.apply(this, arguments);\n"
+                  "      window.setTimeout(commitSelectedEmptyTargets, 0);\n"
+                  "      return result;\n"
+                  "    };\n"
+              )
+              new = (
+                  "    window.toggleSelected = function(id) {\n"
+                  "      /* jmCommitEmptyTargetsAutoFireFixV1 */\n"
+                  "      return originalToggleSelected.apply(this, arguments);\n"
+                  "    };\n"
+              )
+              if old not in text:
+                  raise SystemExit('toggleSelected auto-commit anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('empty-target auto-fire fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmCommitEmptyTargetsAutoFireFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmSuppressNewNameBubbleV1'
+          if marker not in text:
+              # "멤버를 빠르게 배정해야하는데 클릭하면 검은 팝업으로 멤버
+              # 풀네임 나오는데 배정에 방해가 돼." showAdminNewNameBubble()
+              # pops a fixed-position dark bubble (#172033 background, 15px
+              # bold white text) above any .is-new-member card on every
+              # single click, for 2.5s, via a document-level capture click
+              # listener -- so fast successive taps while assigning new/
+              # duplicate-name members keep getting visually covered. This
+              # was presumably useful back when a new member's name could
+              # still get silently abbreviated elsewhere, but
+              # fixDuplicateNameDisplay/fixGlobalCompactName (admin_smart_
+              # placement_v2081.js) already made the full name permanently
+              # visible on the card itself, so the popup is now pure
+              # redundant interference. showAdminNewNameBubble is declared
+              # inside the <script id="adminVnextNewCardSizer"> IIFE (the
+              # same closure markAdminNewCards lives in), so -- same as that
+              # function -- a window.* override from an external script
+              # cannot reach it; this has to be a direct source-text patch.
+              old = (
+                  "  function showAdminNewNameBubble(card) {\n"
+                  "    var name = card && card.querySelector('.member-vnext-full-name');\n"
+                  "    if (!name) return;\n"
+              )
+              new = (
+                  "  function showAdminNewNameBubble(card) {\n"
+                  "    /* jmSuppressNewNameBubbleV1: full name is already always\n"
+                  "       shown on the card itself, so this popup is now only\n"
+                  "       redundant interference during quick assignment. */\n"
+                  "    return;\n"
+                  "    var name = card && card.querySelector('.member-vnext-full-name');\n"
+                  "    if (!name) return;\n"
+              )
+              if old not in text:
+                  raise SystemExit('showAdminNewNameBubble anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('new-name bubble suppression did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmSuppressNewNameBubbleV1' "$ROOT/assets/admin/index.html" >/dev/null
+
           python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js <<'PY'
           from pathlib import Path
           import sys
@@ -1227,13 +1326,16 @@ jobs:
           grep -F 'jmBottomTeamButtonV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmBottomTeamButton' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmVnextMemoFontSizeFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmCommitEmptyTargetsAutoFireFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmSuppressNewNameBubbleV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmWaitCardNameFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.47-longpress-scroll-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.47-longpress-scroll-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.47-longpress-scroll-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.48-tangle-and-popup-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.48-tangle-and-popup-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.48-tangle-and-popup-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1273,20 +1375,23 @@ jobs:
           grep -F 'jmMarkAdminNewCardsFullNameFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmQuickRosterGridV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmRemoveDuplicateCheckboxV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmCommitEmptyTargetsAutoFireFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmSuppressNewNameBubbleV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmWaitCardNameFixV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.47-longpress-scroll-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.48-tangle-and-popup-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.47-longpress-scroll-fix.apk
-          printf 'status=success\nversion=208.47\nfeature=longpress-scroll-cancel+bottom-bar-thrash-fix+remove-tap-auto-assign-hijack+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20847-longpress-scroll-fix.txt
-          git add releases/jayuminton-admin-v208.47-longpress-scroll-fix.apk deployment/status/v20847-longpress-scroll-fix.txt
-          git commit -m 'Publish admin v208.47: cancel in-progress long-press on any scroll, and stop fixBottomBar() from rewriting/reflowing on every debounced re-render when nothing changed' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.48-tangle-and-popup-fix.apk
+          printf 'status=success\nversion=208.48\nfeature=commit-empty-targets-auto-fire-fix+suppress-new-name-bubble+wait-card-name-fix+quick-roster-font-size-bump+longpress-scroll-cancel+bottom-bar-thrash-fix+remove-tap-auto-assign-hijack+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20848-tangle-and-popup-fix.txt
+          git add releases/jayuminton-admin-v208.48-tangle-and-popup-fix.apk deployment/status/v20848-tangle-and-popup-fix.txt
+          git commit -m 'Publish admin v208.48: stop selecting a member from silently auto-firing into a stale armed empty-slot target, remove the black full-name popup that interfered with quick assignment, fix wait-card name clipping, and enlarge quick-roster font' || exit 0
           git push origin HEAD:main

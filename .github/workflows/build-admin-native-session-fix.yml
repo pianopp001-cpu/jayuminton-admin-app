@@ -1,5 +1,5 @@
-name: Build admin native session fix v208.47
-# retrigger: base v208.47 toolbar APK now published on main
+name: Build admin native session fix v208.48
+# retrigger: base v208.48 toolbar APK now published on main
 
 on:
   push:
@@ -49,7 +49,7 @@ jobs:
           rm -rf app
           git archive "$PROVEN_COMMIT" app | tar -x
           mkdir -p app/src/main/assets/admin
-          BASE=releases/jayuminton-admin-v208.47-longpress-scroll-fix.apk
+          BASE=releases/jayuminton-admin-v208.48-tangle-and-popup-fix.apk
           test -s "$BASE"
           unzip -p "$BASE" assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
@@ -229,13 +229,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.47";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.48";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 48',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.38'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 49',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.39'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -294,8 +294,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.47-longpress-scroll-fix-native.apk
-          printf 'status=success\nversion=208.47\nfeature=native-unified-fix+longpress-scroll-cancel+bottom-bar-thrash-fix+remove-tap-auto-assign-hijack+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v208.47-longpress-scroll-fix+v208.46-remove-tap-hijack+v208.45-auto-assign-toast+v208.44-quick-roster-specificity-fix+v208.43-quick-roster-column-fix+v208.42-mark-new-cards-fix+v208.41-full-name-decorator-fix+v208.40-full-name-grid-fix+v208.39-memo-font-fix+v208.38-team-button+v208.37-member-form-fix+v208.36-render-chain-fix+v208.35-target-fill-fix+v208.34-bottom-active-button+v208.33-manual-assign-label+v208.32-assign-single-rpc+v208.31-batch-fill+v208.30-unified-swap-move+v208.29-memo-dedup+v208.28-memo-loop-fix+v208.27-skip-system-status+v208.26-wrap-chain-fix+v208.25-diagnostic+v208.24-html-fix+v208.22-idempotent-observers-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20847-longpress-scroll-fix.txt
-          git add releases/jayuminton-admin-v208.47-longpress-scroll-fix-native.apk deployment/status/v20847-longpress-scroll-fix.txt
-          git commit -m 'Publish admin v208.47: cancel in-progress long-press on any scroll, and stop fixBottomBar() from rewriting/reflowing on every debounced re-render when nothing changed' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.48-tangle-and-popup-fix-native.apk
+          printf 'status=success\nversion=208.48\nfeature=native-unified-fix+commit-empty-targets-auto-fire-fix+suppress-new-name-bubble+wait-card-name-fix+quick-roster-font-size-bump+longpress-scroll-cancel+bottom-bar-thrash-fix+remove-tap-auto-assign-hijack+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v208.48-tangle-and-popup-fix+v208.47-longpress-scroll-fix+v208.46-remove-tap-hijack+v208.45-auto-assign-toast+v208.44-quick-roster-specificity-fix+v208.43-quick-roster-column-fix+v208.42-mark-new-cards-fix+v208.41-full-name-decorator-fix+v208.40-full-name-grid-fix+v208.39-memo-font-fix+v208.38-team-button+v208.37-member-form-fix+v208.36-render-chain-fix+v208.35-target-fill-fix+v208.34-bottom-active-button+v208.33-manual-assign-label+v208.32-assign-single-rpc+v208.31-batch-fill+v208.30-unified-swap-move+v208.29-memo-dedup+v208.28-memo-loop-fix+v208.27-skip-system-status+v208.26-wrap-chain-fix+v208.25-diagnostic+v208.24-html-fix+v208.22-idempotent-observers-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20848-tangle-and-popup-fix.txt
+          git add releases/jayuminton-admin-v208.48-tangle-and-popup-fix-native.apk deployment/status/v20848-tangle-and-popup-fix.txt
+          git commit -m 'Publish admin v208.48: stop selecting a member from silently auto-firing into a stale armed empty-slot target, remove the black full-name popup that interfered with quick assignment, fix wait-card name clipping, and enlarge quick-roster font' || exit 0
           git push origin HEAD:main
