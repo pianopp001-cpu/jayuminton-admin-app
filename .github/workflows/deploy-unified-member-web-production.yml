@@ -7,6 +7,8 @@ on:
       - '.github/workflows/deploy-unified-member-web-production.yml'
       - 'deployment/jayuminton/patch_member_user_requirements_v1.py'
       - 'deployment/jayuminton/patch_member_single_tap_move_v1.py'
+      - 'deployment/jayuminton/patch_member_pwa_install_v1.py'
+      - 'deployment/jayuminton/member-pwa-assets/**'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
   workflow_dispatch: {}
 
@@ -87,6 +89,18 @@ jobs:
           cp "$PUBLIC/index.html" "$RUNNER_TEMP/member-before.html"
           python3 deployment/jayuminton/patch_member_user_requirements_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_single_tap_move_v1.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_pwa_install_v1.py "$PUBLIC/index.html"
+
+          cp deployment/jayuminton/member-pwa-assets/manifest.webmanifest "$PUBLIC/manifest.webmanifest"
+          cp deployment/jayuminton/member-pwa-assets/sw.js "$PUBLIC/sw.js"
+          cp deployment/jayuminton/member-pwa-assets/icon-192.png "$PUBLIC/icon-192.png"
+          cp deployment/jayuminton/member-pwa-assets/icon-512.png "$PUBLIC/icon-512.png"
+          cp deployment/jayuminton/member-pwa-assets/apple-touch-icon.png "$PUBLIC/apple-touch-icon.png"
+          test -s "$PUBLIC/manifest.webmanifest"
+          test -s "$PUBLIC/sw.js"
+          test -s "$PUBLIC/icon-192.png"
+          test -s "$PUBLIC/icon-512.png"
+          test -s "$PUBLIC/apple-touch-icon.png"
           python3 - "$PUBLIC/index.html" <<'PY'
           from pathlib import Path
           import sys
@@ -650,6 +664,10 @@ jobs:
           PY
 
           grep -F 'JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_PWA_HEAD_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_PWA_INSTALL_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'rel="manifest" href="/manifest.webmanifest"' "$PUBLIC/index.html" >/dev/null
+          grep -F "navigator.serviceWorker.register('/sw.js')" "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_IDENTITY_BIND_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_PRETTY_CONFIRM_V1' "$PUBLIC/index.html" >/dev/null
@@ -726,6 +744,8 @@ jobs:
               "public": "public",
               "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
               "headers": [
+                {"source":"/manifest.webmanifest","headers":[{"key":"Content-Type","value":"application/manifest+json; charset=utf-8"},{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]},
+                {"source":"/sw.js","headers":[{"key":"Service-Worker-Allowed","value":"/"},{"key":"Content-Type","value":"application/javascript; charset=utf-8"},{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]},
                 {"source":"/**","headers":[{"key":"Cache-Control","value":"no-store, no-cache, must-revalidate, max-age=0"}]}
               ],
               "rewrites": [{"source":"**","destination":"/index.html"}]
@@ -781,6 +801,8 @@ jobs:
             'JAYUMINTON_MEMBER_PRETTY_CONFIRM_V1' \
             'JAYUMINTON_MEMBER_REFRESH_STATUS_V1' \
             'JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1' \
+            'JAYUMINTON_MEMBER_PWA_HEAD_V1' \
+            'JAYUMINTON_MEMBER_PWA_INSTALL_V1' \
             'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'window.confirmJmDirectMessage=function()' \
@@ -805,6 +827,18 @@ jobs:
           grep -F "$CLOUDFLARE_RPC_URL" "$RUNNER_TEMP/member-live-after.html" >/dev/null
           ! grep -Eqi '<iframe' "$RUNNER_TEMP/member-live-after.html"
           ! grep -F 'script.google.com/macros/s/' "$RUNNER_TEMP/member-live-after.html"
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache' \
+            "${LIVE_USER_URL}manifest.webmanifest?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/manifest-live.json"
+          jq -e '.name and (.icons|length) > 0' "$RUNNER_TEMP/manifest-live.json" >/dev/null
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache' \
+            "${LIVE_USER_URL}sw.js?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/sw-live.js"
+          grep -F "addEventListener('fetch'" "$RUNNER_TEMP/sw-live.js" >/dev/null
+          for asset in icon-192.png icon-512.png apple-touch-icon.png; do
+            code="$(curl -s -o "$RUNNER_TEMP/$asset" -w '%{http_code}' --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache' "${LIVE_USER_URL}${asset}?verify=$GITHUB_RUN_ID")"
+            test "$code" = "200"
+            head -c 8 "$RUNNER_TEMP/$asset" | grep -qa 'PNG'
+          done
+          echo 'PRODUCTION_MEMBER_PWA_ASSETS_OK'
           echo 'PRODUCTION_MEMBER_USER_REQUIREMENTS_AND_NATIVE_IDENTITY_SYNC_OK'
           echo 'MEMBER_MEMO_RPC_TRANSPORT_COMPAT_OK'
           echo 'MAIN_ADMIN_DEPLOYMENTS_NOT_UPDATED'
