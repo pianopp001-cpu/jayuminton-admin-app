@@ -109,7 +109,7 @@
 **요구사항**: 내 이름이 설정되어 있지 않으면 "내 이름을 선택하세요" 안내. 이름 검색으로 찾거나 멤버카드를 한 번 클릭하면 "~님이 본인인가요? (취소 / 네, 저예요)" 확인 후 설정된다. 설정되면 내 카드에 **노란 테두리 두 줄**이 생기고, 흰 동그라미 테두리 안의 검은 바탕 작은 원 안에 흰 별표 + '나' 텍스트가 작게 표시된다.
 
 - 구현 현황: 이름 검색/카드 클릭 → 예쁜 확인창(`jmPrettyConfirm`, "네, 저예요") → `bindMemberIdentity` 저장까지는 이미 구현. 별표+'나' 배지(`.member-self-star`)도 있음.
-- **⚠️ 충돌 — 결정 필요**: 이번 세션에 자기 카드 테두리 색을 노랑(`#facc15`)에서 **파랑(`#2563eb`)으로 이미 변경**했다. 이유: 그 시점엔 1회성팀(임시팀) 테두리도 같은 노랑이라 "이게 내 카드인지 임시팀 표시인지" 구분이 안 됐기 때문. 지금 이 스펙대로 자기 카드를 다시 노랑으로 되돌리면 그 충돌이 재발한다. 이후(오늘) 임시팀 쪽은 테두리를 **점선**으로 바꿔서 실선(영구팀)과 모양으로도 구분되게 고쳤으므로, "자기 카드=노랑 실선, 임시팀=노랑 점선"으로 색은 같고 모양만 다르게 갈지, 아니면 지금처럼 자기 카드는 파랑을 유지할지 확정해야 한다.
+- **✅ 확정**: 자기 카드 테두리는 **파랑(`#2563eb`)으로 유지**하기로 결정함(2026-08-31). 원래 노랑(`#facc15`)이었으나 1회성팀(임시팀)도 같은 노랑이라 구분이 안 돼서 파랑으로 바꿨고, 이 스펙의 "노란 테두리"는 파랑으로 대체 확정. 재론하지 않는다.
 - **확인 필요**: "두 줄" 표현 — 현재는 두꺼운 outline 1개(4px)로 그려진다. 실제로 이중선(두 개의 분리된 선)을 원하는 것인지, 굵은 선 하나를 "두 줄처럼 두껍게"로 표현한 것인지 확인.
 
 ## 11. 카드 표시 규칙
@@ -131,10 +131,10 @@
 **요구사항**: 자기 자신은 이미 설정돼 있으므로, 빈자리(코트 1~4 전체, 대기 1~5 전체 모두)를 클릭하면 그 자리에 "저장중"을 띄우며 바로 배치된다. 빈자리가 아닌 상대방 카드(코트 1~4, 대기 1~5, 코트배정대기 전부 포함 모든 위치)를 한 번 클릭하면 "~님과 자리교환을 요청할까요?"(취소/교환 요청) → 상대방에게 "교환요청을 수락하시겠습니까?"(예/아니오) → 예면 자리 바뀜, 아니오면 안 바뀜. 5분 내 응답 없으면 요청 실패.
 
 - 구현 현황:
-  - **대기조 빈자리**: 이번 세션에 완료 — 한 번 탭하면 바로 `memberMoveToWaitGroup`로 이동, "저장 중" 오버레이도 뜬다(더블탭/내 카드 재탭 요구 없앰).
+  - **빈자리 이동(코트+대기 전체)**: **이미 구현되어 있음 — 정정.** `patch_member_single_tap_move_v1.py`가 `handleMemberWaitEmptyTap`/`handleEmptySlotTap`을 재정의해서 대기조·코트 빈자리 모두 한 번 탭하면 `server('memberMoveSelf',...)`로 즉시 이동한다. 코트 쪽은 `wireCourtEmptySlots()`가 `#memberCourts .court-N` 안의 `.person.empty`를 찾아 MutationObserver + 1.8초 폴링으로 클릭 리스너를 붙이는 방식이라 정적 `onclick=` 검색으로는 안 보였음 — 실제 화면 렌더링으로 재확인해서 코트 빈자리도 잘 작동하는 것 확인함(2026-08-31). 오늘 `patch_member_user_requirements_v1.py`에 추가했던 `JAYUMINTON_MEMBER_WAIT_EMPTY_IMMEDIATE_MOVE_V1`은 이 스크립트가 나중에 로드되며 덮어써서 실제로는 동작에 영향 없음(둘 다 같은 결과라 무해하지만 중복).
   - **자리교환**: 코트/활성 인원(`handleAnywhereMemberTap`)과 대기조(이번 세션에 통일)까지 모든 위치에서 동일한 `memberRequestAnywhereSwap` 경로로 작동. 확인창은 예쁜 팝업(`jmPrettyConfirm`)으로 통일됨. 5분 타임아웃은 서버(`requestSwapMutation`의 `expiresAt: nowMs + 300000`)에 이미 있음.
-  - **저장 중 표시 범위**: 이번 세션에 `server()`의 mutationNames 허용 목록을 확장해서 본인설정/메모저장/교환요청/수락/거절/상태변경까지 전부 "저장 중" 오버레이 + 중복클릭 방지가 적용되도록 고침.
-- **❌ 미구현 — 새로 만들어야 함**: **코트(1~4번) 빈자리는 사용자 화면에서 아예 클릭할 수 없다.** 현재 `renderCourts()`는 사용자용 빈 코트 슬롯을 `memberCard(null,false,false)`로 렌더링하는데, 이건 `onclick`이 없는 단순 "비어 있음" 표시일 뿐이다. 대기조 빈자리처럼 탭하면 바로 이동하는 기능이 코트 쪽엔 없음 — 이게 이번 "큰 공사"에서 실제로 새로 붙여야 할 핵심 기능.
+  - **저장 중 표시 범위**: 이번 세션에 `server()`의 mutationNames 허용 목록을 확장해서 본인설정/메모저장/교환요청/수락/거절/상태변경/`memberMoveSelf`까지 전부 "저장 중" 오버레이 + 중복클릭 방지가 적용되도록 고침 — 빈자리 이동(`memberMoveSelf` 경유)도 이 덕분에 오버레이가 뜬다.
+- **웹=앱**: 사용자 앱(APK)은 이 웹페이지(`jayuminton-push.web.app`)를 그대로 띄우는 WebView(`USER_URL`이 이 도메인으로 패치되어 있음, `patch_user_native_v1642_md_final.py`)라서 여기 적힌 모든 동작은 앱에서도 동일하게 작동한다. "웹은 되는데 앱은 안 된다"는 코드 구조상 있을 수 없다 — 그렇게 보이면 앱이 오래된 캐시를 물고 있는지부터 의심할 것.
 
 ## 14. 현황갱신 · 대기승급 · 코트입장 알림
 
@@ -151,14 +151,14 @@
 - [x] 정보 버튼 패널 열기/닫기 + 알림·진동 토글 + 앱설치 링크
 - [ ] gmail 비공개 테스터 등록 안내/연결
 - [x] 본인 설정 확인창 + 별표·'나' 배지
-- [ ] 본인 카드 테두리 색 최종 확정 (10장 충돌 해결)
+- [x] 본인 카드 테두리 색 확정 (파랑 유지, 2026-08-31 결정)
 - [x] 이름·급수·구력·메모·찬조·신규 카드 표시
 - [x] 고정팀/임시팀 테두리 구분 (색 + 모양)
 - [x] 자기 카드 길게 눌러 상태변경 버튼시트
 - [x] 자기 메모 입력/수정/삭제
 - [ ] 메모 "화려한 색" 실제 적용 확인
 - [x] 대기조 빈자리 탭 → 즉시 이동 + 저장중 표시
-- [ ] **코트 빈자리 탭 → 즉시 이동 + 저장중 표시 (신규 구현 필요)**
+- [x] 코트 빈자리 탭 → 즉시 이동 + 저장중 표시 (`wireCourtEmptySlots`, 2026-08-31 재확인 — 신규 구현 불필요로 정정)
 - [x] 모든 위치(코트/대기/코트배정대기) 상대방 클릭 → 자리교환 요청/수락/거절/5분 타임아웃
 - [x] 저장 중 오버레이가 새로 추가된 모든 mutation을 커버
 - [x] 현황갱신 버튼
@@ -172,7 +172,7 @@
 - 본인 확인/설정: `patch_member_user_requirements_v1.py`의 `IDENTITY_BIND_ADDON` (`jmPrettyConfirm`, `bindMemberIdentity`)
 - 카드 표시/팀 테두리: `patch_member_user_requirements_v1.py`의 `TEAM_STATUS_ADDON`, `TEAM_CARD_LAYOUT_V3_ADDON`
 - 자기 상태변경/메모: `.github/workflows/deploy-unified-member-web-production.yml`의 `JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1`(`openSelfStatusMenu`/`applySelfStatus`), `JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1`
-- 대기조 빈자리 이동: `handleMemberWaitEmptyTap` (`deploy-unified-member-web-production.yml`, `JAYUMINTON_MEMBER_WAIT_EMPTY_IMMEDIATE_MOVE_V1`)
+- 빈자리 이동(코트+대기 전체, 실제 활성 구현): `deployment/jayuminton/patch_member_single_tap_move_v1.py` — `window.handleMemberWaitEmptyTap`/`window.handleEmptySlotTap`/`window.memberWaitEmptySlotCard`/`wireCourtEmptySlots`, 모두 `server('memberMoveSelf',...)` 경유. `patch_member_user_requirements_v1.py`의 동명 함수 재정의는 이 스크립트가 나중에 덮어쓰므로 무시할 것.
 - 자리교환(전체 위치): `handleAnywhereMemberTap`/`requestSwap`/`pollIncoming` (`JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1`), `handleMemberWaitOtherTap`(`JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1`), 서버 `requestSwapMutation`/`respondSwapMutation` (`cloudflare/state-worker/worker.js`)
 - 저장 중 오버레이/중복클릭 방지: `server()`의 `mutationNames`/`ACTION_IN_FLIGHT`/`setActionBusy` (`JAYUMINTON_MEMBER_MUTATION_NAMES_V1`)
-- **코트 빈자리 이동: 미연결 — `renderCourts()`의 `memberCard(null,false,false)`를 대기조 방식으로 교체해야 함**
+- 사용자 앱(APK)=사용자 웹: `deployment/scripts/patch_user_native_v1642_md_final.py`가 `USER_URL`을 `jayuminton-push.web.app`으로 패치 — 별도 구현 없음, WebView가 이 문서에 적힌 웹 코드를 그대로 실행
