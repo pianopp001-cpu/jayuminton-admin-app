@@ -308,7 +308,7 @@ TEAM_STATUS_ADDON = r'''
   window.__JAYUMINTON_MEMBER_TEAM_STATUS_BADGES_V1__=true;
   var scheduled=false;
   function state(){try{return window.STATE||(typeof STATE!=='undefined'?STATE:null);}catch(e){return null;}}
-  function color(value){var p=['#5b21b6','#0f766e','#b45309','#0369a1','#be123c','#4338ca','#15803d','#a21caf'],h=0;String(value||'').split('').forEach(function(c){h=((h*31)+c.charCodeAt(0))>>>0;});return p[h%p.length];}
+  function color(value){var p=['#5b21b6','#0f766e','#334155','#0369a1','#be123c','#4338ca','#15803d','#a21caf'],h=0;String(value||'').split('').forEach(function(c){h=((h*31)+c.charCodeAt(0))>>>0;});return p[h%p.length];}
   function decorate(){
     scheduled=false;var s=state();if(!s||!Array.isArray(s.members))return;
     var map={};s.members.forEach(function(m){map[String(m.id)]=m;});
@@ -663,11 +663,13 @@ def assert_auto_sync_contract(text: str) -> None:
 
 
 def assert_team_status_contract(text: str) -> None:
-    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team", "outline-offset:2px", "0 0 0 5px var(--jm-team-color"]:
+    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team", "outline-offset:2px", "0 0 0 5px var(--jm-team-color", "JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1"]:
         if needle not in text:
             raise SystemExit(f"member team/status contract missing: {needle}")
     if "box-shadow:inset 4px 0 0 var(--jm-team-color)" in text:
         raise SystemExit("member team/status left stripe survived")
+    if "'#b45309'" in text:
+        raise SystemExit("member team color palette still carries the temp-team-colliding amber slot")
 
 
 def assert_member_message_contract(text: str) -> None:
@@ -830,6 +832,25 @@ def patch(path: Path) -> None:
             text = text.replace(old_ask, new_ask, 1)
     if marker_pretty_confirm not in text:
         raise SystemExit("pretty-confirm generalization did not apply")
+
+    # "영구팀 테두리 모양이 임시팀 테두리 모양과 완전히 같게 보이는데.. 영구팀이
+    # 혹시라도 노랑이면 완전 임시팀이랑 구별도 안가고." This page's own color()
+    # (just above, in TEAM_STATUS_ADDON) hashes a team name into one of 8 fixed
+    # colors, and #b45309 (a dark amber/brown) sits in the same gold/yellow hue
+    # family as .jm-temp-pair's #facc15 -- a permanent team landing on that
+    # palette slot becomes visually indistinguishable from a one-time (1회성)
+    # team. Swap it for a slate gray that shares no hue family with either the
+    # other 7 palette entries or the temp-team gold. The admin app carries the
+    # identical fix for its own byte-identical copy of this palette/hash
+    # formula (adminTeamColor(), build-admin-toolbar-v2073.yml's
+    # jmTeamColorNoYellowV1), so the same team name keeps rendering the same
+    # color on both sides.
+    old_palette = "var p=['#5b21b6','#0f766e','#b45309','#0369a1','#be123c','#4338ca','#15803d','#a21caf'],h=0;"
+    new_palette = "var p=['#5b21b6','#0f766e','#334155','#0369a1','#be123c','#4338ca','#15803d','#a21caf'],h=0;/* JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1 */"
+    if "JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1" not in text and old_palette in text:
+        text = text.replace(old_palette, new_palette, 1)
+    if "JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1" not in text:
+        raise SystemExit("team color no-yellow fix did not apply")
 
     # "1회성 팀 설정했을 때 사용자 앱, 웹에서 안보이는 부분 고쳐주고." The
     # .jm-temp-pair CSS class has real style rules (see temporary_team_css

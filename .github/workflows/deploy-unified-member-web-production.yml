@@ -667,6 +667,8 @@ jobs:
           grep -F 'outline:1px solid var(--jm-team-color' "$PUBLIC/index.html" >/dev/null
           grep -F 'outline-offset:2px' "$PUBLIC/index.html" >/dev/null
           grep -F '0 0 0 5px var(--jm-team-color' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1' "$PUBLIC/index.html" >/dev/null
+          ! grep -F "'#b45309'" "$PUBLIC/index.html" >/dev/null
           ! grep -F 'box-shadow:inset 4px 0 0 var(--jm-team-color)' "$PUBLIC/index.html" >/dev/null
           grep -F '.jm-status-badge{display:none!important}' "$PUBLIC/index.html" >/dev/null
           grep -F "server('updateMyProfile',[null,String(member.id),memo])" "$PUBLIC/index.html" >/dev/null
@@ -753,6 +755,7 @@ jobs:
             'outline:1px solid var(--jm-team-color' \
             'outline-offset:2px' \
             '0 0 0 5px var(--jm-team-color' \
+            'JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1' \
             '.jm-status-badge{display:none!important}' \
             "server('updateMyProfile',[null,String(member.id),memo])" \
             'member.teamLabel' \

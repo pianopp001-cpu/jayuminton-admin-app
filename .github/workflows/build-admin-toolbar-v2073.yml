@@ -1265,6 +1265,39 @@ jobs:
           PY
           grep -F 'jmSuppressNewNameBubbleV1' "$ROOT/assets/admin/index.html" >/dev/null
 
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = 'jmTeamColorNoYellowV1'
+          if marker not in text:
+              # "영구팀 테두리 모양이 임시팀 테두리 모양과 완전히 같게 보이는데..
+              # 영구팀이 혹시라도 노랑이면 완전 임시팀이랑 구별도 안가고." The
+              # per-team hash palette in adminTeamColor() includes #b45309 (a
+              # dark amber/brown) which sits in the same gold/yellow hue family
+              # as the temp-team marker color (#d4a017 here, #facc15 on the
+              # member web app, both patched this session for the same reason
+              # against the self-marker) -- a permanent team whose name happens
+              # to hash to that slot becomes visually indistinguishable from a
+              # one-time (1회성) team. Swap it for a slate gray, which shares no
+              # hue family with any of the other 7 palette entries or with
+              # either temp-team gold. patch_member_user_requirements_v1.py
+              # carries the identical fix for the member web app's own copy of
+              # this same 8-color palette/hash formula (kept byte-identical so
+              # the same team name always renders the same color on both
+              # sides).
+              old = "var colors=['#5b21b6','#0f766e','#b45309','#0369a1','#be123c','#4338ca','#15803d','#a21caf'];"
+              new = "var colors=['#5b21b6','#0f766e','#334155','#0369a1','#be123c','#4338ca','#15803d','#a21caf'];/* jmTeamColorNoYellowV1 */"
+              if old not in text:
+                  raise SystemExit('adminTeamColor palette anchor not found -- base HTML has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('team color no-yellow fix did not apply')
+          p.write_text(text, encoding='utf-8')
+          PY
+          grep -F 'jmTeamColorNoYellowV1' "$ROOT/assets/admin/index.html" >/dev/null
+
           python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js <<'PY'
           from pathlib import Path
           import sys
@@ -1329,13 +1362,14 @@ jobs:
           grep -F 'jmCommitEmptyTargetsAutoFireFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmSuppressNewNameBubbleV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmWaitCardNameFixV1' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'jmTeamColorNoYellowV1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.48-tangle-and-popup-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.48-tangle-and-popup-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.48-tangle-and-popup-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.49-team-color-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.49-team-color-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.49-team-color-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1378,20 +1412,21 @@ jobs:
           grep -F 'jmCommitEmptyTargetsAutoFireFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmSuppressNewNameBubbleV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmWaitCardNameFixV1' "$ROOT/verify.html" >/dev/null
+          grep -F 'jmTeamColorNoYellowV1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.48-tangle-and-popup-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.49-team-color-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.48-tangle-and-popup-fix.apk
-          printf 'status=success\nversion=208.48\nfeature=commit-empty-targets-auto-fire-fix+suppress-new-name-bubble+wait-card-name-fix+quick-roster-font-size-bump+longpress-scroll-cancel+bottom-bar-thrash-fix+remove-tap-auto-assign-hijack+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20848-tangle-and-popup-fix.txt
-          git add releases/jayuminton-admin-v208.48-tangle-and-popup-fix.apk deployment/status/v20848-tangle-and-popup-fix.txt
-          git commit -m 'Publish admin v208.48: stop selecting a member from silently auto-firing into a stale armed empty-slot target, remove the black full-name popup that interfered with quick assignment, fix wait-card name clipping, and enlarge quick-roster font' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.49-team-color-fix.apk
+          printf 'status=success\nversion=208.49\nfeature=team-color-no-yellow-fix+commit-empty-targets-auto-fire-fix+suppress-new-name-bubble+wait-card-name-fix+quick-roster-font-size-bump+longpress-scroll-cancel+bottom-bar-thrash-fix+remove-tap-auto-assign-hijack+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20849-team-color-fix.txt
+          git add releases/jayuminton-admin-v208.49-team-color-fix.apk deployment/status/v20849-team-color-fix.txt
+          git commit -m 'Publish admin v208.49: a permanent team hashing to the amber palette slot was visually indistinguishable from a one-time (1회성) team -- swap that slot for slate gray, out of the temp-team gold/yellow hue family' || exit 0
           git push origin HEAD:main
