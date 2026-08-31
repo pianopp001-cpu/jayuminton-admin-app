@@ -89,11 +89,12 @@ jobs:
           python3 deployment/scripts/patch_user_native_v1642_md_final.py "$BUILD"
           python3 deployment/scripts/patch_user_native_target_sdk35_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_versioncode_2001643_v1.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_versioncode_2001645_v1.py "$BUILD"
           grep -F 'VERSION="1.6.42"' "$BUILD" >/dev/null
           grep -F 'MAX_GROUPS = 8' "$BUILD" >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember' "$BUILD" >/dev/null
           grep -F 'targetSdk 35' "$BUILD" >/dev/null
-          grep -F 'VERSION_CODE="2001643"' "$BUILD" >/dev/null
+          grep -F 'VERSION_CODE="2001645"' "$BUILD" >/dev/null
           bash "$BUILD"
 
           # Play Console has already accepted a release signed with the
