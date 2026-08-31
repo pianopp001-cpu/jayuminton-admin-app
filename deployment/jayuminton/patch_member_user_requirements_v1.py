@@ -588,7 +588,7 @@ MEMO_DEDUPE_ADDON = r'''
 COMPLETION_ADDON = r'''
 <style>
 /* JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1 */
-#memberApp [data-member-id].is-self-member{border:2px solid #2563eb!important;outline:2px solid #2563eb!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 6px #2563eb!important;overflow:visible!important}
+#memberApp [data-member-id].is-self-member{border:2px solid #2563eb!important;background-clip:padding-box!important;outline:4px solid #2563eb!important;outline-offset:3px!important;box-shadow:none!important;overflow:visible!important}
 #memberApp [data-member-id].is-self-member>.member-self-star{position:absolute!important;top:2px!important;right:2px!important;left:auto!important;width:auto!important;min-width:22px!important;height:15px!important;min-height:15px!important;padding:0 3px!important;border:1px solid #fff!important;border-radius:999px!important;background:#111827!important;color:#fff!important;font-size:7px!important;font-weight:950!important;line-height:13px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;white-space:nowrap!important;z-index:30!important;box-shadow:0 1px 3px rgba(15,23,42,.35)!important}
 #memberApp [data-member-id]>.member-public-memo{color:#d946ef!important;font-size:10px!important;font-weight:900!important;text-shadow:0 0 8px rgba(217,70,239,.18)!important}
 #jmMemberSelfMemoInput{font-size:11px!important;line-height:1.35!important;color:#d946ef!important;font-weight:850!important}
@@ -663,13 +663,15 @@ def assert_auto_sync_contract(text: str) -> None:
 
 
 def assert_team_status_contract(text: str) -> None:
-    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team", "outline-offset:2px", "JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1", "JAYUMINTON_MEMBER_TEMP_TEAM_DASHED_BORDER_V1", "JAYUMINTON_MEMBER_TEAM_BORDER_THICK_V1", "outline:4px solid var(--jm-team-color", "outline:4px dashed #facc15"]:
+    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team", "outline-offset:2px", "JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1", "JAYUMINTON_MEMBER_TEMP_TEAM_DASHED_BORDER_V1", "JAYUMINTON_MEMBER_TEAM_BORDER_THICK_V1", "outline:4px solid var(--jm-team-color", "outline:4px dashed #facc15", "JAYUMINTON_MEMBER_SELF_DOUBLE_RING_V1", "outline:4px solid #2563eb"]:
         if needle not in text:
             raise SystemExit(f"member team/status contract missing: {needle}")
     if "box-shadow:inset 4px 0 0 var(--jm-team-color)" in text:
         raise SystemExit("member team/status left stripe survived")
     if "'#b45309'" in text:
         raise SystemExit("member team color palette still carries the temp-team-colliding amber slot")
+    if "outline:2px solid #2563eb" in text:
+        raise SystemExit("superseded thin single self-marker ring survived")
 
 
 def assert_member_message_contract(text: str) -> None:
@@ -937,7 +939,13 @@ def patch(path: Path) -> None:
     # pattern here for symmetry, purely additive (no change to the actual
     # tap/timing logic).
     marker_empty_feedback = "JAYUMINTON_MEMBER_WAIT_EMPTY_ARM_FEEDBACK_V1"
-    if marker_empty_feedback not in text:
+    marker_empty_immediate_precheck = "JAYUMINTON_MEMBER_WAIT_EMPTY_IMMEDIATE_MOVE_V1"
+    # The immediate-move fix further below replaces this same function and
+    # strips this marker back out again (superseding the arm-and-wait
+    # design entirely) -- once that has already landed, this block's own
+    # anchor is permanently gone from the live text, so it must skip too,
+    # not just check its own (now-erased) marker.
+    if marker_empty_feedback not in text and marker_empty_immediate_precheck not in text:
         old_empty_tap = (
             "  MEMBER_WAIT_EMPTY_TAP.timer=setTimeout(function(){\n"
             "    MEMBER_WAIT_EMPTY_TAP.timer=null;\n"
@@ -957,7 +965,7 @@ def patch(path: Path) -> None:
         if old_empty_tap not in text:
             raise SystemExit("handleMemberWaitEmptyTap anchor not found -- live source has drifted")
         text = text.replace(old_empty_tap, new_empty_tap, 1)
-    if marker_empty_feedback not in text:
+    if marker_empty_feedback not in text and marker_empty_immediate_precheck not in text:
         raise SystemExit("empty-slot arm feedback fix did not apply")
 
     # "내카드를 왜 다시 탭해야하는데 그거 하지마. 그냥 빈자리 누르면
@@ -1009,6 +1017,26 @@ def patch(path: Path) -> None:
         text = text.replace(old_empty_tap2, new_empty_tap2, 1)
     if marker_empty_immediate not in text:
         raise SystemExit("empty-slot immediate-move fix did not apply")
+
+    # "진짜 두줄이야. 바깥은 굵고 안은 얇은 파랑 테두리 '나'." The self-marker
+    # ring was border(2px)+outline(2px,offset 2px)+box-shadow(4px white gap
+    # then 6px blue) -- because the two box-shadow layers share the same
+    # blue color and the visible blue band is only the DIFFERENCE between
+    # them (6px-4px=2px), the outer ring ended up the same 2px width as the
+    # inner border, not "바깥이 굵게". Drop box-shadow entirely and use a
+    # single outline (like today's team-border fix) for the OUTER ring,
+    # sized wider (4px) than the inner border (2px) -- outline never
+    # participates in box layout, so it cannot eat into the card's padding
+    # or clip the name text either.
+    marker_self_double = "JAYUMINTON_MEMBER_SELF_DOUBLE_RING_V1"
+    if marker_self_double not in text:
+        old_self_marker = "#memberApp [data-member-id].is-self-member{border:2px solid #2563eb!important;outline:2px solid #2563eb!important;outline-offset:2px!important;box-shadow:0 0 0 4px rgba(255,255,255,.98),0 0 0 6px #2563eb!important;overflow:visible!important}"
+        new_self_marker = "#memberApp [data-member-id].is-self-member{border:2px solid #2563eb!important;background-clip:padding-box!important;outline:4px solid #2563eb!important;outline-offset:3px!important;box-shadow:none!important;overflow:visible!important}/* JAYUMINTON_MEMBER_SELF_DOUBLE_RING_V1 */"
+        if old_self_marker not in text:
+            raise SystemExit("is-self-member ring anchor not found -- live source has drifted")
+        text = text.replace(old_self_marker, new_self_marker, 1)
+    if marker_self_double not in text:
+        raise SystemExit("self double-ring fix did not apply")
 
     # Same report ("저장중이라는 말도 안뜨고") also traces to a second, wider
     # gap: server()'s own mutationNames allowlist (which gates both the
