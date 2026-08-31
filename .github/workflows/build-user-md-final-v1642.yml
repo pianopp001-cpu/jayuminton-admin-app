@@ -87,7 +87,8 @@ jobs:
           grep -F 'MAX_GROUPS = 8' "$BUILD" >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember' "$BUILD" >/dev/null
           bash "$BUILD"
-      - name: Verify and publish APK
+          gradle --no-daemon bundleRelease
+      - name: Verify and publish APK + AAB
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +101,22 @@ jobs:
             exit 1
           fi
           SHA="$(sha256sum "$APK_PATH" | awk '{print $1}')"
+
+          # Play Console (공개/비공개 테스트 등 모든 트랙) requires an .aab
+          # upload for new releases -- bundleRelease reuses the exact same
+          # signingConfig/versionCode/versionName already applied to the APK
+          # above by the same gradle invocation, so the two artifacts are
+          # guaranteed to match (same code, same version, same signing key).
+          AAB_PATH="releases/jayuminton-courtstatus-v1.6.42-md-final.aab"
+          AAB_SRC=app/build/outputs/bundle/release/app-release.aab
+          test -s "$AAB_SRC"
+          cp "$AAB_SRC" "$AAB_PATH"
+          if unzip -p "$AAB_PATH" base/dex/classes.dex 2>/dev/null | strings | grep -F 'script.google.com/macros/s/' >/dev/null; then
+            echo 'Forbidden GAS URL detected in final user AAB' >&2
+            exit 1
+          fi
+          AAB_SHA="$(sha256sum "$AAB_PATH" | awk '{print $1}')"
+
           NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           {
             echo 'status=success'
@@ -111,12 +128,14 @@ jobs:
             echo 'push_target_contract=tested'
             echo "run_id=$GITHUB_RUN_ID"
             echo "sha256=$SHA"
+            echo "aab_path=$AAB_PATH"
+            echo "aab_sha256=$AAB_SHA"
             echo "updated_at=$NOW"
           } > deployment/status/user-apk-v1642.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$APK_PATH" deployment/status/user-apk-v1642.txt
-          git commit -m 'Publish MD-final user APK v1.6.42' || exit 0
+          git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
+          git commit -m 'Publish MD-final user APK v1.6.42 + Play Console AAB' || exit 0
           git reset --hard HEAD
           git clean -fd
           git pull --rebase origin main
