@@ -116,21 +116,33 @@ function ensureQuickRosterGridStyle(){if(document.getElementById('jmQuickRosterG
    it always sorts after every rule already in the document) resolves the
    tie without needing to go to 2 IDs like quick-roster did. */
 function ensureWaitCardNameStyle(){if(document.getElementById('jmWaitCardNameFixV1'))return;var style=document.createElement('style');style.id='jmWaitCardNameFixV1';style.textContent='#adminApp .v4-wait-card .person{height:auto!important;overflow:visible!important}#adminApp .v4-wait-card .person .name{white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important;word-break:keep-all!important}';(document.head||document.documentElement).appendChild(style);}
-/* Spec: "색깔만 그런 게 아니라. 테두리 모양도 좀 구별이 되면 안될까 -- 영구팀은
-   코트에서 나와도 그대로 유지, 임시팀은 코트에서 나올 때 테두리 해제 되잖아."
-   Color alone (even after the amber-vs-gold palette fix) is not a robust
-   signal, so make the underlying permanence difference visible as a border
-   STYLE difference too: .has-member-team (permanent) already renders a
-   solid 2px border; every .jm-temp-team-v2047/.jm-temp-pair variant across
-   this app's several historically-layered temp-team style rules also
-   renders a border (solid, sharing the exact same visual shape as
-   permanent) at the same 1-ID-plus-classes specificity -- switch it to
-   dashed. Runtime-appended, so it always sorts after every static rule and
-   wins any specificity tie regardless of which historical layer would
-   otherwise win. Matches the identical fix on the member web app
-   (patch_member_user_requirements_v1.py's
-   JAYUMINTON_MEMBER_TEMP_TEAM_DASHED_BORDER_V1). */
-function ensureTempTeamDashedBorderStyle(){if(document.getElementById('jmTempTeamDashedBorderV1'))return;var style=document.createElement('style');style.id='jmTempTeamDashedBorderV1';style.textContent='#adminApp .jm-temp-team-v2047,#adminApp .jm-temp-team-v2047.jm-temp-pair,#adminApp .has-member-team.jm-temp-team-v2047,#adminApp .has-member-team.jm-temp-team-v2047.jm-temp-pair,#adminApp .jm-temp-pair{border-style:dashed!important}';(document.head||document.documentElement).appendChild(style);}
+/* Spec: "색깔만 그런 게 아니라. 테두리 모양도 좀 구별이 되면 안될까... 굵기가
+   얇으면 안돼 굵어서 확실하게 보여야해... 글자는 가리면 안되고 굵어야 한다고."
+   This app carries FOUR separate historically-layered temp-team style
+   rules discovered by live-rendering the actual shipped HTML and reading
+   getComputedStyle with test cards appended -- a 2px border+white-ring+4px
+   shadow clone of the permanent style; a plain 5px solid outline with
+   box-shadow:none; a 4px box-shadow+very faint 2px outline; and whichever
+   the base app's own MutationObserver-driven scrub() last re-asserted.
+   A competing <style> tag (this function's PREVIOUS version) could not
+   reliably beat whichever of those four last re-ran its own observer,
+   since they react to the exact same DOM mutations this app's own
+   maintain() does and can re-fire in any order. An inline style set
+   directly on the element via .style.setProperty(...,'important'),
+   however, always wins over ANY stylesheet rule regardless of that rule's
+   selector specificity or source order -- that is a hard CSS priority
+   guarantee, not something that depends on the current shape of this
+   app's style-tag history, so it can't be re-broken by a future layer.
+   outline (not border) carries the main ring: it paints outside the
+   border box without participating in layout at all, so a thick 4px ring
+   can never eat into the card's padding or clip the name text the way a
+   thick border/box-shadow could. A temp AND permanent member additionally
+   keeps a slim solid border in their team color (background-clip:padding-
+   box, so it never paints over the text) so team affiliation isn't lost
+   under the dashed outline. Matches the identical fix on the member web
+   app (patch_member_user_requirements_v1.py's
+   JAYUMINTON_MEMBER_TEAM_BORDER_THICK_V1). */
+function fixTeamBorders(){var r=root();if(!r)return;r.querySelectorAll('.has-member-team').forEach(function(el){var isTemp=el.classList.contains('jm-temp-team-v2047')||el.classList.contains('jm-temp-pair');el.style.setProperty('background-clip','padding-box','important');el.style.setProperty('box-shadow','none','important');el.style.setProperty('border','2px solid var(--member-team-color,#7c3aed)','important');el.style.setProperty('outline',isTemp?'4px dashed #d4a017':'4px solid var(--member-team-color,#7c3aed)','important');el.style.setProperty('outline-offset','2px','important');});r.querySelectorAll('.jm-temp-team-v2047:not(.has-member-team),.jm-temp-pair:not(.has-member-team)').forEach(function(el){el.style.setProperty('border','none','important');el.style.setProperty('box-shadow','none','important');el.style.setProperty('outline','4px dashed #d4a017','important');el.style.setProperty('outline-offset','2px','important');});}
 /* Spec: "화면 스크롤만 해도 멤버카드를 길게 누르면 나오는... 버튼이 떠..
    너무너무 방해된다." startMemberLongPress()'s only cancel-guard is
    moveMemberLongPress(), which cancels the 600ms timer only once the
@@ -148,7 +160,7 @@ function ensureTempTeamDashedBorderStyle(){if(document.getElementById('jmTempTea
    Re-verified after adding this: the same synthetic scroll now correctly
    cancels the pending timer before it can fire. */
 function installLongPressScrollCancel(){if(window.__jmLongPressScrollCancelV1)return;window.__jmLongPressScrollCancelV1=true;window.addEventListener('scroll',function(){if(typeof window.finishMemberLongPress==='function')window.finishMemberLongPress();},true);}
-function maintain(){try{fixCheckOverlap();}catch(_){}try{fixNewBadges();}catch(_){}try{fixBottomBar();}catch(_){}try{fixExcludedNames();}catch(_){}try{fixDuplicateNameDisplay();}catch(_){}try{fixGlobalCompactName();}catch(_){}try{ensureQuickRosterGridStyle();}catch(_){}try{ensureWaitCardNameStyle();}catch(_){}try{ensureTempTeamDashedBorderStyle();}catch(_){}try{installLongPressScrollCancel();}catch(_){}}
+function maintain(){try{fixCheckOverlap();}catch(_){}try{fixNewBadges();}catch(_){}try{fixBottomBar();}catch(_){}try{fixExcludedNames();}catch(_){}try{fixDuplicateNameDisplay();}catch(_){}try{fixGlobalCompactName();}catch(_){}try{ensureQuickRosterGridStyle();}catch(_){}try{ensureWaitCardNameStyle();}catch(_){}try{fixTeamBorders();}catch(_){}try{installLongPressScrollCancel();}catch(_){}}
 function boot(){var tries=0;(function retry(){tries++;maintain();if(tries<150)setTimeout(retry,100);})();var r=root();if(r&&!r.__jmV2081Obs){var q=false;r.__jmV2081Obs=new MutationObserver(function(){if(q)return;q=true;setTimeout(function(){q=false;maintain();},50);});r.__jmV2081Obs.observe(r,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else setTimeout(boot,0);
 })();

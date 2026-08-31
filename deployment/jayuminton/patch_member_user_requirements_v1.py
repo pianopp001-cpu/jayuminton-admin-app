@@ -367,9 +367,9 @@ TEAM_CARD_LAYOUT_V3_ADDON = r'''
 <style id="jayuminton-member-team-card-layout-v5">
 /* JAYUMINTON_MEMBER_TEAM_CARD_LAYOUT_V5 */
 #memberApp [data-member-id]{position:relative!important;inset:auto!important;transform:none!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:center!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:52px!important;max-height:none!important;box-sizing:border-box!important;overflow:hidden!important;contain:paint!important}
-#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:3px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}
-#memberApp [data-member-id].jm-temp-pair{outline:0!important;box-shadow:0 0 0 4px #facc15!important;border:2px dashed #facc15!important}
-#memberApp [data-member-id].jm-has-team.jm-temp-pair{outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:3px!important;box-shadow:0 0 0 6px #facc15!important;border:2px dashed #facc15!important}
+#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:4px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:none!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}
+#memberApp [data-member-id].jm-temp-pair{border:none!important;outline:4px dashed #facc15!important;outline-offset:2px!important;box-shadow:none!important;overflow:visible!important}
+#memberApp [data-member-id].jm-has-team.jm-temp-pair{border:2px solid var(--jm-team-color,#6d28d9)!important;background-clip:padding-box!important;outline:4px dashed #facc15!important;outline-offset:2px!important;box-shadow:none!important}
 #memberApp [data-member-id]>.name,#memberApp [data-member-id]>.member-name,#memberApp [data-member-id]>.quick-member-name,#memberApp [data-member-id]>.member-info-detail,#memberApp [data-member-id]>.member-public-memo,#memberApp [data-member-id]>.jm-public-memo,#memberApp [data-member-id]>.member-status-list{position:static!important;inset:auto!important;transform:none!important;display:block!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;max-height:none!important;box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;text-align:center!important;white-space:normal!important;overflow:hidden!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:keep-all!important}
 #memberApp [data-member-id]>.member-self-star{top:2px!important;right:2px!important}
 #memberApp [data-member-id]>.jm-member-badges{position:static!important;inset:auto!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:center!important;flex:0 0 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;box-sizing:border-box!important;margin:2px 0 0!important;padding:0!important;overflow:hidden!important}
@@ -663,7 +663,7 @@ def assert_auto_sync_contract(text: str) -> None:
 
 
 def assert_team_status_contract(text: str) -> None:
-    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team", "outline-offset:2px", "0 0 0 5px var(--jm-team-color", "JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1", "JAYUMINTON_MEMBER_TEMP_TEAM_DASHED_BORDER_V1", "jm-temp-pair{outline:0!important;box-shadow:0 0 0 4px #facc15!important;border:2px dashed #facc15"]:
+    for needle in [TEAM_STATUS_MARKER, TEAM_CARD_LAYOUT_V3_MARKER, "member.teamLabel", "jm-team-badge", "jm-has-team", "outline-offset:2px", "JAYUMINTON_MEMBER_TEAM_COLOR_NO_YELLOW_V1", "JAYUMINTON_MEMBER_TEMP_TEAM_DASHED_BORDER_V1", "JAYUMINTON_MEMBER_TEAM_BORDER_THICK_V1", "outline:4px solid var(--jm-team-color", "outline:4px dashed #facc15"]:
         if needle not in text:
             raise SystemExit(f"member team/status contract missing: {needle}")
     if "box-shadow:inset 4px 0 0 var(--jm-team-color)" in text:
@@ -867,6 +867,36 @@ def patch(path: Path) -> None:
         text = text.replace(old_temp_css, new_temp_css, 1)
     if "JAYUMINTON_MEMBER_TEMP_TEAM_DASHED_BORDER_V1" not in text:
         raise SystemExit("temp-team dashed border fix did not apply")
+
+    # "굵기가 얇으면 안돼 굵어서 확실하게 보여야해... 글자는 가리면 안되고
+    # 굵어야 한다고." The dashed border above sat INSIDE a still-SOLID
+    # box-shadow ring (box-shadow can never be dashed), so the dash was easy
+    # to miss next to that solid glow, and both rings were only 2-5px --
+    # thin enough to read as similar weight at a glance. Drop border and
+    # box-shadow for the ring entirely and express both permanent and temp
+    # state as a single thick (4px) OUTLINE instead -- solid for permanent,
+    # dashed for temp -- since outline paints outside the border box without
+    # participating in box layout at all, so thickening it can never eat
+    # into the card's padding or clip the name text (unlike border/box-
+    # shadow, both of which interact with sizing/paint order in ways that
+    # could). A member who is both on a permanent team AND currently
+    # temp-paired keeps a slim solid border in their team color (clipped to
+    # the padding box, so it stays clear of the text) so that affiliation
+    # is not lost under the dashed outline. Matches the identical fix on
+    # the admin side (build-admin-toolbar-v2073.yml's
+    # jmTempTeamDashedBorderV1 / JAYUMINTON_MEMBER_TEAM_BORDER_THICK_V1).
+    marker_thick = "JAYUMINTON_MEMBER_TEAM_BORDER_THICK_V1"
+    if marker_thick not in text:
+        old_permanent = "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:3px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:0 0 0 5px var(--jm-team-color,#6d28d9)!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}"
+        new_permanent = "#memberApp [data-member-id].jm-has-team{border-color:transparent!important;outline:4px solid var(--jm-team-color,#6d28d9)!important;outline-offset:2px!important;box-shadow:none!important;overflow:visible!important;contain:none!important;background-clip:padding-box!important}/* JAYUMINTON_MEMBER_TEAM_BORDER_THICK_V1 */"
+        if old_permanent in text:
+            text = text.replace(old_permanent, new_permanent, 1)
+        old_temp2 = "#memberApp [data-member-id].jm-temp-pair{outline:0!important;box-shadow:0 0 0 4px #facc15!important;border:2px dashed #facc15!important}\n#memberApp [data-member-id].jm-has-team.jm-temp-pair{outline:1px solid var(--jm-team-color,#6d28d9)!important;outline-offset:3px!important;box-shadow:0 0 0 6px #facc15!important;border:2px dashed #facc15!important}"
+        new_temp2 = "#memberApp [data-member-id].jm-temp-pair{border:none!important;outline:4px dashed #facc15!important;outline-offset:2px!important;box-shadow:none!important;overflow:visible!important}\n#memberApp [data-member-id].jm-has-team.jm-temp-pair{border:2px solid var(--jm-team-color,#6d28d9)!important;background-clip:padding-box!important;outline:4px dashed #facc15!important;outline-offset:2px!important;box-shadow:none!important}"
+        if old_temp2 in text:
+            text = text.replace(old_temp2, new_temp2, 1)
+    if marker_thick not in text:
+        raise SystemExit("thick team-border fix did not apply")
 
     # "1회성 팀 설정했을 때 사용자 앱, 웹에서 안보이는 부분 고쳐주고." The
     # .jm-temp-pair CSS class has real style rules (see temporary_team_css
