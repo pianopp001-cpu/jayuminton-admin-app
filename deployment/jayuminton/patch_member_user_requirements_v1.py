@@ -699,7 +699,6 @@ def assert_pretty_confirm_contract(text: str) -> None:
 
 def assert_save_feedback_contract(text: str) -> None:
     for needle in [
-        "JAYUMINTON_MEMBER_WAIT_EMPTY_ARM_FEEDBACK_V1",
         "JAYUMINTON_MEMBER_MUTATION_NAMES_V1",
         "'memberMoveSelf','bindMemberIdentity','updateMyProfile'",
         "'memberRequestAnywhereSwap','memberCancelAnywhereSwap'",
@@ -707,6 +706,17 @@ def assert_save_feedback_contract(text: str) -> None:
     ]:
         if needle not in text:
             raise SystemExit(f"save-feedback contract missing: {needle}")
+
+
+def assert_empty_slot_tap_contract(text: str) -> None:
+    for needle in [
+        "JAYUMINTON_MEMBER_WAIT_EMPTY_IMMEDIATE_MOVE_V1",
+        "if(!memberWaitSeatSessionArgs())return;\n  /* JAYUMINTON_MEMBER_WAIT_EMPTY_IMMEDIATE_MOVE_V1 */\n  clearMemberWaitSeatPick();\n  memberMoveToWaitGroup(groupIndex);\n}",
+    ]:
+        if needle not in text:
+            raise SystemExit(f"empty-slot immediate-move contract missing: {needle}")
+    if "JAYUMINTON_MEMBER_WAIT_EMPTY_ARM_FEEDBACK_V1" in text:
+        raise SystemExit("superseded empty-slot arm-and-wait code survived")
 
 
 def patch(path: Path) -> None:
@@ -950,6 +960,56 @@ def patch(path: Path) -> None:
     if marker_empty_feedback not in text:
         raise SystemExit("empty-slot arm feedback fix did not apply")
 
+    # "내카드를 왜 다시 탭해야하는데 그거 하지마. 그냥 빈자리 누르면
+    # 이동합니다 하고 이동하면 돼." Reported right after the arm-and-wait
+    # fix above shipped -- the two-step flow itself (tap empty slot to
+    # arm it, then either double-tap the same slot or separately tap your
+    # own card to confirm) is the thing to remove, not just add feedback
+    # to. A single tap on an empty slot now moves the member there
+    # immediately, exactly like double-tap already did -- no arming, no
+    # 430ms wait, no separate "tap my own card" step. memberMoveToWaitGroup
+    # already has its own session/ACTION_IN_FLIGHT guards and (since the
+    # mutationNames fix below) already shows the "저장 중" overlay, so a
+    # single tap now reads as "tap -> 저장 중 -> moved", matching the
+    # request directly. clearMemberWaitSeatPick() still runs first in case
+    # a DIFFERENT pending pick (e.g. an armed swap-with-another-member
+    # target) was left over from a different flow -- an empty-slot tap
+    # should always mean "move me here now", not silently combine with an
+    # unrelated stale pick.
+    marker_empty_immediate = "JAYUMINTON_MEMBER_WAIT_EMPTY_IMMEDIATE_MOVE_V1"
+    if marker_empty_immediate not in text:
+        old_empty_tap2 = (
+            "function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){\n"
+            "  if(IS_ADMIN)return; if(event){event.preventDefault();event.stopPropagation();}\n"
+            "  if(!memberWaitSeatSessionArgs())return;\n"
+            "  const key=String(groupIndex)+':'+String(slotIndex),now=Date.now(),dbl=MEMBER_WAIT_EMPTY_TAP.key===key&&now-MEMBER_WAIT_EMPTY_TAP.tappedAt<=420;\n"
+            "  if(MEMBER_WAIT_EMPTY_TAP.timer)clearTimeout(MEMBER_WAIT_EMPTY_TAP.timer);\n"
+            "  MEMBER_WAIT_EMPTY_TAP={key:key,tappedAt:now,timer:null};\n"
+            "  if(dbl){MEMBER_WAIT_EMPTY_TAP={key:'',tappedAt:0,timer:null};memberMoveToWaitGroup(groupIndex);return;}\n"
+            "  MEMBER_WAIT_EMPTY_TAP.timer=setTimeout(function(){\n"
+            "    MEMBER_WAIT_EMPTY_TAP.timer=null;\n"
+            "    if(MEMBER_WAIT_SEAT_PICK&&MEMBER_WAIT_SEAT_PICK.type==='self'){clearMemberWaitSeatPick();memberMoveToWaitGroup(groupIndex);return;}\n"
+            "    MEMBER_WAIT_SEAT_PICK={type:'empty',groupIndex:Number(groupIndex),slotIndex:Number(slotIndex)};\n"
+            "    /* JAYUMINTON_MEMBER_WAIT_EMPTY_ARM_FEEDBACK_V1 */\n"
+            "    if(typeof showMemberSettingMessage==='function')showMemberSettingMessage('이 자리를 선택했어요. 내 카드를 탭하면 여기로 이동해요.');\n"
+            "  },430);\n"
+            "}"
+        )
+        new_empty_tap2 = (
+            "function handleMemberWaitEmptyTap(groupIndex,slotIndex,event){\n"
+            "  if(IS_ADMIN)return; if(event){event.preventDefault();event.stopPropagation();}\n"
+            "  if(!memberWaitSeatSessionArgs())return;\n"
+            "  /* JAYUMINTON_MEMBER_WAIT_EMPTY_IMMEDIATE_MOVE_V1 */\n"
+            "  clearMemberWaitSeatPick();\n"
+            "  memberMoveToWaitGroup(groupIndex);\n"
+            "}"
+        )
+        if old_empty_tap2 not in text:
+            raise SystemExit("handleMemberWaitEmptyTap (post-feedback) anchor not found -- live source has drifted")
+        text = text.replace(old_empty_tap2, new_empty_tap2, 1)
+    if marker_empty_immediate not in text:
+        raise SystemExit("empty-slot immediate-move fix did not apply")
+
     # Same report ("저장중이라는 말도 안뜨고") also traces to a second, wider
     # gap: server()'s own mutationNames allowlist (which gates both the
     # "저장 중" busy overlay AND the ACTION_IN_FLIGHT double-submit guard)
@@ -1113,6 +1173,7 @@ def patch(path: Path) -> None:
     assert_self_profile_contract(text)
     assert_pretty_confirm_contract(text)
     assert_save_feedback_contract(text)
+    assert_empty_slot_tap_contract(text)
     path.write_text(text, encoding="utf-8")
 
 
