@@ -437,7 +437,7 @@ MEMBER_MESSAGE_ADDON = r'''
 IDENTITY_BIND_ADDON = r'''
 <style id="jayuminton-member-identity-confirm-v2-style">
 #jmMemberIdentityConfirm{position:fixed;z-index:2147483647;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.58)}
-#jmMemberIdentityConfirm.hidden{display:none!important}.jm-identity-confirm-card{width:min(92vw,420px);padding:18px;border-radius:16px;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.38);text-align:center}.jm-identity-confirm-card p{margin:0 0 16px;font-size:17px;font-weight:900}.jm-identity-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.jm-identity-confirm-actions button{min-height:46px;border:0;border-radius:11px;font-size:15px;font-weight:900}.jm-identity-confirm-cancel{background:#e2e8f0;color:#334155}.jm-identity-confirm-ok{background:#315efb;color:#fff}
+#jmMemberIdentityConfirm.hidden{display:none!important}.jm-identity-confirm-card{width:min(92vw,420px);padding:18px;border-radius:16px;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.38);text-align:center}.jm-identity-confirm-card p{margin:0 0 16px;font-size:17px;font-weight:900;white-space:pre-line}.jm-identity-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.jm-identity-confirm-actions button{min-height:46px;border:0;border-radius:11px;font-size:15px;font-weight:900}.jm-identity-confirm-cancel{background:#e2e8f0;color:#334155}.jm-identity-confirm-ok{background:#315efb;color:#fff}
 </style>
 <div id="jmMemberIdentityConfirm" class="hidden" role="dialog" aria-modal="true"><div class="jm-identity-confirm-card"><p id="jmMemberIdentityConfirmText"></p><div class="jm-identity-confirm-actions"><button type="button" class="jm-identity-confirm-cancel">취소</button><button type="button" class="jm-identity-confirm-ok">네, 저예요</button></div></div></div>
 <script>
@@ -448,14 +448,20 @@ IDENTITY_BIND_ADDON = r'''
   window.__JAYUMINTON_MEMBER_IDENTITY_BIND_V2__=true;
   var originalSelect=window.selectMemberSelf,binding=false,boundKey='jayuminton_member_bound_session_v2';
   function find(id){try{return (STATE.members||[]).find(function(m){return m&&String(m.id)===String(id);})||null;}catch(_){return null;}}
-  function ask(member){return new Promise(function(resolve){
+  /* JAYUMINTON_MEMBER_PRETTY_CONFIRM_V1: shared pretty confirm dialog,
+     reused by the swap-request/incoming-swap-request flows below instead
+     of each rolling its own native confirm(). */
+  function jmPrettyConfirm(message,okLabel,cancelLabel){return new Promise(function(resolve){
     var box=document.getElementById('jmMemberIdentityConfirm'),label=document.getElementById('jmMemberIdentityConfirmText');
-    if(!box||!label){resolve(confirm(String(member.name||'선택한 회원')+'님이 본인인가요?'));return;}
-    label.textContent=String(member.name||'선택한 회원')+'님이 본인인가요?';box.classList.remove('hidden');
+    if(!box||!label){resolve(confirm(message));return;}
+    label.textContent=message;box.classList.remove('hidden');
     var cancel=box.querySelector('.jm-identity-confirm-cancel'),ok=box.querySelector('.jm-identity-confirm-ok');
+    cancel.textContent=cancelLabel||'취소';ok.textContent=okLabel||'확인';
     function done(value){box.classList.add('hidden');cancel.onclick=null;ok.onclick=null;resolve(value);}
     cancel.onclick=function(){done(false);};ok.onclick=function(){done(true);};
   });}
+  window.jmPrettyConfirm=jmPrettyConfirm;
+  function ask(member){return jmPrettyConfirm(String(member.name||'선택한 회원')+'님이 본인인가요?','네, 저예요');}
   async function bind(member,quiet){
     if(binding||!member||!member.id)return false;
     var token=typeof currentMemberSessionToken==='function'?String(currentMemberSessionToken()||''):'';
@@ -676,6 +682,19 @@ def assert_self_profile_contract(text: str) -> None:
             raise SystemExit(f"member self-profile contract missing: {needle}")
 
 
+def assert_pretty_confirm_contract(text: str) -> None:
+    for needle in [
+        "JAYUMINTON_MEMBER_PRETTY_CONFIRM_V1",
+        "function jmPrettyConfirm(message,okLabel,cancelLabel)",
+        "window.jmPrettyConfirm=jmPrettyConfirm",
+        "white-space:pre-line",
+    ]:
+        if needle not in text:
+            raise SystemExit(f"pretty-confirm contract missing: {needle}")
+    if "setInterval(checkMemberWaitSwapRequest," in text:
+        raise SystemExit("dead checkMemberWaitSwapRequest poll survived")
+
+
 def patch(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     text = text.replace(
@@ -735,6 +754,82 @@ def patch(path: Path) -> None:
         "setInterval(pollIncoming, 5000);",
         "setInterval(pollIncoming, 9000);",
     )
+
+    # "휴식 눌렀더니 cannot read properties of undefined" -- traced to a
+    # swap request against a wait-group card, which still calls the legacy
+    # memberRequestWaitSwap/memberGetWaitSwapRequest/memberRespondWaitSwap
+    # RPC trio. The worker's legacyRpc() dispatcher (cloudflare/state-
+    # worker/worker.js) only recognizes these three names inside its
+    # memberNames set alongside the newer memberRequestAnywhereSwap et al --
+    # they are NOT there, so every call falls through to the final
+    # `throw new Error('unsupported_legacy_rpc')`. checkMemberWaitSwapRequest
+    # (this poll) has therefore been silently failing every cycle since
+    # whenever the worker was refactored onto the Anywhere-swap system;
+    # pollIncoming's memberGetAnywhereSwapRequest already covers the same
+    # "someone wants to swap with me" notification via a working RPC, so
+    # this poll is now pure dead weight -- stop running it instead of just
+    # slowing it further. (The write-side half of this bug -- tapping a
+    # wait-group card to REQUEST a swap -- is fixed separately in
+    # deploy-unified-member-web-production.yml, where handleMemberWaitOtherTap
+    # is rewired onto the same working memberRequestAnywhereSwap path.)
+    marker_pretty_confirm = "JAYUMINTON_MEMBER_PRETTY_CONFIRM_V1"
+    if marker_pretty_confirm not in text:
+        text = text.replace(
+            "setInterval(checkMemberWaitSwapRequest,9000);",
+            "/* JAYUMINTON_MEMBER_PRETTY_CONFIRM_V1: memberGetWaitSwapRequest is "
+            "unsupported_legacy_rpc server-side -- see comment above. */",
+            1,
+        )
+        # "왜 두번뜨게 해. 예쁜거 뒤에것만 뜨게해?" -- selectMemberSelf's own
+        # pretty-modal confirmation (ask(), just above) was already correct,
+        # but every tap-driven self-identify caller in the base app AND in
+        # deploy-unified-member-web-production.yml's own patches independently
+        # shows a native confirm('...본인인가요?') of its own BEFORE calling
+        # selectMemberSelf -- so the ugly native dialog fires first, then
+        # selectMemberSelf's pretty one fires right after, for the exact same
+        # question. Generalizing ask() into a reusable jmPrettyConfirm(message)
+        # (done above, in the template) lets those other callers -- which
+        # already exist live in the deployed page as of this write -- be
+        # rewired onto the SAME pretty dialog for their own confirmations
+        # (outgoing/incoming swap requests) instead of native confirm(), while
+        # deploy-unified-member-web-production.yml's own patches (applied
+        # after this script, per the deploy workflow's step order) drop those
+        # callers' redundant native confirm() for self-identify entirely.
+        old_css = (
+            ".jm-identity-confirm-card p{margin:0 0 16px;font-size:17px;font-weight:900}"
+        )
+        new_css = (
+            ".jm-identity-confirm-card p{margin:0 0 16px;font-size:17px;font-weight:900;white-space:pre-line}"
+        )
+        if old_css in text:
+            text = text.replace(old_css, new_css, 1)
+        old_ask = (
+            "function ask(member){return new Promise(function(resolve){\n"
+            "    var box=document.getElementById('jmMemberIdentityConfirm'),label=document.getElementById('jmMemberIdentityConfirmText');\n"
+            "    if(!box||!label){resolve(confirm(String(member.name||'선택한 회원')+'님이 본인인가요?'));return;}\n"
+            "    label.textContent=String(member.name||'선택한 회원')+'님이 본인인가요?';box.classList.remove('hidden');\n"
+            "    var cancel=box.querySelector('.jm-identity-confirm-cancel'),ok=box.querySelector('.jm-identity-confirm-ok');\n"
+            "    function done(value){box.classList.add('hidden');cancel.onclick=null;ok.onclick=null;resolve(value);}\n"
+            "    cancel.onclick=function(){done(false);};ok.onclick=function(){done(true);};\n"
+            "  });}"
+        )
+        new_ask = (
+            "function jmPrettyConfirm(message,okLabel,cancelLabel){return new Promise(function(resolve){\n"
+            "    var box=document.getElementById('jmMemberIdentityConfirm'),label=document.getElementById('jmMemberIdentityConfirmText');\n"
+            "    if(!box||!label){resolve(confirm(message));return;}\n"
+            "    label.textContent=message;box.classList.remove('hidden');\n"
+            "    var cancel=box.querySelector('.jm-identity-confirm-cancel'),ok=box.querySelector('.jm-identity-confirm-ok');\n"
+            "    cancel.textContent=cancelLabel||'취소';ok.textContent=okLabel||'확인';\n"
+            "    function done(value){box.classList.add('hidden');cancel.onclick=null;ok.onclick=null;resolve(value);}\n"
+            "    cancel.onclick=function(){done(false);};ok.onclick=function(){done(true);};\n"
+            "  });}\n"
+            "  window.jmPrettyConfirm=jmPrettyConfirm;\n"
+            "  function ask(member){return jmPrettyConfirm(String(member.name||'선택한 회원')+'님이 본인인가요?','네, 저예요');}"
+        )
+        if old_ask in text:
+            text = text.replace(old_ask, new_ask, 1)
+    if marker_pretty_confirm not in text:
+        raise SystemExit("pretty-confirm generalization did not apply")
 
     # "1회성 팀 설정했을 때 사용자 앱, 웹에서 안보이는 부분 고쳐주고." The
     # .jm-temp-pair CSS class has real style rules (see temporary_team_css
@@ -860,6 +955,7 @@ def patch(path: Path) -> None:
     assert_team_status_contract(text)
     assert_member_message_contract(text)
     assert_self_profile_contract(text)
+    assert_pretty_confirm_contract(text)
     path.write_text(text, encoding="utf-8")
 
 

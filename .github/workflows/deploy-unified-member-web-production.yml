@@ -146,6 +146,41 @@ jobs:
           import sys
           path = Path(sys.argv[1])
           text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1'
+          if marker not in text:
+              # "휴식 눌렀더니 cannot read properties of undefined" traced back to
+              # this: memberRequestWaitSwap (called below on swap-confirm) is one
+              # of the legacy RPC names the Cloudflare worker's legacyRpc()
+              # dispatcher no longer recognizes -- it falls through to
+              # `throw new Error('unsupported_legacy_rpc')` every time, so
+              # requesting a swap from a WAIT-GROUP card has been silently
+              # broken (court/active cards work fine -- they already go through
+              # handleAnywhereMemberTap's memberRequestAnywhereSwap). This also
+              # carries the same "본인인가요 두 번 뜨는" bug as
+              # handleAnywhereMemberTap: selectMemberSelf (patch_member_user_
+              # requirements_v1.py's JAYUMINTON_MEMBER_IDENTITY_BIND_V2, applied
+              # earlier in this same deploy) already shows its own pretty
+              # confirm, so this native confirm()-then-selectMemberSelf() call
+              # doubles it up. Fix both by routing this handler onto the exact
+              # same selectMemberSelf/jmRequestAnywhereSwap path already used
+              # (and already working) for court/active cards.
+              old = "function handleMemberWaitOtherTap(groupIndex,targetMemberId,event){\n  if(IS_ADMIN)return;\n  if(event){event.preventDefault();event.stopPropagation();}\n  const target=(STATE.members||[]).find(function(item){return item&&String(item.id)===String(targetMemberId);});\n  if(!target)return;\n  const selected=currentStoredWebPushMember();\n  if(!selected||!selected.id){\n    if(confirm(String(target.name||'선택한 회원')+'님이 본인인가요?')){\n      selectMemberSelf(target.id);\n      showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');\n    }\n    return;\n  }\n  const a=memberWaitSeatSessionArgs(); if(!a)return;\n  if(String(targetMemberId)===String(a.member.id))return;\n  /* JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1: self identity is already known from login, so tapping the other member alone is enough -- no separate 'select my own seat' step. */\n  clearMemberWaitSeatPick();\n  const ok=confirm(String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?');\n  if(ok){memberRequestWaitSwap(targetMemberId);}\n}"
+              new = "async function handleMemberWaitOtherTap(groupIndex,targetMemberId,event){\n  if(IS_ADMIN)return;\n  if(event){event.preventDefault();event.stopPropagation();}\n  const target=(STATE.members||[]).find(function(item){return item&&String(item.id)===String(targetMemberId);});\n  if(!target)return;\n  const selected=currentStoredWebPushMember();\n  if(!selected||!selected.id){\n    if(typeof selectMemberSelf==='function'&&await selectMemberSelf(target.id)){\n      showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');\n    }\n    return;\n  }\n  const a=memberWaitSeatSessionArgs(); if(!a)return;\n  if(String(targetMemberId)===String(a.member.id))return;\n  /* JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1: self identity is already known from login, so tapping the other member alone is enough -- no separate 'select my own seat' step. */\n  /* JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1: memberRequestWaitSwap is an unsupported legacy RPC server-side -- route through the same working memberRequestAnywhereSwap path used by court/active cards instead. */\n  clearMemberWaitSeatPick();\n  if(typeof window.jmRequestAnywhereSwap==='function')await window.jmRequestAnywhereSwap(targetMemberId);\n}"
+              if old not in text:
+                  raise SystemExit('handleMemberWaitOtherTap anchor not found -- live source has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('wait-swap unify patch did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1' "$PUBLIC/index.html" >/dev/null
+
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
           marker = 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1'
           if marker not in text:
               script = '''/* JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1 */
@@ -305,6 +340,76 @@ jobs:
           import sys
           path = Path(sys.argv[1])
           text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_SWAP_PRETTY_CONFIRM_V1'
+          if marker not in text:
+              # Route requestSwap's own confirmation and pollIncoming's incoming-
+              # request notification onto the shared jmPrettyConfirm dialog
+              # (patch_member_user_requirements_v1.py's JAYUMINTON_MEMBER_
+              # IDENTITY_BIND_V2, applied earlier in this same deploy) instead of
+              # native confirm() -- "이런 메세지창이 안이쁘다고". Also translate
+              # invalid_swap_request (thrown when the target isn't currently on a
+              # court/wait, e.g. 도착전/휴식/귀가) into a readable message instead
+              # of surfacing the raw server error code via alert(), and expose
+              # requestSwap so handleMemberWaitOtherTap (wait-group cards) can
+              # route its own swap requests through this same, working RPC
+              # instead of the unsupported legacy memberRequestWaitSwap.
+              old_request = (
+                  "async function requestSwap(targetId){\n"
+                  "    var a = sessionArgs(); if(!a) return;\n"
+                  "    var target = findMember(targetId);\n"
+                  "    if(!target) return;\n"
+                  "    if(!confirm(String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?')) return;\n"
+                  "    try{\n"
+                  "      await server('memberRequestAnywhereSwap',[a.token,String(a.member.id),String(targetId)]);\n"
+                  "      if(typeof showMemberSettingMessage==='function') showMemberSettingMessage('교환을 요청했어요. 5분 내 응답이 없으면 요청이 사라져요.');\n"
+                  "    }catch(e){ alert(String(e&&e.message||e||'교환 요청 실패')); }\n"
+                  "  }"
+              )
+              new_request = (
+                  "async function requestSwap(targetId){\n"
+                  "    var a = sessionArgs(); if(!a) return;\n"
+                  "    var target = findMember(targetId);\n"
+                  "    if(!target) return;\n"
+                  "    var swapMessage = String(target.name||'선택한 회원')+'님과 자리를 바꿀까요?';\n"
+                  "    var ok = (typeof window.jmPrettyConfirm==='function') ? await window.jmPrettyConfirm(swapMessage) : confirm(swapMessage);\n"
+                  "    if(!ok) return;\n"
+                  "    try{\n"
+                  "      await server('memberRequestAnywhereSwap',[a.token,String(a.member.id),String(targetId)]);\n"
+                  "      if(typeof showMemberSettingMessage==='function') showMemberSettingMessage('교환을 요청했어요. 5분 내 응답이 없으면 요청이 사라져요.');\n"
+                  "    }catch(e){\n"
+                  "      var errMsg = (e && e.message) || e || '교환 요청 실패';\n"
+                  "      if(String(errMsg)==='invalid_swap_request') errMsg='상대방이 지금 코트/대기 중이 아니라 자리교환을 할 수 없어요.';\n"
+                  "      alert(String(errMsg));\n"
+                  "    }\n"
+                  "  }\n"
+                  "  /* JAYUMINTON_MEMBER_SWAP_PRETTY_CONFIRM_V1 */\n"
+                  "  window.jmRequestAnywhereSwap = requestSwap;"
+              )
+              if old_request not in text:
+                  raise SystemExit('requestSwap anchor not found -- live source has drifted')
+              text = text.replace(old_request, new_request, 1)
+              old_incoming = (
+                  "      var accepted = confirm(String(requester&&requester.name||'다른 회원')+'님이 자리 교환을 요청했어요.\\n\\n서로 상의하셨다면 확인을 눌러 교환하세요.');"
+              )
+              new_incoming = (
+                  "      var incomingMessage = String(requester&&requester.name||'다른 회원')+'님이 자리 교환을 요청했어요.\\n\\n서로 상의하셨다면 확인을 눌러 교환하세요.';\n"
+                  "      var accepted = (typeof window.jmPrettyConfirm==='function') ? await window.jmPrettyConfirm(incomingMessage) : confirm(incomingMessage);"
+              )
+              if old_incoming not in text:
+                  raise SystemExit('pollIncoming confirm anchor not found -- live source has drifted')
+              text = text.replace(old_incoming, new_incoming, 1)
+          if marker not in text:
+              raise SystemExit('swap pretty-confirm patch did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_SWAP_PRETTY_CONFIRM_V1' "$PUBLIC/index.html" >/dev/null
+
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
           marker = 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1'
           if marker not in text:
               old_tap = (
@@ -364,6 +469,29 @@ jobs:
           PY
 
           grep -F 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1' "$PUBLIC/index.html" >/dev/null
+
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_ANYWHERE_TAP_NO_DOUBLE_CONFIRM_V1'
+          if marker not in text:
+              # Same double-popup bug as handleMemberWaitOtherTap: selectMemberSelf
+              # (patch_member_user_requirements_v1.py's identity-bind override,
+              # applied earlier in this deploy) already shows its own pretty
+              # confirm, so this handler's own native confirm() just doubles it.
+              old = "window.handleAnywhereMemberTap = function(memberId, event){\n    if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;\n    if(event){ try{event.preventDefault();event.stopPropagation();}catch(e){} }\n    var self = (typeof currentStoredWebPushMember==='function') ? currentStoredWebPushMember() : null;\n    if(!self||!self.id){\n      var target = findMember(memberId);\n      if(!target) return;\n      if(confirm(String(target.name||'선택한 회원')+'님이 본인인가요?')){\n        selectMemberSelf(target.id);\n        if(typeof showMemberSettingMessage==='function') showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');\n      }\n      return;\n    }\n    var a = sessionArgs(); if(!a) return;\n"
+              new = "/* JAYUMINTON_MEMBER_ANYWHERE_TAP_NO_DOUBLE_CONFIRM_V1 */\n  window.handleAnywhereMemberTap = async function(memberId, event){\n    if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN) return;\n    if(event){ try{event.preventDefault();event.stopPropagation();}catch(e){} }\n    var self = (typeof currentStoredWebPushMember==='function') ? currentStoredWebPushMember() : null;\n    if(!self||!self.id){\n      var target = findMember(memberId);\n      if(!target) return;\n      if(typeof selectMemberSelf==='function'&&await selectMemberSelf(target.id)){\n        if(typeof showMemberSettingMessage==='function') showMemberSettingMessage(String(target.name||'')+'님으로 설정했어요.');\n      }\n      return;\n    }\n    var a = sessionArgs(); if(!a) return;\n"
+              if old not in text:
+                  raise SystemExit('handleAnywhereMemberTap self-identify anchor not found -- live source has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('anywhere-tap no-double-confirm patch did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_ANYWHERE_TAP_NO_DOUBLE_CONFIRM_V1' "$PUBLIC/index.html" >/dev/null
 
           python3 - "$PUBLIC/index.html" <<'PY'
           from pathlib import Path
@@ -524,6 +652,7 @@ jobs:
           grep -F 'JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_IDENTITY_BIND_V2' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_PRETTY_CONFIRM_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_REFRESH_STATUS_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1' "$PUBLIC/index.html" >/dev/null
           grep -F '내 정보 입력' "$PUBLIC/index.html" >/dev/null
@@ -543,6 +672,11 @@ jobs:
           grep -F "server('updateMyProfile',[null,String(member.id),memo])" "$PUBLIC/index.html" >/dev/null
           grep -F 'member.teamLabel' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_SWAP_PRETTY_CONFIRM_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_ANYWHERE_TAP_NO_DOUBLE_CONFIRM_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'window.jmRequestAnywhereSwap = requestSwap' "$PUBLIC/index.html" >/dev/null
+          ! grep -F 'if(ok){memberRequestWaitSwap(targetMemberId);}' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' "$PUBLIC/index.html" >/dev/null
@@ -623,11 +757,15 @@ jobs:
             "server('updateMyProfile',[null,String(member.id),memo])" \
             'member.teamLabel' \
             'JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1' \
+            'JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1' \
+            'JAYUMINTON_MEMBER_SWAP_PRETTY_CONFIRM_V1' \
+            'JAYUMINTON_MEMBER_ANYWHERE_TAP_NO_DOUBLE_CONFIRM_V1' \
             'JAYUMINTON_MEMBER_ALERT_VIBRATION_STOP_V1' \
             'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1' \
             'JAYUMINTON_MEMBER_ANYWHERE_SWAP_SELF_IDENTIFY_V1' \
             'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2' \
             'JAYUMINTON_MEMBER_IDENTITY_BIND_V2' \
+            'JAYUMINTON_MEMBER_PRETTY_CONFIRM_V1' \
             'JAYUMINTON_MEMBER_REFRESH_STATUS_V1' \
             'JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1' \
             'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1' \
