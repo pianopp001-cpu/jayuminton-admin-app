@@ -7,6 +7,8 @@ on:
       - '.github/workflows/build-user-2001648.yml'
       - 'deployment/scripts/patch_user_native_v1642_md_final.py'
       - 'deployment/scripts/patch_user_native_versioncode_2001645_v1.py'
+      - 'deployment/scripts/patch_user_native_target_sdk36_v1.py'
+      - 'deployment/scripts/patch_user_native_versioncode_2001649_v1.py'
   workflow_dispatch: {}
 
 permissions:
@@ -37,7 +39,7 @@ jobs:
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: '17'}
       - uses: gradle/actions/setup-gradle@v4
-        with: {gradle-version: '8.7'}
+        with: {gradle-version: '8.11.1'}
       - uses: google-github-actions/auth@v2
         with: {credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}'}
       - run: npm install --global firebase-tools@latest
@@ -72,11 +74,16 @@ jobs:
           python3 deployment/scripts/patch_user_native_target_sdk35_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_versioncode_2001643_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_versioncode_2001645_v1.py "$BUILD"
-          grep -F 'VERSION_CODE="2001648"' "$BUILD" >/dev/null
+          python3 deployment/scripts/patch_user_native_target_sdk36_v1.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_versioncode_2001649_v1.py "$BUILD"
+          grep -F 'VERSION_CODE="2001649"' "$BUILD" >/dev/null
           grep -F 'startAdminMessageVibration' "$BUILD" >/dev/null
           grep -F 'stopAdminMessageVibration' "$BUILD" >/dev/null
           grep -F '__JM_NATIVE_ADMIN_MSG_VIBRATION__' "$BUILD" >/dev/null
           grep -F 'USER_ONLY_LAYOUT_V2001648' "$BUILD" >/dev/null
+          grep -F 'compileSdk 36' "$BUILD" >/dev/null
+          grep -F 'targetSdk 36' "$BUILD" >/dev/null
+          grep -F "version '8.9.1' apply false" "$BUILD" >/dev/null
           bash "$BUILD"
           test -n "$PLAY_UPLOAD_KEYSTORE_B64"
           printf '%s' "$PLAY_UPLOAD_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/play-upload.jks"
@@ -102,7 +109,7 @@ jobs:
           {
             echo 'status=success'
             echo 'version=1.6.42'
-            echo 'version_code=2001648'
+            echo 'version_code=2001649'
             echo 'admin_message_native_vibration=true'
             echo 'admin_message_confirm_stops_vibration=true'
             echo 'vibration=3x8'
