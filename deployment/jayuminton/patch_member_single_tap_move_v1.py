@@ -44,6 +44,26 @@ addon = r'''
     return value&&typeof value==='object'?value:null;
   }
 
+  /* JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V1
+     Cloudflare member mutations (including memberMoveSelf used by the
+     long-press 도착전/휴식/귀가/코트배정대기 menu) return an envelope such as
+     {ok:true,state:<full state>}.  Legacy member UI code sometimes forwards
+     that whole envelope to renderState(), which then makes STATE.courts
+     undefined and renderCourts() throws while reading courts[1].  Normalize
+     only when the nested value is recognizably a full state; raw-state
+     responses keep the existing path unchanged. */
+  var originalRenderState=window.renderState;
+  if(typeof originalRenderState==='function'&&!window.__JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V1__){
+    window.__JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V1__=true;
+    window.renderState=function(result){
+      var next=unwrap(result);
+      if(next&&next.courts&&typeof next.courts==='object'&&Array.isArray(next.waitGroups)){
+        return originalRenderState.call(this,next);
+      }
+      return originalRenderState.apply(this,arguments);
+    };
+  }
+
   function session(){
     try{
       if(typeof memberWaitSeatSessionArgs==='function'){
@@ -158,10 +178,12 @@ text = text[:insert_at] + addon + "\n" + text[insert_at:]
 
 required = [
     "JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2",
+    "JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V1",
     "window.handleMemberWaitEmptyTap=function",
     "window.handleEmptySlotTap=function",
     "server('memberMoveSelf'",
     "server('getPublicState'",
+    "originalRenderState=window.renderState",
     "한 번 터치하면 이 대기자리에 들어갑니다",
     "wireCourtEmptySlots",
 ]
