@@ -51,18 +51,18 @@ new_stop = '''    private static final String VOLUME_PREFS_NAME = "jayuminton_al
     private static final String VOLUME_KEY_PRE_DUCK = "pre_duck_music_volume";
     private static final String VOLUME_KEY_DUCKED = "music_ducked";
 
-    public static void duckMusicVolume(Context context, AudioManager audio) {
+    public static void duckMusicVolume(Context context, android.media.AudioManager audio) {
         Context app = context.getApplicationContext();
         android.content.SharedPreferences prefs =
                 app.getSharedPreferences(VOLUME_PREFS_NAME, Context.MODE_PRIVATE);
         if (!prefs.getBoolean(VOLUME_KEY_DUCKED, false)) {
             prefs.edit()
-                    .putInt(VOLUME_KEY_PRE_DUCK, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
+                    .putInt(VOLUME_KEY_PRE_DUCK, audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC))
                     .putBoolean(VOLUME_KEY_DUCKED, true)
                     .apply();
         }
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC,
-                Math.min(6, audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)), 0);
+        audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC,
+                Math.min(6, audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)), 0);
     }
 
     private static void restoreMusicVolume(Context app) {
@@ -72,9 +72,10 @@ new_stop = '''    private static final String VOLUME_PREFS_NAME = "jayuminton_al
         int original = prefs.getInt(VOLUME_KEY_PRE_DUCK, -1);
         prefs.edit().putBoolean(VOLUME_KEY_DUCKED, false).apply();
         if (original < 0) return;
-        AudioManager audio = (AudioManager) app.getSystemService(Context.AUDIO_SERVICE);
+        android.media.AudioManager audio =
+                (android.media.AudioManager) app.getSystemService(Context.AUDIO_SERVICE);
         if (audio == null) return;
-        audio.setStreamVolume(AudioManager.STREAM_MUSIC, original, 0);
+        audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, original, 0);
     }
 
     public static void stop(Context context) {
@@ -100,7 +101,7 @@ source = source.replace(old_stop, new_stop, 1)
 
 required = (
     'AlertVibrationController.duckMusicVolume(this, audio);',
-    'public static void duckMusicVolume(Context context, AudioManager audio)',
+    'public static void duckMusicVolume(Context context, android.media.AudioManager audio)',
     'private static void restoreMusicVolume(Context app)',
     'restoreMusicVolume(app);',
 )
