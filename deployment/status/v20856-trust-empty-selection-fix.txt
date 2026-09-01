@@ -1,6 +1,6 @@
 status=success
 version=208.56
-feature=selectedIds-trusts-empty-persistent-set-no-stale-dom-fallback
-base=v208.55-full-selection-fix
-run_id=33553717773
-sha256=2539fd05238b26f92629144ce684a075b7f236520a55b79a916b76a655f7b166
+feature=native-unified-fix+selectedIds-trusts-empty-persistent-set+assign-full-selection-fix+empty-slot-manual-assign-fix+member-replies-inbox+admin-delete-reply
+base=v208.56-trust-empty-selection-fix+v208.55-full-selection-fix+native-session-fix+dialog-chrome-fix
+run_id=33553981685
+sha256=463f8370ea258e7012cd14626022f3431be14c784b0369230523180a1818be15
