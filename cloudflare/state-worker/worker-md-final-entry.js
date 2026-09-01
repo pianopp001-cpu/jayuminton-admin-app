@@ -102,7 +102,7 @@ async function handleMemberMessageReply(request,env,body){
   const memberId=String(sessionPacket.memberId||'');
   const claimedId=String(args[1]||'');
   const messageId=String(args[2]||'').trim();
-  const text=String(args[3]||'').trim().slice(0,300);
+  const text=String(args[3]||'').trim().slice(0,80);
   if(!memberId)throw new Error('member_identity_required');
   if(claimedId&&claimedId!==memberId)throw new Error('member_identity_required');
   if(!messageId)throw new Error('message_required');
