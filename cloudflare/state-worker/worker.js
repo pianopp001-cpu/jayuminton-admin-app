@@ -288,7 +288,7 @@ export function sendMemberMessageMutation(input, memberIds, message) {
   if (!recipients.length) throw new Error('members_not_found');
   const item = { id: `msg-${crypto.randomUUID()}`, memberIds: recipients, text, createdAt: new Date().toISOString() };
   state.memberMessages = [...state.memberMessages, item].slice(-50);
-  return { state, event: { type: 'member_message_sent', messageId: item.id, memberIds: recipients } };
+  return { state, event: { type: 'member_message_sent', messageId: item.id, memberIds: recipients, text } };
 }
 
 export function deleteMemberReplyMutation(input, messageId, replyId) {
@@ -438,6 +438,7 @@ function recordAction(state, operationId, action, event, beforeState) {
 async function sendPush(env, type, event, members) {
   if (!members.length || !env.PUSH_URL || !env.INTERNAL_KEY) return { ok: true, skipped: true };
   const body = { type, assignmentId: `${type}-${event.courtNo || 0}-${Date.now()}-${members.map(m => m.id).join('-')}`, courtNo: event.courtNo || 0, members };
+  if (event.messageText) body.messageText = String(event.messageText).slice(0, 300);
   try {
     const response = await fetch(env.PUSH_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-jayuminton-key': env.INTERNAL_KEY }, body: JSON.stringify(body) });
     return await response.json();
@@ -460,6 +461,11 @@ async function publishAssignmentTransitions(env, before, after, event) {
   const transitions = assignmentTransitions(before, after); const results = [];
   for (const no of ['1', '2', '3', '4']) if (transitions.courtGroups[no].length) results.push(await sendPush(env, 'court_assignment', { ...event, courtNo: Number(no) }, transitions.courtGroups[no]));
   if (transitions.wait1.length) results.push(await sendPush(env, 'wait1_ready', event, transitions.wait1));
+  if (event.type === 'member_message_sent' && Array.isArray(event.memberIds) && event.memberIds.length) {
+    const wanted = new Set(event.memberIds.map(String));
+    const recipients = after.members.filter(m => wanted.has(String(m.id))).map(m => ({ id: String(m.id), name: String(m.name || '') }));
+    if (recipients.length) results.push(await sendPush(env, 'admin_message', { ...event, messageText: event.text }, recipients));
+  }
   return results;
 }
 

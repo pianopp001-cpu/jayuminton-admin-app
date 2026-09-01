@@ -120,6 +120,10 @@ function authorized(request, env, body, url) {
 }
 function textFor(event, member) {
   const roster = String(event.rosterNames || '').trim();
+  if (event.type === 'admin_message') return {
+    title: '관리자 메시지',
+    body: String(event.messageText || '').trim() || '새 메시지가 도착했습니다.',
+  };
   if (event.type === 'wait1_ready') return {
     title: '대기 1 안내',
     body: roster
@@ -153,15 +157,17 @@ async function sendOne(env, accessToken, projectId, event, member, record) {
 async function sendEvent(request, env, body, url) {
   if (!authorized(request, env, body, url)) return responseJson({ ok: false, error: 'unauthorized' }, 403);
   const type = clean(body.type);
-  if (!['wait1_ready', 'court_assignment'].includes(type)) return responseJson({ ok: false, error: 'invalid_type' }, 400);
+  if (!['wait1_ready', 'court_assignment', 'admin_message'].includes(type)) return responseJson({ ok: false, error: 'invalid_type' }, 400);
   const members = Array.isArray(body.members) ? body.members.map(m => ({ id: clean(m?.id), name: clean(m?.name, 80) })).filter(m => m.id) : [];
-  if (!members.length || members.length > 4) return responseJson({ ok: false, error: 'invalid_members' }, 400);
+  const maxMembers = type === 'admin_message' ? 200 : 4;
+  if (!members.length || members.length > maxMembers) return responseJson({ ok: false, error: 'invalid_members' }, 400);
   const event = {
     type,
     assignmentId: clean(body.assignmentId, 500) || `${type}-${Date.now()}`,
     courtNo: Number(body.courtNo || 0),
     expectedCourtNo: Number(body.expectedCourtNo || 0),
     rosterNames: members.map(member => member.name).filter(Boolean).join(', '),
+    messageText: clean(body.messageText, 300),
   };
   const targetResponse = await registryCall(env, '/targets', { memberIds: members.map(m => m.id) });
   const targetJson = await targetResponse.json();
