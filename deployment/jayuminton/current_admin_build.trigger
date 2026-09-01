@@ -1,3 +1,4 @@
 build=current-cloudflare-admin-v2074-md-full-contract
-reason=full-md-recheck-and-continue-current-admin-actions
-diag_ping=1787924406
+reason=member-reply-inbox-v1
+reply_inbox=enabled
+diag_ping=1788259201
