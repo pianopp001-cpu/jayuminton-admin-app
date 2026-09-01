@@ -96,6 +96,56 @@ async function handleLegacyWaitSwap(request,env,body){
   throw new Error('unsupported_wait_swap_rpc');
 }
 
+async function handleMemberMessageReply(request,env,body){
+  const args=Array.isArray(body.args)?body.args:[];
+  const sessionPacket=await memberState(request,env,args);
+  const memberId=String(sessionPacket.memberId||'');
+  const claimedId=String(args[1]||'');
+  const messageId=String(args[2]||'').trim();
+  const text=String(args[3]||'').trim().slice(0,300);
+  if(!memberId)throw new Error('member_identity_required');
+  if(claimedId&&claimedId!==memberId)throw new Error('member_identity_required');
+  if(!messageId)throw new Error('message_required');
+  if(!text)throw new Error('reply_required');
+
+  const visibleMessages=Array.isArray(sessionPacket.state&&sessionPacket.state.memberMessages)
+    ?sessionPacket.state.memberMessages:[];
+  const received=visibleMessages.find(item=>item&&String(item.id||'')===messageId&&
+    Array.isArray(item.memberIds)&&item.memberIds.map(String).includes(memberId));
+  if(!received)throw new Error('reply_requires_received_message');
+
+  for(let attempt=0;attempt<4;attempt+=1){
+    const row=await env.DB.prepare('SELECT revision,state_json FROM app_state WHERE id=1').first();
+    if(!row)throw new Error('state_missing');
+    const revision=Math.max(0,Number(row.revision)||0);
+    const state=JSON.parse(String(row.state_json||'{}'));
+    state.memberMessages=Array.isArray(state.memberMessages)?state.memberMessages:[];
+    const target=state.memberMessages.find(item=>item&&String(item.id||'')===messageId&&
+      Array.isArray(item.memberIds)&&item.memberIds.map(String).includes(memberId));
+    if(!target)throw new Error('reply_requires_received_message');
+    const replies=Array.isArray(target.replies)?target.replies.slice(-19):[];
+    const replyItem={
+      id:`reply-${crypto.randomUUID()}`,
+      memberId,
+      text,
+      createdAt:new Date().toISOString(),
+      inReplyTo:messageId,
+    };
+    target.replies=[...replies,replyItem];
+    const nextRevision=revision+1;
+    const updatedAt=new Date().toISOString();
+    state.revision=nextRevision;
+    state.updatedAt=updatedAt;
+    const result=await env.DB.prepare(
+      'UPDATE app_state SET revision=?,state_json=?,updated_at=? WHERE id=1 AND revision=?'
+    ).bind(nextRevision,JSON.stringify(state),updatedAt,revision).run();
+    if(Number(result&&result.meta&&result.meta.changes||0)>0){
+      return {ok:true,reply:replyItem,messageId};
+    }
+  }
+  throw new Error('reply_conflict_retry');
+}
+
 const LEGACY_WAIT_SWAP=new Set([
   'memberRequestWaitSwap',
   'memberGetWaitSwapRequest',
@@ -112,6 +162,10 @@ export default {
         const normalized={...body,args:normalizeMemberMemoArgs(body.args)};
         const headers=new Headers(request.headers);headers.set('content-type','application/json');
         return compatCore.fetch(new Request(request.url,{method:'POST',headers,body:JSON.stringify(normalized)}),env);
+      }
+      if(String(body.name||'')==='memberReplyToMessage'){
+        try{return reply({ok:true,result:await handleMemberMessageReply(request,env,body)});}
+        catch(error){return reply({ok:false,error:String(error&&error.message||error)});}
       }
       if(LEGACY_WAIT_SWAP.has(String(body.name||''))){
         try{return reply({ok:true,result:await handleLegacyWaitSwap(request,env,body)});}
