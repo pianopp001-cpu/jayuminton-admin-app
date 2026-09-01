@@ -49,7 +49,7 @@ jobs:
           rm -rf app
           git archive "$PROVEN_COMMIT" app | tar -x
           mkdir -p app/src/main/assets/admin
-          BASE=releases/jayuminton-admin-v208.55-full-selection-fix.apk
+          BASE=releases/jayuminton-admin-v208.56-trust-empty-selection-fix.apk
           test -s "$BASE"
           unzip -p "$BASE" assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
@@ -295,6 +295,7 @@ jobs:
           grep -F 'window.__jmUnlimitedSelected=selected;' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_PERSISTENT_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_ASSIGN_FULL_SELECTION_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_TRUST_EMPTY_V1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -302,8 +303,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.55-full-selection-fix-native.apk
-          printf 'status=success\nversion=208.55\nfeature=native-unified-fix+multi-member-assign-full-selection-fix+empty-slot-manual-assign-fix+member-replies-inbox+admin-delete-reply\nbase=v208.55-full-selection-fix+v208.54-empty-slot-select-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20855-full-selection-fix.txt
-          git add releases/jayuminton-admin-v208.55-full-selection-fix-native.apk deployment/status/v20855-full-selection-fix.txt
-          git commit -m 'Publish admin v208.55: fix multi-member court/wait assign dropping all but the last-selected member (native)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.56-trust-empty-selection-fix-native.apk
+          printf 'status=success\nversion=208.56\nfeature=native-unified-fix+selectedIds-trusts-empty-persistent-set+assign-full-selection-fix+empty-slot-manual-assign-fix+member-replies-inbox+admin-delete-reply\nbase=v208.56-trust-empty-selection-fix+v208.55-full-selection-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20856-trust-empty-selection-fix.txt
+          git add releases/jayuminton-admin-v208.56-trust-empty-selection-fix-native.apk deployment/status/v20856-trust-empty-selection-fix.txt
+          git commit -m 'Publish admin v208.56: stop selectedIds() from resurrecting stale DOM checkmarks as a phantom selection (native)' || exit 0
           git push origin HEAD:main
