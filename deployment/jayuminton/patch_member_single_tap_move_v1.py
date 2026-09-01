@@ -36,7 +36,7 @@ addon = r'''
 
   function unwrap(result){
     var value=result;
-    for(var depth=0;depth<4;depth+=1){
+    for(var depth=0;depth<6;depth+=1){
       if(value&&value.state&&typeof value.state==='object'){value=value.state;continue;}
       if(value&&value.result&&typeof value.result==='object'){value=value.result;continue;}
       break;
@@ -44,21 +44,31 @@ addon = r'''
     return value&&typeof value==='object'?value:null;
   }
 
-  /* JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V1
-     Cloudflare member mutations (including memberMoveSelf used by the
-     long-press 도착전/휴식/귀가/코트배정대기 menu) return an envelope such as
-     {ok:true,state:<full state>}.  Legacy member UI code sometimes forwards
-     that whole envelope to renderState(), which then makes STATE.courts
-     undefined and renderCourts() throws while reading courts[1].  Normalize
-     only when the nested value is recognizably a full state; raw-state
-     responses keep the existing path unchanged. */
+  function looksLikeFullState(value){
+    return !!(value&&typeof value==='object'&&Array.isArray(value.members)&&Array.isArray(value.waitGroups)&&value.courts&&typeof value.courts==='object');
+  }
+
+  /* JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V2
+     Some Cloudflare member mutations return an envelope and some return only a
+     partial state. Never send either shape into the legacy renderer. If the
+     mutation response is not a complete member state, fetch getPublicState and
+     render that instead. This specifically prevents the self-status menu
+     (도착전/휴식/귀가/코트배정대기) from causing courts[1] undefined errors. */
   var originalRenderState=window.renderState;
-  if(typeof originalRenderState==='function'&&!window.__JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V1__){
-    window.__JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V1__=true;
+  if(typeof originalRenderState==='function'&&!window.__JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V2__){
+    window.__JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V2__=true;
     window.renderState=function(result){
       var next=unwrap(result);
-      if(next&&next.courts&&typeof next.courts==='object'&&Array.isArray(next.waitGroups)){
+      if(looksLikeFullState(next)){
         return originalRenderState.call(this,next);
+      }
+      var appearsWrappedOrPartial=!!(result&&typeof result==='object'&&(result.state||result.result||Array.isArray(result.members)||Array.isArray(result.waitGroups)||result.courts));
+      if(appearsWrappedOrPartial&&typeof server==='function'){
+        Promise.resolve(server('getPublicState',[null])).then(function(fresh){
+          var full=unwrap(fresh);
+          if(looksLikeFullState(full))originalRenderState.call(window,full);
+        }).catch(function(error){try{console.warn('member full-state refresh failed',error);}catch(_) {}});
+        return;
       }
       return originalRenderState.apply(this,arguments);
     };
@@ -178,11 +188,12 @@ text = text[:insert_at] + addon + "\n" + text[insert_at:]
 
 required = [
     "JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2",
-    "JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V1",
+    "JAYUMINTON_MEMBER_RENDER_STATE_UNWRAP_V2",
     "window.handleMemberWaitEmptyTap=function",
     "window.handleEmptySlotTap=function",
     "server('memberMoveSelf'",
     "server('getPublicState'",
+    "looksLikeFullState",
     "originalRenderState=window.renderState",
     "한 번 터치하면 이 대기자리에 들어갑니다",
     "wireCourtEmptySlots",
@@ -195,4 +206,4 @@ if "applyOptimistic" in addon:
     raise SystemExit("optimistic STATE mutation must not return")
 
 path.write_text(text, encoding="utf-8")
-print("MEMBER_SINGLE_TAP_MOVE_V2_OK")
+print("MEMBER_SINGLE_TAP_MOVE_V2_RENDER_UNWRAP_V2_OK")
