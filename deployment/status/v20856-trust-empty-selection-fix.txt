@@ -1,0 +1,6 @@
+status=success
+version=208.56
+feature=selectedIds-trusts-empty-persistent-set-no-stale-dom-fallback
+base=v208.55-full-selection-fix
+run_id=33553717773
+sha256=2539fd05238b26f92629144ce684a075b7f236520a55b79a916b76a655f7b166
