@@ -1,6 +1,6 @@
 status=success
 version=208.55
-feature=selectedIds-reads-persistent-set+assign-expands-to-full-selection
-base=v208.54-empty-slot-select-fix
-run_id=33545287134
-sha256=aa09df70acf2f7065bf6c1cb058efc951a5035bb00d5d283fc7bdec844c0f781
+feature=native-unified-fix+multi-member-assign-full-selection-fix+empty-slot-manual-assign-fix+member-replies-inbox+admin-delete-reply
+base=v208.55-full-selection-fix+v208.54-empty-slot-select-fix+native-session-fix+dialog-chrome-fix
+run_id=33545490116
+sha256=2eff57e35652c47db44787d498973f436aa14c7b2679726b25ef8a9d8f7dfe83
