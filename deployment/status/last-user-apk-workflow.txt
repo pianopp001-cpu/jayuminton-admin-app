@@ -1,6 +1,6 @@
 workflow=Build unified MD-final user APK v1.6.42
-conclusion=success
-run_id=33461689472
-head_sha=29d5ed2b85e95b0f6218b63a58a55edeaac785d0
-run_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/33461689472
-updated_at=2026-09-01T02:14:52Z
+conclusion=cancelled
+run_id=33464375417
+head_sha=dcce64938b6fbfafb19fae53409e6e9d73b26a65
+run_url=https://github.com/pianopp001-cpu/jayuminton-admin-app/actions/runs/33464375417
+updated_at=2026-09-01T02:57:06Z
