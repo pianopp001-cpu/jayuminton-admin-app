@@ -1,6 +1,6 @@
 status=success
 version=208.52
-feature=member-replies-inbox-button-and-popup-corrected-login-visibility-check
-base=v208.51-team-border-inline-fix
-run_id=33529526486
-sha256=693f73063566ee6cf47b4713c345ebba8c873b6c461c2b7807e5a84eed34b262
+feature=native-unified-fix+member-replies-inbox-corrected-login-visibility+team-border-inline-style-fix
+base=v208.52-member-replies-fix+v208.51-team-border-inline-fix+native-session-fix+dialog-chrome-fix
+run_id=33529728546
+sha256=7be6a35692d04b4809352d21e839dc598deb6f5acba4c718695cc023ed394735
