@@ -20,8 +20,12 @@ for old, new in pairs:
         raise SystemExit('versionCode bump anchor missing: ' + old)
     source = source.replace(old, new, 1)
 
-if '2001648' in source:
-    raise SystemExit('stale versionCode 2001648 residue remains')
+for old, new in pairs:
+    if old in source:
+        raise SystemExit('stale versionCode residue remains: ' + old)
+# USER_ONLY_LAYOUT_V2001648 is a historical marker name (checked elsewhere
+# in the build), not a live version reference -- it intentionally keeps
+# the old number and must not be renamed.
 
 path.write_text(source, encoding='utf-8')
 print('VERSION_CODE_2001649_OK')
