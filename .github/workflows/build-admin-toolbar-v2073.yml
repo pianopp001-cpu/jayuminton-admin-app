@@ -91,7 +91,6 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_EXPOSE_UNLIMITED_SELECTED_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'window.__jmUnlimitedSelected=selected;' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'window.__jmClearUnlimitedSelectedV1=function' "$ROOT/assets/admin/index.html" >/dev/null
-          grep -F 'window.__jmClearUnlimitedSelectedV1()' "$ROOT/assets/admin/index.html" >/dev/null
 
           python3 - "$ROOT/assets/admin/index.html" <<'PY'
           from pathlib import Path
