@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'deployment/scripts/patch_user_native_v1642_md_final.py'
+      - 'deployment/scripts/patch_user_native_versioncode_2001645_v1.py'
       - 'deployment/jayuminton/patch_member_user_requirements_v1.py'
       - 'cloudflare/state-worker/worker-md-entry.js'
       - 'cloudflare/user-push/worker-do.js'
@@ -94,21 +95,11 @@ jobs:
           grep -F 'MAX_GROUPS = 8' "$BUILD" >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember' "$BUILD" >/dev/null
           grep -F 'targetSdk 35' "$BUILD" >/dev/null
-          grep -F 'VERSION_CODE="2001645"' "$BUILD" >/dev/null
+          grep -F 'VERSION_CODE="2001646"' "$BUILD" >/dev/null
+          grep -F 'requested.contains("mode=admin")' "$BUILD" >/dev/null
+          grep -F 'routeGuard=1' "$BUILD" >/dev/null
           bash "$BUILD"
 
-          # Play Console has already accepted a release signed with the
-          # dedicated "Jayuminton Play Upload" key (fingerprint
-          # 6B:3A:77:5B:54:B1:EB:F8:26:C9:3C:73:F8:6A:FD:E1:41:CB:C6:8D:49:8A:
-          # 22:43:BC:0A:69:D8:A8:7C:A6:6F) -- Play requires every future
-          # upload for this app to keep using that exact key, so the AAB
-          # CANNOT reuse signing/jayuminton-release.jks (that one signs the
-          # sideload APK and the admin app; confirmed by inspecting its own
-          # cert, subject CN=Jayuminton/OU=Admin App, a completely different
-          # certificate). android.injected.signing.* properties override
-          # build.gradle's signingConfigs.release for just this one gradle
-          # invocation without needing a second product flavor, so the
-          # sideload APK above is unaffected.
           test -n "$PLAY_UPLOAD_KEYSTORE_B64"
           test -n "$PLAY_UPLOAD_KEY_ALIAS"
           test -n "$PLAY_UPLOAD_KEY_PASSWORD"
@@ -127,24 +118,29 @@ jobs:
           test -s "$SRC"
           mkdir -p releases deployment/status
           cp "$SRC" "$APK_PATH"
-          if unzip -p "$APK_PATH" classes.dex 2>/dev/null | strings | grep -F 'script.google.com/macros/s/' >/dev/null; then
+          APK_STRINGS="$RUNNER_TEMP/apk-strings.txt"
+          unzip -p "$APK_PATH" classes.dex 2>/dev/null | strings > "$APK_STRINGS" || true
+          if grep -F 'script.google.com/macros/s/' "$APK_STRINGS" >/dev/null; then
             echo 'Forbidden GAS URL detected in final user APK' >&2
+            exit 1
+          fi
+          if grep -F 'file:///android_asset/admin/index.html' "$APK_STRINGS" >/dev/null || grep -F '관리자 화면을 불러오는 중입니다.' "$APK_STRINGS" >/dev/null; then
+            echo 'Forbidden admin entry content detected in final user APK' >&2
             exit 1
           fi
           SHA="$(sha256sum "$APK_PATH" | awk '{print $1}')"
 
-          # Play Console (공개/비공개 테스트 등 모든 트랙) requires an .aab
-          # upload for new releases. Unlike the APK above, this AAB is
-          # deliberately signed with a DIFFERENT key (PLAY_UPLOAD_KEY_* in
-          # the previous step) -- Play Console already accepted a release
-          # under the dedicated "Jayuminton Play Upload" cert and will
-          # reject any future upload signed with a different one, so the
-          # fingerprint is verified below rather than assumed.
           AAB_SRC=app/build/outputs/bundle/release/app-release.aab
           test -s "$AAB_SRC"
           cp "$AAB_SRC" "$AAB_PATH"
-          if unzip -p "$AAB_PATH" base/dex/classes.dex 2>/dev/null | strings | grep -F 'script.google.com/macros/s/' >/dev/null; then
+          AAB_STRINGS="$RUNNER_TEMP/aab-strings.txt"
+          unzip -p "$AAB_PATH" base/dex/classes.dex 2>/dev/null | strings > "$AAB_STRINGS" || true
+          if grep -F 'script.google.com/macros/s/' "$AAB_STRINGS" >/dev/null; then
             echo 'Forbidden GAS URL detected in final user AAB' >&2
+            exit 1
+          fi
+          if grep -F 'file:///android_asset/admin/index.html' "$AAB_STRINGS" >/dev/null || grep -F '관리자 화면을 불러오는 중입니다.' "$AAB_STRINGS" >/dev/null; then
+            echo 'Forbidden admin entry content detected in final user AAB' >&2
             exit 1
           fi
           EXPECTED_AAB_FINGERPRINT='6B:3A:77:5B:54:B1:EB:F8:26:C9:3C:73:F8:6A:FD:E1:41:CB:C6:8D:49:8A:22:43:BC:0A:69:D8:A8:7C:A6:6F'
@@ -161,10 +157,12 @@ jobs:
           {
             echo 'status=success'
             echo 'version=1.6.42'
+            echo 'version_code=2001646'
             echo 'backend=cloudflare-only'
             echo 'push=cloudflare-durable-object-fcm'
             echo 'vibration=3x8'
             echo 'current_member_only=true'
+            echo 'user_route_guard=admin-blocked'
             echo 'push_target_contract=tested'
             echo "run_id=$GITHUB_RUN_ID"
             echo "sha256=$SHA"
@@ -175,7 +173,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
-          git commit -m 'Publish MD-final user APK v1.6.42 + Play Console AAB' || exit 0
+          git commit -m 'Publish user Play hotfix v1.6.42 code 2001646' || exit 0
           git reset --hard HEAD
           git clean -fd
           git pull --rebase origin main
