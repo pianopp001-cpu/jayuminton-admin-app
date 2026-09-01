@@ -71,7 +71,17 @@ jobs:
               old = "var selected=new Set(), mode='', targets=[], busy=false, ephemeralTemp=new Set();"
               if old not in text:
                   raise SystemExit('unlimited-selection private Set anchor missing')
-              new = old + " window.__jmUnlimitedSelected=selected; /* " + marker + " */"
+              # Also expose a real clear function reaching into this exact closure.
+              # clearLegacySelection() (used after a successful assign) only clears
+              # this Set by finding and clicking the toolbar's own [data-a="clear"]
+              # button in the DOM -- if that button isn't present at that exact
+              # moment (toolbar mid-rebuild, scrolled/filtered away, etc.) the click
+              # silently no-ops and this real Set is NEVER actually cleared, so the
+              # next selection accumulates on top of members already placed by the
+              # previous action. A direct function reference here can't miss.
+              new = (old + " window.__jmUnlimitedSelected=selected;"
+                     " window.__jmClearUnlimitedSelectedV1=function(){selected.clear();mode='';targets=[];try{paint();}catch(_){}};"
+                     " /* " + marker + " */")
               text = text.replace(old, new, 1)
           if marker not in text:
               raise SystemExit('expose unlimited-selected patch did not apply')
@@ -80,6 +90,8 @@ jobs:
           PY
           grep -F '__JAYUMINTON_ADMIN_EXPOSE_UNLIMITED_SELECTED_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'window.__jmUnlimitedSelected=selected;' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'window.__jmClearUnlimitedSelectedV1=function' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'window.__jmClearUnlimitedSelectedV1()' "$ROOT/assets/admin/index.html" >/dev/null
 
           python3 - "$ROOT/assets/admin/index.html" <<'PY'
           from pathlib import Path
@@ -1409,9 +1421,9 @@ jobs:
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.56-trust-empty-selection-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.56-trust-empty-selection-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.56-trust-empty-selection-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.57-guaranteed-clear-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.57-guaranteed-clear-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.57-guaranteed-clear-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1462,6 +1474,8 @@ jobs:
           grep -F 'jm-admin-reply-delete' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$ROOT/verify.html" >/dev/null
           grep -F 'window.__jmUnlimitedSelected=selected;' "$ROOT/verify.html" >/dev/null
+          grep -F 'window.__jmClearUnlimitedSelectedV1=function' "$ROOT/verify.html" >/dev/null
+          grep -F 'window.__jmClearUnlimitedSelectedV1()' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_PERSISTENT_V1__' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_ASSIGN_FULL_SELECTION_V1__' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_TRUST_EMPTY_V1' "$ROOT/verify.html" >/dev/null
@@ -1470,15 +1484,15 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.56-trust-empty-selection-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.57-guaranteed-clear-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.56-trust-empty-selection-fix.apk
-          printf 'status=success\nversion=208.56\nfeature=selectedIds-trusts-empty-persistent-set-no-stale-dom-fallback\nbase=v208.55-full-selection-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20856-trust-empty-selection-fix.txt
-          git add releases/jayuminton-admin-v208.56-trust-empty-selection-fix.apk deployment/status/v20856-trust-empty-selection-fix.txt
-          git commit -m 'Publish admin v208.56: stop selectedIds() from resurrecting stale DOM checkmarks as a phantom selection when nothing is really selected' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.57-guaranteed-clear-fix.apk
+          printf 'status=success\nversion=208.57\nfeature=direct-closure-clear-after-assign-not-button-click-proxy\nbase=v208.56-trust-empty-selection-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20857-guaranteed-clear-fix.txt
+          git add releases/jayuminton-admin-v208.57-guaranteed-clear-fix.apk deployment/status/v20857-guaranteed-clear-fix.txt
+          git commit -m 'Publish admin v208.57: clear the real selection Set directly after a successful assign instead of relying on a DOM button-click proxy that can silently miss' || exit 0
           git push origin HEAD:main

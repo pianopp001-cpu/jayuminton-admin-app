@@ -17,6 +17,19 @@
    the same defensive re-wrap-on-interval pattern as
    admin_server_timeout_v1.js, since other scripts also wrap
    window.server and load order isn't guaranteed.
+
+   __JAYUMINTON_ADMIN_ASSIGN_FULL_SELECTION_CLEAR_V1__: separately, after
+   a successful assign, the toolbar's own assign() only clears the real
+   selection Set by finding and clicking its own [data-a="clear"] button
+   in the DOM (clearLegacySelection()) -- if that button isn't present
+   at that exact moment, the click silently no-ops and the Set is never
+   actually cleared. Confirmed live in production use: after assigning
+   court 1 then selecting 4 new members for court 2, the previous 4
+   (already in court 1) came along too. Clear it directly and
+   unconditionally here on success, via window.__jmClearUnlimitedSelectedV1
+   (a base-HTML patch exposing a real function into the toolbar's own
+   closure) -- a direct function reference can't miss the way a
+   DOM-button-click proxy can.
 */
 (function(){
   if (window.__JAYUMINTON_ADMIN_ASSIGN_FULL_SELECTION_V1__) return;
@@ -47,7 +60,19 @@
           }
         }
       } catch (e) {}
-      return current.apply(this, arguments);
+      var result = current.apply(this, arguments);
+      if (name === 'assignMembersToCourt' || name === 'assignMembersToWaitGroup') {
+        try {
+          Promise.resolve(result).then(function(){
+            try {
+              if (typeof window.__jmClearUnlimitedSelectedV1 === 'function') {
+                window.__jmClearUnlimitedSelectedV1();
+              }
+            } catch (e) {}
+          }, function(){});
+        } catch (e) {}
+      }
+      return result;
     };
     wrapped.__jmAssignFullSelectionV1 = true;
     window.server = wrapped;
