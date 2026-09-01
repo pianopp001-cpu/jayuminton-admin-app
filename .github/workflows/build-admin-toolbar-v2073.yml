@@ -1404,13 +1404,14 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_PERSISTENT_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_ASSIGN_FULL_SELECTION_V1__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_TRUST_EMPTY_V1' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.55-full-selection-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.55-full-selection-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.55-full-selection-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.56-trust-empty-selection-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.56-trust-empty-selection-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.56-trust-empty-selection-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1463,20 +1464,21 @@ jobs:
           grep -F 'window.__jmUnlimitedSelected=selected;' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_PERSISTENT_V1__' "$ROOT/verify.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_ASSIGN_FULL_SELECTION_V1__' "$ROOT/verify.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_TRUST_EMPTY_V1' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.55-full-selection-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.56-trust-empty-selection-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.55-full-selection-fix.apk
-          printf 'status=success\nversion=208.55\nfeature=selectedIds-reads-persistent-set+assign-expands-to-full-selection\nbase=v208.54-empty-slot-select-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20855-full-selection-fix.txt
-          git add releases/jayuminton-admin-v208.55-full-selection-fix.apk deployment/status/v20855-full-selection-fix.txt
-          git commit -m 'Publish admin v208.55: fix multi-member court/wait assign dropping all but the last-selected member' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.56-trust-empty-selection-fix.apk
+          printf 'status=success\nversion=208.56\nfeature=selectedIds-trusts-empty-persistent-set-no-stale-dom-fallback\nbase=v208.55-full-selection-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20856-trust-empty-selection-fix.txt
+          git add releases/jayuminton-admin-v208.56-trust-empty-selection-fix.apk deployment/status/v20856-trust-empty-selection-fix.txt
+          git commit -m 'Publish admin v208.56: stop selectedIds() from resurrecting stale DOM checkmarks as a phantom selection when nothing is really selected' || exit 0
           git push origin HEAD:main

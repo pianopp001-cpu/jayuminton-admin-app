@@ -53,7 +53,20 @@
       if (live && typeof live.forEach === 'function') {
         var ids = [];
         live.forEach(function(id){ id = String(id); if (id && ids.indexOf(id) < 0) ids.push(id); });
-        if (ids.length) return ids;
+        /* __JAYUMINTON_ADMIN_SELECTED_IDS_TRUST_EMPTY_V1: an empty result
+           here is a legitimate, common state (nothing selected right now)
+           -- it must NOT fall through to the DOM-scan fallback below.
+           That fallback exists only for when the persistent Set itself is
+           unavailable. Falling back on "empty" instead of "unavailable"
+           meant that any leftover .jm-unlimited-check badge still in the
+           DOM from an earlier render (paint() not having run at the exact
+           right moment, e.g. after a MutationObserver-driven re-render)
+           got silently resurrected as "still selected" even though the
+           real, current selection was correctly empty -- explains members
+           unexpectedly getting swept into a placement, and the server's
+           capacity check then rejecting it as "location full" for a slot
+           that visibly has room for the members actually intended. */
+        return ids;
       }
     } catch (e) {}
     return domScanFallback();
