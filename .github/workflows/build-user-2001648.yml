@@ -125,10 +125,11 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "$APK_PATH"
           cp app/build/outputs/bundle/release/app-release.aab "$AAB_PATH"
           test -s "$APK_PATH" && test -s "$AAB_PATH"
-          : > "$RUNNER_TEMP/aab-strings.txt"
+          : > "$RUNNER_TEMP/aab-dex.bin"
           for dex_entry in $(unzip -Z1 "$AAB_PATH" 2>/dev/null | grep -E '^base/dex/classes[0-9]*\.dex$'); do
-            unzip -p "$AAB_PATH" "$dex_entry" 2>/dev/null | strings >> "$RUNNER_TEMP/aab-strings.txt" || true
+            unzip -p "$AAB_PATH" "$dex_entry" 2>/dev/null >> "$RUNNER_TEMP/aab-dex.bin" || true
           done
+          strings "$RUNNER_TEMP/aab-dex.bin" > "$RUNNER_TEMP/aab-strings.txt" || true
           grep -F 'startAdminMessageVibration' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F 'stopAdminMessageVibration' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F 'admin_message' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
@@ -140,9 +141,9 @@ jobs:
             unzip -Z1 "$AAB_PATH" | grep -E 'dex$'
             exit 1
           fi
-          if ! grep -F '답장' "$RUNNER_TEMP/aab-strings.txt" >/dev/null; then
-            echo "DIAGNOSTIC: 답장 not found in extracted dex strings"
-            wc -l "$RUNNER_TEMP/aab-strings.txt"
+          if ! grep -a -F '답장' "$RUNNER_TEMP/aab-dex.bin" >/dev/null; then
+            echo "DIAGNOSTIC: 답장 not found in raw dex bytes"
+            wc -c "$RUNNER_TEMP/aab-dex.bin"
             unzip -Z1 "$AAB_PATH" | grep -E 'dex$'
             exit 1
           fi
