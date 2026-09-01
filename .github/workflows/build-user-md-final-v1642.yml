@@ -95,10 +95,19 @@ jobs:
           grep -F 'MAX_GROUPS = 8' "$BUILD" >/dev/null
           grep -F 'NativePushRegistrar.isCurrentMember' "$BUILD" >/dev/null
           grep -F 'targetSdk 35' "$BUILD" >/dev/null
-          grep -F 'VERSION_CODE="2001646"' "$BUILD" >/dev/null
+          grep -F 'VERSION_CODE="2001647"' "$BUILD" >/dev/null
           grep -F 'requested.contains("mode=admin")' "$BUILD" >/dev/null
           grep -F 'routeGuard=1' "$BUILD" >/dev/null
+          grep -F 'USER_ONLY_LAYOUT_V2001647' "$BUILD" >/dev/null
           bash "$BUILD"
+
+          # Critical regression check: the generated USER build must contain
+          # only its WebView layout, never the administrator loading overlay.
+          grep -F '@+id/webView' app/src/main/res/layout/activity_main.xml >/dev/null
+          if grep -F 'adminLoadPanel' app/src/main/res/layout/activity_main.xml >/dev/null || grep -F '관리자 화면을 불러오는 중입니다.' app/src/main/res/layout/activity_main.xml >/dev/null; then
+            echo 'Forbidden admin loading overlay detected in generated user layout' >&2
+            exit 1
+          fi
 
           test -n "$PLAY_UPLOAD_KEYSTORE_B64"
           test -n "$PLAY_UPLOAD_KEY_ALIAS"
@@ -157,12 +166,13 @@ jobs:
           {
             echo 'status=success'
             echo 'version=1.6.42'
-            echo 'version_code=2001646'
+            echo 'version_code=2001647'
             echo 'backend=cloudflare-only'
             echo 'push=cloudflare-durable-object-fcm'
             echo 'vibration=3x8'
             echo 'current_member_only=true'
             echo 'user_route_guard=admin-blocked'
+            echo 'user_layout=isolated-no-admin-overlay'
             echo 'push_target_contract=tested'
             echo "run_id=$GITHUB_RUN_ID"
             echo "sha256=$SHA"
@@ -173,7 +183,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
-          git commit -m 'Publish user Play hotfix v1.6.42 code 2001646' || exit 0
+          git commit -m 'Publish user Play hotfix v1.6.42 code 2001647' || exit 0
           git reset --hard HEAD
           git clean -fd
           git pull --rebase origin main
