@@ -15,6 +15,7 @@ on:
       - 'deployment/jayuminton/admin_render_resilience_v1.js'
       - 'deployment/jayuminton/admin_login_load_resilience_v1.js'
       - 'deployment/jayuminton/admin_lock_watchdog_v1.js'
+      - 'deployment/jayuminton/admin_member_replies_v1.js'
   workflow_dispatch: {}
 
 permissions:
@@ -1298,7 +1299,7 @@ jobs:
           PY
           grep -F 'jmTeamColorNoYellowV1' "$ROOT/assets/admin/index.html" >/dev/null
 
-          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js <<'PY'
+          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js deployment/jayuminton/admin_member_replies_v1.js <<'PY'
           from pathlib import Path
           import sys
           p=Path(sys.argv[1]); html=p.read_text(encoding='utf-8')
@@ -1364,13 +1365,15 @@ jobs:
           grep -F 'jmWaitCardNameFixV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jmTeamColorNoYellowV1' "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'function fixTeamBorders' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MEMBER_REPLIES_V1__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F "app && !app.classList.contains('hidden')" "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.51-team-border-inline-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.51-team-border-inline-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.51-team-border-inline-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.52-member-replies-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.52-member-replies-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.52-member-replies-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1415,20 +1418,22 @@ jobs:
           grep -F 'jmWaitCardNameFixV1' "$ROOT/verify.html" >/dev/null
           grep -F 'jmTeamColorNoYellowV1' "$ROOT/verify.html" >/dev/null
           grep -F 'function fixTeamBorders' "$ROOT/verify.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_MEMBER_REPLIES_V1__' "$ROOT/verify.html" >/dev/null
+          grep -F "app && !app.classList.contains('hidden')" "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.51-team-border-inline-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.52-member-replies-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.51-team-border-inline-fix.apk
-          printf 'status=success\nversion=208.51\nfeature=team-border-inline-style-fix+temp-team-dashed-border+team-color-no-yellow-fix+commit-empty-targets-auto-fire-fix+suppress-new-name-bubble+wait-card-name-fix+quick-roster-font-size-bump+longpress-scroll-cancel+bottom-bar-thrash-fix+remove-tap-auto-assign-hijack+quick-roster-specificity-fix+quick-roster-is-new-member-grid-column-fix+mark-admin-new-cards-full-name-source-fix+quick-roster-always-5-column-grid+full-name-everywhere+remove-duplicate-name-checkbox+vnext-memo-font-size-fix+bottom-team-button+hide-broken-quick-message-button+member-form-single-field+render-resilience-chain-fix+auto-assign-target-fill-fix+bottom-active-button+manual-assign-label+batch-assign-single-rpc+wait4box-scope-fix+batch-fill-empty-location+unified-swap-move+memo-dedup+memo-loop-fix+skip-auto-system-status+server-wrap-chain-fix+diagnostic-error-surfacing\nbase=v207.2-unlimited-selection\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20851-team-border-inline-fix.txt
-          git add releases/jayuminton-admin-v208.51-team-border-inline-fix.apk deployment/status/v20851-team-border-inline-fix.txt
-          git commit -m 'Publish admin v208.51: team border ring made thick (4px outline, cannot cover text) and reliably wins over four historically-layered competing CSS rules by using inline styles instead of another stylesheet -- solid for permanent teams, dashed for temp' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.52-member-replies-fix.apk
+          printf 'status=success\nversion=208.52\nfeature=member-replies-inbox-button-and-popup-corrected-login-visibility-check\nbase=v208.51-team-border-inline-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20852-member-replies-fix.txt
+          git add releases/jayuminton-admin-v208.52-member-replies-fix.apk deployment/status/v20852-member-replies-fix.txt
+          git commit -m 'Publish admin v208.52: member-reply inbox button+popup, ported from the stale v200.8-based build-current-admin.yml lineage with its broken login-visibility check fixed (was showing/polling before real login, likely causing a freeze)' || exit 0
           git push origin HEAD:main
