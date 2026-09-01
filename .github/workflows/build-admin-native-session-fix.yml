@@ -49,7 +49,7 @@ jobs:
           rm -rf app
           git archive "$PROVEN_COMMIT" app | tar -x
           mkdir -p app/src/main/assets/admin
-          BASE=releases/jayuminton-admin-v208.53-member-replies-fix.apk
+          BASE=releases/jayuminton-admin-v208.54-empty-slot-select-fix.apk
           test -s "$BASE"
           unzip -p "$BASE" assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
@@ -291,6 +291,8 @@ jobs:
           grep -F "app && !app.classList.contains('hidden')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "server('deleteMemberReply'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jm-admin-reply-delete' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'window.__jmUnlimitedSelected=selected;' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -298,8 +300,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.53-member-replies-fix-native.apk
-          printf 'status=success\nversion=208.53\nfeature=native-unified-fix+member-replies-inbox-corrected-login-visibility+admin-delete-reply+team-border-inline-style-fix\nbase=v208.53-member-replies-fix+v208.52-member-replies-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20853-member-replies-fix.txt
-          git add releases/jayuminton-admin-v208.53-member-replies-fix-native.apk deployment/status/v20853-member-replies-fix.txt
-          git commit -m 'Publish admin v208.53: add delete button for received member replies (native)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.54-empty-slot-select-fix-native.apk
+          printf 'status=success\nversion=208.54\nfeature=native-unified-fix+empty-slot-manual-assign-fix+member-replies-inbox+admin-delete-reply+team-border-inline-style-fix\nbase=v208.54-empty-slot-select-fix+v208.53-member-replies-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20854-empty-slot-select-fix.txt
+          git add releases/jayuminton-admin-v208.54-empty-slot-select-fix-native.apk deployment/status/v20854-empty-slot-select-fix.txt
+          git commit -m 'Publish admin v208.54: fix empty-slot manual assign losing selections across gender filter switches (native)' || exit 0
           git push origin HEAD:main
