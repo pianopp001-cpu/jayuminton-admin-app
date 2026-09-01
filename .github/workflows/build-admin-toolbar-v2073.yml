@@ -16,6 +16,7 @@ on:
       - 'deployment/jayuminton/admin_login_load_resilience_v1.js'
       - 'deployment/jayuminton/admin_lock_watchdog_v1.js'
       - 'deployment/jayuminton/admin_member_replies_v1.js'
+      - 'deployment/jayuminton/admin_empty_slot_manual_assign_fix_v1.js'
   workflow_dispatch: {}
 
 permissions:
@@ -48,6 +49,35 @@ jobs:
           cp "$BASE" "$ROOT/base.apk"
           unzip -p "$BASE" assets/admin/index.html > "$ROOT/assets/admin/index.html"
           test -s "$ROOT/assets/admin/index.html"
+
+          python3 - "$ROOT/assets/admin/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = '__JAYUMINTON_ADMIN_EXPOSE_UNLIMITED_SELECTED_V1__'
+          if marker not in text:
+              # The unlimited-selection toolbar (v2072) tracks member selection in a
+              # `selected` Set private to its own IIFE closure. handleEmptySlotTap
+              # (tapping an empty court/wait slot directly) reads a completely
+              # different, legacy global `SELECTED` Set that nothing in the current
+              # UI actually writes to any more -- so selecting members via cards or
+              # the quick-roster panel (including its 남자/여자 filter) never showed
+              # up when tapping an empty slot to batch-assign them. Expose the
+              # live private Set on window so a later overlay can bridge it into
+              # `SELECTED` right before handleEmptySlotTap runs.
+              old = "var selected=new Set(), mode='', targets=[], busy=false, ephemeralTemp=new Set();"
+              if old not in text:
+                  raise SystemExit('unlimited-selection private Set anchor missing')
+              new = old + " window.__jmUnlimitedSelected=selected; /* " + marker + " */"
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('expose unlimited-selected patch did not apply')
+          p.write_text(text, encoding='utf-8')
+          print('EXPOSE_UNLIMITED_SELECTED_V1_OK')
+          PY
+          grep -F '__JAYUMINTON_ADMIN_EXPOSE_UNLIMITED_SELECTED_V1__' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F 'window.__jmUnlimitedSelected=selected;' "$ROOT/assets/admin/index.html" >/dev/null
 
           python3 - "$ROOT/assets/admin/index.html" <<'PY'
           from pathlib import Path
@@ -1299,7 +1329,7 @@ jobs:
           PY
           grep -F 'jmTeamColorNoYellowV1' "$ROOT/assets/admin/index.html" >/dev/null
 
-          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js deployment/jayuminton/admin_member_replies_v1.js <<'PY'
+          python3 - "$ROOT/assets/admin/index.html" deployment/jayuminton/admin_toolbar_position_colors_v2073.js deployment/jayuminton/admin_layout_wait4_compact_v2076.js deployment/jayuminton/admin_toolbar_actions_v2077.js deployment/jayuminton/admin_dead_ui_cleanup_v2080.js deployment/jayuminton/admin_smart_placement_v2081.js deployment/jayuminton/admin_server_timeout_v1.js deployment/jayuminton/admin_render_resilience_v1.js deployment/jayuminton/admin_login_load_resilience_v1.js deployment/jayuminton/admin_lock_watchdog_v1.js deployment/jayuminton/admin_member_replies_v1.js deployment/jayuminton/admin_empty_slot_manual_assign_fix_v1.js <<'PY'
           from pathlib import Path
           import sys
           p=Path(sys.argv[1]); html=p.read_text(encoding='utf-8')
@@ -1369,13 +1399,14 @@ jobs:
           grep -F "app && !app.classList.contains('hidden')" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F "server('deleteMemberReply'" "$ROOT/assets/admin/index.html" >/dev/null
           grep -F 'jm-admin-reply-delete' "$ROOT/assets/admin/index.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$ROOT/assets/admin/index.html" >/dev/null
           cp "$ROOT/base.apk" "$ROOT/patched-unsigned.apk"
           (cd "$ROOT" && zip -q -u patched-unsigned.apk assets/admin/index.html)
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$ROOT/patched-unsigned.apk" "$ROOT/aligned.apk"
           base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.53-member-replies-fix.apk" "$ROOT/aligned.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.53-member-replies-fix.apk"
-          unzip -p "$ROOT/jayuminton-admin-v208.53-member-replies-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$ROOT/release.jks" --ks-key-alias jayuminton --ks-pass pass:'JayuMinton14!' --key-pass pass:'JayuMinton14!' --out "$ROOT/jayuminton-admin-v208.54-empty-slot-select-fix.apk" "$ROOT/aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ROOT/jayuminton-admin-v208.54-empty-slot-select-fix.apk"
+          unzip -p "$ROOT/jayuminton-admin-v208.54-empty-slot-select-fix.apk" assets/admin/index.html > "$ROOT/verify.html"
           grep -F '__JAYUMINTON_ADMIN_LAYOUT_WAIT4_COMPACT_V2079__' "$ROOT/verify.html" >/dev/null
           grep -F 'data-jm-v2079-wait4-index' "$ROOT/verify.html" >/dev/null
           grep -F 'jmBottomActionRowV2079' "$ROOT/verify.html" >/dev/null
@@ -1424,20 +1455,22 @@ jobs:
           grep -F "app && !app.classList.contains('hidden')" "$ROOT/verify.html" >/dev/null
           grep -F "server('deleteMemberReply'" "$ROOT/verify.html" >/dev/null
           grep -F 'jm-admin-reply-delete' "$ROOT/verify.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$ROOT/verify.html" >/dev/null
+          grep -F 'window.__jmUnlimitedSelected=selected;' "$ROOT/verify.html" >/dev/null
       - name: Publish APK
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/jm2081"
-          APK="$ROOT/jayuminton-admin-v208.53-member-replies-fix.apk"
+          APK="$ROOT/jayuminton-admin-v208.54-empty-slot-select-fix.apk"
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.53-member-replies-fix.apk
-          printf 'status=success\nversion=208.53\nfeature=member-replies-inbox-button-and-popup-corrected-login-visibility-check+admin-delete-reply\nbase=v208.52-member-replies-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20853-member-replies-fix.txt
-          git add releases/jayuminton-admin-v208.53-member-replies-fix.apk deployment/status/v20853-member-replies-fix.txt
-          git commit -m 'Publish admin v208.53: add delete button for received member replies' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.54-empty-slot-select-fix.apk
+          printf 'status=success\nversion=208.54\nfeature=empty-slot-manual-assign-reads-live-unlimited-selection-set\nbase=v208.53-member-replies-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20854-empty-slot-select-fix.txt
+          git add releases/jayuminton-admin-v208.54-empty-slot-select-fix.apk deployment/status/v20854-empty-slot-select-fix.txt
+          git commit -m 'Publish admin v208.54: fix empty-slot manual assign losing selections across quick-roster gender filter switches' || exit 0
           git push origin HEAD:main
