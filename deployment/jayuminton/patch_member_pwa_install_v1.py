@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""Add PWA installability (manifest + service worker + iOS 'Add to Home
-Screen' guided banner) to the member web page, without touching existing
-layout/design.
-
-Android intentionally gets NO install banner and NO PWA install prompt --
-the club's Android distribution channel is the Play Store native app, not
-a browser-installed web app. We still register a manifest/service worker
-(harmless, and needed for iOS home-screen icon/theme-color), but on
-Android we call preventDefault() on beforeinstallprompt so Chrome's own
-mini-infobar never appears, so nothing on Android should ever nudge a
-user toward installing this as a web app instead of the real Play Store
-app.
-"""
+"""Add PWA installability and a native-user route guard to the member page."""
 from pathlib import Path
 import sys
 
@@ -37,6 +25,37 @@ if HEAD_MARKER not in text:
 if HEAD_MARKER not in text:
     raise SystemExit("PWA head tag injection did not apply")
 
+# Emergency compatibility guard for the already-published Android user app.
+# If a stale link/script tries to navigate the native user WebView to an
+# explicit admin route, normalize it back to the member route without
+# requiring a new AAB first.
+ROUTE_MARKER = "JAYUMINTON_NATIVE_USER_ROUTE_GUARD_V1"
+if ROUTE_MARKER not in text:
+    route_script = '''<script>
+/* ''' + ROUTE_MARKER + ''' */
+(function guardNativeUserRouteV1(){
+  var ua = String(navigator.userAgent || '');
+  var nativeUser = /JayumintonUserNative|JayumintonNativeAndroid/i.test(ua) || !!window.NativeUserApp;
+  if (!nativeUser) return;
+  var url = new URL(window.location.href);
+  var mode = String(url.searchParams.get('mode') || '').toLowerCase();
+  var adminPath = /(^|\\/)admin(?:\\/|$)/i.test(url.pathname || '');
+  if (mode === 'admin' || adminPath) {
+    url.pathname = '/';
+    url.searchParams.set('mode', 'user');
+    url.searchParams.set('apkUser', '1');
+    url.searchParams.set('routeGuard', 'web-v1');
+    url.searchParams.set('ts', String(Date.now()));
+    window.location.replace(url.toString());
+  }
+})();
+</script>'''
+    lower = text.lower()
+    head_close = lower.find("</head>")
+    if head_close < 0:
+        raise SystemExit("head close marker missing for route guard injection")
+    text = text[:head_close] + route_script + "\n" + text[head_close:]
+
 BODY_MARKER = "JAYUMINTON_MEMBER_PWA_INSTALL_V1"
 if BODY_MARKER not in text:
     script = '''<script>
@@ -60,9 +79,6 @@ if BODY_MARKER not in text:
     return /iPhone|iPad|iPod/i.test(String(navigator.userAgent || ''));
   }
 
-  /* Android/desktop Chrome: suppress the browser's own install prompt.
-     This site is not offered as a browser-installed app on Android --
-     Android users get the real app from the Play Store. */
   window.addEventListener('beforeinstallprompt', function(event){
     event.preventDefault();
   });
@@ -91,18 +107,9 @@ if BODY_MARKER not in text:
     overlay.innerHTML =
       '<div style="width:100%;max-width:480px;background:#fff;border-radius:16px 16px 0 0;padding:20px 20px calc(20px + env(safe-area-inset-bottom));box-sizing:border-box;font-family:inherit">' +
         '<div style="font-size:17px;font-weight:800;color:#111827;margin-bottom:14px">홈 화면에 추가하는 방법</div>' +
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
-          '<div style="flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:#315efb;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center">1</div>' +
-          '<div style="font-size:14px;color:#374151">Safari 하단(또는 상단)의 공유 버튼 <b>⬆️</b> 을 탭하세요.</div>' +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
-          '<div style="flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:#315efb;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center">2</div>' +
-          '<div style="font-size:14px;color:#374151">메뉴에서 <b>\\'홈 화면에 추가\\'</b>를 선택하세요.</div>' +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">' +
-          '<div style="flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:#315efb;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center">3</div>' +
-          '<div style="font-size:14px;color:#374151">오른쪽 위 <b>\\'추가\\'</b>를 탭하면 완료됩니다.</div>' +
-        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:#315efb;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center">1</div><div style="font-size:14px;color:#374151">Safari 하단(또는 상단)의 공유 버튼 <b>⬆️</b> 을 탭하세요.</div></div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:#315efb;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center">2</div><div style="font-size:14px;color:#374151">메뉴에서 <b>홈 화면에 추가</b>를 선택하세요.</div></div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><div style="flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:#315efb;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center">3</div><div style="font-size:14px;color:#374151">오른쪽 위 <b>추가</b>를 탭하면 완료됩니다.</div></div>' +
         '<button type="button" id="jmPwaIosGuideClose" style="width:100%;min-height:46px;border:0;border-radius:10px;background:#f3f5fa;color:#111827;font-weight:800;font-size:14px">확인</button>' +
       '</div>';
     document.body.appendChild(overlay);
@@ -135,16 +142,17 @@ if BODY_MARKER not in text:
         raise SystemExit("body close marker missing for PWA install script injection")
     text = text[:body_close] + script + "\n" + text[body_close:]
 
-if BODY_MARKER not in text:
-    raise SystemExit("PWA install script injection did not apply")
-
 required = (
     HEAD_MARKER,
+    ROUTE_MARKER,
     BODY_MARKER,
     'rel="manifest" href="/manifest.webmanifest"',
     "navigator.serviceWorker.register('/sw.js')",
     "beforeinstallprompt",
     "event.preventDefault()",
+    "JayumintonUserNative",
+    "url.searchParams.set('mode', 'user')",
+    "routeGuard",
     "isIos()",
     "isStandalone()",
     "jmPwaIosBanner",
@@ -152,7 +160,7 @@ required = (
 )
 for marker in required:
     if marker not in text:
-        raise SystemExit("PWA install contract missing: " + marker)
+        raise SystemExit("PWA/route-guard contract missing: " + marker)
 
 path.write_text(text, encoding="utf-8")
-print("MEMBER_PWA_INSTALL_V1_OK")
+print("MEMBER_PWA_INSTALL_AND_NATIVE_ROUTE_GUARD_V1_OK")
