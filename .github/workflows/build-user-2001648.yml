@@ -15,6 +15,8 @@ on:
       - 'deployment/scripts/patch_user_native_foreground_suppress_v1.py'
       - 'deployment/scripts/patch_user_native_foreground_alert_vibration_v1.py'
       - 'deployment/scripts/patch_user_native_versioncode_2001651_v1.py'
+      - 'deployment/scripts/patch_user_native_admin_message_reply_action_v1.py'
+      - 'deployment/scripts/patch_user_native_versioncode_2001652_v1.py'
   workflow_dispatch: {}
 
 permissions:
@@ -88,10 +90,15 @@ jobs:
           python3 deployment/scripts/patch_user_native_foreground_suppress_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_foreground_alert_vibration_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_versioncode_2001651_v1.py "$BUILD"
-          grep -F 'VERSION_CODE="2001651"' "$BUILD" >/dev/null
+          python3 deployment/scripts/patch_user_native_admin_message_reply_action_v1.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_versioncode_2001652_v1.py "$BUILD"
+          grep -F 'VERSION_CODE="2001652"' "$BUILD" >/dev/null
           grep -F 'startAdminMessageVibration' "$BUILD" >/dev/null
           grep -F 'stopAdminMessageVibration' "$BUILD" >/dev/null
           grep -F '__JM_NATIVE_ADMIN_MSG_VIBRATION__' "$BUILD" >/dev/null
+          grep -F 'EXTRA_IS_ADMIN_MESSAGE' "$BUILD" >/dev/null
+          grep -F 'reply.setText("답장");' "$BUILD" >/dev/null
+          grep -F 'showNotification(court, adminMessage, title, body, assignmentId);' "$BUILD" >/dev/null
           grep -F 'USER_ONLY_LAYOUT_V2001648' "$BUILD" >/dev/null
           grep -F 'compileSdk 36' "$BUILD" >/dev/null
           grep -F 'targetSdk 36' "$BUILD" >/dev/null
@@ -124,19 +131,23 @@ jobs:
           grep -F 'admin_message' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F 'jayuminton_alert_volume' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F 'foreground_native_alert_suppressed' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
+          grep -F 'EXTRA_IS_ADMIN_MESSAGE' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
+          grep -F '답장' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           ! grep -F '관리자 화면을 불러오는 중입니다.' "$RUNNER_TEMP/aab-strings.txt"
           AAB_SHA="$(sha256sum "$AAB_PATH" | awk '{print $1}')"
           APK_SHA="$(sha256sum "$APK_PATH" | awk '{print $1}')"
           {
             echo 'status=success'
             echo 'version=1.6.42'
-            echo 'version_code=2001651'
+            echo 'version_code=2001652'
             echo 'admin_message_native_vibration=true'
             echo 'admin_message_confirm_stops_vibration=true'
             echo 'admin_message_push=true'
             echo 'alert_volume_restore=true'
             echo 'foreground_native_alert_suppressed=true'
             echo 'foreground_alert_uses_native_vibration_bridge=true'
+            echo 'admin_message_alert_title_fixed=true'
+            echo 'admin_message_reply_button=true'
             echo 'vibration=3x8'
             echo "run_id=$GITHUB_RUN_ID"
             echo "sha256=$APK_SHA"
@@ -145,7 +156,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
-          git commit -m 'Publish user Play hotfix v1.6.42 code 2001651: foreground shows only the in-page wait/court alert (native vibration bridged to it), native full-screen popup reserved for background/killed' || exit 0
+          git commit -m 'Publish user Play hotfix v1.6.42 code 2001652: fix background admin-message alert showing wrong wait1 title, add a visible 답장 button that stops vibration and opens the app to the existing reply form' || exit 0
           # The native build intentionally rewrites tracked Android source files.
           # They are build-only changes and must not block rebasing the artifact commit.
           git reset --hard HEAD
