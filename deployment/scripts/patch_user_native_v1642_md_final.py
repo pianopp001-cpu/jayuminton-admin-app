@@ -62,10 +62,10 @@ if old not in source:
 source = source.replace(old, new, 1)
 
 # Native admin-direct-message vibration bridge.
-# The web member page already displays #jmDirectMessageAlert.  Android WebView
+# The web member page already displays #jmDirectMessageAlert. Android WebView
 # navigator.vibrate() is not reliable enough across devices, so observe that
 # popup from injected JS and drive the same proven native vibration controller
-# used for assignment alerts.  Confirmation/hide stops it immediately.
+# used for assignment alerts. Confirmation/hide stops it immediately.
 bridge_anchor = '''        @JavascriptInterface public void setVibrationEnabled(boolean enabled) {
             NativePushRegistrar.setVibrationEnabled(MainActivity.this, enabled);
         }
@@ -86,25 +86,30 @@ if bridge_anchor not in source:
     raise SystemExit('native message vibration bridge anchor missing')
 source = source.replace(bridge_anchor, bridge_replacement, 1)
 
-page_anchor = '''                    "if(typeof syncNativeUserPushBridge==='function'){syncNativeUserPushBridge();}",
-                    null
-                );'''
-page_replacement = '''                    "if(typeof syncNativeUserPushBridge==='function'){syncNativeUserPushBridge();}" +
+# Earlier native patches may extend the first evaluateJavascript expression.
+# Inject a second independent observer at the stable end of onPageFinished,
+# rather than depending on the exact contents of that earlier expression.
+page_close_anchor = '''            }
+        });
+
+        Map<String, String> headers = new HashMap<>();'''
+observer_block = '''                view.evaluateJavascript(
                     "(function(){if(window.__JM_NATIVE_ADMIN_MSG_VIBRATION__)return;window.__JM_NATIVE_ADMIN_MSG_VIBRATION__=1;" +
                     "function s(){var b=document.getElementById('jmDirectMessageAlert');if(!b)return;" +
                     "var visible=!b.classList.contains('hidden');" +
                     "try{if(visible&&window.NativeUserApp&&typeof NativeUserApp.startAdminMessageVibration==='function'){" +
-                    "var body=document.getElementById('jmDirectMessageBody');NativeUserApp.startAdminMessageVibration((body&&body.textContent)||String(Date.now()));" +
+                    "var mid=(b.dataset&&b.dataset.messageId)||'';var body=document.getElementById('jmDirectMessageBody');NativeUserApp.startAdminMessageVibration(mid||((body&&body.textContent)||String(Date.now())));" +
                     "}else if(!visible&&window.NativeUserApp&&typeof NativeUserApp.stopAdminMessageVibration==='function'){NativeUserApp.stopAdminMessageVibration();}}catch(e){}}" +
                     "function w(){var b=document.getElementById('jmDirectMessageAlert');if(!b){setTimeout(w,300);return;}" +
-                    "new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['class']});s();}" +
+                    "new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['class','data-message-id']});s();}" +
                     "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',w,{once:true});}else{w();}" +
                     "window.addEventListener('pagehide',function(){try{NativeUserApp.stopAdminMessageVibration();}catch(e){}});})();",
                     null
-                );'''
-if page_anchor not in source:
-    raise SystemExit('native admin-message JS observer anchor missing')
-source = source.replace(page_anchor, page_replacement, 1)
+                );
+'''
+if page_close_anchor not in source:
+    raise SystemExit('native admin-message onPageFinished close anchor missing')
+source = source.replace(page_close_anchor, observer_block + page_close_anchor, 1)
 
 # ROOT CAUSE FIX:
 # The repository's activity_main.xml is intentionally an ADMIN layout and has
