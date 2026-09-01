@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Restore one-tap member moves, normalize memberMoveSelf responses, and allow reply-only admin messaging."""
+"""Restore one-tap member moves, normalize status responses, and keep member replies reply-only."""
 
 from pathlib import Path
 import re
@@ -12,6 +12,23 @@ path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 text = re.sub(r'\s*<script id="jayuminton-member-single-tap-move-v1">[\s\S]*?</script>\s*', "\n", text, count=1, flags=re.I)
 text = re.sub(r'\s*<script id="jayuminton-member-message-reply-v1">[\s\S]*?</script>\s*', "\n", text, count=1, flags=re.I)
+text = re.sub(r'\s*<style id="jayuminton-self-status-badge-v1">[\s\S]*?</style>\s*', "\n", text, count=1, flags=re.I)
+text = re.sub(r'\s*<script id="jayuminton-self-status-badge-v1-js">[\s\S]*?</script>\s*', "\n", text, count=1, flags=re.I)
+
+# The direct-message popup owns the exact message id. Keep that id on the popup so
+# identical message text can never make a reply attach to the wrong original message.
+if "box.dataset.messageId=activeId" not in text:
+    text = text.replace(
+        "if(box)box.classList.add('show');",
+        "if(box){box.dataset.messageId=activeId;box.classList.add('show');}",
+        1,
+    )
+if "delete box.dataset.messageId" not in text:
+    text = text.replace(
+        "if(box)box.classList.remove('show');",
+        "if(box){delete box.dataset.messageId;box.classList.remove('show');}",
+        1,
+    )
 
 addon = r'''
 <script id="jayuminton-member-single-tap-move-v1">
@@ -33,6 +50,9 @@ addon = r'''
   function full(v){
     return !!(v&&typeof v==='object'&&Array.isArray(v.members)&&Array.isArray(v.waitGroups)&&v.courts&&typeof v.courts==='object');
   }
+  function statusSoon(){
+    setTimeout(function(){try{if(typeof window.__jmApplySelfStatusBadgeV1==='function')window.__jmApplySelfStatusBadgeV1();}catch(_){}},60);
+  }
 
   var rawServer=window.server;
   if(typeof rawServer==='function'){
@@ -40,10 +60,11 @@ addon = r'''
       var result=await rawServer.apply(this,arguments);
       if(String(name)!=='memberMoveSelf')return result;
       var candidate=unwrap(result);
-      if(full(candidate))return candidate;
+      if(full(candidate)){statusSoon();return candidate;}
       var token=Array.isArray(args)&&args.length?args[0]:null;
       var fresh=await rawServer.call(this,'getPublicState',[token]);
       var state=unwrap(fresh);
+      statusSoon();
       return full(state)?state:result;
     };
   }
@@ -61,6 +82,7 @@ addon = r'''
       var destination={type:type,key:type==='court'?String(index):String(Number(index)+1)};
       var state=await server('memberMoveSelf',[String(a.token),String(a.member.id),destination]);
       if(state&&typeof renderState==='function')renderState(state);
+      statusSoon();
       return true;
     }catch(e){alert(String(e&&e.message||e||'빈자리 이동에 실패했습니다.'));return false;}
     finally{moving=false;}
@@ -77,11 +99,59 @@ addon = r'''
 })();
 </script>
 
+<style id="jayuminton-self-status-badge-v1">
+body.jm-member-mode .jm-self-status-badge-v1{
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  margin-left:4px!important;padding:1px 5px!important;min-height:14px!important;
+  border:1px solid currentColor!important;border-radius:999px!important;
+  font-size:10px!important;line-height:1.2!important;font-weight:800!important;
+  white-space:nowrap!important;vertical-align:middle!important;opacity:.92!important;
+}
+</style>
+<script id="jayuminton-self-status-badge-v1-js">
+/* JAYUMINTON_MEMBER_SELF_STATUS_BADGE_V1 */
+(function(){
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+  if(window.__JM_MEMBER_SELF_STATUS_BADGE_V1__)return;
+  window.__JM_MEMBER_SELF_STATUS_BADGE_V1__=true;
+  var labels={before:'도착전',rest:'휴식',away:'귀가'};
+  function session(){try{return typeof memberWaitSeatSessionArgs==='function'?memberWaitSeatSessionArgs():null;}catch(_){return null;}}
+  function apply(){
+    try{
+      var a=session();if(!a||!a.member)return;
+      var id=String(a.member.id||a.member.memberId||'');if(!id)return;
+      var s=window.STATE||(typeof STATE!=='undefined'?STATE:null);
+      var members=s&&Array.isArray(s.members)?s.members:[];
+      var member=members.find(function(item){return String(item&&((item.id!=null?item.id:item.memberId))||'')===id;});
+      var label=labels[String(member&&member.status||'')]||'';
+      var own=[];
+      document.querySelectorAll('[data-member-id]').forEach(function(card){
+        if(String(card.getAttribute('data-member-id')||'')===id)own.push(card);
+      });
+      own.forEach(function(card){
+        var badge=card.querySelector('.jm-self-status-badge-v1');
+        if(!label){if(badge)badge.remove();return;}
+        if(!badge){
+          badge=document.createElement('span');badge.className='jm-self-status-badge-v1';badge.setAttribute('aria-label','현재 상태');
+          var name=card.querySelector('.name');
+          if(name&&name.parentNode===card)name.insertAdjacentElement('afterend',badge);else card.appendChild(badge);
+        }
+        if(badge.textContent!==label)badge.textContent=label;
+      });
+    }catch(_){}
+  }
+  window.__jmApplySelfStatusBadgeV1=apply;
+  document.addEventListener('DOMContentLoaded',function(){apply();setTimeout(apply,500);setTimeout(apply,1500);},{once:true});
+  setInterval(apply,1800);
+  apply();
+})();
+</script>
+
 <script id="jayuminton-member-message-reply-v1">
 /* JAYUMINTON_MEMBER_MESSAGE_REPLY_ONLY_V1
    Members cannot initiate admin messages. A reply control appears only while a
    received administrator message is visible, and every reply is tied to the
-   original message id. */
+   original message id. Replies are capped at 80 characters in UI and server. */
 (function(){
   if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
   if(window.__JM_MEMBER_MESSAGE_REPLY_ONLY_V1__)return;
@@ -96,32 +166,40 @@ addon = r'''
   function activeMessage(){
     var box=document.getElementById('jmDirectMessageAlert');
     var body=document.getElementById('jmDirectMessageBody');
-    if(!box||box.classList.contains('hidden')||!body)return null;
+    if(!box||!box.classList.contains('show')||!body)return null;
     var s=state(),a=session();if(!s||!a||!Array.isArray(s.memberMessages))return null;
-    var text=String(body.textContent||'');
     var list=s.memberMessages.filter(function(item){
       return item&&Array.isArray(item.memberIds)&&item.memberIds.map(String).indexOf(String(a.member.id))>=0;
     });
+    var exactId=String(box.dataset&&box.dataset.messageId||'');
+    if(exactId){
+      for(var j=list.length-1;j>=0;j--){if(String(list[j].id||'')===exactId)return list[j];}
+      return null;
+    }
+    var text=String(body.textContent||'');
     for(var i=list.length-1;i>=0;i--){if(String(list[i].text||'')===text)return list[i];}
-    return list.length?list[list.length-1]:null;
+    return null;
   }
   function ensureUi(){
-    var box=document.getElementById('jmDirectMessageAlert');if(!box||box.classList.contains('hidden'))return;
-    var card=box.querySelector('.jm-direct-message-card');if(!card||card.querySelector('.jm-member-reply-wrap'))return;
+    var box=document.getElementById('jmDirectMessageAlert');if(!box||!box.classList.contains('show'))return;
+    var card=box.querySelector('.jm-direct-message-card');if(!card)return;
     var item=activeMessage();if(!item||!item.id)return;
-    var wrap=document.createElement('div');wrap.className='jm-member-reply-wrap';
-    wrap.style.cssText='margin-top:10px;display:flex;flex-direction:column;gap:8px';
-    wrap.innerHTML='<button type="button" class="jm-member-reply-open" style="width:100%;min-height:42px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;font-weight:800">답장</button>'+
-      '<div class="jm-member-reply-form" style="display:none;gap:8px;flex-direction:column">'+
-      '<textarea class="jm-member-reply-input" maxlength="300" rows="3" placeholder="관리자에게 답장" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:10px;font-size:14px"></textarea>'+
-      '<button type="button" class="jm-member-reply-send" style="width:100%;min-height:42px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-weight:900">답장 보내기</button></div>';
+    var old=card.querySelector('.jm-member-reply-wrap');
+    if(old&&String(old.dataset.messageId||'')!==String(item.id)){old.remove();old=null;}
+    if(old)return;
+    var wrap=document.createElement('div');wrap.className='jm-member-reply-wrap';wrap.dataset.messageId=String(item.id);
+    wrap.style.cssText='margin-top:8px;display:flex;flex-direction:column;gap:6px';
+    wrap.innerHTML='<button type="button" class="jm-member-reply-open" style="width:100%;min-height:36px;border:1px solid #cbd5e1;border-radius:9px;background:#f8fafc;font-weight:800">답장</button>'+
+      '<div class="jm-member-reply-form" style="display:none;gap:6px;flex-direction:column">'+
+      '<textarea class="jm-member-reply-input" maxlength="80" rows="2" placeholder="관리자에게 답장 (80자 이내)" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:9px;padding:8px;font-size:14px"></textarea>'+
+      '<button type="button" class="jm-member-reply-send" style="width:100%;min-height:36px;border:0;border-radius:9px;background:#2563eb;color:#fff;font-weight:900">답장 보내기</button></div>';
     card.appendChild(wrap);
     wrap.querySelector('.jm-member-reply-open').addEventListener('click',function(){
       this.style.display='none';var form=wrap.querySelector('.jm-member-reply-form');form.style.display='flex';setTimeout(function(){wrap.querySelector('.jm-member-reply-input').focus();},30);
     });
     wrap.querySelector('.jm-member-reply-send').addEventListener('click',async function(){
       if(sending)return;var a=session(),current=activeMessage(),input=wrap.querySelector('.jm-member-reply-input');
-      var text=String(input&&input.value||'').trim();if(!a||!current||!current.id)return;if(!text){alert('답장 내용을 입력해 주세요.');return;}
+      var text=String(input&&input.value||'').trim().slice(0,80);if(!a||!current||!current.id)return;if(!text){alert('답장 내용을 입력해 주세요.');return;}
       sending=true;this.disabled=true;this.textContent='전송 중...';
       try{
         await server('memberReplyToMessage',[String(a.token),String(a.member.id),String(current.id),text]);
@@ -142,7 +220,20 @@ pos=text.lower().rfind('</body>')
 if pos<0: pos=text.lower().rfind('</html>')
 if pos<0: raise SystemExit('member page closing marker missing')
 text=text[:pos]+addon+'\n'+text[pos:]
-for needle in ['JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2','JAYUMINTON_MEMBER_MOVESELF_FULL_STATE_V3','window.server=async function','getPublicState\',[token]','window.handleMemberWaitEmptyTap=function','window.handleEmptySlotTap=function','JAYUMINTON_MEMBER_MESSAGE_REPLY_ONLY_V1','memberReplyToMessage','답장 보내기']:
+for needle in [
+    'JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2',
+    'JAYUMINTON_MEMBER_MOVESELF_FULL_STATE_V3',
+    'window.server=async function',
+    "getPublicState',[token]",
+    'window.handleMemberWaitEmptyTap=function',
+    'window.handleEmptySlotTap=function',
+    'JAYUMINTON_MEMBER_MESSAGE_REPLY_ONLY_V1',
+    'memberReplyToMessage',
+    'maxlength="80"',
+    'JAYUMINTON_MEMBER_SELF_STATUS_BADGE_V1',
+    "away:'귀가'",
+    'box.dataset.messageId=activeId',
+]:
     if needle not in text: raise SystemExit('missing '+needle)
 path.write_text(text,encoding='utf-8')
-print('MEMBER_MOVESELF_FULL_STATE_V3_REPLY_ONLY_V1_OK')
+print('MEMBER_MOVESELF_V3_REPLY80_EXACT_ID_SELF_STATUS_BADGE_OK')
