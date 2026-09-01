@@ -25,10 +25,9 @@ pairs = (
 for old, new in pairs:
     source = source.replace(old, new)
 
-# MD contract: user APK always opens the Firebase member surface, never admin.
-# Change this marker on every emergency login/routing repair so Android WebView
-# cannot restore a stale cached document after installing the rebuilt APK.
-ROUTE_MARKER = '20260827c-login-recovery'
+# Emergency route marker. Bumping this guarantees a fresh member URL after the
+# Play update instead of reusing any stale document from an earlier build.
+ROUTE_MARKER = '20260901a-play-user-route-hotfix'
 USER_ROUTE = f'https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42&memberRoute={ROUTE_MARKER}'
 source = re.sub(
     r'USER_URL="https://jayuminton-push\.web\.app/[^"\n]*"',
@@ -36,6 +35,27 @@ source = re.sub(
     source,
     count=1,
 )
+
+# Generated user MainActivity must refuse an explicit admin query even if the
+# member page or a stale link attempts to navigate there.
+old = '''            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String scheme = request.getUrl().getScheme();
+                return !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme));
+            }'''
+new = '''            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String requested = request.getUrl().toString();
+                if (requested.contains("mode=admin") || requested.contains("/admin")) {
+                    view.stopLoading();
+                    view.clearHistory();
+                    view.loadUrl(USER_URL + "&routeGuard=1&ts=" + System.currentTimeMillis());
+                    return true;
+                }
+                String scheme = request.getUrl().getScheme();
+                return !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme));
+            }'''
+if old not in source:
+    raise SystemExit('user route guard anchor missing')
+source = source.replace(old, new, 1)
 
 required = (
     'VERSION="1.6.42"',
@@ -46,19 +66,18 @@ required = (
     'stopPreviousMemberAlert(app);',
     f'USER_URL="{USER_ROUTE}"',
     'com.jayuminton.user',
+    'requested.contains("mode=admin")',
+    'routeGuard=1',
 )
 for marker in required:
     if marker not in source:
         raise SystemExit('v1642 MD final contract missing: ' + marker)
 if 'script.google.com' in source or 'MAIN_DEPLOYMENT_ID' in source:
     raise SystemExit('v1642 must remain Cloudflare/Firebase-only')
-# Only reject an actual Android entry URL routed to admin.  The build script
-# intentionally contains a negative grep for '?mode=admin'; matching that
-# guard text itself made every otherwise-correct user build fail.
 if re.search(r'USER_URL="[^"\n]*[?&]mode=admin(?:[&#"\n]|$)', source):
     raise SystemExit('v1642 user APK must never contain admin mode routing')
 if 'mode=user' not in source or ROUTE_MARKER not in source:
     raise SystemExit('v1642 fresh member route guard missing')
 
 path.write_text(source, encoding='utf-8')
-print('Prepared v1.6.42 MD-final user APK with forced fresh member login route.')
+print('Prepared v1.6.42 MD-final user APK with forced fresh member route and admin-route block.')
