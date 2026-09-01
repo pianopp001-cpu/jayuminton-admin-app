@@ -1,9 +1,11 @@
 status=success
 version=1.6.42
-version_code=2001649
+version_code=2001650
 admin_message_native_vibration=true
 admin_message_confirm_stops_vibration=true
+admin_message_push=true
+alert_volume_restore=true
 vibration=3x8
-run_id=33525253213
-sha256=dac6166947933c67bca83c8a7f8fe55033773d44e597416570a5775f05d349a2
-aab_sha256=afd4b845591bacf521178945b2ab7b6094cccab7801c5fd5ba84981e3652ebd9
+run_id=33534190867
+sha256=948e3c013f69f6d34612e38e04bde672769335cb9650c9752a23f001c5d65cb7
+aab_sha256=7dc3f8e10dd6ab7b45463b783ae7fae0a1b2b44513f7ca85389f79565fdc9124
