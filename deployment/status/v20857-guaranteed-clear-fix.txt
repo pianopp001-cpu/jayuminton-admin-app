@@ -1,6 +1,6 @@
 status=success
 version=208.57
-feature=direct-closure-clear-after-assign-not-button-click-proxy
-base=v208.56-trust-empty-selection-fix
-run_id=33556192936
-sha256=edbc27d8855c619dd3b1461555a2814682504c06245a3c1ef1e5e91d0b75af86
+feature=native-unified-fix+direct-closure-clear-after-assign+selectedIds-trusts-empty-persistent-set+assign-full-selection-fix+empty-slot-manual-assign-fix+member-replies-inbox+admin-delete-reply
+base=v208.57-guaranteed-clear-fix+v208.56-trust-empty-selection-fix+native-session-fix+dialog-chrome-fix
+run_id=33556735050
+sha256=2fa0b25f7bee8797aa3d9461195a3af87c0a4bf4cc9c2261bc3f6b8073bd84c0
