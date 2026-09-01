@@ -114,5 +114,9 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
           git commit -m 'Publish user Play hotfix v1.6.42 code 2001648' || exit 0
+          # The native build intentionally rewrites tracked Android source files.
+          # They are build-only changes and must not block rebasing the artifact commit.
+          git reset --hard HEAD
+          git clean -fd
           git pull --rebase origin main
           git push origin HEAD:main
