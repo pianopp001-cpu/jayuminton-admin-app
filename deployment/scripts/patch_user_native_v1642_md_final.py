@@ -86,30 +86,29 @@ if bridge_anchor not in source:
     raise SystemExit('native message vibration bridge anchor missing')
 source = source.replace(bridge_anchor, bridge_replacement, 1)
 
-# Earlier native patches may extend the first evaluateJavascript expression.
-# Inject a second independent observer at the stable end of onPageFinished,
-# rather than depending on the exact contents of that earlier expression.
-page_close_anchor = '''            }
-        });
-
-        Map<String, String> headers = new HashMap<>();'''
-observer_block = '''                view.evaluateJavascript(
-                    "(function(){if(window.__JM_NATIVE_ADMIN_MSG_VIBRATION__)return;window.__JM_NATIVE_ADMIN_MSG_VIBRATION__=1;" +
-                    "function s(){var b=document.getElementById('jmDirectMessageAlert');if(!b)return;" +
-                    "var visible=!b.classList.contains('hidden');" +
-                    "try{if(visible&&window.NativeUserApp&&typeof NativeUserApp.startAdminMessageVibration==='function'){" +
-                    "var mid=(b.dataset&&b.dataset.messageId)||'';var body=document.getElementById('jmDirectMessageBody');NativeUserApp.startAdminMessageVibration(mid||((body&&body.textContent)||String(Date.now())));" +
-                    "}else if(!visible&&window.NativeUserApp&&typeof NativeUserApp.stopAdminMessageVibration==='function'){NativeUserApp.stopAdminMessageVibration();}}catch(e){}}" +
-                    "function w(){var b=document.getElementById('jmDirectMessageAlert');if(!b){setTimeout(w,300);return;}" +
-                    "new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['class','data-message-id']});s();}" +
+# Earlier native patches rewrite the body of onPageFinished. Anchor only on its
+# stable method prologue instead of its closing braces so the observer survives
+# every prior v111-v134 patch in the generated build script.
+page_start_anchor = '''            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+'''
+observer_block = '''            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                view.evaluateJavascript(
+                    "(function(){if(window.__JM_NATIVE_ADMIN_MSG_VIBRATION__)return;window.__JM_NATIVE_ADMIN_MSG_VIBRATION__=1;var active='';" +
+                    "function s(){var b=document.getElementById('jmDirectMessageAlert');if(!b)return;var visible=b.classList.contains('show');" +
+                    "var mid=(b.dataset&&b.dataset.messageId)||'';var body=document.getElementById('jmDirectMessageBody');if(!mid)mid=(body&&body.textContent)||'';" +
+                    "try{if(visible&&mid!==active&&window.NativeUserApp&&typeof NativeUserApp.startAdminMessageVibration==='function'){active=mid||String(Date.now());NativeUserApp.startAdminMessageVibration(active);}" +
+                    "else if(!visible&&active&&window.NativeUserApp&&typeof NativeUserApp.stopAdminMessageVibration==='function'){active='';NativeUserApp.stopAdminMessageVibration();}}catch(e){}}" +
+                    "function w(){var b=document.getElementById('jmDirectMessageAlert');if(!b){setTimeout(w,300);return;}new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['class','data-message-id']});s();}" +
                     "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',w,{once:true});}else{w();}" +
-                    "window.addEventListener('pagehide',function(){try{NativeUserApp.stopAdminMessageVibration();}catch(e){}});})();",
+                    "window.addEventListener('pagehide',function(){try{active='';NativeUserApp.stopAdminMessageVibration();}catch(e){}});})();",
                     null
                 );
 '''
-if page_close_anchor not in source:
-    raise SystemExit('native admin-message onPageFinished close anchor missing')
-source = source.replace(page_close_anchor, observer_block + page_close_anchor, 1)
+if page_start_anchor not in source:
+    raise SystemExit('native admin-message onPageFinished start anchor missing')
+source = source.replace(page_start_anchor, observer_block, 1)
 
 # ROOT CAUSE FIX:
 # The repository's activity_main.xml is intentionally an ADMIN layout and has
@@ -165,6 +164,7 @@ required = (
     'startAdminMessageVibration',
     'stopAdminMessageVibration',
     '__JM_NATIVE_ADMIN_MSG_VIBRATION__',
+    "b.classList.contains('show')",
     'jmDirectMessageAlert',
 )
 for marker in required:
