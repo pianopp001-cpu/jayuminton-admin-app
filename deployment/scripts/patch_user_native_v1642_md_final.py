@@ -28,8 +28,6 @@ pairs = (
 for old, new in pairs:
     source = source.replace(old, new)
 
-# Force a fresh member/user route. This affects only what the user APK opens;
-# all Cloudflare state + FCM communication with the administrator is preserved.
 ROUTE_MARKER = '20260901b-user-layout-isolation'
 USER_ROUTE = f'https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42&memberRoute={ROUTE_MARKER}'
 source = re.sub(
@@ -39,9 +37,6 @@ source = re.sub(
     count=1,
 )
 
-# Generated user MainActivity must refuse an explicit admin navigation. This
-# does NOT disable user<->admin data/FCM communication; it only protects the
-# user WebView's visible top-level route.
 old = '''            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String scheme = request.getUrl().getScheme();
                 return !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme));
@@ -61,11 +56,6 @@ if old not in source:
     raise SystemExit('user route guard anchor missing')
 source = source.replace(old, new, 1)
 
-# Native admin-direct-message vibration bridge.
-# The web member page already displays #jmDirectMessageAlert. Android WebView
-# navigator.vibrate() is not reliable enough across devices, so observe that
-# popup from injected JS and drive the same proven native vibration controller
-# used for assignment alerts. Confirmation/hide stops it immediately.
 bridge_anchor = '''        @JavascriptInterface public void setVibrationEnabled(boolean enabled) {
             NativePushRegistrar.setVibrationEnabled(MainActivity.this, enabled);
         }
@@ -86,9 +76,6 @@ if bridge_anchor not in source:
     raise SystemExit('native message vibration bridge anchor missing')
 source = source.replace(bridge_anchor, bridge_replacement, 1)
 
-# Earlier native patches rewrite the body of onPageFinished. Anchor only on its
-# stable method prologue instead of its closing braces so the observer survives
-# every prior v111-v134 patch in the generated build script.
 page_start_anchor = '''            public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
 '''
@@ -96,7 +83,7 @@ observer_block = '''            public void onPageFinished(WebView view, String 
                 super.onPageFinished(view, url);
                 view.evaluateJavascript(
                     "(function(){if(window.__JM_NATIVE_ADMIN_MSG_VIBRATION__)return;window.__JM_NATIVE_ADMIN_MSG_VIBRATION__=1;var active='';" +
-                    "function s(){var b=document.getElementById('jmDirectMessageAlert');if(!b)return;var visible=b.classList.contains('show');" +
+                    "function s(){var b=document.getElementById('jmDirectMessageAlert');if(!b)return;var visible=!b.classList.contains('hidden');" +
                     "var mid=(b.dataset&&b.dataset.messageId)||'';var body=document.getElementById('jmDirectMessageBody');if(!mid)mid=(body&&body.textContent)||'';" +
                     "try{if(visible&&mid!==active&&window.NativeUserApp&&typeof NativeUserApp.startAdminMessageVibration==='function'){active=mid||String(Date.now());NativeUserApp.startAdminMessageVibration(active);}" +
                     "else if(!visible&&active&&window.NativeUserApp&&typeof NativeUserApp.stopAdminMessageVibration==='function'){active='';NativeUserApp.stopAdminMessageVibration();}}catch(e){}}" +
@@ -110,13 +97,6 @@ if page_start_anchor not in source:
     raise SystemExit('native admin-message onPageFinished start anchor missing')
 source = source.replace(page_start_anchor, observer_block, 1)
 
-# ROOT CAUSE FIX:
-# The repository's activity_main.xml is intentionally an ADMIN layout and has
-# a full-screen adminLoadPanel. The generated user MainActivity also calls
-# setContentView(R.layout.activity_main), so without overriding the layout the
-# admin panel sits permanently above the user's WebView. Replace that layout
-# only inside the temporary user build. The repository/admin source is never
-# modified by this generated shell block.
 layout_anchor = 'mkdir -p "$JAVA_DIR" releases deployment/status signing\n'
 layout_block = '''mkdir -p "$JAVA_DIR" releases deployment/status signing
 
@@ -164,7 +144,7 @@ required = (
     'startAdminMessageVibration',
     'stopAdminMessageVibration',
     '__JM_NATIVE_ADMIN_MSG_VIBRATION__',
-    "b.classList.contains('show')",
+    "!b.classList.contains('hidden')",
     'jmDirectMessageAlert',
 )
 for marker in required:
