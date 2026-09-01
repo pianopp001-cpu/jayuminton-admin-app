@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import re
 
+# 2026-09-01 Play hotfix trigger: rebuild user bundle with route guard + code 2001646.
 path = Path(sys.argv[1])
 source = path.read_text(encoding='utf-8')
 
