@@ -3,7 +3,9 @@ from pathlib import Path
 import sys
 import re
 
-# 2026-09-01 Play hotfix trigger: rebuild user bundle with route guard + code 2001646.
+# 2026-09-01 Play hotfix: force the user route and isolate the user APK layout
+# from the admin-only loading overlay. This patches only the temporary user
+# build script; the permanent admin Activity/layout stays untouched.
 path = Path(sys.argv[1])
 source = path.read_text(encoding='utf-8')
 
@@ -26,9 +28,9 @@ pairs = (
 for old, new in pairs:
     source = source.replace(old, new)
 
-# Emergency route marker. Bumping this guarantees a fresh member URL after the
-# Play update instead of reusing any stale document from an earlier build.
-ROUTE_MARKER = '20260901a-play-user-route-hotfix'
+# Force a fresh member/user route. This affects only what the user APK opens;
+# all Cloudflare state + FCM communication with the administrator is preserved.
+ROUTE_MARKER = '20260901b-user-layout-isolation'
 USER_ROUTE = f'https://jayuminton-push.web.app/?mode=user&apkUser=1&userAppVersion=1.6.42&memberRoute={ROUTE_MARKER}'
 source = re.sub(
     r'USER_URL="https://jayuminton-push\.web\.app/[^"\n]*"',
@@ -37,8 +39,9 @@ source = re.sub(
     count=1,
 )
 
-# Generated user MainActivity must refuse an explicit admin query even if the
-# member page or a stale link attempts to navigate there.
+# Generated user MainActivity must refuse an explicit admin navigation. This
+# does NOT disable user<->admin data/FCM communication; it only protects the
+# user WebView's visible top-level route.
 old = '''            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String scheme = request.getUrl().getScheme();
                 return !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme));
@@ -58,6 +61,43 @@ if old not in source:
     raise SystemExit('user route guard anchor missing')
 source = source.replace(old, new, 1)
 
+# ROOT CAUSE FIX:
+# The repository's activity_main.xml is intentionally an ADMIN layout and has
+# a full-screen adminLoadPanel. The generated user MainActivity also calls
+# setContentView(R.layout.activity_main), so without overriding the layout the
+# admin panel sits permanently above the user's WebView. Replace that layout
+# only inside the temporary user build. The repository/admin source is never
+# modified by this generated shell block.
+layout_anchor = 'mkdir -p "$JAVA_DIR" releases deployment/status signing\n'
+layout_block = '''mkdir -p "$JAVA_DIR" releases deployment/status signing
+
+# USER_ONLY_LAYOUT_V2001647: user APK must never inherit the admin loading overlay.
+mkdir -p app/src/main/res/layout
+cat > app/src/main/res/layout/activity_main.xml <<'XML'
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:overScrollMode="never" />
+</FrameLayout>
+XML
+
+grep -F '@+id/webView' app/src/main/res/layout/activity_main.xml >/dev/null
+if grep -F 'adminLoadPanel' app/src/main/res/layout/activity_main.xml >/dev/null || grep -F '관리자 화면을 불러오는 중입니다.' app/src/main/res/layout/activity_main.xml >/dev/null; then
+    echo 'USER_LAYOUT_ADMIN_OVERLAY_DETECTED' >&2
+    exit 1
+fi
+'''
+if layout_anchor not in source:
+    raise SystemExit('user layout isolation anchor missing')
+source = source.replace(layout_anchor, layout_block, 1)
+
 required = (
     'VERSION="1.6.42"',
     'VERSION_CODE="2001642"',
@@ -69,6 +109,9 @@ required = (
     'com.jayuminton.user',
     'requested.contains("mode=admin")',
     'routeGuard=1',
+    'USER_ONLY_LAYOUT_V2001647',
+    'android:id="@+id/webView"',
+    'USER_LAYOUT_ADMIN_OVERLAY_DETECTED',
 )
 for marker in required:
     if marker not in source:
@@ -81,4 +124,4 @@ if 'mode=user' not in source or ROUTE_MARKER not in source:
     raise SystemExit('v1642 fresh member route guard missing')
 
 path.write_text(source, encoding='utf-8')
-print('Prepared v1.6.42 MD-final user APK with forced fresh member route and admin-route block.')
+print('Prepared v1.6.42 MD-final user APK with isolated user layout, fresh member route and admin-route block.')
