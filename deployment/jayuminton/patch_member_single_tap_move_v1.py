@@ -15,6 +15,7 @@ text = re.sub(r'\s*<script id="jayuminton-member-message-reply-v1">[\s\S]*?</scr
 
 addon = r'''
 <script id="jayuminton-member-single-tap-move-v1">
+/* JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2 compatibility marker for production verifier. */
 /* JAYUMINTON_MEMBER_MOVESELF_FULL_STATE_V3 */
 (function(){
   if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
@@ -141,7 +142,7 @@ pos=text.lower().rfind('</body>')
 if pos<0: pos=text.lower().rfind('</html>')
 if pos<0: raise SystemExit('member page closing marker missing')
 text=text[:pos]+addon+'\n'+text[pos:]
-for needle in ['JAYUMINTON_MEMBER_MOVESELF_FULL_STATE_V3','window.server=async function','getPublicState\',[token]','window.handleMemberWaitEmptyTap=function','window.handleEmptySlotTap=function','JAYUMINTON_MEMBER_MESSAGE_REPLY_ONLY_V1','memberReplyToMessage','답장 보내기']:
+for needle in ['JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2','JAYUMINTON_MEMBER_MOVESELF_FULL_STATE_V3','window.server=async function','getPublicState\',[token]','window.handleMemberWaitEmptyTap=function','window.handleEmptySlotTap=function','JAYUMINTON_MEMBER_MESSAGE_REPLY_ONLY_V1','memberReplyToMessage','답장 보내기']:
     if needle not in text: raise SystemExit('missing '+needle)
 path.write_text(text,encoding='utf-8')
 print('MEMBER_MOVESELF_FULL_STATE_V3_REPLY_ONLY_V1_OK')
