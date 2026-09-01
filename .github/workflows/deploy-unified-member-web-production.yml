@@ -96,11 +96,25 @@ jobs:
           cp deployment/jayuminton/member-pwa-assets/icon-192.png "$PUBLIC/icon-192.png"
           cp deployment/jayuminton/member-pwa-assets/icon-512.png "$PUBLIC/icon-512.png"
           cp deployment/jayuminton/member-pwa-assets/apple-touch-icon.png "$PUBLIC/apple-touch-icon.png"
+          cp deployment/jayuminton/member-pwa-assets/install.html "$PUBLIC/install.html"
+          cp deployment/jayuminton/member-pwa-assets/install-qr.png "$PUBLIC/install-qr.png"
           test -s "$PUBLIC/manifest.webmanifest"
           test -s "$PUBLIC/sw.js"
           test -s "$PUBLIC/icon-192.png"
           test -s "$PUBLIC/icon-512.png"
           test -s "$PUBLIC/apple-touch-icon.png"
+          test -s "$PUBLIC/install.html"
+          test -s "$PUBLIC/install-qr.png"
+          grep -F 'JAYUMINTON_INSTALL_LANDING_V1' "$PUBLIC/install.html" >/dev/null
+          grep -F 'play.google.com/store/apps/details?id=com.jayuminton.user' "$PUBLIC/install.html" >/dev/null
+          grep -F 'https://jayuminton-push.web.app/' "$PUBLIC/install.html" >/dev/null
+          python3 - "$PUBLIC/install.html" "$RUNNER_TEMP/install-inline.js" <<'PY'
+          import re, sys
+          text = open(sys.argv[1], encoding='utf-8').read()
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>', text, flags=re.I)
+          open(sys.argv[2], 'w', encoding='utf-8').write('\n'.join(scripts))
+          PY
+          node --check "$RUNNER_TEMP/install-inline.js"
           python3 - "$PUBLIC/index.html" <<'PY'
           from pathlib import Path
           import sys
@@ -838,6 +852,13 @@ jobs:
             test "$code" = "200"
             head -c 8 "$RUNNER_TEMP/$asset" | grep -qa 'PNG'
           done
+          curl --fail --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache' \
+            "${LIVE_USER_URL}install.html?verify=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/install-live.html"
+          grep -F 'JAYUMINTON_INSTALL_LANDING_V1' "$RUNNER_TEMP/install-live.html" >/dev/null
+          grep -F 'play.google.com/store/apps/details?id=com.jayuminton.user' "$RUNNER_TEMP/install-live.html" >/dev/null
+          code="$(curl -s -o "$RUNNER_TEMP/install-qr-live.png" -w '%{http_code}' --location --retry 5 --max-time 60 -H 'Cache-Control: no-cache' "${LIVE_USER_URL}install-qr.png?verify=$GITHUB_RUN_ID")"
+          test "$code" = "200"
+          head -c 8 "$RUNNER_TEMP/install-qr-live.png" | grep -qa 'PNG'
           echo 'PRODUCTION_MEMBER_PWA_ASSETS_OK'
           echo 'PRODUCTION_MEMBER_USER_REQUIREMENTS_AND_NATIVE_IDENTITY_SYNC_OK'
           echo 'MEMBER_MEMO_RPC_TRANSPORT_COMPAT_OK'

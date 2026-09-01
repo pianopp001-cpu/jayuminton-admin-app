@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>자유민턴 설치하기</title>
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#315efb">
+<style>
+  :root{
+    --bg:#f3f5fa;
+    --card:#ffffff;
+    --ink:#111827;
+    --sub:#6b7280;
+    --accent:#315efb;
+    --border:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px 16px;
+  }
+  .card{
+    width:100%;
+    max-width:420px;
+    background:var(--card);
+    border-radius:20px;
+    padding:28px 24px 32px;
+    box-shadow:0 8px 30px rgba(15,23,42,.08);
+  }
+  h1{
+    font-size:22px;
+    margin:0 0 6px;
+    text-align:center;
+  }
+  .sub{
+    text-align:center;
+    color:var(--sub);
+    font-size:14px;
+    margin:0 0 22px;
+    line-height:1.5;
+  }
+  .switcher{
+    display:flex;
+    gap:8px;
+    background:var(--bg);
+    border-radius:12px;
+    padding:4px;
+    margin-bottom:22px;
+  }
+  .switcher button{
+    flex:1;
+    border:0;
+    background:transparent;
+    padding:10px 0;
+    border-radius:9px;
+    font-size:13px;
+    font-weight:700;
+    color:var(--sub);
+    cursor:pointer;
+  }
+  .switcher button.active{
+    background:#fff;
+    color:var(--ink);
+    box-shadow:0 1px 4px rgba(15,23,42,.12);
+  }
+  .panel{ display:none; }
+  .panel.active{ display:block; }
+  .icon-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:12px;
+  }
+  .icon-row .emoji{ font-size:26px; }
+  .icon-row .title{ font-size:17px; font-weight:800; }
+  .desc{
+    font-size:14px;
+    color:var(--sub);
+    line-height:1.6;
+    margin-bottom:18px;
+  }
+  .cta{
+    display:block;
+    width:100%;
+    text-align:center;
+    text-decoration:none;
+    background:var(--accent);
+    color:#fff;
+    font-weight:800;
+    font-size:15px;
+    padding:14px 0;
+    border-radius:12px;
+  }
+  .steps{
+    margin:16px 0 0;
+    padding:0;
+    list-style:none;
+  }
+  .steps li{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    font-size:13px;
+    color:var(--ink);
+    margin-bottom:10px;
+  }
+  .steps li .num{
+    flex:0 0 auto;
+    width:22px;
+    height:22px;
+    border-radius:50%;
+    background:var(--accent);
+    color:#fff;
+    font-size:12px;
+    font-weight:800;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .qr-wrap{
+    text-align:center;
+    margin:8px 0 18px;
+  }
+  .qr-wrap img{
+    width:180px;
+    height:180px;
+    border-radius:12px;
+    border:1px solid var(--border);
+    padding:10px;
+    background:#fff;
+  }
+  .pc-links{
+    display:flex;
+    gap:10px;
+    margin-top:6px;
+  }
+  .pc-links a{
+    flex:1;
+    text-align:center;
+    text-decoration:none;
+    color:var(--ink);
+    font-size:13px;
+    font-weight:700;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:10px 0;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1420;
+      --card:#171d2b;
+      --ink:#f3f4f6;
+      --sub:#9ca3af;
+      --border:#2a3142;
+    }
+    .qr-wrap img{ background:#fff; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🏸 자유민턴 설치하기</h1>
+    <p class="sub">사용 중인 기기에 맞는 설치 방법을 안내해 드립니다.</p>
+
+    <div class="switcher">
+      <button type="button" data-target="ios">🍎 iPhone</button>
+      <button type="button" data-target="android">🤖 Android</button>
+      <button type="button" data-target="pc">💻 PC</button>
+    </div>
+
+    <div class="panel" id="panel-ios">
+      <div class="icon-row"><span class="emoji">🍎</span><span class="title">iPhone</span></div>
+      <p class="desc">앱 설치 없이 홈 화면에 추가해서 앱처럼 바로 열 수 있어요.</p>
+      <a class="cta" href="https://jayuminton-push.web.app/" id="iosOpenLink">Safari로 열기</a>
+      <ul class="steps">
+        <li><span class="num">1</span><span>위 버튼으로 페이지를 여세요.</span></li>
+        <li><span class="num">2</span><span>하단 공유 버튼 <b>⬆️</b> 을 탭하세요.</span></li>
+        <li><span class="num">3</span><span><b>'홈 화면에 추가'</b>를 선택하면 완료됩니다.</span></li>
+      </ul>
+    </div>
+
+    <div class="panel" id="panel-android">
+      <div class="icon-row"><span class="emoji">🤖</span><span class="title">Android</span></div>
+      <p class="desc">Google Play에서 자유민턴 앱을 설치하세요.</p>
+      <a class="cta" href="https://play.google.com/store/apps/details?id=com.jayuminton.user">Google Play에서 설치</a>
+    </div>
+
+    <div class="panel" id="panel-pc">
+      <div class="icon-row"><span class="emoji">💻</span><span class="title">PC</span></div>
+      <p class="desc">휴대폰으로 아래 QR코드를 스캔해 주세요.</p>
+      <div class="qr-wrap"><img src="/install-qr.png" alt="설치 안내 페이지 QR코드"></div>
+      <div class="pc-links">
+        <a href="https://jayuminton-push.web.app/">🍎 iPhone으로 열기</a>
+        <a href="https://play.google.com/store/apps/details?id=com.jayuminton.user">🤖 Google Play</a>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* JAYUMINTON_INSTALL_LANDING_V1 */
+(function(){
+  var ua = String(navigator.userAgent || '');
+  var isIos = /iPhone|iPad|iPod/i.test(ua);
+  var isAndroid = /Android/i.test(ua);
+  var initial = isIos ? 'ios' : (isAndroid ? 'android' : 'pc');
+
+  function show(target){
+    ['ios','android','pc'].forEach(function(key){
+      var panel = document.getElementById('panel-' + key);
+      var btn = document.querySelector('.switcher button[data-target="' + key + '"]');
+      var active = key === target;
+      if (panel) panel.classList.toggle('active', active);
+      if (btn) btn.classList.toggle('active', active);
+    });
+  }
+
+  document.querySelectorAll('.switcher button').forEach(function(btn){
+    btn.addEventListener('click', function(){ show(btn.getAttribute('data-target')); });
+  });
+
+  show(initial);
+})();
+</script>
+</body>
+</html>
