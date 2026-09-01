@@ -123,7 +123,9 @@ async function handleMemberMessageReply(request,env,body){
     const target=state.memberMessages.find(item=>item&&String(item.id||'')===messageId&&
       Array.isArray(item.memberIds)&&item.memberIds.map(String).includes(memberId));
     if(!target)throw new Error('reply_requires_received_message');
-    const replies=Array.isArray(target.replies)?target.replies.slice(-19):[];
+    const existingReplies=Array.isArray(target.replies)?target.replies:[];
+    if(existingReplies.some(item=>item&&String(item.memberId||'')===memberId))throw new Error('reply_already_sent');
+    const replies=existingReplies.slice(-19);
     const replyItem={
       id:`reply-${crypto.randomUUID()}`,
       memberId,

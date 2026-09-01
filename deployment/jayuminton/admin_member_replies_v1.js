@@ -28,7 +28,7 @@
     '#jmAdminReplyShade{position:fixed;inset:0;z-index:2147483644;background:rgba(15,23,42,.40);display:none;align-items:flex-end;justify-content:center;padding:10px;box-sizing:border-box}' +
     '#jmAdminReplyPanel{width:min(560px,100%);max-height:min(76vh,720px);overflow:hidden;background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(15,23,42,.30);display:flex;flex-direction:column}' +
     '.jm-admin-reply-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid #e2e8f0}.jm-admin-reply-head strong{font-size:16px}.jm-admin-reply-close{border:0;background:#f1f5f9;border-radius:9px;padding:7px 10px;font-weight:800}' +
-    '#jmAdminReplyList{padding:10px;overflow:auto;display:flex;flex-direction:column;gap:8px}.jm-admin-reply-empty{padding:26px 10px;text-align:center;color:#64748b;font-size:13px}.jm-admin-reply-card{border:1px solid #e2e8f0;border-radius:13px;padding:10px;background:#fff}.jm-admin-reply-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}.jm-admin-reply-name{font-size:14px;font-weight:900;color:#111827}.jm-admin-reply-time{font-size:10px;color:#64748b;white-space:nowrap}.jm-admin-reply-line{font-size:12px;line-height:1.45;color:#475569;margin-top:4px;word-break:break-word}.jm-admin-reply-line b{color:#0f172a}.jm-admin-reply-text{margin-top:6px;padding:8px 9px;border-radius:9px;background:#eff6ff;color:#1e3a8a;font-size:13px;font-weight:750;line-height:1.45;word-break:break-word}' +
+    '#jmAdminReplyList{padding:10px;overflow:auto;display:flex;flex-direction:column;gap:8px}.jm-admin-reply-empty{padding:26px 10px;text-align:center;color:#64748b;font-size:13px}.jm-admin-reply-card{border:1px solid #e2e8f0;border-radius:13px;padding:10px;background:#fff}.jm-admin-reply-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}.jm-admin-reply-name{font-size:14px;font-weight:900;color:#111827}.jm-admin-reply-time{font-size:10px;color:#64748b;white-space:nowrap}.jm-admin-reply-line{font-size:12px;line-height:1.45;color:#475569;margin-top:4px;word-break:break-word}.jm-admin-reply-line b{color:#0f172a}.jm-admin-reply-text{margin-top:6px;padding:8px 9px;border-radius:9px;background:#eff6ff;color:#1e3a8a;font-size:13px;font-weight:750;line-height:1.45;word-break:break-word}.jm-admin-reply-delete{margin-top:8px;width:100%;min-height:30px;border:1px solid #fecaca;border-radius:8px;background:#fff;color:#dc2626;font-weight:800;font-size:11px}' +
     '#jmAdminReplyPopup{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147483647;width:min(420px,calc(100vw - 24px));display:none;background:#fff;border-radius:17px;padding:14px;box-shadow:0 20px 70px rgba(15,23,42,.36);border:1px solid #dbeafe}.jm-admin-reply-popup-title{font-size:15px;font-weight:950;margin-bottom:8px}.jm-admin-reply-popup-meta{font-size:12px;font-weight:800;color:#334155;margin-bottom:6px}.jm-admin-reply-popup-original{font-size:12px;color:#64748b;line-height:1.4;margin-bottom:7px;word-break:break-word}.jm-admin-reply-popup-text{font-size:14px;line-height:1.45;font-weight:850;color:#0f172a;background:#eff6ff;border-radius:10px;padding:9px;word-break:break-word}.jm-admin-reply-popup-ok{width:100%;margin-top:10px;min-height:38px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-weight:900}';
   document.head.appendChild(style);
 
@@ -57,6 +57,10 @@
     if(!document.getElementById('jmAdminReplyShade')){
       var shade=document.createElement('div');shade.id='jmAdminReplyShade';shade.innerHTML='<div id="jmAdminReplyPanel"><div class="jm-admin-reply-head"><strong>회원 답장</strong><button type="button" class="jm-admin-reply-close">닫기</button></div><div id="jmAdminReplyList"></div></div>';document.body.appendChild(shade);
       shade.querySelector('.jm-admin-reply-close').onclick=closePanel;shade.addEventListener('click',function(e){if(e.target===shade)closePanel();});
+      shade.querySelector('#jmAdminReplyList').addEventListener('click',function(e){
+        var btn=e.target.closest&&e.target.closest('.jm-admin-reply-delete');if(!btn)return;
+        deleteReply(String(btn.dataset.messageId||''),String(btn.dataset.replyId||''));
+      });
     }
     if(!document.getElementById('jmAdminReplyPopup')){
       var p=document.createElement('div');p.id='jmAdminReplyPopup';p.innerHTML='<div class="jm-admin-reply-popup-title">회원 답장 도착</div><div class="jm-admin-reply-popup-meta"></div><div class="jm-admin-reply-popup-original"></div><div class="jm-admin-reply-popup-text"></div><button type="button" class="jm-admin-reply-popup-ok">확인</button>';document.body.appendChild(p);p.querySelector('.jm-admin-reply-popup-ok').onclick=confirmPopup;
@@ -74,7 +78,19 @@
   function renderList(){
     var list=document.getElementById('jmAdminReplyList'),all=flatten().slice(-30).reverse();if(!list)return;
     if(!all.length){list.innerHTML='<div class="jm-admin-reply-empty">아직 받은 답장이 없습니다.</div>';return;}
-    list.innerHTML=all.map(function(x){return '<div class="jm-admin-reply-card"><div class="jm-admin-reply-meta"><span class="jm-admin-reply-name">'+esc(x.memberName)+'</span><span class="jm-admin-reply-time">'+esc(timeText(x.createdAt))+'</span></div><div class="jm-admin-reply-line"><b>관리자 원문</b> · '+esc(x.original)+'</div><div class="jm-admin-reply-text"><b>답장</b> · '+esc(x.text)+'</div></div>';}).join('');
+    list.innerHTML=all.map(function(x){return '<div class="jm-admin-reply-card"><div class="jm-admin-reply-meta"><span class="jm-admin-reply-name">'+esc(x.memberName)+'</span><span class="jm-admin-reply-time">'+esc(timeText(x.createdAt))+'</span></div><div class="jm-admin-reply-line"><b>관리자 원문</b> · '+esc(x.original)+'</div><div class="jm-admin-reply-text"><b>답장</b> · '+esc(x.text)+'</div><button type="button" class="jm-admin-reply-delete" data-message-id="'+esc(x.messageId)+'" data-reply-id="'+esc(x.id)+'">삭제</button></div>';}).join('');
+  }
+  var deleting=false;
+  async function deleteReply(messageId,replyId){
+    if(deleting||!messageId||!replyId)return;
+    if(!confirm('이 답장을 삭제할까요?'))return;
+    deleting=true;
+    try{
+      var result=await server('deleteMemberReply',[null,messageId,replyId]);
+      if(result&&typeof renderState==='function')renderState(result);
+      renderList();renderButton();
+    }catch(e){alert(String(e&&e.message||e||'삭제에 실패했습니다.'));}
+    finally{deleting=false;}
   }
   function openPanel(){ensure();renderList();document.getElementById('jmAdminReplyShade').style.display='flex';var ids=flatten().map(function(x){return x.id;});saveSeen(Array.from(new Set(seen().concat(ids))));renderButton();hidePopup();}
   function closePanel(){var e=document.getElementById('jmAdminReplyShade');if(e)e.style.display='none';}

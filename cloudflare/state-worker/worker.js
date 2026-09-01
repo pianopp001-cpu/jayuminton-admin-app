@@ -291,6 +291,18 @@ export function sendMemberMessageMutation(input, memberIds, message) {
   return { state, event: { type: 'member_message_sent', messageId: item.id, memberIds: recipients } };
 }
 
+export function deleteMemberReplyMutation(input, messageId, replyId) {
+  const state = normalizeState(input);
+  const mid = String(messageId || ''); const rid = String(replyId || '');
+  if (!mid || !rid) throw new Error('reply_required');
+  const message = state.memberMessages.find(m => m && String(m.id) === mid);
+  if (!message) throw new Error('message_not_found');
+  const before = Array.isArray(message.replies) ? message.replies.length : 0;
+  message.replies = (Array.isArray(message.replies) ? message.replies : []).filter(r => r && String(r.id) !== rid);
+  if (message.replies.length === before) throw new Error('reply_not_found');
+  return { state, event: { type: 'member_reply_deleted', messageId: mid, replyId: rid } };
+}
+
 export function setMemberStatusMutation(input, memberIds, status) {
   const state = normalizeState(input); const ids = uniqueIds(memberIds, 200);
   if (!['active', 'before', 'rest', 'away'].includes(String(status))) throw new Error('invalid_member_status');
@@ -503,6 +515,7 @@ export class StateCoordinator {
       else if (action === 'clearBundle') result = clearBundleMutation(current, body.memberIds);
       else if (action === 'setTempPairs') result = setTempPairsMutation(current, body.tempPairs);
       else if (action === 'sendMemberMessage') result = sendMemberMessageMutation(current, body.memberIds, body.message);
+      else if (action === 'deleteMemberReply') result = deleteMemberReplyMutation(current, body.messageId, body.replyId);
       else if (action === 'adjustGames') result = adjustGamesMutation(current, body.memberIds, body.delta, body.reset);
       else if (action === 'requestSwap') result = requestSwapMutation(current, body.requesterId, body.targetId);
       else if (action === 'respondSwap') result = respondSwapMutation(current, body.requestId, body.responderId, body.accept);
@@ -595,7 +608,7 @@ export async function legacyRpc(request, env, name, args) {
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
-  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMemberReply','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
   if (adminNames.has(name)) {
     await verifyAdminSession(bearerRequest(request, token), env, state);
     if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
@@ -608,6 +621,7 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'clearBundle') { action = 'clearBundle'; body.memberIds = values[1]; }
     else if (name === 'setTempPairs') { action = 'setTempPairs'; body.tempPairs = values[1]; }
     else if (name === 'sendMemberMessage') { action = 'sendMemberMessage'; body.memberIds = values[1]; body.message = values[2]; }
+    else if (name === 'deleteMemberReply') { action = 'deleteMemberReply'; body.messageId = values[1]; body.replyId = values[2]; }
     else if (name === 'deleteMembers') { action = 'deleteMembers'; body.memberIds = values[1]; }
     else if (name === 'assignMembersToCourt') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'court', key: String(values[1]) }; }
     else if (name === 'assignMembersToWaitGroup') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'wait', key: String(Number(values[1]) + 1) }; }
