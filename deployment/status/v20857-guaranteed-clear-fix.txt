@@ -1,0 +1,6 @@
+status=success
+version=208.57
+feature=direct-closure-clear-after-assign-not-button-click-proxy
+base=v208.56-trust-empty-selection-fix
+run_id=33556192936
+sha256=edbc27d8855c619dd3b1461555a2814682504c06245a3c1ef1e5e91d0b75af86
