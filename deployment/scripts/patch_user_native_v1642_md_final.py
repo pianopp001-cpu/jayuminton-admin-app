@@ -61,6 +61,51 @@ if old not in source:
     raise SystemExit('user route guard anchor missing')
 source = source.replace(old, new, 1)
 
+# Native admin-direct-message vibration bridge.
+# The web member page already displays #jmDirectMessageAlert.  Android WebView
+# navigator.vibrate() is not reliable enough across devices, so observe that
+# popup from injected JS and drive the same proven native vibration controller
+# used for assignment alerts.  Confirmation/hide stops it immediately.
+bridge_anchor = '''        @JavascriptInterface public void setVibrationEnabled(boolean enabled) {
+            NativePushRegistrar.setVibrationEnabled(MainActivity.this, enabled);
+        }
+'''
+bridge_replacement = '''        @JavascriptInterface public void setVibrationEnabled(boolean enabled) {
+            NativePushRegistrar.setVibrationEnabled(MainActivity.this, enabled);
+        }
+        @JavascriptInterface public void startAdminMessageVibration(String messageId) {
+            if (!NativePushRegistrar.vibrationEnabled(MainActivity.this)) return;
+            AlertVibrationController.start(MainActivity.this,
+                    "admin_message_" + (messageId == null ? System.currentTimeMillis() : messageId));
+        }
+        @JavascriptInterface public void stopAdminMessageVibration() {
+            AlertVibrationController.stop(MainActivity.this);
+        }
+'''
+if bridge_anchor not in source:
+    raise SystemExit('native message vibration bridge anchor missing')
+source = source.replace(bridge_anchor, bridge_replacement, 1)
+
+page_anchor = '''                    "if(typeof syncNativeUserPushBridge==='function'){syncNativeUserPushBridge();}",
+                    null
+                );'''
+page_replacement = '''                    "if(typeof syncNativeUserPushBridge==='function'){syncNativeUserPushBridge();}" +
+                    "(function(){if(window.__JM_NATIVE_ADMIN_MSG_VIBRATION__)return;window.__JM_NATIVE_ADMIN_MSG_VIBRATION__=1;" +
+                    "function s(){var b=document.getElementById('jmDirectMessageAlert');if(!b)return;" +
+                    "var visible=!b.classList.contains('hidden');" +
+                    "try{if(visible&&window.NativeUserApp&&typeof NativeUserApp.startAdminMessageVibration==='function'){" +
+                    "var body=document.getElementById('jmDirectMessageBody');NativeUserApp.startAdminMessageVibration((body&&body.textContent)||String(Date.now()));" +
+                    "}else if(!visible&&window.NativeUserApp&&typeof NativeUserApp.stopAdminMessageVibration==='function'){NativeUserApp.stopAdminMessageVibration();}}catch(e){}}" +
+                    "function w(){var b=document.getElementById('jmDirectMessageAlert');if(!b){setTimeout(w,300);return;}" +
+                    "new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['class']});s();}" +
+                    "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',w,{once:true});}else{w();}" +
+                    "window.addEventListener('pagehide',function(){try{NativeUserApp.stopAdminMessageVibration();}catch(e){}});})();",
+                    null
+                );'''
+if page_anchor not in source:
+    raise SystemExit('native admin-message JS observer anchor missing')
+source = source.replace(page_anchor, page_replacement, 1)
+
 # ROOT CAUSE FIX:
 # The repository's activity_main.xml is intentionally an ADMIN layout and has
 # a full-screen adminLoadPanel. The generated user MainActivity also calls
@@ -71,7 +116,7 @@ source = source.replace(old, new, 1)
 layout_anchor = 'mkdir -p "$JAVA_DIR" releases deployment/status signing\n'
 layout_block = '''mkdir -p "$JAVA_DIR" releases deployment/status signing
 
-# USER_ONLY_LAYOUT_V2001647: user APK must never inherit the admin loading overlay.
+# USER_ONLY_LAYOUT_V2001648: user APK must never inherit the admin loading overlay.
 mkdir -p app/src/main/res/layout
 cat > app/src/main/res/layout/activity_main.xml <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
@@ -109,9 +154,13 @@ required = (
     'com.jayuminton.user',
     'requested.contains("mode=admin")',
     'routeGuard=1',
-    'USER_ONLY_LAYOUT_V2001647',
+    'USER_ONLY_LAYOUT_V2001648',
     'android:id="@+id/webView"',
     'USER_LAYOUT_ADMIN_OVERLAY_DETECTED',
+    'startAdminMessageVibration',
+    'stopAdminMessageVibration',
+    '__JM_NATIVE_ADMIN_MSG_VIBRATION__',
+    'jmDirectMessageAlert',
 )
 for marker in required:
     if marker not in source:
@@ -124,4 +173,4 @@ if 'mode=user' not in source or ROUTE_MARKER not in source:
     raise SystemExit('v1642 fresh member route guard missing')
 
 path.write_text(source, encoding='utf-8')
-print('Prepared v1.6.42 MD-final user APK with isolated user layout, fresh member route and admin-route block.')
+print('Prepared v1.6.42 MD-final user APK with native admin-message vibration, isolated user layout and fresh member route.')
