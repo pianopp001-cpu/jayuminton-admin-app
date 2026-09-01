@@ -15,14 +15,33 @@ text = re.sub(r'\s*<script id="jayuminton-member-message-reply-v1">[\s\S]*?</scr
 text = re.sub(r'\s*<style id="jayuminton-self-status-badge-v1">[\s\S]*?</style>\s*', "\n", text, count=1, flags=re.I)
 text = re.sub(r'\s*<script id="jayuminton-self-status-badge-v1-js">[\s\S]*?</script>\s*', "\n", text, count=1, flags=re.I)
 
-old_show = "function show(item){activeId=String(item.id||'');var box=document.getElementById('jmDirectMessageAlert'),body=document.getElementById('jmDirectMessageBody');if(body)body.textContent=String(item.text||'');if(box)box.classList.remove('hidden');stop();vibrate();vibrationTimer=setInterval(vibrate,14500);}"
-new_show = "function show(item){activeId=String(item.id||'');var box=document.getElementById('jmDirectMessageAlert'),body=document.getElementById('jmDirectMessageBody');if(body)body.textContent=String(item.text||'');if(box){box.dataset.messageId=activeId;box.classList.remove('hidden');}stop();vibrate();vibrationTimer=setInterval(vibrate,14500);}"
-if old_show in text:
-    text = text.replace(old_show, new_show, 1)
-old_confirm = "window.confirmJmDirectMessage=function(){if(activeId)remember(activeId);activeId='';stop();var box=document.getElementById('jmDirectMessageAlert');if(box)box.classList.add('hidden');};"
-new_confirm = "window.confirmJmDirectMessage=function(){if(activeId)remember(activeId);activeId='';stop();var box=document.getElementById('jmDirectMessageAlert');if(box){delete box.dataset.messageId;box.classList.add('hidden');}};"
-if old_confirm in text:
-    text = text.replace(old_confirm, new_confirm, 1)
+# The received-message popup is the authority for the reply target. Persist the
+# exact server message id on the popup while it is visible, and clear it on
+# confirmation. Scope this to the direct-message alert patch so identical text
+# can never bind a reply to a different message.
+marker = text.find('JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1')
+if marker < 0:
+    raise SystemExit('direct message alert marker missing')
+direct = text[marker:]
+if 'box.dataset.messageId=activeId' not in direct:
+    direct, changed = re.subn(
+        r"(function\s+show\s*\(item\)\s*\{[\s\S]*?)(box\.classList\.remove\('hidden'\);)",
+        r"\1box.dataset.messageId=activeId;\2",
+        direct,
+        count=1,
+    )
+    if changed != 1:
+        raise SystemExit('direct message show hook missing')
+if 'delete box.dataset.messageId' not in direct:
+    direct, changed = re.subn(
+        r"(window\.confirmJmDirectMessage\s*=\s*function\s*\(\)\s*\{[\s\S]*?var\s+box\s*=\s*getBox\(\);)if\(box\)box\.classList\.add\('hidden'\);",
+        r"\1if(box){delete box.dataset.messageId;box.classList.add('hidden');}",
+        direct,
+        count=1,
+    )
+    if changed != 1:
+        raise SystemExit('direct message confirm hook missing')
+text = text[:marker] + direct
 
 addon = r'''
 <script id="jayuminton-member-single-tap-move-v1">
@@ -69,7 +88,7 @@ pos=text.lower().rfind('</body>')
 if pos<0: pos=text.lower().rfind('</html>')
 if pos<0: raise SystemExit('member page closing marker missing')
 text=text[:pos]+addon+'\n'+text[pos:]
-for needle in ['JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2','JAYUMINTON_MEMBER_MOVESELF_FULL_STATE_V3','window.server=async function',"getPublicState',[token]",'window.handleMemberWaitEmptyTap=function','window.handleEmptySlotTap=function','JAYUMINTON_MEMBER_MESSAGE_REPLY_ONLY_V1','memberReplyToMessage','maxlength="80"','JAYUMINTON_MEMBER_SELF_STATUS_BADGE_V1',"away:'귀가'",'box.dataset.messageId=activeId',"classList.contains('hidden')"]:
+for needle in ['JAYUMINTON_MEMBER_SINGLE_TAP_MOVE_V2','JAYUMINTON_MEMBER_MOVESELF_FULL_STATE_V3','window.server=async function',"getPublicState',[token]",'window.handleMemberWaitEmptyTap=function','window.handleEmptySlotTap=function','JAYUMINTON_MEMBER_MESSAGE_REPLY_ONLY_V1','memberReplyToMessage','maxlength="80"','JAYUMINTON_MEMBER_SELF_STATUS_BADGE_V1',"away:'귀가'",'box.dataset.messageId=activeId','delete box.dataset.messageId',"classList.contains('hidden')"]:
     if needle not in text: raise SystemExit('missing '+needle)
 path.write_text(text,encoding='utf-8')
 print('MEMBER_MOVESELF_V3_REPLY80_EXACT_ID_HIDDEN_POPUP_SELF_STATUS_BADGE_OK')
