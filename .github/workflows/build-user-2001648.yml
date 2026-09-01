@@ -1,0 +1,116 @@
+name: Build user 2001648 admin-message vibration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-user-2001648.yml'
+      - 'deployment/scripts/patch_user_native_v1642_md_final.py'
+      - 'deployment/scripts/patch_user_native_versioncode_2001645_v1.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-user-2001648
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      FIREBASE_PROJECT_CONFIG: ${{ secrets.JAYUMINTON_DEPLOY_CONFIG_JSON }}
+      WORKER_URL: https://jayuminton-user-push.pianopp001.workers.dev
+      APK_PATH: releases/jayuminton-courtstatus-v1.6.42-md-final.apk
+      AAB_PATH: releases/jayuminton-courtstatus-v1.6.42-md-final.aab
+      PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+      PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+      PLAY_UPLOAD_KEYSTORE_B64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.7'}
+      - uses: google-github-actions/auth@v2
+        with: {credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}'}
+      - run: npm install --global firebase-tools@latest
+      - name: Prepare Firebase Android config
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$FIREBASE_PROJECT_CONFIG" > "$RUNNER_TEMP/deploy.json"
+          FIREBASE_PROJECT_ID="$(jq -r '.firebaseProjectId // empty' "$RUNNER_TEMP/deploy.json")"
+          test -n "$FIREBASE_PROJECT_ID"
+          firebase apps:list ANDROID --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/apps.json"
+          APP_ID="$(jq -r '[.. | objects | select(((.packageName? == "com.jayuminton.user") or (.package_name? == "com.jayuminton.user") or (.androidClientInfo?.packageName? == "com.jayuminton.user")) and ((.appId? // .app_id?) != null)) | (.appId? // .app_id?)] | first // empty' "$RUNNER_TEMP/apps.json")"
+          test -n "$APP_ID"
+          firebase apps:sdkconfig ANDROID "$APP_ID" --project "$FIREBASE_PROJECT_ID" > app/google-services.json
+      - name: Build user APK and AAB
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PUSH_URL="$WORKER_URL"
+          BUILD="$RUNNER_TEMP/build-2001648.sh"
+          cp deployment/scripts/build_user_native_push_fresh_v110.sh "$BUILD"
+          for patch in patch_build_user_native_v111.py patch_build_user_native_v112.py patch_build_user_native_v113.py patch_build_user_native_v114.py patch_build_user_native_v115.py patch_build_user_native_v116.py patch_build_user_native_v117.py patch_build_user_native_v118.py patch_build_user_native_v119.py patch_build_user_native_v120_diagnostic.py patch_build_user_native_v121.py patch_build_user_native_v122.py patch_build_user_native_v124_confirmed_overlay.py patch_build_user_native_v126_stop_controller.py patch_build_user_native_v126_raceguard.py patch_build_user_native_v127_member_switch.py patch_build_user_native_v128_repeat_switch.py patch_build_user_native_v129_background_registration.py; do
+            python3 "deployment/scripts/$patch" "$BUILD"
+          done
+          python3 deployment/scripts/patch_user_native_v130_vibration_cap8.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_v132_strict_current_member.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_v133_install_safe.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_v134_cloudflare_complete.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_v1642_md_final.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_target_sdk35_v1.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_versioncode_2001643_v1.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_versioncode_2001645_v1.py "$BUILD"
+          grep -F 'VERSION_CODE="2001648"' "$BUILD" >/dev/null
+          grep -F 'startAdminMessageVibration' "$BUILD" >/dev/null
+          grep -F 'stopAdminMessageVibration' "$BUILD" >/dev/null
+          grep -F '__JM_NATIVE_ADMIN_MSG_VIBRATION__' "$BUILD" >/dev/null
+          grep -F 'USER_ONLY_LAYOUT_V2001648' "$BUILD" >/dev/null
+          bash "$BUILD"
+          test -n "$PLAY_UPLOAD_KEYSTORE_B64"
+          printf '%s' "$PLAY_UPLOAD_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/play-upload.jks"
+          gradle --no-daemon bundleRelease \
+            "-Pandroid.injected.signing.store.file=$RUNNER_TEMP/play-upload.jks" \
+            "-Pandroid.injected.signing.store.password=$PLAY_UPLOAD_KEY_PASSWORD" \
+            "-Pandroid.injected.signing.key.alias=$PLAY_UPLOAD_KEY_ALIAS" \
+            "-Pandroid.injected.signing.key.password=$PLAY_UPLOAD_KEY_PASSWORD"
+      - name: Publish 2001648 artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p releases deployment/status
+          cp app/build/outputs/apk/release/app-release.apk "$APK_PATH"
+          cp app/build/outputs/bundle/release/app-release.aab "$AAB_PATH"
+          test -s "$APK_PATH" && test -s "$AAB_PATH"
+          unzip -p "$AAB_PATH" base/dex/classes.dex 2>/dev/null | strings > "$RUNNER_TEMP/aab-strings.txt" || true
+          grep -F 'startAdminMessageVibration' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
+          grep -F 'stopAdminMessageVibration' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
+          ! grep -F '관리자 화면을 불러오는 중입니다.' "$RUNNER_TEMP/aab-strings.txt"
+          AAB_SHA="$(sha256sum "$AAB_PATH" | awk '{print $1}')"
+          APK_SHA="$(sha256sum "$APK_PATH" | awk '{print $1}')"
+          {
+            echo 'status=success'
+            echo 'version=1.6.42'
+            echo 'version_code=2001648'
+            echo 'admin_message_native_vibration=true'
+            echo 'admin_message_confirm_stops_vibration=true'
+            echo 'vibration=3x8'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "sha256=$APK_SHA"
+            echo "aab_sha256=$AAB_SHA"
+          } > deployment/status/user-apk-v1642.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
+          git commit -m 'Publish user Play hotfix v1.6.42 code 2001648' || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
