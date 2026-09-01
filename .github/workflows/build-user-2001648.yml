@@ -131,7 +131,7 @@ jobs:
           grep -F 'admin_message' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F 'jayuminton_alert_volume' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F 'foreground_native_alert_suppressed' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
-          grep -F 'EXTRA_IS_ADMIN_MESSAGE' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
+          grep -F 'assignment_is_admin_message' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F '답장' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           ! grep -F '관리자 화면을 불러오는 중입니다.' "$RUNNER_TEMP/aab-strings.txt"
           AAB_SHA="$(sha256sum "$AAB_PATH" | awk '{print $1}')"
