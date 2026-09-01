@@ -57,6 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           export PUSH_URL="$WORKER_URL"
+          export FIREBASE_PROJECT_ID="$(printf '%s' "$FIREBASE_PROJECT_CONFIG" | jq -r '.firebaseProjectId // empty')"
+          test -n "$FIREBASE_PROJECT_ID"
           BUILD="$RUNNER_TEMP/build-2001648.sh"
           cp deployment/scripts/build_user_native_push_fresh_v110.sh "$BUILD"
           for patch in patch_build_user_native_v111.py patch_build_user_native_v112.py patch_build_user_native_v113.py patch_build_user_native_v114.py patch_build_user_native_v115.py patch_build_user_native_v116.py patch_build_user_native_v117.py patch_build_user_native_v118.py patch_build_user_native_v119.py patch_build_user_native_v120_diagnostic.py patch_build_user_native_v121.py patch_build_user_native_v122.py patch_build_user_native_v124_confirmed_overlay.py patch_build_user_native_v126_stop_controller.py patch_build_user_native_v126_raceguard.py patch_build_user_native_v127_member_switch.py patch_build_user_native_v128_repeat_switch.py patch_build_user_native_v129_background_registration.py; do
