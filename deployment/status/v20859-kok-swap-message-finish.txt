@@ -1,0 +1,6 @@
+status=success
+version=208.59
+feature=kok-submission-check-panel+court-wait-whole-group-cross-swap+longpress-send-message+finish-court-big-button-optimistic
+base=v208.57-guaranteed-clear-fix+v208.56-trust-empty-selection-fix+native-session-fix+dialog-chrome-fix
+run_id=33603344694
+sha256=e42951de789126988a9f885e154f799efb28834b064ae554bdae972dcd2cd3d4
