@@ -5,13 +5,32 @@ inside that same panel: 남자 2개 · 여자 1개 기준으로 제출 인원수
 전체/남자/여자 탭으로 필터링할 수 있고, 각 탭 안에서 가나다순 정렬된다. 이름이 잘리지
 않도록 전용 세로 목록 레이아웃을 쓴다 (기존 .roster 그리드는 좁은 칸에 이름이 잘림).
 
-V4: per user feedback, this drops the V3 "click name to pick, then bulk-apply" flow
+V4: per user feedback, this dropped the V3 "click name to pick, then bulk-apply" flow
 entirely (no selection checkbox, no bulk toolbar) -- it added a second, confusing
-"box around a box" visual with no real benefit. Now there is exactly one control per
-row: a single 완료/복귀 button that is completely independent of member.status (court
-assignment / 코트배정 제외 등과 절대 얽히지 않는 새 kokInactive 플래그). Pressing 완료
-marks that member's 콕 제출을 완료 처리해서 집계(남자 2개·여자 1개)에 반영하고, 목록
-맨 아래로 가라앉힌다 (완료된 그룹 안에서도 가나다순 유지). 복귀를 누르면 되돌린다.
+"box around a box" visual with no real benefit. Left exactly one control per row: a
+single 완료/복귀 button that is completely independent of member.status (court
+assignment / 코트배정 제외 등과 절대 얽히지 않는 새 kokInactive 플래그).
+
+V5: V4 still reused the site-wide "member" CSS class and a "data-member-id" attribute
+on each row for convenience. That was the actual bug behind the user's real-device
+report ("완료 누르면 테두리 씌워지고 콕제출 카운트도 안세어지고 비활성화도 안되고
+아래로 가지지도 않아") -- a completely unrelated, pre-existing feature
+(jmUnifiedSwapMoveFixV1's "멤버선택 · 상태변경 · 회원삭제" bulk toolbar, and several
+sibling IIFEs like it) attaches a CAPTURING click listener directly on #adminApp whose
+CARD_SELECTOR/ID_SELECTOR match any ".member" element or any element carrying
+"data-member-id" anywhere inside #adminApp. Because our kok-check rows matched that
+selector, that listener's `ev.stopImmediatePropagation()` fired in the capture phase --
+before our own button's onclick ever ran -- toggled that OTHER feature's own selection
+Set, and painted its own green checkmark/selection state (what looked like "a border")
+on the row. completeKokMember() never executed at all: hence no line-through, no count,
+no reordering. Since a capturing listener on an ancestor (#adminApp) always runs before
+any listener on a descendant regardless of registration order, this cannot be fixed by
+capturing "harder" on our own button -- the only real fix is to stop matching that
+selector. V5 renames the row's class from "member" to "jm-kok-row" and its identifying
+attribute from "data-member-id" to "data-jm-kok-member-id", neither of which appears in
+any of the CARD_SELECTOR/ID_SELECTOR lists used across the codebase, so the legacy
+click-capture features now ignore these rows entirely and our own button's onclick is
+the only thing that runs.
 
 Operates on the fully-built admin index.html (same file build-admin-native-session-fix.yml
 extracts from the latest release APK)."""
@@ -22,12 +41,12 @@ import sys
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
 
-MARKER = 'jmKokSubmitCheckV4'
+MARKER = 'jmKokSubmitCheckV5'
 if MARKER in html:
     print('ADMIN_KOK_SUBMIT_CHECK_ALREADY_OK')
     raise SystemExit(0)
 
-for old in ('jmKokSubmitCheckV1', 'jmKokSubmitCheckV2', 'jmKokSubmitCheckV3'):
+for old in ('jmKokSubmitCheckV1', 'jmKokSubmitCheckV2', 'jmKokSubmitCheckV3', 'jmKokSubmitCheckV4'):
     if old in html:
         raise SystemExit(f'old {old} marker present -- base HTML already has an older panel, refusing to double-patch')
 
@@ -84,22 +103,24 @@ html = html.replace(RENDER_ANCHOR, RENDER_ANCHOR + '\n  renderKokSubmitPanel();'
 # multi-column grid (which squeezed name+quantity into a narrow cell and clipped names
 # via the site-wide bare ".name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
 # rule), style the filter tabs, and style the 완료-처리 state (struck-through, dimmed name).
+# Rows use a dedicated ".jm-kok-row" class (NOT the site-wide ".member" class) -- see the
+# V5 note above for why that matters.
 KOK_STYLE = (
     '\n<style id="jmKokSubmitCheckStyle">\n'
     '/* ' + MARKER + ' */\n'
     '#kokSubmitRoster.jm-kok-roster-list{display:flex;flex-direction:column;gap:6px;'
     'margin-top:8px;max-height:none}\n'
-    '#kokSubmitRoster.jm-kok-roster-list .member{display:flex!important;align-items:center;'
+    '#kokSubmitRoster.jm-kok-roster-list .jm-kok-row{display:flex!important;align-items:center;'
     'gap:8px;width:100%!important;max-width:none!important;box-sizing:border-box;'
     'border:1px solid transparent;border-radius:8px;padding:4px 6px}\n'
-    '#kokSubmitRoster.jm-kok-roster-list .name{white-space:normal!important;'
+    '#kokSubmitRoster.jm-kok-roster-list .jm-kok-row .name{white-space:normal!important;'
     'overflow:visible!important;text-overflow:clip!important;flex:1 1 auto;min-width:0;'
     'word-break:keep-all}\n'
     '.jm-kok-tabs .jm-kok-tab{opacity:.55}\n'
     '.jm-kok-tabs .jm-kok-tab.active{opacity:1;font-weight:900;text-decoration:underline;'
     'text-underline-offset:3px}\n'
-    '#kokSubmitRoster.jm-kok-roster-list .member.jm-kok-inactive{opacity:.55}\n'
-    '#kokSubmitRoster.jm-kok-roster-list .member.jm-kok-inactive .name{'
+    '#kokSubmitRoster.jm-kok-roster-list .jm-kok-row.jm-kok-inactive{opacity:.55}\n'
+    '#kokSubmitRoster.jm-kok-roster-list .jm-kok-row.jm-kok-inactive .name{'
     'text-decoration:line-through}\n'
     '.jm-kok-complete-btn{margin-left:auto;flex:0 0 auto}\n'
     '</style>\n'
@@ -152,8 +173,12 @@ function renderKokSubmitPanel() {
       ? list.map(function(member) {
           var qtyLabel = member.gender === 'female' ? '여자 · 1개' : '남자 · 2개';
           var inactive = !!member.kokInactive;
-          var rowClass = 'member ' + genderClass(member) + (inactive ? ' jm-kok-inactive' : '');
-          return '<div class="' + rowClass + '" data-member-id="' + member.id + '">' +
+          /* jm-kok-row: a dedicated class + data attribute, deliberately NOT reusing the
+             site-wide "member" class or "data-member-id" attribute -- see the V5 note at
+             the top of this file for why that combination gets hijacked by unrelated
+             legacy click-capture features elsewhere in the app. */
+          var rowClass = 'jm-kok-row ' + genderClass(member) + (inactive ? ' jm-kok-inactive' : '');
+          return '<div class="' + rowClass + '" data-jm-kok-member-id="' + member.id + '">' +
             '<span class="name">' + member.name + '</span>' +
             '<span class="meta">' + qtyLabel + (inactive ? ' · 완료' : '') + '</span>' +
             '<button type="button" class="ghost-button jm-kok-complete-btn" onclick="completeKokMember(\\'' + member.id + '\\')">' +
@@ -215,8 +240,14 @@ if html.count("server('setMemberKokInactive'") != 1:
     raise SystemExit('setMemberKokInactive must be called exactly once, from completeKokMember')
 if html.count('text-decoration:line-through') != 1:
     raise SystemExit('completed member name must get a line-through style')
+if html.count("'jm-kok-row '") != 1:
+    raise SystemExit('row must be built with the dedicated jm-kok-row class exactly once')
+if html.count('data-jm-kok-member-id="') != 1:
+    raise SystemExit('row must carry the dedicated data-jm-kok-member-id attribute exactly once')
+if "data-member-id=\\'\" + member.id" in html or 'data-member-id=" + member.id' in html:
+    raise SystemExit('V5 regression: kok row must not use the shared data-member-id attribute')
 if 'jm-kok-bulk' in html or 'kokBulkDeactivate' in html or 'kokBulkReactivate' in html or 'KOK_PICKED' in html:
-    raise SystemExit('V4 must not contain any leftover bulk-select code from V3')
+    raise SystemExit('V5 must not contain any leftover bulk-select code from V3')
 
 path.write_text(html, encoding='utf-8')
 print('ADMIN_KOK_SUBMIT_CHECK_OK')
