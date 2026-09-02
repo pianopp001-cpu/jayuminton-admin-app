@@ -114,6 +114,25 @@ export class StateCoordinator extends BaseStateCoordinator{
             state.waitGroups[a]=ga.concat(idsB);
             state.waitGroups[b]=gb.concat(idsA);
           }
+        }else if(kind==='cross'){
+          // 코트 하나와 대기조 하나를 통째로 맞바꾼다 (a=코트번호 1~4, b=대기조 인덱스 0~4).
+          // 코트끼리/대기끼리만 되던 전체 교환을 코트<->대기 조합으로 확장한 것.
+          if(action!=='mdSwapLocations')throw new Error('invalid_location_kind');
+          if(![1,2,3,4].includes(a))throw new Error('invalid_court');
+          if(b<0||b>4)throw new Error('invalid_wait_group');
+          const ck=String(a);
+          const courtPlayers=(state.courts[ck]||[]).map(String);
+          const waitPlayers=(state.waitGroups[b]||[]).map(String);
+          state.courts[ck]=waitPlayers;
+          state.waitGroups[b]=courtPlayers;
+          // 구성원이 바뀌었으므로 새 경기 시작으로 취급: 대기조 출신이 들어오면 타이머를 새로 시작하고,
+          // 코트가 비게 되면(대기조가 비어 있던 경우) 타이머를 지운다.
+          state.courtStartedAt[ck]=waitPlayers.length?new Date().toISOString():'';
+          // 대기조에서 코트로 새로 들어온 인원은 다른 코트 진입 경로와 동일하게 게임횟수를 올린다.
+          if(waitPlayers.length){
+            const entering=new Set(waitPlayers);
+            state.members=(state.members||[]).map(m=>entering.has(String(m&&m.id))?{...m,games:Math.max(0,(Number(m.games)||0)+1)}:m);
+          }
         }else throw new Error('invalid_location_kind');
         const event={type:action==='mdSwapLocations'?'locations_swapped':'locations_adjusted',kind,a,b};
         return reply({ok:true,state:await writeCustom(this.env.DB,state,action,event,before,body.operationId),event});
@@ -170,12 +189,14 @@ async function handleCompat(request,env,body){
   if(name==='removeFromCourt'||name==='removeFromWaitGroup')return adminAction(request,env,'setMemberStatus',{memberIds:[String(a[2]||'')],status:'active'});
   if(name==='swapCourts')return doCustom(request,env,'mdSwapLocations',{kind:'court',a:Number(a[1]),b:Number(a[2])});
   if(name==='swapWaitGroups')return doCustom(request,env,'mdSwapLocations',{kind:'wait',a:Number(a[1]),b:Number(a[2])});
+  // 코트 하나 <-> 대기조 하나 전체 교환 (a=코트번호 1~4, b=대기조 인덱스 0~4).
+  if(name==='swapCourtAndWaitGroup')return doCustom(request,env,'mdSwapLocations',{kind:'cross',a:Number(a[1]),b:Number(a[2])});
   if(name==='adjustCourtMembers')return doCustom(request,env,'mdAdjustLocations',{kind:'court',a:Number(a[1]),b:Number(a[2]),idsA:a[3]||[],idsB:a[4]||[]});
   if(name==='adjustWaitGroupMembers')return doCustom(request,env,'mdAdjustLocations',{kind:'wait',a:Number(a[1]),b:Number(a[2]),idsA:a[3]||[],idsB:a[4]||[]});
   return null;
 }
 
-const OWN_COMPAT=new Set(['mdAutoAssignTargets','autoFillCourt','autoFillWaitGroup','setBundle','clearBundle','moveOrSwapMember','assignWaitGroupToCourt','removeFromCourt','removeFromWaitGroup','swapCourts','swapWaitGroups','adjustCourtMembers','adjustWaitGroupMembers']);
+const OWN_COMPAT=new Set(['mdAutoAssignTargets','autoFillCourt','autoFillWaitGroup','setBundle','clearBundle','moveOrSwapMember','assignWaitGroupToCourt','removeFromCourt','removeFromWaitGroup','swapCourts','swapWaitGroups','swapCourtAndWaitGroup','adjustCourtMembers','adjustWaitGroupMembers']);
 
 export default{
   async fetch(request,env){

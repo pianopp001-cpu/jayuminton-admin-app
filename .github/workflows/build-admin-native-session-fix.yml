@@ -54,6 +54,29 @@ jobs:
           unzip -p "$BASE" assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
 
+      - name: Apply the kok-check, cross-swap, long-press-message, and finish-court UI patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          HTML=app/src/main/assets/admin/index.html
+          python3 deployment/jayuminton/admin_court_wait_cross_swap_patch.py "$HTML"
+          python3 deployment/jayuminton/admin_kok_submission_check_patch.py "$HTML"
+          python3 deployment/jayuminton/admin_longpress_member_message_patch.py "$HTML"
+          python3 deployment/jayuminton/admin_finish_court_speed_patch.py "$HTML"
+
+          grep -F 'jmCourtWaitCrossSwapV1' "$HTML" >/dev/null
+          grep -F "'swapCourtAndWaitGroup'" "$HTML" >/dev/null
+          grep -F 'jmKokSubmitCheckV1' "$HTML" >/dev/null
+          grep -F 'id="kokSubmitRoster"' "$HTML" >/dev/null
+          grep -F 'id="kokSubmitTotal"' "$HTML" >/dev/null
+          grep -F "server('setMemberKokSubmitted'" "$HTML" >/dev/null
+          grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$HTML" >/dev/null
+          grep -F 'jmLongPressMemberMessageV1' "$HTML" >/dev/null
+          grep -F 'onclick="openMemberActionMessage()"' "$HTML" >/dev/null
+          grep -F 'jmFinishCourtBigButtonAndOptimisticV1' "$HTML" >/dev/null
+          grep -F 'function applyFinishCourtLocally(' "$HTML" >/dev/null
+          grep -F 'class="finish-court-button"' "$HTML" >/dev/null
+
       - name: Apply the session-persistence fix
         shell: bash
         run: |
@@ -298,6 +321,16 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_TRUST_EMPTY_V1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'window.__jmClearUnlimitedSelectedV1=function' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'window.__jmClearUnlimitedSelectedV1()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmCourtWaitCrossSwapV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "'swapCourtAndWaitGroup'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmKokSubmitCheckV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'id="kokSubmitRoster"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmLongPressMemberMessageV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'onclick="openMemberActionMessage()"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmFinishCourtBigButtonAndOptimisticV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'function applyFinishCourtLocally(' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'class="finish-court-button"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -305,8 +338,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.57-guaranteed-clear-fix-native.apk
-          printf 'status=success\nversion=208.57\nfeature=native-unified-fix+direct-closure-clear-after-assign+selectedIds-trusts-empty-persistent-set+assign-full-selection-fix+empty-slot-manual-assign-fix+member-replies-inbox+admin-delete-reply\nbase=v208.57-guaranteed-clear-fix+v208.56-trust-empty-selection-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20857-guaranteed-clear-fix.txt
-          git add releases/jayuminton-admin-v208.57-guaranteed-clear-fix-native.apk deployment/status/v20857-guaranteed-clear-fix.txt
-          git commit -m 'Publish admin v208.57: clear the real selection Set directly after a successful assign instead of relying on a DOM button-click proxy (native)' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.59-kok-swap-message-finish-native.apk
+          printf 'status=success\nversion=208.59\nfeature=kok-submission-check-panel+court-wait-whole-group-cross-swap+longpress-send-message+finish-court-big-button-optimistic\nbase=v208.57-guaranteed-clear-fix+v208.56-trust-empty-selection-fix+native-session-fix+dialog-chrome-fix\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20859-kok-swap-message-finish.txt
+          git add releases/jayuminton-admin-v208.59-kok-swap-message-finish-native.apk deployment/status/v20859-kok-swap-message-finish.txt
+          git commit -m 'Publish admin v208.59: add 콕제출체크 panel, court<->wait whole-group swap, long-press 메시지 보내기 button, and a bigger optimistic 경기종료 button (native)' || exit 0
           git push origin HEAD:main

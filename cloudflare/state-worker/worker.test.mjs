@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, setMemberKokSubmittedMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -143,5 +143,22 @@ function fixture() {
   assert.deepEqual(transitions.courtGroups['1'].map(m => m.id), ['3', '4', '5', '6']);
   assert.deepEqual(transitions.wait1.map(m => m.id), ['7', '8', '9', '10']);
   assert.equal(transitions.courtGroups['2'].length, 0);
+}
+{
+  const checked = setMemberKokSubmittedMutation(fixture(), ['1', '2'], true);
+  assert.equal(checked.state.members.find(m => m.id === '1').kokSubmitted, true);
+  assert.equal(checked.state.members.find(m => m.id === '2').kokSubmitted, true);
+  assert.equal(checked.state.members.find(m => m.id === '3').kokSubmitted, undefined);
+  assert.equal(checked.event.type, 'kok_submitted_changed');
+  const unchecked = setMemberKokSubmittedMutation(checked.state, ['1'], false);
+  assert.equal(unchecked.state.members.find(m => m.id === '1').kokSubmitted, false);
+  assert.equal(unchecked.state.members.find(m => m.id === '2').kokSubmitted, true);
+  assert.throws(() => setMemberKokSubmittedMutation(fixture(), [], true), /members_required/);
+  // upsertMemberMutation (used by the member-edit form) must not silently wipe the kok flag.
+  const edited = upsertMemberMutation(checked.state, { id: '1', name: '회원1', gender: 'male' });
+  assert.equal(edited.state.members.find(m => m.id === '1').kokSubmitted, true);
+  // adminState/publicState must not strip the flag from what the UI receives.
+  assert.equal(adminState(checked.state).members.find(m => m.id === '1').kokSubmitted, true);
+  assert.equal(publicState(checked.state, '1').members.find(m => m.id === '1').kokSubmitted, true);
 }
 console.log('STATE_WORKER_CORE_TESTS_OK');

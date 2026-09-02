@@ -21,11 +21,19 @@ assert.deepEqual(normalizeMemberMemoArgs(['member-7','공개 메모']), [null,'m
 assert.deepEqual(normalizeMemberMemoArgs([null,'member-7','공개 메모']), [null,'member-7','공개 메모'], 'three-slot member memo call must stay stable');
 assert.ok(finalEntry.includes("String(body.name||'')==='updateMyProfile'"), 'member memo backend normalization route missing');
 
-for (const name of ['assignWaitGroupToCourt','autoFillCourt','autoFillWaitGroup','moveOrSwapMember','swapCourts','swapWaitGroups','removeFromCourt','removeFromWaitGroup','adjustCourtMembers','adjustWaitGroupMembers']) {
+for (const name of ['assignWaitGroupToCourt','autoFillCourt','autoFillWaitGroup','moveOrSwapMember','swapCourts','swapWaitGroups','swapCourtAndWaitGroup','removeFromCourt','removeFromWaitGroup','adjustCourtMembers','adjustWaitGroupMembers']) {
   assert.ok(compatEntry.includes(name), `missing admin compat RPC: ${name}`);
 }
 assert.ok(compatEntry.includes('liveIdsInGroup(sourceA,body.idsA)'), 'court stale-selection guard missing');
 assert.ok(compatEntry.includes('liveIdsInGroup(sourceB,body.idsB)'), 'second-source stale-selection guard missing');
+// Court<->wait whole-group swap (clicking a court header then a wait-group header, or vice
+// versa) used to be blocked with "코트끼리만/대기조끼리만 전체 교환할 수 있습니다." -- it must
+// now be handled as its own kind, restricted to the full-swap action only (not partial adjust).
+assert.ok(compatEntry.includes("kind==='cross'"), 'court<->wait whole-group swap kind missing');
+assert.ok(compatEntry.includes("if(action!=='mdSwapLocations')throw new Error('invalid_location_kind')"), 'cross swap must stay restricted to full swaps, not partial member adjust');
+assert.ok(compatEntry.includes("if(![1,2,3,4].includes(a))throw new Error('invalid_court')") || compatEntry.match(/kind==='cross'[\s\S]{0,400}invalid_court/), 'cross swap must validate the court index');
+assert.ok(compatEntry.match(/kind==='cross'[\s\S]{0,400}invalid_wait_group/), 'cross swap must validate the wait-group index');
+assert.ok(compatEntry.match(/kind==='cross'[\s\S]{0,1200}games:Math\.max\(0,\(Number\(m\.games\)\|\|0\)\+1\)/), 'members entering a court from a wait group via cross swap must gain a game credit like every other court-entry path');
 assert.ok(mdEntry.includes('pair_stats'), 'D1 pair statistics missing');
 assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS pair_stats'), 'pair_stats missing from persistent schema');
 assert.ok(mdEntry.includes("body.action === 'autoAssign'"), 'MD autoAssign entry missing');

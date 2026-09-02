@@ -319,6 +319,16 @@ export function adjustGamesMutation(input, memberIds, delta, reset = false) {
   return { state, event: { type: 'games_adjusted', memberIds: ids, delta: reset ? 'reset' : Number(delta) } };
 }
 
+// 콕(셔틀콕) 제출 체크: 남자 2개·여자 1개 기준으로 관리자가 명단에서 제출 여부를 체크한다.
+// 코트/대기 이동과 무관한 단순 멤버 플래그이므로 games와 동일한 방식으로 D1 state_json에 저장한다.
+export function setMemberKokSubmittedMutation(input, memberIds, submitted) {
+  const state = normalizeState(input); const ids = uniqueIds(memberIds, 200); const wanted = new Set(ids);
+  if (!ids.length) throw new Error('members_required');
+  const flag = Boolean(submitted);
+  state.members = state.members.map(m => wanted.has(String(m.id)) ? { ...m, kokSubmitted: flag } : m);
+  return { state, event: { type: 'kok_submitted_changed', memberIds: ids, submitted: flag } };
+}
+
 export function requestSwapMutation(input, requesterId, targetId, nowMs = Date.now()) {
   const state = normalizeState(input); const requester = String(requesterId); const target = String(targetId);
   if (requester === target || !locationOf(state, requester) || !locationOf(state, target)) throw new Error('invalid_swap_request');
@@ -523,6 +533,7 @@ export class StateCoordinator {
       else if (action === 'sendMemberMessage') result = sendMemberMessageMutation(current, body.memberIds, body.message);
       else if (action === 'deleteMemberReply') result = deleteMemberReplyMutation(current, body.messageId, body.replyId);
       else if (action === 'adjustGames') result = adjustGamesMutation(current, body.memberIds, body.delta, body.reset);
+      else if (action === 'setKokSubmitted') result = setMemberKokSubmittedMutation(current, body.memberIds, body.submitted);
       else if (action === 'requestSwap') result = requestSwapMutation(current, body.requesterId, body.targetId);
       else if (action === 'respondSwap') result = respondSwapMutation(current, body.requestId, body.responderId, body.accept);
       else if (action === 'cancelSwap') result = cancelSwapMutation(current, body.requesterId);
@@ -614,7 +625,7 @@ export async function legacyRpc(request, env, name, args) {
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
-  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMemberReply','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword']);
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMemberReply','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword','setMemberKokSubmitted']);
   if (adminNames.has(name)) {
     await verifyAdminSession(bearerRequest(request, token), env, state);
     if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
@@ -652,6 +663,7 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'adjustMemberGames') { action = 'adjustGames'; body.memberIds = [values[1]]; body.delta = values[2]; }
     else if (name === 'decreaseSelectedGameCounts') { action = 'adjustGames'; body.memberIds = values[1]; body.delta = -1; }
     else if (name === 'resetSelectedGameCounts') { action = 'adjustGames'; body.memberIds = values[1]; body.reset = true; }
+    else if (name === 'setMemberKokSubmitted') { action = 'setKokSubmitted'; body.memberIds = [values[1]]; body.submitted = Boolean(values[2]); }
     else if (name === 'resetAllOperationData') action = 'resetAll';
     else if (name === 'createManualBackup') action = 'backup';
     else if (name === 'restoreManualBackup') action = 'restoreBackup';
@@ -755,7 +767,7 @@ export default {
     if (url.pathname === '/api/admin/rpc' && request.method === 'POST') {
       try {
         const state = await readState(env.DB); await verifyAdminSession(request, env, state); const body = await request.json();
-        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','adjustGames','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
+        const allowed = new Set(['finishCourt','moveMembers','swapMembers','autoAssign','upsertMember','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','adjustGames','setKokSubmitted','setSettings','deleteMembers','resetAll','backup','restoreBackup','undoLast','cancelSwap']);
         if (!allowed.has(String(body.action || ''))) return reply({ ok: false, error: 'unsupported_admin_action' }, 400);
         return coordinatorAsInternal(request, env, String(body.action), body);
       } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 401); }
