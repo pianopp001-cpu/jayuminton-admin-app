@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""1) Relabel + enlarge the per-court 경기종료(finish game) button: add a
-"N번코트 경기종료" line above it and make the button itself much bigger/easier to tap.
+"""1) Relabel + enlarge the per-court 경기종료(finish game) button: instead of a separate
+"N번코트 경기종료" line stacked above a button that just says "경기 종료" (redundant --
+"경기종료" appeared twice), fold the court number directly into the button's own label
+("1코트 종료", "3코트 종료", ...) and make the button itself much bigger/easier to tap.
 2) Make finishCourt() apply its (fully deterministic) state change to the court/wait
 groups optimistically, the same way manual assign/move/swap already do, instead of
 waiting for the full server round trip before the court visually clears.
@@ -13,13 +15,19 @@ import sys
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
 
-MARKER = 'jmFinishCourtBigButtonAndOptimisticV1'
+MARKER = 'jmFinishCourtBigButtonAndOptimisticV2'
 if MARKER in html:
     print('ADMIN_FINISH_COURT_SPEED_ALREADY_OK')
     raise SystemExit(0)
 
-# 1) Court card buttons: split "선택 인원 넣기" and "경기 종료" into their own rows,
-# with a "N번코트 경기종료" label above the (now much bigger) finish button.
+OLD_MARKER = 'jmFinishCourtBigButtonAndOptimisticV1'
+if OLD_MARKER in html:
+    raise SystemExit('old jmFinishCourtBigButtonAndOptimisticV1 marker present -- base HTML already has the V1 button, refusing to double-patch')
+
+# 1) Court card buttons: split "선택 인원 넣기" and "경기 종료" into their own rows, and
+# fold the court number straight into the (now much bigger) finish button's own text --
+# "1코트 종료" instead of a separate "1번코트 경기종료" label sitting above a button that
+# repeats "경기 종료" again.
 OLD_BUTTONS = (
     "const buttons =\n"
     "          IS_ADMIN\n"
@@ -53,13 +61,11 @@ NEW_BUTTONS = (
     "              '</button>' +\n"
     "              '</div>' +\n"
     "              '<div class=\"finish-court-block\">' +\n"
-    "              '<div class=\"finish-court-label\">' +\n"
-    "              courtNo +\n"
-    "              '번코트 경기종료</div>' +\n"
     "              '<button class=\"finish-court-button\" onclick=\"finishCourt(' +\n"
     "              courtNo +\n"
     "              ')\">' +\n"
-    "              '경기 종료' +\n"
+    "              courtNo +\n"
+    "              '코트 종료' +\n"
     "              '</button>' +\n"
     "              '</div>'\n"
     "            )\n"
@@ -69,15 +75,13 @@ if html.count(OLD_BUTTONS) != 1:
     raise SystemExit(f'expected exactly one court buttons match, found {html.count(OLD_BUTTONS)}')
 html = html.replace(OLD_BUTTONS, NEW_BUTTONS, 1)
 
-# 2) CSS for the label + big button, injected before </head>.
+# 2) CSS for the big button, injected before </head>.
 STYLE = (
     '\n<style id="jmFinishCourtBigButtonStyle">\n'
     '/* ' + MARKER + ' */\n'
     '.finish-court-block{margin-top:8px}\n'
-    '.finish-court-label{width:100%;text-align:center;font-size:13px;font-weight:800;'
-    'color:#334155;margin-bottom:6px}\n'
     '.finish-court-button{display:block!important;width:100%!important;min-height:56px!important;'
-    'font-size:17px!important;font-weight:900!important;border-radius:12px!important;'
+    'font-size:18px!important;font-weight:900!important;border-radius:12px!important;'
     'padding:10px 12px!important}\n'
     '</style>\n'
 )

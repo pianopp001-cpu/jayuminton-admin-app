@@ -2,6 +2,8 @@
 """Rename the "제외인원관리" label inside the "멤버등록·비밀번호·게임횟수·제외인원 관리"
 collapsible menu to "콕제출체크", and add a per-member 콕(셔틀콕) submission checklist
 inside that same panel: 남자 2개 · 여자 1개 기준으로 제출 인원수/콕 개수를 집계한다.
+전체/남자/여자 탭으로 필터링할 수 있고, 각 탭 안에서 가나다순 정렬된다. 이름이 잘리지
+않도록 전용 세로 목록 레이아웃을 쓴다 (기존 .roster 그리드는 좁은 칸에 이름이 잘림).
 
 Operates on the fully-built admin index.html (same file build-admin-native-session-fix.yml
 extracts from the latest release APK)."""
@@ -12,10 +14,14 @@ import sys
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
 
-MARKER = 'jmKokSubmitCheckV1'
+MARKER = 'jmKokSubmitCheckV2'
 if MARKER in html:
     print('ADMIN_KOK_SUBMIT_CHECK_ALREADY_OK')
     raise SystemExit(0)
+
+OLD_MARKER = 'jmKokSubmitCheckV1'
+if OLD_MARKER in html:
+    raise SystemExit('old jmKokSubmitCheckV1 marker present -- base HTML already has the V1 panel, refusing to double-patch')
 
 # 1) Collapsible summary label: "...게임횟수·제외인원 관리" -> "...게임횟수·콕제출체크"
 OLD_SUMMARY = '멤버등록·비밀번호·게임횟수·제외인원 관리'
@@ -26,7 +32,7 @@ html = html.replace(OLD_SUMMARY, NEW_SUMMARY, 1)
 
 # 2) New panel, inserted right after the existing 게임횟수 카운트 조정 panel (same
 # collapsible <details class="admin-setup-details">), listing every registered member
-# with a checkbox for 콕 제출 여부.
+# with a checkbox for 콕 제출 여부, with 전체/남자/여자 filter tabs.
 GAME_COUNT_PANEL = (
     '<div class="card admin-game-count-panel" style="box-shadow:none;margin-top:12px">\n'
     '      <h2>게임횟수 카운트 조정</h2>\n'
@@ -49,7 +55,12 @@ KOK_PANEL = (
     '      <div class="toolbar section" style="margin-top:8px">\n'
     '        <span id="kokSubmitTotal" class="meta admin-member-counts">제출 0명 · 콕 0개</span>\n'
     '      </div>\n'
-    '      <div id="kokSubmitRoster" class="roster"></div>\n'
+    '      <div class="toolbar section jm-kok-tabs" style="margin-top:6px;gap:6px">\n'
+    '        <button type="button" class="jm-kok-tab active" data-jm-kok-tab="all" onclick="setKokSubmitTab(\'all\')">전체</button>\n'
+    '        <button type="button" class="jm-kok-tab" data-jm-kok-tab="male" onclick="setKokSubmitTab(\'male\')">남자</button>\n'
+    '        <button type="button" class="jm-kok-tab" data-jm-kok-tab="female" onclick="setKokSubmitTab(\'female\')">여자</button>\n'
+    '      </div>\n'
+    '      <div id="kokSubmitRoster" class="jm-kok-roster-list"></div>\n'
     '    </div>'
 )
 html = html.replace(GAME_COUNT_PANEL, GAME_COUNT_PANEL + KOK_PANEL, 1)
@@ -60,18 +71,51 @@ if html.count(RENDER_ANCHOR) != 1:
     raise SystemExit('renderState() renderExcluded() anchor not found or not unique')
 html = html.replace(RENDER_ANCHOR, RENDER_ANCHOR + '\n  renderKokSubmitPanel();', 1)
 
-# 4) The panel's own render/toggle functions + a small style tweak, injected before </body>.
+# 4) CSS: give the kok list its own full-width vertical layout instead of the .roster
+# multi-column grid (which squeezed checkbox+name+quantity into a narrow cell and
+# clipped names via the site-wide bare ".name{overflow:hidden;text-overflow:ellipsis;
+# white-space:nowrap}" rule), and style the filter tabs.
+KOK_STYLE = (
+    '\n<style id="jmKokSubmitCheckStyle">\n'
+    '/* ' + MARKER + ' */\n'
+    '#kokSubmitRoster.jm-kok-roster-list{display:flex;flex-direction:column;gap:6px;'
+    'margin-top:8px;max-height:none}\n'
+    '#kokSubmitRoster.jm-kok-roster-list .member{display:flex!important;align-items:center;'
+    'gap:8px;width:100%!important;max-width:none!important;box-sizing:border-box}\n'
+    '#kokSubmitRoster.jm-kok-roster-list .name{white-space:normal!important;'
+    'overflow:visible!important;text-overflow:clip!important;flex:1 1 auto;min-width:0;'
+    'word-break:keep-all}\n'
+    '.jm-kok-tabs .jm-kok-tab{opacity:.55}\n'
+    '.jm-kok-tabs .jm-kok-tab.active{opacity:1;font-weight:900;text-decoration:underline;'
+    'text-underline-offset:3px}\n'
+    '</style>\n'
+)
+if html.count('</head>') != 1:
+    raise SystemExit('</head> anchor not found or not unique')
+html = html.replace('</head>', KOK_STYLE + '</head>', 1)
+
+# 5) The panel's own render/toggle/tab functions, injected before </body>.
 KOK_SCRIPT = '''
 <script>
 /* %s */
+var KOK_SUBMIT_TAB = 'all';
+
+function setKokSubmitTab(tab) {
+  KOK_SUBMIT_TAB = (tab === 'male' || tab === 'female') ? tab : 'all';
+  document.querySelectorAll('.jm-kok-tab').forEach(function(button) {
+    button.classList.toggle('active', button.getAttribute('data-jm-kok-tab') === KOK_SUBMIT_TAB);
+  });
+  renderKokSubmitPanel();
+}
+
 function renderKokSubmitPanel() {
   var container = document.getElementById('kokSubmitRoster');
   var totalEl = document.getElementById('kokSubmitTotal');
   if (!container && !totalEl) return;
-  var list = sortMembersByKoreanName((STATE.members || []).slice());
+  var all = sortMembersByKoreanName((STATE.members || []).slice());
   var submittedCount = 0;
   var kokTotal = 0;
-  list.forEach(function(member) {
+  all.forEach(function(member) {
     if (member.kokSubmitted) {
       submittedCount += 1;
       kokTotal += member.gender === 'female' ? 1 : 2;
@@ -81,6 +125,9 @@ function renderKokSubmitPanel() {
     totalEl.textContent = '제출 ' + submittedCount + '명 · 콕 ' + kokTotal + '개';
   }
   if (container) {
+    var list = KOK_SUBMIT_TAB === 'all'
+      ? all
+      : all.filter(function(member) { return genderClass(member) === KOK_SUBMIT_TAB; });
     container.innerHTML = list.length
       ? list.map(function(member) {
           var checked = member.kokSubmitted ? ' checked' : '';
@@ -93,7 +140,7 @@ function renderKokSubmitPanel() {
             '<span class="meta">' + qtyLabel + '</span>' +
             '</label>';
         }).join('')
-      : '<div class="sub">등록된 멤버가 없습니다.</div>';
+      : '<div class="sub">' + (KOK_SUBMIT_TAB === 'all' ? '등록된 멤버가 없습니다.' : '해당하는 멤버가 없습니다.') + '</div>';
   }
 }
 
@@ -118,7 +165,7 @@ if html.count('</body>') != 1:
     raise SystemExit('</body> anchor not found or not unique')
 html = html.replace('</body>', KOK_SCRIPT + '</body>', 1)
 
-# 5) Route the new RPC through the same save-lock overlay as every other member mutation.
+# 6) Route the new RPC through the same save-lock overlay as every other member mutation.
 mutations_match = re.search(r"var MUTATIONS=new Set\(\[(?P<items>.*?)\]\);", html)
 if not mutations_match:
     raise SystemExit('MUTATIONS set anchor not found')
@@ -130,6 +177,10 @@ if MARKER not in html:
     raise SystemExit('marker missing after patch (should be unreachable)')
 if html.count('id="kokSubmitRoster"') != 1:
     raise SystemExit('kok submit roster must exist exactly once')
+if html.count('function setKokSubmitTab(') != 1:
+    raise SystemExit('setKokSubmitTab must exist exactly once')
+if html.count('jm-kok-tab') < 3:
+    raise SystemExit('expected 3 filter tab buttons (all/male/female)')
 
 path.write_text(html, encoding='utf-8')
 print('ADMIN_KOK_SUBMIT_CHECK_OK')
