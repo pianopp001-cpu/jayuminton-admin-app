@@ -66,26 +66,23 @@ jobs:
 
           grep -F 'jmCourtWaitCrossSwapV1' "$HTML" >/dev/null
           grep -F "'swapCourtAndWaitGroup'" "$HTML" >/dev/null
-          grep -F 'jmKokSubmitCheckV3' "$HTML" >/dev/null
+          grep -F 'jmKokSubmitCheckV4' "$HTML" >/dev/null
           grep -F 'id="kokSubmitRoster"' "$HTML" >/dev/null
           grep -F 'id="kokSubmitTotal"' "$HTML" >/dev/null
-          grep -F "server('setMemberKokSubmitted'" "$HTML" >/dev/null
           grep -F "server('setMemberKokInactive'" "$HTML" >/dev/null
           grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$HTML" >/dev/null
           grep -F 'function setKokSubmitTab(' "$HTML" >/dev/null
           grep -F 'jm-kok-tab' "$HTML" >/dev/null
           grep -F 'jm-kok-roster-list' "$HTML" >/dev/null
           grep -F 'function completeKokMember(' "$HTML" >/dev/null
-          grep -F 'function kokBulkDeactivate(' "$HTML" >/dev/null
-          grep -F 'function kokBulkReactivate(' "$HTML" >/dev/null
-          grep -F 'jm-kok-bulk' "$HTML" >/dev/null
-          grep -F 'id="kokSubmitPickedCount"' "$HTML" >/dev/null
+          grep -F 'text-decoration:line-through' "$HTML" >/dev/null
           grep -F 'jmLongPressMemberMessageV1' "$HTML" >/dev/null
           grep -F 'onclick="openMemberActionMessage()"' "$HTML" >/dev/null
-          grep -F 'jmFinishCourtBigButtonAndOptimisticV2' "$HTML" >/dev/null
+          grep -F 'jmFinishCourtBigButtonAndOptimisticV3' "$HTML" >/dev/null
           grep -F 'function applyFinishCourtLocally(' "$HTML" >/dev/null
           grep -F 'class="finish-court-button"' "$HTML" >/dev/null
           grep -F "'코트 종료'" "$HTML" >/dev/null
+          grep -F 'word-break:keep-all' "$HTML" >/dev/null
 
       - name: Apply the session-persistence fix
         shell: bash
@@ -333,7 +330,7 @@ jobs:
           grep -F 'window.__jmClearUnlimitedSelectedV1()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmCourtWaitCrossSwapV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "'swapCourtAndWaitGroup'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'jmKokSubmitCheckV3' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmKokSubmitCheckV4' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="kokSubmitRoster"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "server('setMemberKokInactive'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -341,16 +338,14 @@ jobs:
           grep -F 'jm-kok-tab' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jm-kok-roster-list' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function completeKokMember(' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'function kokBulkDeactivate(' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'function kokBulkReactivate(' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'jm-kok-bulk' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'id="kokSubmitPickedCount"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'text-decoration:line-through' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmLongPressMemberMessageV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'onclick="openMemberActionMessage()"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'jmFinishCourtBigButtonAndOptimisticV2' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmFinishCourtBigButtonAndOptimisticV3' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function applyFinishCourtLocally(' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'class="finish-court-button"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "'코트 종료'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'word-break:keep-all' "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -358,8 +353,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.61-kok-complete-toggle-native.apk
-          printf 'status=success\nversion=208.61\nfeature=kok-check-complete-toggle-and-bulk-activate-deactivate\nbase=v208.60-kok-tabs-finish-label-native\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20861-kok-complete-toggle.txt
-          git add releases/jayuminton-admin-v208.61-kok-complete-toggle-native.apk deployment/status/v20861-kok-complete-toggle.txt
-          git commit -m 'Publish admin v208.61: kok-check panel gets per-member 완료/복귀 toggle (new kokInactive flag, independent of court-assignment status) plus bulk 선택 콕제출+비활성화/재활성화 buttons' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.62-kok-complete-fix-native.apk
+          printf 'status=success\nversion=208.62\nfeature=kok-check-complete-toggle-simplified-and-finish-court-wrap-fix\nbase=v208.61-kok-complete-toggle-native\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20862-kok-complete-fix.txt
+          git add releases/jayuminton-admin-v208.62-kok-complete-fix-native.apk deployment/status/v20862-kok-complete-fix.txt
+          git commit -m 'Publish admin v208.62: drop the confusing kok-check select/bulk UI, keep a single per-row 완료/복귀 toggle (line-through + count on completion), and fix finish-court button text wrap/overflow' || exit 0
           git push origin HEAD:main

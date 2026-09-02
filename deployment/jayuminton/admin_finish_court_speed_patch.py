@@ -15,14 +15,14 @@ import sys
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
 
-MARKER = 'jmFinishCourtBigButtonAndOptimisticV2'
+MARKER = 'jmFinishCourtBigButtonAndOptimisticV3'
 if MARKER in html:
     print('ADMIN_FINISH_COURT_SPEED_ALREADY_OK')
     raise SystemExit(0)
 
-OLD_MARKER = 'jmFinishCourtBigButtonAndOptimisticV1'
-if OLD_MARKER in html:
-    raise SystemExit('old jmFinishCourtBigButtonAndOptimisticV1 marker present -- base HTML already has the V1 button, refusing to double-patch')
+for old in ('jmFinishCourtBigButtonAndOptimisticV1', 'jmFinishCourtBigButtonAndOptimisticV2'):
+    if old in html:
+        raise SystemExit(f'old {old} marker present -- base HTML already has an older button, refusing to double-patch')
 
 # 1) Court card buttons: split "선택 인원 넣기" and "경기 종료" into their own rows, and
 # fold the court number straight into the (now much bigger) finish button's own text --
@@ -81,9 +81,10 @@ STYLE = (
     '/* ' + MARKER + ' */\n'
     '.finish-court-block{margin-top:8px}\n'
     '.finish-court-button{display:block!important;width:100%!important;min-height:56px!important;'
-    'font-size:18px!important;font-weight:900!important;border-radius:12px!important;'
-    'padding:10px 12px!important;white-space:nowrap!important;overflow:hidden!important;'
-    'text-overflow:ellipsis!important;box-sizing:border-box!important;text-align:center!important}\n'
+    'font-size:16px!important;font-weight:900!important;border-radius:12px!important;'
+    'padding:8px 6px!important;white-space:normal!important;word-break:keep-all!important;'
+    'overflow-wrap:break-word!important;box-sizing:border-box!important;text-align:center!important;'
+    'line-height:1.25!important}\n'
     '</style>\n'
 )
 if html.count('</head>') != 1:
