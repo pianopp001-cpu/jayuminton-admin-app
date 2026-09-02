@@ -63,6 +63,7 @@ jobs:
           python3 deployment/jayuminton/admin_kok_submission_check_patch.py "$HTML"
           python3 deployment/jayuminton/admin_longpress_member_message_patch.py "$HTML"
           python3 deployment/jayuminton/admin_finish_court_speed_patch.py "$HTML"
+          python3 deployment/jayuminton/admin_toolbar_selection_leak_fix_patch.py "$HTML"
 
           grep -F 'jmCourtWaitCrossSwapV1' "$HTML" >/dev/null
           grep -F "'swapCourtAndWaitGroup'" "$HTML" >/dev/null
@@ -85,6 +86,9 @@ jobs:
           grep -F 'class="finish-court-button"' "$HTML" >/dev/null
           grep -F "'코트 종료'" "$HTML" >/dev/null
           grep -F 'word-break:keep-all' "$HTML" >/dev/null
+          grep -F 'jmToolbarSelectionLeakFixV1' "$HTML" >/dev/null
+          grep -F "if(__jmNestedCtl&&__jmNestedCtl!==c)c=null;" "$HTML" >/dev/null
+          grep -F "if(typeof window.__jmClearUnlimitedSelectedV1==='function')window.__jmClearUnlimitedSelectedV1();" "$HTML" >/dev/null
 
       - name: Apply the session-persistence fix
         shell: bash
@@ -350,6 +354,9 @@ jobs:
           grep -F 'class="finish-court-button"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "'코트 종료'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'word-break:keep-all' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmToolbarSelectionLeakFixV1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "if(__jmNestedCtl&&__jmNestedCtl!==c)c=null;" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "if(typeof window.__jmClearUnlimitedSelectedV1==='function')window.__jmClearUnlimitedSelectedV1();" "$RUNNER_TEMP/apk-admin.html" >/dev/null
 
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -357,8 +364,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.63-kok-row-selector-fix-native.apk
-          printf 'status=success\nversion=208.63\nfeature=kok-check-row-no-longer-hijacked-by-legacy-member-selector\nbase=v208.62-kok-complete-fix-native\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20863-kok-row-selector-fix.txt
-          git add releases/jayuminton-admin-v208.63-kok-row-selector-fix-native.apk deployment/status/v20863-kok-row-selector-fix.txt
-          git commit -m 'Publish admin v208.63: kok-check rows no longer match the legacy #adminApp member-selector click-capture (renamed member/data-member-id -> jm-kok-row/data-jm-kok-member-id), fixing 완료 button being hijacked into the unrelated bulk-select toolbar' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.64-toolbar-selection-leak-fix-native.apk
+          printf 'status=success\nversion=208.64\nfeature=toolbar-phantom-selection-fix\nbase=v208.63-kok-row-selector-fix-native\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20864-toolbar-selection-leak-fix.txt
+          git add releases/jayuminton-admin-v208.64-toolbar-selection-leak-fix-native.apk deployment/status/v20864-toolbar-selection-leak-fix.txt
+          git commit -m 'Publish admin v208.64: fix phantom member selection in the bulk toolbar (a nested action button like 대기 빼기 no longer gets silently swallowed into a selection toggle, and ordinary actions now clear the toolbar shadow selection too), which could pair an unselected member into 임시팀설정 and leave stuck selection checkmarks' || exit 0
           git push origin HEAD:main
