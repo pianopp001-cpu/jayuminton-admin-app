@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, setMemberKokSubmittedMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -160,5 +160,30 @@ function fixture() {
   // adminState/publicState must not strip the flag from what the UI receives.
   assert.equal(adminState(checked.state).members.find(m => m.id === '1').kokSubmitted, true);
   assert.equal(publicState(checked.state, '1').members.find(m => m.id === '1').kokSubmitted, true);
+}
+{
+  // kokInactive is a brand-new, independent flag: it must never touch member.status
+  // (court-assignment logic) and must not be confused with kokSubmitted.
+  const done = setMemberKokInactiveMutation(fixture(), ['1', '2'], true);
+  assert.equal(done.state.members.find(m => m.id === '1').kokInactive, true);
+  assert.equal(done.state.members.find(m => m.id === '2').kokInactive, true);
+  assert.equal(done.state.members.find(m => m.id === '3').kokInactive, undefined);
+  assert.equal(done.event.type, 'kok_inactive_changed');
+  // status must be completely untouched by this flag.
+  assert.equal(done.state.members.find(m => m.id === '1').status, fixture().members.find(m => m.id === '1').status);
+  const undone = setMemberKokInactiveMutation(done.state, ['1'], false);
+  assert.equal(undone.state.members.find(m => m.id === '1').kokInactive, false);
+  assert.equal(undone.state.members.find(m => m.id === '2').kokInactive, true);
+  assert.throws(() => setMemberKokInactiveMutation(fixture(), [], true), /members_required/);
+  // kokSubmitted and kokInactive are independent -- setting one must not affect the other.
+  const both = setMemberKokSubmittedMutation(setMemberKokInactiveMutation(fixture(), ['1'], true).state, ['1'], true);
+  assert.equal(both.state.members.find(m => m.id === '1').kokInactive, true);
+  assert.equal(both.state.members.find(m => m.id === '1').kokSubmitted, true);
+  // upsertMemberMutation must not silently wipe the kokInactive flag either.
+  const edited = upsertMemberMutation(done.state, { id: '1', name: '회원1', gender: 'male' });
+  assert.equal(edited.state.members.find(m => m.id === '1').kokInactive, true);
+  // adminState/publicState must not strip the flag from what the UI receives.
+  assert.equal(adminState(done.state).members.find(m => m.id === '1').kokInactive, true);
+  assert.equal(publicState(done.state, '1').members.find(m => m.id === '1').kokInactive, true);
 }
 console.log('STATE_WORKER_CORE_TESTS_OK');

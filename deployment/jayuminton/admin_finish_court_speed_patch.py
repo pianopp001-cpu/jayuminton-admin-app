@@ -82,7 +82,8 @@ STYLE = (
     '.finish-court-block{margin-top:8px}\n'
     '.finish-court-button{display:block!important;width:100%!important;min-height:56px!important;'
     'font-size:18px!important;font-weight:900!important;border-radius:12px!important;'
-    'padding:10px 12px!important}\n'
+    'padding:10px 12px!important;white-space:nowrap!important;overflow:hidden!important;'
+    'text-overflow:ellipsis!important;box-sizing:border-box!important;text-align:center!important}\n'
     '</style>\n'
 )
 if html.count('</head>') != 1:

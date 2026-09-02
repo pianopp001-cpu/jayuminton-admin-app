@@ -329,6 +329,18 @@ export function setMemberKokSubmittedMutation(input, memberIds, submitted) {
   return { state, event: { type: 'kok_submitted_changed', memberIds: ids, submitted: flag } };
 }
 
+// 콕제출체크 명단에서 "완료" 처리(개별/일괄)했는지 표시하는 전용 플래그.
+// member.status(코트배정/제외 등)와는 완전히 별개의 새 필드로, 코트배정·대기 이동
+// 로직에는 어떤 영향도 주지 않는다. 콕제출체크 화면에서만 명단 맨 아래로 가라앉히는
+// 용도로 쓰인다.
+export function setMemberKokInactiveMutation(input, memberIds, inactive) {
+  const state = normalizeState(input); const ids = uniqueIds(memberIds, 200); const wanted = new Set(ids);
+  if (!ids.length) throw new Error('members_required');
+  const flag = Boolean(inactive);
+  state.members = state.members.map(m => wanted.has(String(m.id)) ? { ...m, kokInactive: flag } : m);
+  return { state, event: { type: 'kok_inactive_changed', memberIds: ids, inactive: flag } };
+}
+
 export function requestSwapMutation(input, requesterId, targetId, nowMs = Date.now()) {
   const state = normalizeState(input); const requester = String(requesterId); const target = String(targetId);
   if (requester === target || !locationOf(state, requester) || !locationOf(state, target)) throw new Error('invalid_swap_request');
@@ -534,6 +546,7 @@ export class StateCoordinator {
       else if (action === 'deleteMemberReply') result = deleteMemberReplyMutation(current, body.messageId, body.replyId);
       else if (action === 'adjustGames') result = adjustGamesMutation(current, body.memberIds, body.delta, body.reset);
       else if (action === 'setKokSubmitted') result = setMemberKokSubmittedMutation(current, body.memberIds, body.submitted);
+      else if (action === 'setKokInactive') result = setMemberKokInactiveMutation(current, body.memberIds, body.inactive);
       else if (action === 'requestSwap') result = requestSwapMutation(current, body.requesterId, body.targetId);
       else if (action === 'respondSwap') result = respondSwapMutation(current, body.requestId, body.responderId, body.accept);
       else if (action === 'cancelSwap') result = cancelSwapMutation(current, body.requesterId);
@@ -625,7 +638,7 @@ export async function legacyRpc(request, env, name, args) {
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
-  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMemberReply','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword','setMemberKokSubmitted']);
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMemberReply','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword','setMemberKokSubmitted','setMemberKokInactive']);
   if (adminNames.has(name)) {
     await verifyAdminSession(bearerRequest(request, token), env, state);
     if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
@@ -664,6 +677,7 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'decreaseSelectedGameCounts') { action = 'adjustGames'; body.memberIds = values[1]; body.delta = -1; }
     else if (name === 'resetSelectedGameCounts') { action = 'adjustGames'; body.memberIds = values[1]; body.reset = true; }
     else if (name === 'setMemberKokSubmitted') { action = 'setKokSubmitted'; body.memberIds = [values[1]]; body.submitted = Boolean(values[2]); }
+    else if (name === 'setMemberKokInactive') { action = 'setKokInactive'; body.memberIds = Array.isArray(values[1]) ? values[1] : [values[1]]; body.inactive = Boolean(values[2]); }
     else if (name === 'resetAllOperationData') action = 'resetAll';
     else if (name === 'createManualBackup') action = 'backup';
     else if (name === 'restoreManualBackup') action = 'restoreBackup';
