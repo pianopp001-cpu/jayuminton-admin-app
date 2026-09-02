@@ -1,0 +1,6 @@
+status=success
+version=208.64
+feature=toolbar-phantom-selection-fix
+base=v208.63-kok-row-selector-fix-native
+run_id=33690018360
+sha256=e034a7599eacd258f2cddeb7424e9fa5c4809c3b3e61e94e19c7c471094d8ae2
