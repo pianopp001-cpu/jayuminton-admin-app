@@ -1,0 +1,6 @@
+status=success
+version=208.61
+feature=kok-check-complete-toggle-and-bulk-activate-deactivate
+base=v208.60-kok-tabs-finish-label-native
+run_id=33640156909
+sha256=a002bcaf58ae4419b7e4901f2389771e32fe2e2caf0873d66623b28300e19812
