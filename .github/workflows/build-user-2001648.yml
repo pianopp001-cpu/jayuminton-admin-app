@@ -17,6 +17,8 @@ on:
       - 'deployment/scripts/patch_user_native_versioncode_2001651_v1.py'
       - 'deployment/scripts/patch_user_native_admin_message_reply_action_v1.py'
       - 'deployment/scripts/patch_user_native_versioncode_2001652_v1.py'
+      - 'deployment/scripts/patch_user_native_pair_request_vibration_v1.py'
+      - 'deployment/scripts/patch_user_native_versioncode_2001653_v1.py'
   workflow_dispatch: {}
 
 permissions:
@@ -92,7 +94,9 @@ jobs:
           python3 deployment/scripts/patch_user_native_versioncode_2001651_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_admin_message_reply_action_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_versioncode_2001652_v1.py "$BUILD"
-          grep -F 'VERSION_CODE="2001652"' "$BUILD" >/dev/null
+          python3 deployment/scripts/patch_user_native_pair_request_vibration_v1.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_versioncode_2001653_v1.py "$BUILD"
+          grep -F 'VERSION_CODE="2001653"' "$BUILD" >/dev/null
           grep -F 'startAdminMessageVibration' "$BUILD" >/dev/null
           grep -F 'stopAdminMessageVibration' "$BUILD" >/dev/null
           grep -F '__JM_NATIVE_ADMIN_MSG_VIBRATION__' "$BUILD" >/dev/null
@@ -109,6 +113,8 @@ jobs:
           grep -F 'public static volatile boolean isAppInForeground = false;' "$BUILD" >/dev/null
           grep -F 'foreground_native_alert_suppressed' "$BUILD" >/dev/null
           grep -F '__JM_NATIVE_WAIT_COURT_ALERT_VIBRATION__' "$BUILD" >/dev/null
+          grep -F '__JM_NATIVE_PAIR_REQUEST_ALERT_VIBRATION__' "$BUILD" >/dev/null
+          grep -F "getElementById('jmPairIncomingAlert')" "$BUILD" >/dev/null
           bash "$BUILD"
           test -n "$PLAY_UPLOAD_KEYSTORE_B64"
           printf '%s' "$PLAY_UPLOAD_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/play-upload.jks"
@@ -135,6 +141,8 @@ jobs:
           grep -F 'admin_message' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F 'jayuminton_alert_volume' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           grep -F 'foreground_native_alert_suppressed' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
+          grep -F 'jmPairIncomingAlert' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
+          grep -F 'pair_request_' "$RUNNER_TEMP/aab-strings.txt" >/dev/null
           if ! grep -F 'assignment_is_admin_message' "$RUNNER_TEMP/aab-strings.txt" >/dev/null; then
             echo "DIAGNOSTIC: assignment_is_admin_message not found in extracted dex strings"
             wc -l "$RUNNER_TEMP/aab-strings.txt"
@@ -153,7 +161,7 @@ jobs:
           {
             echo 'status=success'
             echo 'version=1.6.42'
-            echo 'version_code=2001652'
+            echo 'version_code=2001653'
             echo 'admin_message_native_vibration=true'
             echo 'admin_message_confirm_stops_vibration=true'
             echo 'admin_message_push=true'
@@ -162,6 +170,7 @@ jobs:
             echo 'foreground_alert_uses_native_vibration_bridge=true'
             echo 'admin_message_alert_title_fixed=true'
             echo 'admin_message_reply_button=true'
+            echo 'pair_request_alert_uses_native_vibration_bridge=true'
             echo 'vibration=3x8'
             echo "run_id=$GITHUB_RUN_ID"
             echo "sha256=$APK_SHA"
@@ -170,7 +179,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
-          git commit -m 'Publish user Play hotfix v1.6.42 code 2001652: fix background admin-message alert showing wrong wait1 title, add a visible 답장 button that stops vibration and opens the app to the existing reply form' || exit 0
+          git commit -m 'Publish user Play hotfix v1.6.42 code 2001653: bridge the incoming 짝요청 (pair-play request) web alert to native vibration, same as admin messages and wait/court alerts' || exit 0
           # The native build intentionally rewrites tracked Android source files.
           # They are build-only changes and must not block rebasing the artifact commit.
           git reset --hard HEAD
