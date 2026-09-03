@@ -41,7 +41,46 @@ text = path.read_text(encoding="utf-8")
 
 MARKER = "JAYUMINTON_MEMBER_PAIR_PLAY_V1"
 
-if MARKER not in text:
+# This deploy pipeline works by re-fetching the LIVE page and re-running every
+# patch script against it every time (see deploy-unified-member-web-production.yml's
+# "curl $LIVE_USER_URL -> patch -> firebase deploy" step) -- so a plain
+# `if MARKER not in text` guard is only safe as long as this script's injected
+# content never changes. It DID change here (confirm()/jmPrettyConfirm() ->
+# the #jmPairIncomingAlert DOM alert, added so native vibration can observe
+# it -- see patch_user_native_pair_request_vibration_v1.py), and the live
+# page already had the OLD content baked in with the OLD marker from a prior
+# deploy. Guarding on MARKER alone would have made this whole block a no-op
+# forever: the marker is already present, so the new script content would
+# never actually reach production. (This is exactly what happened once,
+# silently, before this comment was added -- the live page kept showing the
+# blocking confirm() dialog after this file was updated and redeployed.)
+# NEW_MARKER distinguishes "the current version is already live" from "some
+# version is already live", so an updated script body always forces a
+# real re-application: the stale block is stripped and rebuilt from scratch.
+NEW_MARKER = "JAYUMINTON_MEMBER_PAIR_PLAY_ALERT_V2"
+
+MEMBER_SCRIPT_OPEN = '<script id="jayuminton-member-pair-play-v1">'
+ADMIN_SCRIPT_OPEN = '<script id="jayuminton-admin-pair-notice-v1">'
+
+
+def _strip_script_block(source, open_tag):
+    start = source.find(open_tag)
+    if start < 0:
+        return source
+    end = source.find('</script>', start)
+    if end < 0:
+        raise SystemExit('unterminated pre-existing script block for ' + open_tag)
+    end += len('</script>')
+    return source[:start] + source[end:]
+
+
+if NEW_MARKER not in text:
+    # Remove any stale member/admin pair-play script blocks injected by an
+    # older version of this same patch before rebuilding them fresh below.
+    # No-op (find() returns -1) on a page that never had this feature at all.
+    text = _strip_script_block(text, MEMBER_SCRIPT_OPEN)
+    text = _strip_script_block(text, ADMIN_SCRIPT_OPEN)
+
     # This must load AFTER window.handleAnywhereMemberTap is defined (by the
     # JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1 script block) and after every later
     # patch that further edits that same function's source in place
@@ -64,7 +103,7 @@ if MARKER not in text:
 
     member_addon = (
         '<script id="jayuminton-member-pair-play-v1">\n'
-        "/* " + MARKER + " */\n"
+        "/* " + MARKER + " " + NEW_MARKER + " */\n"
         "(function(){\n"
         "  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;\n"
         "  if(window.__JM_MEMBER_PAIR_PLAY_V1__)return;\n"
@@ -350,7 +389,7 @@ if MARKER not in text:
         raise SystemExit('body close not found for pair-play script injection')
     text = text[:close] + member_addon + admin_addon + text[close:]
 
-if MARKER not in text:
+if NEW_MARKER not in text:
     raise SystemExit("pair-play patch did not apply")
 
 path.write_text(text, encoding="utf-8")
