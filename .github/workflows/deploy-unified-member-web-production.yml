@@ -110,6 +110,7 @@ jobs:
           cp deployment/jayuminton/member-pwa-assets/icon-512.png "$PUBLIC/icon-512.png"
           cp deployment/jayuminton/member-pwa-assets/apple-touch-icon.png "$PUBLIC/apple-touch-icon.png"
           cp deployment/jayuminton/member-pwa-assets/install.html "$PUBLIC/install.html"
+          cp deployment/jayuminton/member-pwa-assets/game.html "$PUBLIC/game.html"
           cp deployment/jayuminton/member-pwa-assets/install-qr.png "$PUBLIC/install-qr.png"
           test -s "$PUBLIC/manifest.webmanifest"
           test -s "$PUBLIC/sw.js"
@@ -117,9 +118,12 @@ jobs:
           test -s "$PUBLIC/icon-512.png"
           test -s "$PUBLIC/apple-touch-icon.png"
           test -s "$PUBLIC/install.html"
+          test -s "$PUBLIC/game.html"
           test -s "$PUBLIC/install-qr.png"
           grep -F 'JAYUMINTON_INSTALL_LANDING_V1' "$PUBLIC/install.html" >/dev/null
           grep -F 'play.google.com/store/apps/details?id=com.jayuminton.user' "$PUBLIC/install.html" >/dev/null
+          grep -F '자유민턴 게임 현황 보기' "$PUBLIC/game.html" >/dev/null
+          ! grep -F 'install-qr.png' "$PUBLIC/game.html"
           grep -F 'https://jayuminton-push.web.app/' "$PUBLIC/install.html" >/dev/null
           python3 - "$PUBLIC/install.html" "$RUNNER_TEMP/install-inline.js" <<'PY'
           import re, sys
