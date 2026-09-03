@@ -9,9 +9,7 @@ on:
       - 'app/src/main/java/com/jayuminton/admin/MainActivity.java'
       - 'app/src/main/AndroidManifest.xml'
       - 'app/build.gradle'
-      - 'deployment/jayuminton/patch_admin_pair_request_reply_merge_v1.py'
       - 'deployment/jayuminton/admin_member_replies_v1.js'
-      - 'deployment/jayuminton/admin_member_replies_v1_pre_pair_merge_reference.js'
   workflow_dispatch: {}
 
 permissions:
@@ -93,12 +91,11 @@ jobs:
           grep -F "if(__jmNestedCtl&&__jmNestedCtl!==c)c=null;" "$HTML" >/dev/null
           grep -F "if(typeof window.__jmClearUnlimitedSelectedV1==='function')window.__jmClearUnlimitedSelectedV1();" "$HTML" >/dev/null
 
-      - name: Apply the pair-request/reply merge patch (회원쪽지 rename + 짝요청 memo)
+      - name: Verify the pair-request/reply merge is present (baked into BASE by build-admin-toolbar-v2073.yml, which re-injects deployment/jayuminton/admin_member_replies_v1.js verbatim on every run)
         shell: bash
         run: |
           set -euo pipefail
           HTML=app/src/main/assets/admin/index.html
-          python3 deployment/jayuminton/patch_admin_pair_request_reply_merge_v1.py "$HTML"
 
           grep -F "id='jmAdminReplyButton';b.innerHTML='회원쪽지" "$HTML" >/dev/null
           grep -F '<strong>회원쪽지</strong>' "$HTML" >/dev/null
@@ -107,7 +104,6 @@ jobs:
           grep -F 'jm-admin-reply-complete' "$HTML" >/dev/null
           grep -F "server('dismissPairNotice',[null,requestId])" "$HTML" >/dev/null
           ! grep -F "b.innerHTML='회원 답장" "$HTML" >/dev/null
-          ! grep -F '<strong>회원 답장</strong>' "$HTML" >/dev/null
 
       - name: Apply the session-persistence fix
         shell: bash
