@@ -52,8 +52,10 @@ jobs:
           test "${#INTERNAL_KEY}" -ge 32
           node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/temp-pairs.test.mjs
+          node cloudflare/state-worker/worker.test.mjs
           grep -F 'validMemberIds' cloudflare/state-worker/worker.js >/dev/null
           grep -F '!validMemberIds.has(id) || occupied.has(id)' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_PAIR_PLAY_V1' cloudflare/state-worker/worker.js >/dev/null
       - name: Resolve existing D1 and prepare config
         shell: bash
         run: |
