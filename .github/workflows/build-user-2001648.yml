@@ -19,6 +19,7 @@ on:
       - 'deployment/scripts/patch_user_native_versioncode_2001652_v1.py'
       - 'deployment/scripts/patch_user_native_pair_request_vibration_v1.py'
       - 'deployment/scripts/patch_user_native_versioncode_2001653_v1.py'
+      - 'deployment/scripts/patch_user_native_versioncode_2001654_v1.py'
   workflow_dispatch: {}
 
 permissions:
@@ -96,7 +97,8 @@ jobs:
           python3 deployment/scripts/patch_user_native_versioncode_2001652_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_pair_request_vibration_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_versioncode_2001653_v1.py "$BUILD"
-          grep -F 'VERSION_CODE="2001653"' "$BUILD" >/dev/null
+          python3 deployment/scripts/patch_user_native_versioncode_2001654_v1.py "$BUILD"
+          grep -F 'VERSION_CODE="2001654"' "$BUILD" >/dev/null
           grep -F 'startAdminMessageVibration' "$BUILD" >/dev/null
           grep -F 'stopAdminMessageVibration' "$BUILD" >/dev/null
           grep -F '__JM_NATIVE_ADMIN_MSG_VIBRATION__' "$BUILD" >/dev/null
@@ -115,6 +117,11 @@ jobs:
           grep -F '__JM_NATIVE_WAIT_COURT_ALERT_VIBRATION__' "$BUILD" >/dev/null
           grep -F '__JM_NATIVE_PAIR_REQUEST_ALERT_VIBRATION__' "$BUILD" >/dev/null
           grep -F "getElementById('jmPairIncomingAlert')" "$BUILD" >/dev/null
+          grep -F 'if (MainActivity.isAppInForeground) {' "$BUILD" >/dev/null
+          if grep -qF '!adminMessage && MainActivity.isAppInForeground' "$BUILD"; then
+            echo 'stale admin-message foreground exclusion still present (duplicate popup regression)' >&2
+            exit 1
+          fi
           bash "$BUILD"
           test -n "$PLAY_UPLOAD_KEYSTORE_B64"
           printf '%s' "$PLAY_UPLOAD_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/play-upload.jks"
@@ -161,12 +168,13 @@ jobs:
           {
             echo 'status=success'
             echo 'version=1.6.42'
-            echo 'version_code=2001653'
+            echo 'version_code=2001654'
             echo 'admin_message_native_vibration=true'
             echo 'admin_message_confirm_stops_vibration=true'
             echo 'admin_message_push=true'
             echo 'alert_volume_restore=true'
             echo 'foreground_native_alert_suppressed=true'
+            echo 'foreground_admin_message_also_suppressed=true'
             echo 'foreground_alert_uses_native_vibration_bridge=true'
             echo 'admin_message_alert_title_fixed=true'
             echo 'admin_message_reply_button=true'
@@ -179,7 +187,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
-          git commit -m 'Publish user Play hotfix v1.6.42 code 2001653: bridge the incoming 짝요청 (pair-play request) web alert to native vibration, same as admin messages and wait/court alerts' || exit 0
+          git commit -m 'Publish user Play hotfix v1.6.42 code 2001654: admin direct messages now follow the same foreground-suppress gate as wait1_ready/court_assignment, so the native full-screen alert no longer duplicates the web reply-inbox popup while the app is open' || exit 0
           # The native build intentionally rewrites tracked Android source files.
           # They are build-only changes and must not block rebasing the artifact commit.
           git reset --hard HEAD

@@ -595,6 +595,275 @@ jobs:
           import sys
           path = Path(sys.argv[1])
           text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_OUTGOING_OUTCOME_NOTICE_V1'
+          if marker not in text:
+              # Neither the 자리 교환(swap) requester nor the 짝요청(pair play) requester
+              # ever learned what happened to their own outgoing request -- pollIncoming()
+              # (JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1 above) and patch_member_pair_play_v1.py's
+              # incoming poller only notify the *target*. memberGetAnywhereOutgoingSwap /
+              # memberGetPairPlayOutgoing already existed on the backend for exactly this
+              # but had no caller. Poll them from the requester's own side and show the
+              # outcome once, per the user's exact requested wording.
+              script = '''/* JAYUMINTON_MEMBER_OUTGOING_OUTCOME_NOTICE_V1 */
+          (function installMemberOutgoingOutcomeNoticeV1(){
+            if (typeof IS_ADMIN!=='undefined' && IS_ADMIN) return;
+            if (window.__JAYUMINTON_MEMBER_OUTGOING_OUTCOME_NOTICE_V1__) return;
+            window.__JAYUMINTON_MEMBER_OUTGOING_OUTCOME_NOTICE_V1__ = true;
+
+            function sessionArgs(){
+              try { return (typeof memberWaitSeatSessionArgs==='function') ? memberWaitSeatSessionArgs() : null; } catch(e){ return null; }
+            }
+            function findMember(id){
+              try { return (STATE.members||[]).find(function(m){ return m && String(m.id)===String(id); }) || null; } catch(e){ return null; }
+            }
+
+            var lastSwapKey='', SWAP_CHECKING=false;
+            async function pollOutgoingSwap(){
+              if((typeof IS_ADMIN!=='undefined'&&IS_ADMIN)||SWAP_CHECKING) return;
+              var a = sessionArgs(); if(!a) return;
+              SWAP_CHECKING=true;
+              try{
+                var req = await server('memberGetAnywhereOutgoingSwap',[a.token,String(a.member.id)]);
+                if(!req||!req.id||req.status==='pending') return;
+                var key = String(req.id)+':'+String(req.status);
+                if(key===lastSwapKey) return;
+                lastSwapKey=key;
+                var target = findMember(req.targetId);
+                var name = String(target&&target.name||'상대방');
+                if(req.status==='accepted') alert(name+'님이 자리바꿈을 수락했어요. 자리를 바꿉니다.');
+                else if(req.status==='rejected') alert(name+'님이 자리 교환 요청을 거절했어요.');
+              }catch(e){ try{console.warn(e);}catch(err){} } finally { SWAP_CHECKING=false; }
+            }
+
+            var lastPairKey='', PAIR_CHECKING=false;
+            async function pollOutgoingPair(){
+              if((typeof IS_ADMIN!=='undefined'&&IS_ADMIN)||PAIR_CHECKING) return;
+              var a = sessionArgs(); if(!a) return;
+              PAIR_CHECKING=true;
+              try{
+                var req = await server('memberGetPairPlayOutgoing',[a.token,String(a.member.id)]);
+                if(!req||!req.id||req.status==='pending') return;
+                var key = String(req.id)+':'+String(req.status);
+                if(key===lastPairKey) return;
+                lastPairKey=key;
+                var target = findMember(req.targetId);
+                var name = String(target&&target.name||'상대방');
+                if(req.status==='accepted_joined') alert(name+'님이 수락했어요. 5번대기조에 같이 들어갑니다.');
+                else if(req.status==='accepted_awaiting_seat') alert(name+'님이 수락했어요. 5번대기조가 가득 차서 관리자에게 전달했어요. 자리가 나는 대로 배정해 드릴게요.');
+                else if(req.status==='rejected') alert(name+'님이 같이 게임하기 요청을 거절했어요.');
+              }catch(e){ try{console.warn(e);}catch(err){} } finally { PAIR_CHECKING=false; }
+            }
+
+            setInterval(function(){ pollOutgoingSwap(); pollOutgoingPair(); }, 9000);
+          })();'''
+              close = text.lower().rfind('</body>')
+              if close < 0:
+                  raise SystemExit('body close not found for outgoing-outcome script injection')
+              text = text[:close] + '<script>\n' + script + '\n</script>\n' + text[close:]
+          if marker not in text:
+              raise SystemExit('outgoing-outcome script injection did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_OUTGOING_OUTCOME_NOTICE_V1' "$PUBLIC/index.html" >/dev/null
+
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_MESSAGE_INBOX_V1'
+          if marker not in text:
+              # "관리자가 메세지를 보냈으면 백그라운드에서도 답장하기 버튼이 있어야 하고.
+              # 앱실행중에 예쁜창 띄우며 진동할때도 답장하기 버튼이 있어야지. 왜 답장이라는
+              # 문구가 없어져 버린거야?" + "사용자 측에도 메세지 함 만들어줘. 거기에서 왔던
+              # 메세지를 다시 확인할 수 있고 관리자에게 답장하기 버튼을 통해 답장을 할 수
+              # 있어야하고 메세지 삭제 버튼 눌러 삭제도 가능해야해." -- MEMBER_MESSAGE_ADDON's
+              # #jmDirectMessageAlert (patch_member_user_requirements_v1.py) never had a reply
+              # button at all, and there was no way to see message history once dismissed. This
+              # adds a full inbox (floating button + unread badge + list with reply/delete, all
+              # wired to the new replyToMemberMessage/memberDeleteMessage RPCs) and injects a
+              # "답장하기" button onto the existing pretty popup via DOM, without touching that
+              # already-live block at all -- avoids re-triggering MEMBER_MESSAGE_MARKER's
+              # already-baked-in gate on the live page.
+              script = '''/* JAYUMINTON_MEMBER_MESSAGE_INBOX_V1 */
+          (function installMemberMessageInboxV1(){
+            if (typeof IS_ADMIN!=='undefined' && IS_ADMIN) return;
+            if (window.__JAYUMINTON_MEMBER_MESSAGE_INBOX_V1__) return;
+            window.__JAYUMINTON_MEMBER_MESSAGE_INBOX_V1__ = true;
+
+            function sessionArgs(){
+              try { return (typeof memberWaitSeatSessionArgs==='function') ? memberWaitSeatSessionArgs() : null; } catch(e){ return null; }
+            }
+            function state(){ try { return window.STATE||(typeof STATE!=='undefined'?STATE:null); } catch(e){ return null; } }
+            function myMessages(){ try { var s=state(); return (s&&Array.isArray(s.memberMessages))?s.memberMessages.slice().reverse():[]; } catch(e){ return []; } }
+            function esc(text){ return String(text==null?'':text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+            function fmtTime(ms){ try { var d=new Date(Number(ms)||Date.now()); return (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); } catch(e){ return ''; } }
+
+            function ensureModal(){
+              var modal = document.getElementById('jmMessageInboxModal');
+              if(modal) return modal;
+              modal = document.createElement('div');
+              modal.id='jmMessageInboxModal';
+              modal.className='hidden';
+              modal.style.cssText='position:fixed;z-index:2147483646;inset:0;display:flex;align-items:flex-end;justify-content:center;background:rgba(15,23,42,.58)';
+              modal.innerHTML =
+                '<div style="width:100%;max-width:480px;max-height:82vh;display:flex;flex-direction:column;background:#fff;border-radius:16px 16px 0 0;overflow:hidden;padding-bottom:env(safe-area-inset-bottom)">'
+                + '<div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f1f5f9">'
+                +   '<strong style="font-size:16px">관리자 메시지함</strong>'
+                +   '<button type="button" id="jmMessageInboxClose" style="border:0;background:transparent;font-size:22px;line-height:1;color:#94a3b8">\\u00d7</button>'
+                + '</div>'
+                + '<div id="jmMessageInboxList" style="overflow-y:auto;padding:10px 14px"></div>'
+                + '</div>';
+              document.body.appendChild(modal);
+              modal.addEventListener('click', function(e){ if(e.target===modal) closeModal(); });
+              document.getElementById('jmMessageInboxClose').addEventListener('click', closeModal);
+              return modal;
+            }
+            function closeModal(){ var m=document.getElementById('jmMessageInboxModal'); if(m) m.classList.add('hidden'); }
+            function itemHtml(item){
+              var replies=(Array.isArray(item.replies)?item.replies:[]).map(function(r){
+                return '<div style="margin:6px 0 0;padding:8px 10px;border-radius:9px;background:#eef2ff;font-size:13px;text-align:right">'+esc(r.text)+'</div>';
+              }).join('');
+              return (
+                '<div class="jm-inbox-item" data-message-id="'+esc(item.id)+'" style="margin-bottom:14px;padding:12px;border-radius:12px;background:#f8fafc">'
+                + '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px">'+fmtTime(item.createdAt)+'</div>'
+                + '<div style="font-size:15px;font-weight:700;white-space:pre-wrap;word-break:break-word">'+esc(item.text)+'</div>'
+                + replies
+                + '<textarea class="jm-inbox-reply-input" placeholder="답장 내용을 입력하세요" style="width:100%;box-sizing:border-box;margin-top:8px;min-height:52px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:13px"></textarea>'
+                + '<div style="display:flex;gap:6px;margin-top:6px">'
+                +   '<button type="button" class="jm-inbox-reply-send" style="flex:1;min-height:38px;border:0;border-radius:8px;background:#315efb;color:#fff;font-weight:800">답장 보내기</button>'
+                +   '<button type="button" class="jm-inbox-delete" style="min-height:38px;padding:0 12px;border:0;border-radius:8px;background:#fee2e2;color:#b91c1c;font-weight:800">삭제</button>'
+                + '</div>'
+                + '</div>'
+              );
+            }
+            function renderList(){
+              var list = document.getElementById('jmMessageInboxList'); if(!list) return;
+              var items = myMessages();
+              list.innerHTML = items.length ? items.map(itemHtml).join('') : '<div style="padding:24px 0;text-align:center;color:#94a3b8;font-size:14px">받은 메시지가 없어요.</div>';
+            }
+            async function sendReply(messageId, text, btn){
+              var a=sessionArgs(); if(!a) return;
+              var body=String(text||'').trim(); if(!body) return;
+              if(btn) btn.disabled=true;
+              try{
+                await server('memberReplyToMessage',[a.token,String(a.member.id),messageId,body]);
+                if(typeof refreshMemberState==='function') await refreshMemberState();
+                renderList();
+              }catch(e){ alert(String(e&&e.message||e||'답장 전송 실패')); }
+              finally{ if(btn) btn.disabled=false; }
+            }
+            async function deleteMessage(messageId, btn){
+              var a=sessionArgs(); if(!a) return;
+              if(btn) btn.disabled=true;
+              try{
+                await server('memberDeleteMessage',[a.token,String(a.member.id),messageId]);
+                if(typeof refreshMemberState==='function') await refreshMemberState();
+                renderList();
+              }catch(e){ alert(String(e&&e.message||e||'삭제 실패')); }
+              finally{ if(btn) btn.disabled=false; }
+            }
+            function openModal(focusMessageId){
+              ensureModal();
+              renderList();
+              var modal=document.getElementById('jmMessageInboxModal'); if(modal) modal.classList.remove('hidden');
+              if(focusMessageId){
+                setTimeout(function(){
+                  var el=document.querySelector('.jm-inbox-item[data-message-id="'+focusMessageId+'"] .jm-inbox-reply-input');
+                  if(el){ el.scrollIntoView({block:'center'}); el.focus(); }
+                },60);
+              }
+            }
+            window.jmOpenMessageInbox = openModal;
+
+            document.addEventListener('click', function(e){
+              var sendBtn = e.target.closest && e.target.closest('.jm-inbox-reply-send');
+              if(sendBtn){
+                var item = sendBtn.closest('.jm-inbox-item');
+                var mid = item && item.getAttribute('data-message-id');
+                var input = item && item.querySelector('.jm-inbox-reply-input');
+                if(mid && input) sendReply(mid, input.value, sendBtn);
+                return;
+              }
+              var delBtn = e.target.closest && e.target.closest('.jm-inbox-delete');
+              if(delBtn){
+                var item2 = delBtn.closest('.jm-inbox-item');
+                var mid2 = item2 && item2.getAttribute('data-message-id');
+                if(mid2 && confirm('이 메시지를 삭제할까요?')) deleteMessage(mid2, delBtn);
+                return;
+              }
+            }, true);
+
+            function ensureFab(){
+              var fab = document.getElementById('jmMessageInboxFab');
+              var a = sessionArgs();
+              if(!a){ if(fab) fab.remove(); var badge0=document.getElementById('jmMessageInboxBadge'); if(badge0) badge0.remove(); return; }
+              if(!fab){
+                fab = document.createElement('button');
+                fab.id='jmMessageInboxFab';
+                fab.type='button';
+                fab.textContent='\\ud83d\\udcac';
+                fab.style.cssText='position:fixed;z-index:2147483000;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);width:48px;height:48px;border-radius:50%;border:0;background:#315efb;color:#fff;font-size:20px;box-shadow:0 10px 25px rgba(49,94,251,.45)';
+                fab.addEventListener('click', function(){ openModal(); });
+                document.body.appendChild(fab);
+              }
+              var count = myMessages().length;
+              var badge = document.getElementById('jmMessageInboxBadge');
+              if(count>0){
+                if(!badge){
+                  badge=document.createElement('span');
+                  badge.id='jmMessageInboxBadge';
+                  badge.style.cssText='position:fixed;z-index:2147483001;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 52px);min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#ef4444;color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center'
+                  document.body.appendChild(badge);
+                }
+                badge.textContent=String(count);
+              } else if(badge){ badge.remove(); }
+            }
+            setInterval(ensureFab, 1500);
+            document.addEventListener('DOMContentLoaded', ensureFab, {once:true});
+            ensureFab();
+
+            function ensureReplyButtonOnAlert(){
+              var box=document.getElementById('jmDirectMessageAlert');
+              if(!box) return;
+              var card=box.querySelector('.jm-direct-message-card'); if(!card) return;
+              var confirmBtn = card.querySelector('button'); if(!confirmBtn) return;
+              if(card.querySelector('.jm-direct-message-reply-btn')) return;
+              var replyBtn=document.createElement('button');
+              replyBtn.type='button';
+              replyBtn.className='jm-direct-message-reply-btn';
+              replyBtn.textContent='답장하기';
+              replyBtn.style.cssText='width:100%;min-height:48px;border:0;border-radius:12px;background:#eef2ff;color:#315efb;font-size:16px;font-weight:950;margin-bottom:8px';
+              replyBtn.addEventListener('click', function(){
+                var body=document.getElementById('jmDirectMessageBody');
+                var text=body?body.textContent:'';
+                var match=myMessages().find(function(m){ return m && String(m.text||'')===String(text||''); });
+                if(typeof window.confirmJmDirectMessage==='function') window.confirmJmDirectMessage();
+                openModal(match?String(match.id):'');
+              });
+              confirmBtn.parentNode.insertBefore(replyBtn, confirmBtn);
+            }
+            new MutationObserver(function(){ try{ensureReplyButtonOnAlert();}catch(e){} }).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+            document.addEventListener('DOMContentLoaded', ensureReplyButtonOnAlert, {once:true});
+            setInterval(ensureReplyButtonOnAlert, 1000);
+          })();'''
+              close = text.lower().rfind('</body>')
+              if close < 0:
+                  raise SystemExit('body close not found for message-inbox script injection')
+              text = text[:close] + '<script>\n' + script + '\n</script>\n' + text[close:]
+          if marker not in text:
+              raise SystemExit('message-inbox script injection did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_MESSAGE_INBOX_V1' "$PUBLIC/index.html" >/dev/null
+
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
           marker = 'JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1'
           if marker not in text:
               # Add a memo field directly into the existing self-settings panel
