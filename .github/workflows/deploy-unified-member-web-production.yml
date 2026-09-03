@@ -11,6 +11,8 @@ on:
       - 'deployment/jayuminton/patch_member_self_temp_pair_border_fix_v1.py'
       - 'deployment/jayuminton/patch_member_safe_alert_v1.py'
       - 'deployment/jayuminton/patch_member_active_nearest_wait_v1.py'
+      - 'deployment/jayuminton/patch_member_active_type_matched_wait_v1.py'
+      - 'deployment/jayuminton/patch_member_self_status_render_safe_v1.py'
       - 'deployment/jayuminton/patch_member_pair_play_v1.py'
       - 'deployment/jayuminton/member-pwa-assets/**'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
@@ -97,12 +99,17 @@ jobs:
           python3 deployment/jayuminton/patch_member_self_temp_pair_border_fix_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_safe_alert_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_active_nearest_wait_v1.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_active_type_matched_wait_v1.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_self_status_render_safe_v1.py "$PUBLIC/index.html"
           grep -F 'JAYUMINTON_MEMBER_SELF_TEMP_PAIR_BORDER_FIX_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'is-self-member.jm-temp-pair{border:2px solid #2563eb!important;outline:4px dashed #facc15!important' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_SAFE_ALERT_V1' "$PUBLIC/index.html" >/dev/null
           grep -F "window.alert=function(message){" "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ACTIVE_NEAREST_WAIT_V1' "$PUBLIC/index.html" >/dev/null
           grep -F "getElementById('activeMembersMember')" "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_ACTIVE_TYPE_MATCHED_WAIT_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_SELF_STATUS_RENDER_SAFE_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_WAIT1_MESSAGE_NO_PREFIX_V1' "$PUBLIC/index.html" >/dev/null
 
           cp deployment/jayuminton/member-pwa-assets/manifest.webmanifest "$PUBLIC/manifest.webmanifest"
           cp deployment/jayuminton/member-pwa-assets/sw.js "$PUBLIC/sw.js"
@@ -1158,6 +1165,9 @@ jobs:
             "window.alert=function(message){" \
             'JAYUMINTON_MEMBER_ACTIVE_NEAREST_WAIT_V1' \
             "getElementById('activeMembersMember')" \
+            'JAYUMINTON_MEMBER_ACTIVE_TYPE_MATCHED_WAIT_V1' \
+            'JAYUMINTON_MEMBER_SELF_STATUS_RENDER_SAFE_V1' \
+            'JAYUMINTON_MEMBER_WAIT1_MESSAGE_NO_PREFIX_V1' \
             'window.confirmJmDirectMessage=function()' \
             'vibrationTimer=setInterval(vibrate,14500)' \
             'window.NativeUserApp.setMember(memberId, memberName)' \
