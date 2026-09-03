@@ -9,8 +9,18 @@ separate popups in a row (native "ugly" one, then the web "pretty" one).
 Per explicit decision: while the app is foregrounded, show ONLY the
 in-page alert; the native full-screen overlay/notification (and its
 vibration) is reserved for when the app is backgrounded/killed, which is
-exactly when the in-page JS cannot run at all. Admin direct messages are
-untouched -- this only gates wait1_ready/court_assignment.
+exactly when the in-page JS cannot run at all.
+
+2026-09 update: admin direct messages were originally excluded from this
+gate (the in-page #jmDirectMessageAlert popup had no reply button, so the
+native full-screen alert -- which does -- was kept as a second, always-on
+path). Per the user's report ("안이쁜창이랑 예쁜창 왜 두번이나 뜨는거야"),
+now that #jmDirectMessageAlert itself has a full reply/delete inbox
+(deploy-unified-member-web-production.yml's JAYUMINTON_MEMBER_MESSAGE_
+INBOX_V1), the native popup is pure duplication while foregrounded, so
+admin_message now follows the exact same gate as wait1_ready/
+court_assignment: suppressed in foreground, still fires normally in
+background/killed (its own reply button remains for that case).
 """
 from pathlib import Path
 import sys
@@ -54,7 +64,7 @@ trigger_old = '''        String assignmentId = value(data, "assignmentId", Strin
         // replace the intended 3-group/5-group vibration with a short pattern.
         configureAlertVolumes();'''
 trigger_new = '''        String assignmentId = value(data, "assignmentId", String.valueOf(System.currentTimeMillis()));
-        if (!adminMessage && MainActivity.isAppInForeground) {
+        if (MainActivity.isAppInForeground) {
             NativeDeliveryReporter.report("foreground_native_alert_suppressed", type,
                     hasTargetMemberId, true, false, false, false);
             return;
