@@ -21,6 +21,7 @@ MEMBER_FLAGS_MARKER = "JAYUMINTON_MEMBER_FLAGS_V1"
 MEMO_DEDUPE_MARKER = "JAYUMINTON_MEMBER_MEMO_DEDUPE_V1"
 COMPLETION_MARKER = "JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1"
 MEMO_SPACING_FIX_MARKER = "JAYUMINTON_MEMBER_MEMO_SPACING_FIX_V1"
+WAIT1_MESSAGE_NO_PREFIX_MARKER = "JAYUMINTON_MEMBER_WAIT1_MESSAGE_NO_PREFIX_V1"
 
 ADDON = r'''
 <script>
@@ -642,6 +643,33 @@ MEMO_SPACING_FIX_ADDON = r'''
 </style>
 '''
 
+# "대기2에서 대기 1로 가면 ~님 라켓들고 준비해달라고 하는 것 좋은데 대기1: 이 글자는
+# 빼줘. 코트에 들어갈 때도 문구에 대기1: 오뜨님 이러는데 대기1 이 글자좀 빼줘."
+# Both messages live inside COMPLETION_ADDON's window.detectMemberForegroundTransition,
+# already baked into the live page from an earlier deploy -- editing that block in place
+# would not take effect (same reasoning as MEMO_SPACING_FIX_ADDON above), so this
+# reassigns the same window-scoped function again afterward, identical except for
+# dropping the literal "대기1: " label before the ready/roster name list in both
+# messages (the destination logic and every other string are untouched).
+WAIT1_MESSAGE_NO_PREFIX_ADDON = r'''
+<script>
+/* JAYUMINTON_MEMBER_WAIT1_MESSAGE_NO_PREFIX_V1 */
+(function(){
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+  if(window.__JAYUMINTON_MEMBER_WAIT1_MESSAGE_NO_PREFIX_V1__)return;
+  window.__JAYUMINTON_MEMBER_WAIT1_MESSAGE_NO_PREFIX_V1__=true;
+  if(typeof window.detectMemberForegroundTransition!=='function')return;
+  window.detectMemberForegroundTransition=function(previousState,nextState){
+    if(IS_ADMIN||!previousState||!nextState)return;normalizeStateMemberProfiles(previousState);normalizeStateMemberProfiles(nextState);
+    var member=selectedWebPushMember();if(!member)return;var before=memberLocation(previousState,member.id),after=memberLocation(nextState,member.id),updatedAt=String(nextState.updatedAt||Date.now());
+    function names(state){var ids=state&&Array.isArray(state.waitGroups)&&Array.isArray(state.waitGroups[0])?state.waitGroups[0].slice(0,4):[];return ids.map(function(id){var item=(state.members||[]).find(function(candidate){return candidate&&String(candidate.id)===String(id);});return item?String(item.name||''):'';}).filter(Boolean);}
+    if(before.type==='wait'&&before.index===1&&after.type==='wait'&&after.index===0){var ready=names(nextState);showMemberForegroundAlert('대기 1순위 안내','대기1순위 입니다. 라켓 들고 준비해주세요.'+(ready.length?' '+ready.join(', ')+'님':''),'wait1_'+member.id+'_'+updatedAt,'wait1_ready');}
+    if(before.type==='wait'&&before.index===0&&after.type==='court'){var courtNo=Number(after.index),roster=names(previousState);showMemberForegroundAlert('코트 배정 안내',courtNo+'번 코트 나왔습니다.'+(roster.length?' '+roster.join(', ')+'님':'')+' '+courtNo+'번 코트로 들어가주세요.','court_'+courtNo+'_'+member.id+'_'+updatedAt,'court_assignment');}
+  };
+})();
+</script>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -1218,6 +1246,10 @@ def patch(path: Path) -> None:
         text = text.replace(marker, COMPLETION_ADDON + "\n" + marker, 1)
     if MEMO_SPACING_FIX_MARKER not in text:
         text = text.replace(marker, MEMO_SPACING_FIX_ADDON + "\n" + marker, 1)
+    if WAIT1_MESSAGE_NO_PREFIX_MARKER not in text:
+        text = text.replace(marker, WAIT1_MESSAGE_NO_PREFIX_ADDON + "\n" + marker, 1)
+    if WAIT1_MESSAGE_NO_PREFIX_MARKER not in text:
+        raise SystemExit("wait1 message no-prefix patch did not apply")
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
