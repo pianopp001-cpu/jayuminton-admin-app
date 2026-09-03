@@ -11,6 +11,7 @@ on:
       - 'deployment/jayuminton/patch_member_self_temp_pair_border_fix_v1.py'
       - 'deployment/jayuminton/patch_member_safe_alert_v1.py'
       - 'deployment/jayuminton/patch_member_active_nearest_wait_v1.py'
+      - 'deployment/jayuminton/patch_member_pair_play_v1.py'
       - 'deployment/jayuminton/member-pwa-assets/**'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
   workflow_dispatch: {}
@@ -690,6 +691,13 @@ jobs:
           PY
 
           grep -F 'JAYUMINTON_MEMBER_INLINE_MEMO_EDITOR_V1' "$PUBLIC/index.html" >/dev/null
+
+          python3 deployment/jayuminton/patch_member_pair_play_v1.py "$PUBLIC/index.html"
+          grep -F 'JAYUMINTON_MEMBER_PAIR_PLAY_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'id="jayuminton-member-pair-play-v1"' "$PUBLIC/index.html" >/dev/null
+          grep -F 'id="jayuminton-admin-pair-notice-v1"' "$PUBLIC/index.html" >/dev/null
+          grep -F "server('memberRequestPairPlay'" "$PUBLIC/index.html" >/dev/null
+          grep -F "server('dismissPairNotice',[ADMIN_PIN_VALUE,requestId])" "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_PWA_HEAD_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_PWA_INSTALL_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'rel="manifest" href="/manifest.webmanifest"' "$PUBLIC/index.html" >/dev/null
@@ -830,6 +838,10 @@ jobs:
             'JAYUMINTON_MEMBER_PWA_HEAD_V1' \
             'JAYUMINTON_MEMBER_PWA_INSTALL_V1' \
             'JAYUMINTON_MEMBER_SERVER_TIMEOUT_V1' \
+            'JAYUMINTON_MEMBER_PAIR_PLAY_V1' \
+            'id="jayuminton-member-pair-play-v1"' \
+            'id="jayuminton-admin-pair-notice-v1"' \
+            "server('memberRequestPairPlay'" \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'JAYUMINTON_MEMBER_SELF_TEMP_PAIR_BORDER_FIX_V1' \
             'is-self-member.jm-temp-pair{border:2px solid #2563eb!important;outline:4px dashed #facc15!important' \
