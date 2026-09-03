@@ -15,7 +15,7 @@ export function emptyState() {
     courtStartedAt: { '1': '', '2': '', '3': '', '4': '' },
     waitGroups: [[], [], [], [], []],
     settings: { memberPassword: '', memberPasswordVersion: 1, adminPin: '', adminPinVersion: 1, courtOrientation: 'door-right' },
-    swapRequests: [], memberMessages: [], tempPairs: [], actionHistory: [], updatedAt: new Date(0).toISOString(),
+    swapRequests: [], pairRequests: [], memberMessages: [], tempPairs: [], actionHistory: [], updatedAt: new Date(0).toISOString(),
   };
 }
 
@@ -82,6 +82,7 @@ export function normalizeState(input) {
   state.courtStartedAt = Object.assign(base.courtStartedAt, state.courtStartedAt || {});
   state.settings = Object.assign(base.settings, state.settings || {});
   state.swapRequests = Array.isArray(state.swapRequests) ? state.swapRequests.slice(-100) : [];
+  state.pairRequests = Array.isArray(state.pairRequests) ? state.pairRequests.slice(-100) : [];
   state.memberMessages = Array.isArray(state.memberMessages) ? state.memberMessages.slice(-50) : [];
   state.tempPairs = normalizeTempPairs(state.tempPairs);
   state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory.slice(-50) : [];
@@ -366,6 +367,62 @@ export function cancelSwapMutation(input, requesterId) {
   return { state, event: { type: 'swap_cancelled', requestId: request.id } };
 }
 
+/* JAYUMINTON_MEMBER_PAIR_PLAY_V1: "짝요청하기" -- a member asks another member to play together.
+   On acceptance, both are seated together at the back of the wait line (대기5) if there is room
+   for both there; otherwise the request is kept as an admin-visible notice ("자리 나면 같이 배정해
+   달라"는 부탁) instead of silently failing. This is deliberately separate from the existing
+   자리 바꿈(swap) request feature, which must keep working exactly as it did before. */
+export function requestPairPlayMutation(input, requesterId, targetId, nowMs = Date.now()) {
+  const state = normalizeState(input); const requester = String(requesterId); const target = String(targetId);
+  if (requester === target) throw new Error('invalid_pair_request');
+  const knownIds = new Set(state.members.map(m => String(m.id)));
+  if (!knownIds.has(requester) || !knownIds.has(target)) throw new Error('invalid_pair_request');
+  state.pairRequests = state.pairRequests.filter(r => r.status !== 'pending' || Number(r.expiresAt) > nowMs);
+  const request = { id: crypto.randomUUID(), requesterId: requester, targetId: target, status: 'pending', createdAt: nowMs, expiresAt: nowMs + 300000 };
+  state.pairRequests = [...state.pairRequests, request];
+  return { state, event: { type: 'pair_requested', request } };
+}
+
+export function respondPairPlayMutation(input, requestId, responderId, accept, nowMs = Date.now()) {
+  let state = normalizeState(input);
+  const request = state.pairRequests.find(r => r.id === String(requestId));
+  if (!request || request.status !== 'pending' || request.targetId !== String(responderId)) throw new Error('pair_request_not_found');
+  if (Number(request.expiresAt) <= nowMs) {
+    request.status = 'expired';
+    return { state, event: { type: 'pair_expired', requestId: request.id } };
+  }
+  if (!accept) {
+    request.status = 'rejected'; request.respondedAt = nowMs;
+    return { state, event: { type: 'pair_rejected', requestId: request.id } };
+  }
+  let outcome = 'admin_notice';
+  try {
+    state = moveMutation(state, [request.requesterId, request.targetId], { type: 'wait', key: '5' }).state;
+    outcome = 'joined';
+  } catch (error) {
+    if (error.message !== 'location_full') throw error;
+  }
+  const saved = state.pairRequests.find(r => r.id === request.id);
+  if (saved) { saved.status = outcome === 'joined' ? 'accepted_joined' : 'accepted_awaiting_seat'; saved.respondedAt = nowMs; }
+  return { state, event: { type: 'pair_accepted', requestId: request.id, outcome } };
+}
+
+export function cancelPairPlayMutation(input, requesterId) {
+  const state = normalizeState(input);
+  const request = [...state.pairRequests].reverse().find(r => r.status === 'pending' && r.requesterId === String(requesterId));
+  if (!request) throw new Error('pair_request_not_found');
+  request.status = 'cancelled'; request.respondedAt = Date.now();
+  return { state, event: { type: 'pair_cancelled', requestId: request.id } };
+}
+
+export function dismissPairNoticeMutation(input, requestId) {
+  const state = normalizeState(input);
+  const request = state.pairRequests.find(r => r.id === String(requestId));
+  if (!request || request.status !== 'accepted_awaiting_seat') throw new Error('pair_request_not_found');
+  request.status = 'admin_dismissed'; request.dismissedAt = Date.now();
+  return { state, event: { type: 'pair_notice_dismissed', requestId: request.id } };
+}
+
 async function digest(value) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(hash)].map(v => v.toString(16).padStart(2, '0')).join('');
@@ -550,6 +607,10 @@ export class StateCoordinator {
       else if (action === 'requestSwap') result = requestSwapMutation(current, body.requesterId, body.targetId);
       else if (action === 'respondSwap') result = respondSwapMutation(current, body.requestId, body.responderId, body.accept);
       else if (action === 'cancelSwap') result = cancelSwapMutation(current, body.requesterId);
+      else if (action === 'requestPairPlay') result = requestPairPlayMutation(current, body.requesterId, body.targetId);
+      else if (action === 'respondPairPlay') result = respondPairPlayMutation(current, body.requestId, body.responderId, body.accept);
+      else if (action === 'cancelPairPlay') result = cancelPairPlayMutation(current, body.requesterId);
+      else if (action === 'dismissPairNotice') result = dismissPairNoticeMutation(current, body.requestId);
       else if (action === 'setSettings') {
         result = { state: normalizeState(current), event: { type: 'settings_updated' } };
         if (body.memberPassword !== undefined) { result.state.settings.memberPassword = String(body.memberPassword); result.state.settings.memberPasswordVersion = Number(result.state.settings.memberPasswordVersion || 0) + 1; }
@@ -602,6 +663,10 @@ function latestSwap(state, predicate) {
   return [...state.swapRequests].reverse().find(r => r.status === 'pending' && Number(r.expiresAt) > Date.now() && predicate(r)) || null;
 }
 
+function latestPair(state, predicate) {
+  return [...state.pairRequests].reverse().find(r => r.status === 'pending' && Number(r.expiresAt) > Date.now() && predicate(r)) || null;
+}
+
 export async function legacyRpc(request, env, name, args) {
   const state = await readState(env.DB); const values = Array.isArray(args) ? args : [];
   const headerToken = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
@@ -638,7 +703,7 @@ export async function legacyRpc(request, env, name, args) {
     catch (_) { const session = await verifyMemberSession(bearerRequest(request, token), env, state); return publicState(state, session.memberId); }
   }
 
-  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMemberReply','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword','setMemberKokSubmitted','setMemberKokInactive']);
+  const adminNames = new Set(['getCurrentMemberPassword','getSystemStatus','addMember','updateMemberProfile','setMemberStatus','setBundle','clearBundle','setTempPairs','sendMemberMessage','deleteMemberReply','deleteMembers','assignMembersToCourt','assignMembersToWaitGroup','smartAssignSelected','finishCourt','swapMembers','swapCourts','swapWaitGroups','moveOrSwapMember','undoLastAction','adjustMemberGames','decreaseSelectedGameCounts','resetSelectedGameCounts','resetAllOperationData','createManualBackup','restoreManualBackup','changeMemberPassword','setMemberKokSubmitted','setMemberKokInactive','dismissPairNotice']);
   if (adminNames.has(name)) {
     await verifyAdminSession(bearerRequest(request, token), env, state);
     if (name === 'getCurrentMemberPassword') return String(state.settings.memberPassword || '');
@@ -652,6 +717,7 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'setTempPairs') { action = 'setTempPairs'; body.tempPairs = values[1]; }
     else if (name === 'sendMemberMessage') { action = 'sendMemberMessage'; body.memberIds = values[1]; body.message = values[2]; }
     else if (name === 'deleteMemberReply') { action = 'deleteMemberReply'; body.messageId = values[1]; body.replyId = values[2]; }
+    else if (name === 'dismissPairNotice') { action = 'dismissPairNotice'; body.requestId = values[1]; }
     else if (name === 'deleteMembers') { action = 'deleteMembers'; body.memberIds = values[1]; }
     else if (name === 'assignMembersToCourt') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'court', key: String(values[1]) }; }
     else if (name === 'assignMembersToWaitGroup') { action = 'moveMembers'; body.memberIds = values[2]; body.destination = { type: 'wait', key: String(Number(values[1]) + 1) }; }
@@ -688,12 +754,15 @@ export async function legacyRpc(request, env, name, args) {
     return packet.state || packet;
   }
 
-  const memberNames = new Set(['updateMyProfile','memberMoveSelf','memberReturnSelfToWait','memberMoveToWaitGroup','memberLeaveWaitGroup','memberRequestAnywhereSwap','memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap','memberCancelAnywhereSwap','memberAcceptAnywhereSwap','memberRejectAnywhereSwap']);
+  const memberNames = new Set(['updateMyProfile','memberMoveSelf','memberReturnSelfToWait','memberMoveToWaitGroup','memberLeaveWaitGroup','memberRequestAnywhereSwap','memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap','memberCancelAnywhereSwap','memberAcceptAnywhereSwap','memberRejectAnywhereSwap','memberRequestPairPlay','memberGetPairPlayRequest','memberGetPairPlayOutgoing','memberCancelPairPlay','memberAcceptPairPlay','memberRejectPairPlay']);
   if (memberNames.has(name)) {
     const session = await verifyMemberSession(bearerRequest(request, token), env, state); const memberId = String(session.memberId || '');
     if (!memberId || (values[1] && String(values[1]) !== memberId)) throw new Error('member_identity_required');
     if (name === 'memberGetAnywhereSwapRequest') return latestSwap(state, r => r.targetId === memberId);
     if (name === 'memberGetAnywhereOutgoingSwap') return latestSwap(state, r => r.requesterId === memberId);
+    /* JAYUMINTON_MEMBER_PAIR_PLAY_V1 */
+    if (name === 'memberGetPairPlayRequest') return latestPair(state, r => r.targetId === memberId);
+    if (name === 'memberGetPairPlayOutgoing') return latestPair(state, r => r.requesterId === memberId);
     let action; const body = { operationId: `${name}-${Date.now()}-${crypto.randomUUID()}` };
     if (name === 'updateMyProfile') {
       const currentMember = state.members.find(m => String(m.id) === memberId);
@@ -708,12 +777,20 @@ export async function legacyRpc(request, env, name, args) {
     else if (name === 'memberMoveToWaitGroup') { action = 'moveMembers'; body.memberIds = [memberId]; body.destination = { type: 'wait', key: String(Number(values[2]) + 1) }; }
     else if (name === 'memberRequestAnywhereSwap') { action = 'requestSwap'; body.requesterId = memberId; body.targetId = String(values[2]); }
     else if (name === 'memberCancelAnywhereSwap') { action = 'cancelSwap'; body.requesterId = memberId; }
-    else {
+    else if (name === 'memberAcceptAnywhereSwap' || name === 'memberRejectAnywhereSwap') {
       const requesterId = String(values[2]); const createdAt = Number(values[3] || 0); const pending = latestSwap(state, r => r.targetId === memberId && r.requesterId === requesterId && (!createdAt || Number(r.createdAt) === createdAt));
       if (!pending) throw new Error('swap_request_not_found');
       action = 'respondSwap'; body.requestId = pending.id; body.responderId = memberId; body.accept = name === 'memberAcceptAnywhereSwap';
     }
+    else if (name === 'memberRequestPairPlay') { action = 'requestPairPlay'; body.requesterId = memberId; body.targetId = String(values[2]); }
+    else if (name === 'memberCancelPairPlay') { action = 'cancelPairPlay'; body.requesterId = memberId; }
+    else if (name === 'memberAcceptPairPlay' || name === 'memberRejectPairPlay') {
+      const requesterId = String(values[2]); const createdAt = Number(values[3] || 0); const pending = latestPair(state, r => r.targetId === memberId && r.requesterId === requesterId && (!createdAt || Number(r.createdAt) === createdAt));
+      if (!pending) throw new Error('pair_request_not_found');
+      action = 'respondPairPlay'; body.requestId = pending.id; body.responderId = memberId; body.accept = name === 'memberAcceptPairPlay';
+    }
     const packet = await coordinatorPacket(request, env, action, body);
+    if (name === 'memberAcceptPairPlay') return { ok: true, state: publicState(packet.state, memberId), outcome: (packet.event && packet.event.outcome) || 'admin_notice', message: '저장되었습니다.' };
     return { ok: true, state: publicState(packet.state, memberId), message: '저장되었습니다.' };
   }
   throw new Error('unsupported_legacy_rpc');

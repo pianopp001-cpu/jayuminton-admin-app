@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, publicState, adminState, assignmentTransitions } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -185,5 +185,62 @@ function fixture() {
   // adminState/publicState must not strip the flag from what the UI receives.
   assert.equal(adminState(done.state).members.find(m => m.id === '1').kokInactive, true);
   assert.equal(publicState(done.state, '1').members.find(m => m.id === '1').kokInactive, true);
+}
+{
+  // JAYUMINTON_MEMBER_PAIR_PLAY_V1: "짝요청하기" must stay entirely separate from the existing
+  // 자리 바꿈(swap) request feature -- these tests exist specifically to guard that swap keeps
+  // working exactly as before while pair-play is added alongside it.
+  const requested = requestPairPlayMutation(fixture(), '14', '7', 1000);
+  assert.equal(requested.event.request.status, 'pending');
+  assert.equal(requested.event.request.expiresAt, 301000);
+  const cancelled = cancelPairPlayMutation(requested.state, '14');
+  assert.equal(cancelled.state.pairRequests[0].status, 'cancelled');
+}
+{
+  // Room for both at the back of the wait line (대기5 has 1/4 -- '13') -> they join together.
+  const requested = requestPairPlayMutation(fixture(), '14', '15', 1000);
+  const accepted = respondPairPlayMutation(requested.state, requested.event.request.id, '15', true, 2000);
+  assert.equal(accepted.event.type, 'pair_accepted');
+  assert.equal(accepted.event.outcome, 'joined');
+  assert.deepEqual(accepted.state.waitGroups[4].slice().sort(), ['13', '14', '15'].sort());
+  assert.equal(accepted.state.pairRequests[0].status, 'accepted_joined');
+}
+{
+  // No room for a pair at the back (only 1 free slot) -> becomes an admin-visible notice, nobody moves.
+  const state = fixture(); state.waitGroups[4] = ['13', '14', '15'];
+  const requested = requestPairPlayMutation(normalizeState(state), '1', '7', 1000);
+  const accepted = respondPairPlayMutation(requested.state, requested.event.request.id, '7', true, 2000);
+  assert.equal(accepted.event.outcome, 'admin_notice');
+  assert.equal(accepted.state.pairRequests[0].status, 'accepted_awaiting_seat');
+  assert.equal(accepted.state.courts['1'].includes('1'), true);
+  assert.equal(accepted.state.waitGroups[1].includes('7'), true);
+  const dismissed = dismissPairNoticeMutation(accepted.state, accepted.event.requestId);
+  assert.equal(dismissed.state.pairRequests[0].status, 'admin_dismissed');
+  assert.throws(() => dismissPairNoticeMutation(dismissed.state, accepted.event.requestId), /pair_request_not_found/);
+}
+{
+  const requested = requestPairPlayMutation(fixture(), '1', '7', 1000);
+  const rejected = respondPairPlayMutation(requested.state, requested.event.request.id, '7', false, 2000);
+  assert.equal(rejected.event.type, 'pair_rejected');
+  assert.equal(rejected.state.courts['1'].includes('1'), true);
+  const requested2 = requestPairPlayMutation(fixture(), '1', '7', 1000);
+  const expired = respondPairPlayMutation(requested2.state, requested2.event.request.id, '7', true, 301001);
+  assert.equal(expired.event.type, 'pair_expired');
+  assert.equal(expired.state.courts['1'].includes('1'), true);
+}
+{
+  assert.throws(() => requestPairPlayMutation(fixture(), '1', '1', 1000), /invalid_pair_request/);
+  assert.throws(() => requestPairPlayMutation(fixture(), '1', '999', 1000), /invalid_pair_request/);
+  const requested = requestPairPlayMutation(fixture(), '1', '7', 1000);
+  assert.throws(() => respondPairPlayMutation(requested.state, requested.event.request.id, '9', true, 2000), /pair_request_not_found/);
+  assert.equal(publicState(requested.state, '7').pairRequests.length, 1);
+  assert.equal(adminState(requested.state).pairRequests.length, 1);
+}
+{
+  // Regression guard: the pre-existing swap-request feature must be completely untouched.
+  const requested = requestSwapMutation(fixture(), '1', '7', 1000);
+  const accepted = respondSwapMutation(requested.state, requested.event.request.id, '7', true, 2000);
+  assert.equal(accepted.event.type, 'swap_accepted');
+  assert.equal(accepted.state.courts['1'].includes('7'), true);
 }
 console.log('STATE_WORKER_CORE_TESTS_OK');
