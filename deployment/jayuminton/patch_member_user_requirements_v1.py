@@ -20,6 +20,7 @@ SELF_INFO_MENU_MARKER = "JAYUMINTON_MEMBER_SELF_INFO_MENU_V1"
 MEMBER_FLAGS_MARKER = "JAYUMINTON_MEMBER_FLAGS_V1"
 MEMO_DEDUPE_MARKER = "JAYUMINTON_MEMBER_MEMO_DEDUPE_V1"
 COMPLETION_MARKER = "JAYUMINTON_MEMBER_REQUIREMENTS_COMPLETION_V1"
+MEMO_SPACING_FIX_MARKER = "JAYUMINTON_MEMBER_MEMO_SPACING_FIX_V1"
 
 ADDON = r'''
 <script>
@@ -618,6 +619,29 @@ COMPLETION_ADDON = r'''
 </script>
 '''
 
+# "멤버이름과 멤버정보메모 사이의 줄간격이 들어가버린 것도 있고 아닌 것도 있는데
+# 의미없이 카드크기가 커지지 않도록만 글자 배치 안잘리게 다시한번 점검 후 잘해줘."
+# The canonical renderer's .member-public-memo never got its own margin-top (only
+# the now-suppressed legacy .jm-public-memo did, back at
+# TEAM_ONLY_V2_ADDON/patch()'s earlier CSS -- see MEMO_DEDUPE_ADDON above), so the
+# gap above the memo line depended on whatever margin the browser default gave
+# that element, which is inconsistent card to card. Editing COMPLETION_ADDON in
+# place would not take effect (COMPLETION_MARKER is already baked into the live
+# page from an earlier deploy, so that whole `if` block is skipped forever) -- this
+# is a brand-new, separately-gated block instead, appended after COMPLETION_ADDON
+# so it wins the cascade for equal-specificity !important rules. A small fixed
+# margin-top plus a tight line-height keeps the gap uniform across every card
+# without growing the card (min-height on the card itself is unchanged), and the
+# base TEAM_CARD_LAYOUT_V3_ADDON rule already handles wrapping without clipping
+# (overflow-wrap:anywhere / word-break:keep-all / white-space:normal), which this
+# does not touch.
+MEMO_SPACING_FIX_ADDON = r'''
+<style id="jayuminton-member-memo-spacing-fix-v1">
+/* JAYUMINTON_MEMBER_MEMO_SPACING_FIX_V1 */
+#memberApp [data-member-id]>.member-public-memo{margin-top:3px!important;margin-bottom:0!important;line-height:1.25!important}
+</style>
+'''
+
 
 def assert_alert_contract(text: str) -> None:
     required = [
@@ -1192,6 +1216,8 @@ def patch(path: Path) -> None:
         text = text.replace(marker, MEMO_DEDUPE_ADDON + "\n" + marker, 1)
     if COMPLETION_MARKER not in text:
         text = text.replace(marker, COMPLETION_ADDON + "\n" + marker, 1)
+    if MEMO_SPACING_FIX_MARKER not in text:
+        text = text.replace(marker, MEMO_SPACING_FIX_ADDON + "\n" + marker, 1)
 
     assert_alert_contract(text)
     assert_native_sync_contract(text)
