@@ -10,6 +10,7 @@ on:
       - 'app/src/main/AndroidManifest.xml'
       - 'app/build.gradle'
       - 'deployment/jayuminton/admin_member_replies_v1.js'
+      - 'deployment/jayuminton/force_cloudflare_admin_login_v2050.py'
   workflow_dispatch: {}
 
 permissions:
@@ -104,6 +105,34 @@ jobs:
           grep -F 'jm-admin-reply-complete' "$HTML" >/dev/null
           grep -F "server('dismissPairNotice',[null,requestId])" "$HTML" >/dev/null
           ! grep -F "b.innerHTML='회원 답장" "$HTML" >/dev/null
+
+      - name: Apply the RPC fetch-timeout fix (실행취소/새로고침 stuck disabled forever on a hung request)
+        shell: bash
+        run: |
+          set -euo pipefail
+          HTML=app/src/main/assets/admin/index.html
+
+          # window.server(...) is the directServer() bridge injected by
+          # force_cloudflare_admin_login_v2050.py, baked into the live BASE
+          # apk from a much earlier build with no timeout on its fetch(). A
+          # single hung mobile-network request then leaves that fetch's
+          # promise pending forever -- never resolving, never rejecting -- so
+          # any button awaiting it (새로고침, 자동배정, and anything that only
+          # re-enables 실행취소 on success) stays disabled permanently with no
+          # error and no recovery short of force-closing the app. This is the
+          # "실행취소/새로고침 버튼이 아예 안 먹힌다" bug reported in
+          # production. The script strips the stale pre-timeout block (found
+          # via its old marker) and rebuilds it with an AbortController-based
+          # timeout so a hang always eventually rejects instead.
+          python3 deployment/jayuminton/force_cloudflare_admin_login_v2050.py
+
+          grep -F '__JAYUMINTON_ADMIN_DIRECT_CLOUDFLARE_LOGIN_V2050_FETCH_TIMEOUT_V1__' "$HTML" >/dev/null
+          grep -F 'var RPC_TIMEOUT_MS=20000;' "$HTML" >/dev/null
+          grep -F 'new AbortController()' "$HTML" >/dev/null
+          grep -F "signal:controller?controller.signal:undefined" "$HTML" >/dev/null
+          grep -F '서버 응답이 없습니다. 네트워크 상태를 확인하고 다시 시도해주세요.' "$HTML" >/dev/null
+          grep -F 'window.server=directServer;' "$HTML" >/dev/null
+          [ "$(grep -o 'window.server=directServer;' "$HTML" | wc -l)" = "1" ]
 
       - name: Apply the session-persistence fix
         shell: bash
@@ -280,13 +309,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.65";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.66";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 53',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.43'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 54',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.44'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -348,6 +377,11 @@ jobs:
           grep -F 'jm-admin-reply-complete' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "server('dismissPairNotice',[null,requestId])" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F "b.innerHTML='회원 답장" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '__JAYUMINTON_ADMIN_DIRECT_CLOUDFLARE_LOGIN_V2050_FETCH_TIMEOUT_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'var RPC_TIMEOUT_MS=20000;' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'new AbortController()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '서버 응답이 없습니다. 네트워크 상태를 확인하고 다시 시도해주세요.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          [ "$(grep -o 'window.server=directServer;' "$RUNNER_TEMP/apk-admin.html" | wc -l)" = "1" ]
           grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'window.__jmUnlimitedSelected=selected;' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_PERSISTENT_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -385,8 +419,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.65-pair-request-reply-merge-native.apk
-          printf 'status=success\nversion=208.65\nfeature=pair-request-reply-merge\nbase=v208.64-toolbar-selection-leak-fix-native\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20865-pair-request-reply-merge.txt
-          git add releases/jayuminton-admin-v208.65-pair-request-reply-merge-native.apk deployment/status/v20865-pair-request-reply-merge.txt
-          git commit -m 'Publish admin v208.65: rename 회원답장 to 회원쪽지 and merge pending 짝요청(pair-play request) items into the same panel as 완료-able cards (calls the existing dismissPairNotice RPC), per user request' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.66-rpc-fetch-timeout-fix.apk
+          printf 'status=success\nversion=208.66\nfeature=rpc-fetch-timeout-fix\nbase=v208.65-pair-request-reply-merge-native\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20866-rpc-fetch-timeout-fix.txt
+          git add releases/jayuminton-admin-v208.66-rpc-fetch-timeout-fix.apk deployment/status/v20866-rpc-fetch-timeout-fix.txt
+          git commit -m 'Publish admin v208.66: add a 20s timeout to the window.server RPC bridge so a hung mobile-network request always eventually fails instead of leaving 새로고침/실행취소/자동배정 stuck disabled forever, per user report' || exit 0
           git push origin HEAD:main
