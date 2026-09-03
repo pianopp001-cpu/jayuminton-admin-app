@@ -304,6 +304,37 @@ export function deleteMemberReplyMutation(input, messageId, replyId) {
   return { state, event: { type: 'member_reply_deleted', messageId: mid, replyId: rid } };
 }
 
+/* JAYUMINTON_MEMBER_MESSAGE_REPLY_V1: members previously had no way to reply to or remove an
+   admin direct message from their own side -- only the admin could delete a member's reply
+   (deleteMemberReplyMutation above). These two mutations add the member-facing half: replying
+   (appended to the same message.replies array the admin already reads) and deleting the message
+   from their own inbox view (removing themselves from memberIds without touching other
+   recipients' copies of a broadcast message). */
+export function replyToMemberMessageMutation(input, messageId, memberId, text) {
+  const state = normalizeState(input);
+  const mid = String(messageId || ''); const mem = String(memberId || '');
+  const body = String(text || '').trim().slice(0, 300);
+  if (!mid || !mem) throw new Error('reply_required');
+  if (!body) throw new Error('message_required');
+  const message = state.memberMessages.find(m => m && String(m.id) === mid);
+  if (!message) throw new Error('message_not_found');
+  if (!Array.isArray(message.memberIds) || !message.memberIds.map(String).includes(mem)) throw new Error('member_identity_required');
+  const item = { id: `reply-${crypto.randomUUID()}`, memberId: mem, text: body, createdAt: new Date().toISOString() };
+  message.replies = [...(Array.isArray(message.replies) ? message.replies : []), item].slice(-20);
+  return { state, event: { type: 'member_reply_sent', messageId: mid, replyId: item.id } };
+}
+
+export function memberDeleteMessageMutation(input, messageId, memberId) {
+  const state = normalizeState(input);
+  const mid = String(messageId || ''); const mem = String(memberId || '');
+  if (!mid || !mem) throw new Error('message_required');
+  const message = state.memberMessages.find(m => m && String(m.id) === mid);
+  if (!message) throw new Error('message_not_found');
+  if (!Array.isArray(message.memberIds) || !message.memberIds.map(String).includes(mem)) throw new Error('member_identity_required');
+  message.memberIds = message.memberIds.filter(id => String(id) !== mem);
+  return { state, event: { type: 'member_message_deleted', messageId: mid, memberId: mem } };
+}
+
 export function setMemberStatusMutation(input, memberIds, status) {
   const state = normalizeState(input); const ids = uniqueIds(memberIds, 200);
   if (!['active', 'before', 'rest', 'away'].includes(String(status))) throw new Error('invalid_member_status');
@@ -499,7 +530,10 @@ export function publicState(state, memberId = '') {
   const safe = normalizeState(state); const me = String(memberId || '');
   safe.settings = { memberPasswordVersion: Number(safe.settings.memberPasswordVersion || 1), courtOrientation: safe.settings.courtOrientation };
   safe.swapRequests = safe.swapRequests.filter(r => r.status === 'pending' && (r.requesterId === me || r.targetId === me));
-  safe.memberMessages = safe.memberMessages.filter(item => Array.isArray(item.memberIds) && item.memberIds.map(String).includes(me)).slice(-10);
+  safe.memberMessages = safe.memberMessages
+    .filter(item => Array.isArray(item.memberIds) && item.memberIds.map(String).includes(me))
+    .slice(-10)
+    .map(item => ({ ...item, replies: (Array.isArray(item.replies) ? item.replies : []).filter(r => r && String(r.memberId) === me) }));
   delete safe.actionHistory; return safe;
 }
 
@@ -601,6 +635,8 @@ export class StateCoordinator {
       else if (action === 'setTempPairs') result = setTempPairsMutation(current, body.tempPairs);
       else if (action === 'sendMemberMessage') result = sendMemberMessageMutation(current, body.memberIds, body.message);
       else if (action === 'deleteMemberReply') result = deleteMemberReplyMutation(current, body.messageId, body.replyId);
+      else if (action === 'replyToMemberMessage') result = replyToMemberMessageMutation(current, body.messageId, body.memberId, body.text);
+      else if (action === 'memberDeleteMessage') result = memberDeleteMessageMutation(current, body.messageId, body.memberId);
       else if (action === 'adjustGames') result = adjustGamesMutation(current, body.memberIds, body.delta, body.reset);
       else if (action === 'setKokSubmitted') result = setMemberKokSubmittedMutation(current, body.memberIds, body.submitted);
       else if (action === 'setKokInactive') result = setMemberKokInactiveMutation(current, body.memberIds, body.inactive);
@@ -665,6 +701,19 @@ function latestSwap(state, predicate) {
 
 function latestPair(state, predicate) {
   return [...state.pairRequests].reverse().find(r => r.status === 'pending' && Number(r.expiresAt) > Date.now() && predicate(r)) || null;
+}
+
+/* JAYUMINTON_MEMBER_OUTGOING_OUTCOME_V1: memberGetAnywhereOutgoingSwap/memberGetPairPlayOutgoing
+   originally reused latestSwap/latestPair, which only ever match status==='pending' -- so once the
+   target responded (accepted/rejected), the request stopped matching and the requester's own poll
+   saw nothing. That made these two RPCs unusable for telling the requester how their own request
+   turned out, which nothing was calling them for yet anyway. This keeps the pending case identical
+   and adds a short window (2 minutes) after a response during which the requester can still see the
+   outcome once. */
+function recentOutgoing(list, predicate, nowMs = Date.now()) {
+  return [...list].reverse().find(r => predicate(r) && (
+    r.status === 'pending' ? Number(r.expiresAt) > nowMs : Number(r.respondedAt || r.createdAt || 0) > nowMs - 120000
+  )) || null;
 }
 
 export async function legacyRpc(request, env, name, args) {
@@ -754,15 +803,15 @@ export async function legacyRpc(request, env, name, args) {
     return packet.state || packet;
   }
 
-  const memberNames = new Set(['updateMyProfile','memberMoveSelf','memberReturnSelfToWait','memberMoveToWaitGroup','memberLeaveWaitGroup','memberRequestAnywhereSwap','memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap','memberCancelAnywhereSwap','memberAcceptAnywhereSwap','memberRejectAnywhereSwap','memberRequestPairPlay','memberGetPairPlayRequest','memberGetPairPlayOutgoing','memberCancelPairPlay','memberAcceptPairPlay','memberRejectPairPlay']);
+  const memberNames = new Set(['updateMyProfile','memberMoveSelf','memberReturnSelfToWait','memberMoveToWaitGroup','memberLeaveWaitGroup','memberRequestAnywhereSwap','memberGetAnywhereSwapRequest','memberGetAnywhereOutgoingSwap','memberCancelAnywhereSwap','memberAcceptAnywhereSwap','memberRejectAnywhereSwap','memberRequestPairPlay','memberGetPairPlayRequest','memberGetPairPlayOutgoing','memberCancelPairPlay','memberAcceptPairPlay','memberRejectPairPlay','memberReplyToMessage','memberDeleteMessage']);
   if (memberNames.has(name)) {
     const session = await verifyMemberSession(bearerRequest(request, token), env, state); const memberId = String(session.memberId || '');
     if (!memberId || (values[1] && String(values[1]) !== memberId)) throw new Error('member_identity_required');
     if (name === 'memberGetAnywhereSwapRequest') return latestSwap(state, r => r.targetId === memberId);
-    if (name === 'memberGetAnywhereOutgoingSwap') return latestSwap(state, r => r.requesterId === memberId);
+    if (name === 'memberGetAnywhereOutgoingSwap') return recentOutgoing(state.swapRequests, r => r.requesterId === memberId);
     /* JAYUMINTON_MEMBER_PAIR_PLAY_V1 */
     if (name === 'memberGetPairPlayRequest') return latestPair(state, r => r.targetId === memberId);
-    if (name === 'memberGetPairPlayOutgoing') return latestPair(state, r => r.requesterId === memberId);
+    if (name === 'memberGetPairPlayOutgoing') return recentOutgoing(state.pairRequests, r => r.requesterId === memberId);
     let action; const body = { operationId: `${name}-${Date.now()}-${crypto.randomUUID()}` };
     if (name === 'updateMyProfile') {
       const currentMember = state.members.find(m => String(m.id) === memberId);
@@ -789,6 +838,8 @@ export async function legacyRpc(request, env, name, args) {
       if (!pending) throw new Error('pair_request_not_found');
       action = 'respondPairPlay'; body.requestId = pending.id; body.responderId = memberId; body.accept = name === 'memberAcceptPairPlay';
     }
+    else if (name === 'memberReplyToMessage') { action = 'replyToMemberMessage'; body.messageId = String(values[2] || ''); body.memberId = memberId; body.text = String(values[3] || ''); }
+    else if (name === 'memberDeleteMessage') { action = 'memberDeleteMessage'; body.messageId = String(values[2] || ''); body.memberId = memberId; }
     const packet = await coordinatorPacket(request, env, action, body);
     if (name === 'memberAcceptPairPlay') return { ok: true, state: publicState(packet.state, memberId), outcome: (packet.event && packet.event.outcome) || 'admin_notice', message: '저장되었습니다.' };
     return { ok: true, state: publicState(packet.state, memberId), message: '저장되었습니다.' };
