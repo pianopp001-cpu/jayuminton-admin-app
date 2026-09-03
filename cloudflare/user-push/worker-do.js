@@ -124,6 +124,10 @@ function textFor(event, member) {
     title: '관리자 메시지',
     body: String(event.messageText || '').trim() || '새 메시지가 도착했습니다.',
   };
+  if (event.type === 'swap_request') return { title: '자리 교환 요청', body: String(event.messageText || '').trim() || '자리 교환 요청이 도착했습니다.' };
+  if (event.type === 'swap_result') return { title: '자리 교환 결과', body: String(event.messageText || '').trim() || '자리 교환 요청 결과가 도착했습니다.' };
+  if (event.type === 'pair_request') return { title: '짝 요청', body: String(event.messageText || '').trim() || '함께 경기할 짝 요청이 도착했습니다.' };
+  if (event.type === 'pair_result') return { title: '짝 요청 결과', body: String(event.messageText || '').trim() || '짝 요청 결과가 도착했습니다.' };
   if (event.type === 'wait1_ready') return {
     title: '대기 1 안내',
     body: roster
@@ -143,6 +147,8 @@ async function sendOne(env, accessToken, projectId, event, member, record) {
     type: String(event.type), assignmentId: String(event.assignmentId), memberId: String(member.id), memberName: String(member.name || ''),
     title: copy.title, body: copy.body, courtNo: String(event.courtNo || ''), expectedCourtNo: String(event.expectedCourtNo || ''),
     rosterNames: String(event.rosterNames || ''), repeatCount: '8', vibrationGroups: '8', pulsesPerGroup: '3', stopOnConfirm: 'true',
+    requesterName: String(event.requesterName || ''), responderName: String(event.responderName || ''),
+    accepted: String(Boolean(event.accepted)), outcome: String(event.outcome || ''),
   };
   const android = { priority: 'high', ttl: '600s' };
   if (/JayumintonNativeAndroid\//i.test(record.userAgent || '')) android.restricted_package_name = 'com.jayuminton.user';
@@ -157,7 +163,7 @@ async function sendOne(env, accessToken, projectId, event, member, record) {
 async function sendEvent(request, env, body, url) {
   if (!authorized(request, env, body, url)) return responseJson({ ok: false, error: 'unauthorized' }, 403);
   const type = clean(body.type);
-  if (!['wait1_ready', 'court_assignment', 'admin_message'].includes(type)) return responseJson({ ok: false, error: 'invalid_type' }, 400);
+  if (!['wait1_ready', 'court_assignment', 'admin_message', 'swap_request', 'swap_result', 'pair_request', 'pair_result'].includes(type)) return responseJson({ ok: false, error: 'invalid_type' }, 400);
   const members = Array.isArray(body.members) ? body.members.map(m => ({ id: clean(m?.id), name: clean(m?.name, 80) })).filter(m => m.id) : [];
   const maxMembers = type === 'admin_message' ? 200 : 4;
   if (!members.length || members.length > maxMembers) return responseJson({ ok: false, error: 'invalid_members' }, 400);
@@ -168,6 +174,8 @@ async function sendEvent(request, env, body, url) {
     expectedCourtNo: Number(body.expectedCourtNo || 0),
     rosterNames: members.map(member => member.name).filter(Boolean).join(', '),
     messageText: clean(body.messageText, 300),
+    requesterName: clean(body.requesterName, 80), responderName: clean(body.responderName, 80),
+    accepted: Boolean(body.accepted), outcome: clean(body.outcome, 80),
   };
   const targetResponse = await registryCall(env, '/targets', { memberIds: members.map(m => m.id) });
   const targetJson = await targetResponse.json();

@@ -20,6 +20,8 @@ on:
       - 'deployment/scripts/patch_user_native_pair_request_vibration_v1.py'
       - 'deployment/scripts/patch_user_native_versioncode_2001653_v1.py'
       - 'deployment/scripts/patch_user_native_versioncode_2001654_v1.py'
+      - 'deployment/scripts/patch_user_native_interaction_push_v1.py'
+      - 'deployment/scripts/patch_user_native_versioncode_2001655_v1.py'
   workflow_dispatch: {}
 
 permissions:
@@ -98,7 +100,14 @@ jobs:
           python3 deployment/scripts/patch_user_native_pair_request_vibration_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_versioncode_2001653_v1.py "$BUILD"
           python3 deployment/scripts/patch_user_native_versioncode_2001654_v1.py "$BUILD"
-          grep -F 'VERSION_CODE="2001654"' "$BUILD" >/dev/null
+          python3 deployment/scripts/patch_user_native_interaction_push_v1.py "$BUILD"
+          python3 deployment/scripts/patch_user_native_versioncode_2001655_v1.py "$BUILD"
+          grep -F 'VERSION_CODE="2001655"' "$BUILD" >/dev/null
+          grep -F 'boolean interactionMessage =' "$BUILD" >/dev/null
+          grep -F '"swap_request".equals(type)' "$BUILD" >/dev/null
+          grep -F '"swap_result".equals(type)' "$BUILD" >/dev/null
+          grep -F '"pair_request".equals(type)' "$BUILD" >/dev/null
+          grep -F '"pair_result".equals(type)' "$BUILD" >/dev/null
           grep -F 'startAdminMessageVibration' "$BUILD" >/dev/null
           grep -F 'stopAdminMessageVibration' "$BUILD" >/dev/null
           grep -F '__JM_NATIVE_ADMIN_MSG_VIBRATION__' "$BUILD" >/dev/null
@@ -168,7 +177,8 @@ jobs:
           {
             echo 'status=success'
             echo 'version=1.6.42'
-            echo 'version_code=2001654'
+            echo 'version_code=2001655'
+            echo 'background_swap_pair_push=true'
             echo 'admin_message_native_vibration=true'
             echo 'admin_message_confirm_stops_vibration=true'
             echo 'admin_message_push=true'
@@ -187,7 +197,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$APK_PATH" "$AAB_PATH" deployment/status/user-apk-v1642.txt
-          git commit -m 'Publish user Play hotfix v1.6.42 code 2001654: admin direct messages now follow the same foreground-suppress gate as wait1_ready/court_assignment, so the native full-screen alert no longer duplicates the web reply-inbox popup while the app is open' || exit 0
+          git commit -m 'Publish user Play build v1.6.42 code 2001655 with background swap and pair notifications' || exit 0
           # The native build intentionally rewrites tracked Android source files.
           # They are build-only changes and must not block rebasing the artifact commit.
           git reset --hard HEAD

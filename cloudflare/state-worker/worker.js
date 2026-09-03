@@ -552,6 +552,10 @@ async function sendPush(env, type, event, members) {
   if (!members.length || !env.PUSH_URL || !env.INTERNAL_KEY) return { ok: true, skipped: true };
   const body = { type, assignmentId: `${type}-${event.courtNo || 0}-${Date.now()}-${members.map(m => m.id).join('-')}`, courtNo: event.courtNo || 0, members };
   if (event.messageText) body.messageText = String(event.messageText).slice(0, 300);
+  if (event.requesterName) body.requesterName = String(event.requesterName).slice(0, 80);
+  if (event.responderName) body.responderName = String(event.responderName).slice(0, 80);
+  if (typeof event.accepted === 'boolean') body.accepted = event.accepted;
+  if (event.outcome) body.outcome = String(event.outcome).slice(0, 80);
   try {
     const response = await fetch(env.PUSH_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-jayuminton-key': env.INTERNAL_KEY }, body: JSON.stringify(body) });
     return await response.json();
@@ -570,6 +574,40 @@ export function assignmentTransitions(beforeInput, afterInput) {
   return { courtGroups, wait1 };
 }
 
+function pushMember(state, memberId) {
+  const member = state.members.find(item => String(item.id) === String(memberId));
+  return member ? { id: String(member.id), name: String(member.name || '') } : null;
+}
+
+// Requests go only to the person being asked; accept/reject results go only to the requester.
+export function interactionPushNotifications(afterInput, event) {
+  const state = normalizeState(afterInput);
+  const plans = [];
+  const add = (type, recipient, messageText, extra = {}) => {
+    if (recipient) plans.push({ type, members: [recipient], event: { ...event, ...extra, messageText } });
+  };
+  if (event.type === 'swap_requested') {
+    const request = event.request;
+    const requester = pushMember(state, request?.requesterId);
+    add('swap_request', pushMember(state, request?.targetId), `${requester?.name || '회원'}님이 자리 교환을 요청했습니다.`, { requesterName: requester?.name || '', accepted: false });
+  } else if (event.type === 'swap_accepted' || event.type === 'swap_rejected') {
+    const request = state.swapRequests.find(item => String(item.id) === String(event.requestId));
+    const responder = pushMember(state, request?.targetId);
+    const accepted = event.type === 'swap_accepted';
+    add('swap_result', pushMember(state, request?.requesterId), `${responder?.name || '회원'}님이 자리 교환 요청을 ${accepted ? '수락' : '거절'}했습니다.`, { responderName: responder?.name || '', accepted });
+  } else if (event.type === 'pair_requested') {
+    const request = event.request;
+    const requester = pushMember(state, request?.requesterId);
+    add('pair_request', pushMember(state, request?.targetId), `${requester?.name || '회원'}님이 함께 경기할 짝을 요청했습니다.`, { requesterName: requester?.name || '', accepted: false });
+  } else if (event.type === 'pair_accepted' || event.type === 'pair_rejected') {
+    const request = state.pairRequests.find(item => String(item.id) === String(event.requestId));
+    const responder = pushMember(state, request?.targetId);
+    const accepted = event.type === 'pair_accepted';
+    add('pair_result', pushMember(state, request?.requesterId), `${responder?.name || '회원'}님이 짝 요청을 ${accepted ? '수락' : '거절'}했습니다.`, { responderName: responder?.name || '', accepted, outcome: String(event.outcome || '') });
+  }
+  return plans;
+}
+
 async function publishAssignmentTransitions(env, before, after, event) {
   const transitions = assignmentTransitions(before, after); const results = [];
   for (const no of ['1', '2', '3', '4']) if (transitions.courtGroups[no].length) results.push(await sendPush(env, 'court_assignment', { ...event, courtNo: Number(no) }, transitions.courtGroups[no]));
@@ -579,6 +617,7 @@ async function publishAssignmentTransitions(env, before, after, event) {
     const recipients = after.members.filter(m => wanted.has(String(m.id))).map(m => ({ id: String(m.id), name: String(m.name || '') }));
     if (recipients.length) results.push(await sendPush(env, 'admin_message', { ...event, messageText: event.text }, recipients));
   }
+  for (const plan of interactionPushNotifications(after, event)) results.push(await sendPush(env, plan.type, plan.event, plan.members));
   return results;
 }
 

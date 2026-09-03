@@ -1,0 +1,72 @@
+name: Deploy Cloudflare user push Durable Object
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/user-push/worker-do.js'
+      - 'cloudflare/user-push/worker-do.test.mjs'
+      - '.github/workflows/deploy-cloudflare-user-push-do.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jayuminton-cloudflare-user-push-do
+  cancel-in-progress: false
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      INTERNAL_KEY: ${{ secrets.JAYUMINTON_PUSH_SHARED_SECRET }}
+      WORKER_NAME: jayuminton-user-push
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --global wrangler@latest
+      - name: Test push payloads
+        run: node cloudflare/user-push/worker-do.test.mjs
+      - name: Validate secrets
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON"
+          test "${#INTERNAL_KEY}" -ge 32
+      - name: Deploy Durable Object Worker
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/user-push-do"
+          mkdir -p "$ROOT"
+          cp cloudflare/user-push/worker-do.js "$ROOT/worker.js"
+          cat > "$ROOT/wrangler.toml" <<EOF
+          name = "$WORKER_NAME"
+          main = "worker.js"
+          compatibility_date = "2026-08-21"
+          workers_dev = true
+          account_id = "$CLOUDFLARE_ACCOUNT_ID"
+
+          [[durable_objects.bindings]]
+          name = "PUSH_REGISTRY"
+          class_name = "PushRegistry"
+
+          [[migrations]]
+          tag = "v1"
+          new_sqlite_classes = ["PushRegistry"]
+          EOF
+          cd "$ROOT"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" | wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --config wrangler.toml
+          printf '%s' "$INTERNAL_KEY" | wrangler secret put INTERNAL_KEY --config wrangler.toml
+          wrangler deploy --config wrangler.toml | tee "$RUNNER_TEMP/deploy.txt"
+          URL="$(grep -Eo 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/deploy.txt" | tail -1)"
+          test -n "$URL"
+          sleep 3
+          curl -fsS "$URL/health" | tee "$RUNNER_TEMP/health.json"
+          jq -e '.ok == true and .storage == "durable-object"' "$RUNNER_TEMP/health.json" >/dev/null

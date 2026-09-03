@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions, interactionPushNotifications } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -7,6 +7,36 @@ function fixture() {
   state.courts['1'] = ['1', '2'];
   state.waitGroups = [['3', '4', '5', '6'], ['7', '8', '9', '10'], ['11'], ['12'], ['13']];
   return normalizeState(state);
+}
+{
+  const requested = requestSwapMutation(fixture(), '1', '7', 1000);
+  const requestPush = interactionPushNotifications(requested.state, requested.event);
+  assert.equal(requestPush[0].type, 'swap_request');
+  assert.deepEqual(requestPush[0].members.map(m => m.id), ['7']);
+  assert.equal(requestPush[0].event.messageText, '회원1님이 자리 교환을 요청했습니다.');
+  const accepted = respondSwapMutation(requested.state, requested.event.request.id, '7', true, 2000);
+  const acceptPush = interactionPushNotifications(accepted.state, accepted.event);
+  assert.equal(acceptPush[0].type, 'swap_result');
+  assert.deepEqual(acceptPush[0].members.map(m => m.id), ['1']);
+  assert.equal(acceptPush[0].event.messageText, '회원7님이 자리 교환 요청을 수락했습니다.');
+  const requestedAgain = requestSwapMutation(fixture(), '1', '7', 1000);
+  const rejected = respondSwapMutation(requestedAgain.state, requestedAgain.event.request.id, '7', false, 2000);
+  assert.equal(interactionPushNotifications(rejected.state, rejected.event)[0].event.messageText, '회원7님이 자리 교환 요청을 거절했습니다.');
+}
+{
+  const requested = requestPairPlayMutation(fixture(), '14', '15', 1000);
+  const requestPush = interactionPushNotifications(requested.state, requested.event);
+  assert.equal(requestPush[0].type, 'pair_request');
+  assert.deepEqual(requestPush[0].members.map(m => m.id), ['15']);
+  assert.equal(requestPush[0].event.messageText, '회원14님이 함께 경기할 짝을 요청했습니다.');
+  const accepted = respondPairPlayMutation(requested.state, requested.event.request.id, '15', true, 2000);
+  const acceptPush = interactionPushNotifications(accepted.state, accepted.event);
+  assert.equal(acceptPush[0].type, 'pair_result');
+  assert.deepEqual(acceptPush[0].members.map(m => m.id), ['14']);
+  assert.equal(acceptPush[0].event.messageText, '회원15님이 짝 요청을 수락했습니다.');
+  const requestedAgain = requestPairPlayMutation(fixture(), '14', '15', 1000);
+  const rejected = respondPairPlayMutation(requestedAgain.state, requestedAgain.event.request.id, '15', false, 2000);
+  assert.equal(interactionPushNotifications(rejected.state, rejected.event)[0].event.messageText, '회원15님이 짝 요청을 거절했습니다.');
 }
 {
   const grouped = setBundleMutation(fixture(), ['14', '15', '16']);
