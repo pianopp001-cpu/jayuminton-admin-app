@@ -226,6 +226,41 @@ jobs:
           import sys
           path = Path(sys.argv[1])
           text = path.read_text(encoding='utf-8')
+          marker = 'JAYUMINTON_MEMBER_WAIT_TAP_PAIR_CHOICE_V1'
+          if marker not in text:
+              # "대기끼리 있는 사람은 같이 게임해요(짝요청)은 왜 안돼?" -- traced to:
+              # the page-wide click listener (JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1)
+              # only calls window.handleAnywhereMemberTap (which shows the
+              # swap-vs-pair choice modal) for cards that have NO onclick
+              # attribute -- `if(card.getAttribute('onclick')) return;`. Wait-group
+              # cards DO carry an onclick (handleMemberWaitOtherTap), so they never
+              # reach that listener at all; handleMemberWaitOtherTap
+              # (JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1 above) always calls
+              # window.jmRequestAnywhereSwap directly, so two members who are both
+              # in a wait group are never offered "같이 게임하기" -- only swap.
+              # Court/active cards work fine because they have no onclick and so
+              # do reach handleAnywhereMemberTap, which (once
+              # JAYUMINTON_MEMBER_PAIR_PLAY_ALERT_V2 wraps it) shows the choice.
+              # Fix: route the wait-card tap through that exact same
+              # window.handleAnywhereMemberTap entry point instead of jumping
+              # straight to swap, so wait-to-wait taps get the same choice.
+              old = "  const a=memberWaitSeatSessionArgs(); if(!a)return;\n  if(String(targetMemberId)===String(a.member.id))return;\n  /* JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1: self identity is already known from login, so tapping the other member alone is enough -- no separate 'select my own seat' step. */\n  /* JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1: memberRequestWaitSwap is an unsupported legacy RPC server-side -- route through the same working memberRequestAnywhereSwap path used by court/active cards instead. */\n  clearMemberWaitSeatPick();\n  if(typeof window.jmRequestAnywhereSwap==='function')await window.jmRequestAnywhereSwap(targetMemberId);\n}"
+              new = "  const a=memberWaitSeatSessionArgs(); if(!a)return;\n  if(String(targetMemberId)===String(a.member.id))return;\n  /* JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1: self identity is already known from login, so tapping the other member alone is enough -- no separate 'select my own seat' step. */\n  /* JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1: memberRequestWaitSwap is an unsupported legacy RPC server-side -- route through the same working memberRequestAnywhereSwap path used by court/active cards instead. */\n  /* JAYUMINTON_MEMBER_WAIT_TAP_PAIR_CHOICE_V1: wait-group cards used to always swap directly, silently skipping the pair-play offer that court/active cards already show via handleAnywhereMemberTap -- route through that same choice (같이 게임하기 vs 자리 바꾸기) instead of forcing swap. */\n  clearMemberWaitSeatPick();\n  if(typeof window.handleAnywhereMemberTap==='function'){ await window.handleAnywhereMemberTap(targetMemberId,event); return; }\n  if(typeof window.jmRequestAnywhereSwap==='function')await window.jmRequestAnywhereSwap(targetMemberId);\n}"
+              if old not in text:
+                  raise SystemExit('handleMemberWaitOtherTap anchor not found for pair-choice patch -- live source has drifted')
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              raise SystemExit('wait-tap pair-choice patch did not apply')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -F 'JAYUMINTON_MEMBER_WAIT_TAP_PAIR_CHOICE_V1' "$PUBLIC/index.html" >/dev/null
+
+          python3 - "$PUBLIC/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
           marker = 'JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1'
           if marker not in text:
               script = '''/* JAYUMINTON_MEMBER_ANYWHERE_SWAP_V1 */
@@ -1006,6 +1041,7 @@ jobs:
           grep -F 'member.teamLabel' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ONE_TAP_SWAP_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_WAIT_SWAP_UNIFY_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_WAIT_TAP_PAIR_CHOICE_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_SWAP_PRETTY_CONFIRM_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ANYWHERE_TAP_NO_DOUBLE_CONFIRM_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'window.jmRequestAnywhereSwap = requestSwap' "$PUBLIC/index.html" >/dev/null
