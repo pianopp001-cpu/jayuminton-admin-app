@@ -1,0 +1,134 @@
+name: Build admin v208.85 restore kok total
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20885-restore-kok-total.yml'
+      - 'deployment/jayuminton/admin_v20885_restore_kok_total_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20885-restore-kok-total
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'build-tools;35.0.0' >/dev/null
+
+      - name: Patch verified v208.84 APK only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/jm20885"
+          BASE='releases/jayuminton-admin-v208.84-universal-undo.apk'
+          PATCH='deployment/jayuminton/admin_v20885_restore_kok_total_patch.py'
+          HTML="$ROOT/assets/admin/index.html"
+          UNSIGNED="$ROOT/jayuminton-admin-v208.85-unsigned.apk"
+          ALIGNED="$ROOT/jayuminton-admin-v208.85-aligned.apk"
+          OUT="$ROOT/jayuminton-admin-v208.85-restore-kok-total.apk"
+          VERIFY="$ROOT/verify.html"
+
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/assets/admin"
+          test -s "$BASE"
+          test -s "$PATCH"
+          unzip -p "$BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+
+          grep -F 'jmAdminUniversalUndoV20884' "$HTML" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$HTML" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$HTML" >/dev/null
+          grep -F '완료 총 0명 · 남자 0명 · 여자 0명' "$HTML" >/dev/null
+          grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))!important' "$HTML" >/dev/null
+          grep -F 'min-height:26px!important;height:26px!important' "$HTML" >/dev/null
+          grep -F 'if(undoHistory.length>3)undoHistory.shift()' "$HTML" >/dev/null
+
+          python3 "$PATCH" "$HTML"
+
+          grep -F 'jmAdminRestoreKokTotalV20885' "$HTML" >/dev/null
+          grep -F '총 콕개수 0개  완료: 총 0명 (남자: 0명 여자: 0명)' "$HTML" >/dev/null
+          grep -F 'var kokTotal = 0;' "$HTML" >/dev/null
+          grep -F 'kokTotal += 1;' "$HTML" >/dev/null
+          grep -F 'kokTotal += 2;' "$HTML" >/dev/null
+          grep -F "totalEl.textContent = '총 콕개수 ' + kokTotal + '개  완료: 총 ' + doneCount + '명 (남자: ' + maleDoneCount + '명 여자: ' + femaleDoneCount + '명)';" "$HTML" >/dev/null
+          ! grep -F '완료 총 0명 · 남자 0명 · 여자 0명' "$HTML" >/dev/null
+
+          cp "$BASE" "$UNSIGNED"
+          zip -d "$UNSIGNED" 'META-INF/*' 'assets/admin/index.html' >/dev/null || true
+          (cd "$ROOT" && zip -q -u "$UNSIGNED" assets/admin/index.html)
+
+          BUILD_TOOLS="${ANDROID_HOME}/build-tools/35.0.0"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" "$ALIGNED"
+          "$BUILD_TOOLS/zipalign" -c -p 4 "$ALIGNED"
+
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
+          KS_PASS="$(sed -n "s/^[[:space:]]*storePassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_ALIAS="$(sed -n "s/^[[:space:]]*keyAlias '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_PASS="$(sed -n "s/^[[:space:]]*keyPassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          test -n "$KS_PASS"; test -n "$KEY_ALIAS"; test -n "$KEY_PASS"
+
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$ROOT/release.jks" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KS_PASS" \
+            --key-pass "pass:$KEY_PASS" \
+            --out "$OUT" \
+            "$ALIGNED"
+
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          unzip -p "$OUT" assets/admin/index.html > "$VERIFY"
+          test -s "$VERIFY"
+
+          grep -F 'jmAdminRestoreKokTotalV20885' "$VERIFY" >/dev/null
+          grep -F '총 콕개수 0개  완료: 총 0명 (남자: 0명 여자: 0명)' "$VERIFY" >/dev/null
+          grep -F 'kokTotal += 1;' "$VERIFY" >/dev/null
+          grep -F 'kokTotal += 2;' "$VERIFY" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$VERIFY" >/dev/null
+          grep -F '__jmUniversalUndoServerV20884' "$VERIFY" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$VERIFY" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$VERIFY" >/dev/null
+          grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))!important' "$VERIFY" >/dev/null
+          grep -F 'min-height:26px!important;height:26px!important' "$VERIFY" >/dev/null
+          grep -F 'if(undoHistory.length>3)undoHistory.shift()' "$VERIFY" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$VERIFY" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+
+      - name: Publish v208.85 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$APK_PATH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.85-restore-kok-total.apk
+          printf 'status=success\nversion=208.85\nbase=v208.84-universal-undo\nfeature=restore-total-kok-count-with-completed-total-male-female\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20885-restore-kok-total.txt
+          git add releases/jayuminton-admin-v208.85-restore-kok-total.apk deployment/status/v20885-restore-kok-total.txt
+          git commit -m 'Publish admin v208.85: restore total kok counter' || exit 0
+          git push origin HEAD:main
