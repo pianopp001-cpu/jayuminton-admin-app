@@ -1,0 +1,6 @@
+status=success
+version=208.76
+feature=manual-target-first-compact-kok-grid-overlay
+base=v208.75-clean-duplicate-auto-controls
+run_id=33985299698
+sha256=06fb7f003063e345a21bc3678ed3db1b9e4d420adeecca0334bc15f773fa5d2f
