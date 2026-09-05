@@ -1,0 +1,6 @@
+status=success
+version=208.78
+feature=expanded-menu-exclusive-kok-checklist
+base=v208.77-group-target-kok-wait-games
+run_id=33985841175
+sha256=052c9d6565e4a5cc4709d307f4eb5b3691f54ab3a2aa499e855ed56a294a87e8
