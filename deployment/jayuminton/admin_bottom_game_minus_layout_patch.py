@@ -6,7 +6,7 @@ import sys
 
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
-MARKER = 'jmAdminFixedQuickMenuV20878'
+MARKER = 'jmAdminFixedQuickMenuV20879'
 if MARKER in html:
     print('ADMIN_FIXED_QUICK_MENU_ALREADY_OK')
     raise SystemExit(0)
@@ -47,7 +47,7 @@ html = legacy_bar.sub('', html, count=1)
 
 addon = r'''
 <style id="jmAdminFixedQuickMenuStyle">
-/* jmAdminFixedQuickMenuV20878 */
+/* jmAdminFixedQuickMenuV20879 */
 #jmAdminFixedQuickMenu{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:2147483000!important;background:#fff!important;border-top:2px solid #334155!important;padding:5px max(5px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(5px,env(safe-area-inset-left))!important;box-shadow:0 -4px 18px rgba(15,23,42,.18)!important}
 #jmAdminFixedQuickMenu .jm-q-first{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr)) 28px!important;gap:4px!important;padding:2px!important;border-radius:11px!important;background:#e2e8f0!important;box-shadow:0 2px 8px rgba(15,23,42,.16)!important}
 #jmAdminFixedQuickMenu .jm-q-more{display:none!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important;margin-top:5px!important;padding-top:5px!important;border-top:1px solid #cbd5e1!important}
@@ -65,7 +65,6 @@ addon = r'''
 #jmAdminFixedQuickMenu #jmQuickPerm{background:#7c3aed!important;color:#fff!important}#jmAdminFixedQuickMenu #jmQuickPermClear{background:#ede9fe!important;border-color:#8b5cf6!important;color:#5b21b6!important}
 #jmAdminFixedQuickMenu #jmQuickClear{background:#e2e8f0!important;border-color:#64748b!important;color:#1e293b!important}
 #jmAdminFixedQuickMenu #jmQuickGamePlus{background:#0f766e!important;color:#fff!important}#jmAdminFixedQuickMenu #jmQuickGameZero{background:#991b1b!important;color:#fff!important}
-#jmAdminFixedQuickMenu #jmQuickKok{background:#7c3aed!important;border-color:#6d28d9!important;color:#fff!important}
 #jmAdminFixedQuickMenu .jm-q-selection{position:absolute!important;left:7px!important;top:-23px!important;display:flex!important;align-items:center!important;justify-content:center!important;width:max-content!important;min-width:66px!important;padding:3px 8px!important;border:1px solid #15803d!important;border-radius:7px!important;background:rgba(236,253,245,.96)!important;color:#14532d!important;font-size:10.5px!important;font-weight:950!important;line-height:1.1!important;box-shadow:0 1px 4px rgba(15,118,55,.18)!important;pointer-events:none!important}
 #adminApp #jmUnlimitedToolbar{display:none!important;visibility:hidden!important;height:0!important;min-height:0!important;max-height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important}
 #adminApp .jm-unlimited-check{display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important;overflow:hidden!important}
@@ -80,8 +79,13 @@ addon = r'''
 .admin-kok-submit-panel .jm-kok-row.jm-kok-inactive{order:2!important;background:#f1f5f9!important;opacity:.58!important}
 .admin-kok-submit-panel .jm-kok-row.jm-kok-inactive .name{text-decoration:line-through!important}
 #adminApp .admin-kok-submit-panel.jm-kok-overlay{display:block!important;position:fixed!important;z-index:2147482990!important;left:8px!important;right:8px!important;top:max(44px,env(safe-area-inset-top))!important;bottom:70px!important;margin:0!important;padding:10px!important;overflow:auto!important;background:#fff!important;border:2px solid #7c3aed!important;border-radius:14px!important;box-shadow:0 12px 40px rgba(15,23,42,.32)!important}
-body>.admin-kok-submit-panel.jm-kok-detached:not(.jm-kok-overlay){display:none!important}
-body>.admin-kok-submit-panel.jm-kok-overlay{display:block!important;position:fixed!important;z-index:2147482990!important;left:8px!important;right:8px!important;top:max(44px,env(safe-area-inset-top))!important;bottom:70px!important;margin:0!important;padding:10px!important;overflow:auto!important;background:#fff!important;border:2px solid #7c3aed!important;border-radius:14px!important;box-shadow:0 12px 40px rgba(15,23,42,.32)!important}
+body>.admin-kok-submit-panel.jm-kok-detached{display:block!important;visibility:hidden!important;pointer-events:none!important;position:fixed!important;z-index:2147482990!important;right:0!important;left:auto!important;top:max(36px,env(safe-area-inset-top))!important;bottom:66px!important;width:min(86vw,520px)!important;margin:0!important;padding:10px!important;overflow:auto!important;background:#fff!important;border:2px solid #7c3aed!important;border-right:0!important;border-radius:14px 0 0 14px!important;box-shadow:-12px 0 36px rgba(15,23,42,.3)!important;transform:translateX(104%)!important;transition:transform .2s ease,visibility .2s!important}
+body>.admin-kok-submit-panel.jm-kok-detached.jm-kok-overlay{visibility:visible!important;pointer-events:auto!important;transform:translateX(0)!important}
+#jmKokSideToggle{position:fixed!important;z-index:2147483010!important;right:0!important;top:42vh!important;width:30px!important;height:62px!important;min-width:30px!important;padding:0!important;border:2px solid #6d28d9!important;border-right:0!important;border-radius:10px 0 0 10px!important;background:#7c3aed!important;color:#fff!important;font-size:18px!important;font-weight:1000!important;box-shadow:-3px 2px 10px rgba(15,23,42,.24)!important;transition:right .2s ease!important}
+#jmKokSideToggle.jm-open{right:min(86vw,520px)!important}
+#adminApp .excluded-panel h2{font-size:15px!important;line-height:1.15!important;margin:0 0 3px!important}
+#adminApp .excluded-panel .sub{font-size:10px!important;line-height:1.25!important}
+#jmQuickEligibleCounts{display:inline-flex!important;align-items:center!important;margin-left:7px!important;padding:2px 6px!important;border-radius:999px!important;background:#eef2ff!important;color:#3730a3!important;font-size:9.5px!important;font-weight:900!important;line-height:1.2!important;white-space:nowrap!important;vertical-align:middle!important}
 #adminApp .v4-wait-card .person .meta,#adminApp .wait-group .person .meta,#adminApp #waitGroups .person .meta{display:block!important;visibility:visible!important;margin-top:2px!important;font-size:9px!important;font-weight:900!important;line-height:1.05!important;opacity:.82!important;text-align:center!important;white-space:nowrap!important}
 @media(min-width:700px){.admin-kok-submit-panel #kokSubmitRoster.jm-kok-roster-list{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 html body .jm-original-bottom-hidden,html body #adminApp .jm-original-bottom-hidden{display:none!important;visibility:hidden!important;height:0!important;min-height:0!important;max-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important}
@@ -91,8 +95,8 @@ body.jm-quick-collapsed{padding-bottom:66px!important}body.jm-quick-expanded{pad
 <script id="jmAdminFixedQuickMenuScript">
 (function(){
 'use strict';
-if(window.__jmAdminFixedQuickMenuV20878)return;
-window.__jmAdminFixedQuickMenuV20878=true;
+if(window.__jmAdminFixedQuickMenuV20879)return;
+window.__jmAdminFixedQuickMenuV20879=true;
 var running=false,queued=false;
 var manualFirstTarget=null;
 function compact(s){return String(s||'').replace(/\s+/g,'').trim();}
@@ -154,8 +158,12 @@ function detachKokPanel(){
 function toggleKokPanel(){
   var panel=detachKokPanel();if(!panel)return alert('콕 제출 명단을 찾을 수 없습니다.');
   var opening=!panel.classList.contains('jm-kok-overlay');panel.classList.toggle('jm-kok-overlay',opening);
-  var button=document.getElementById('jmQuickKok');if(button)button.textContent=opening?'콕 닫기':'콕체크';
+  var button=document.getElementById('jmKokSideToggle');if(button){button.textContent=opening?'▶':'◀';button.classList.toggle('jm-open',opening);button.setAttribute('aria-label',opening?'콕체크 닫기':'콕체크 열기');}
   if(opening&&typeof renderKokSubmitPanel==='function')renderKokSubmitPanel();
+}
+function installKokSideToggle(){
+  var button=document.getElementById('jmKokSideToggle');if(button)return button;
+  button=make('jmKokSideToggle','◀',toggleKokPanel);button.setAttribute('aria-label','콕체크 열기');document.body.appendChild(button);return button;
 }
 function installMenu(){
   var menu=document.getElementById('jmAdminFixedQuickMenu');
@@ -191,8 +199,7 @@ function installMenu(){
     ['jmQuickPermClear','영구팀해제',function(){clickTarget(toolbarButton('perm-clear'));}],
     ['jmQuickClear','선택해제',function(){clickTarget(toolbarButton('clear'));}],
     ['jmQuickGamePlus','게임 +1',function(){if(typeof window.increaseSelectedGames==='function')window.increaseSelectedGames();}],
-    ['jmQuickGameZero','게임 모두 0',function(){if(typeof window.resetSelectedGames==='function')window.resetSelectedGames();}],
-    ['jmQuickKok','콕체크',toggleKokPanel]
+    ['jmQuickGameZero','게임 모두 0',function(){if(typeof window.resetSelectedGames==='function')window.resetSelectedGames();}]
   ].forEach(function(x){more.appendChild(make(x[0],x[1],x[2]));});
   menu.appendChild(more);document.body.appendChild(menu);document.body.classList.add('jm-quick-collapsed');
   return menu;
@@ -212,6 +219,15 @@ function removeDuplicatePanels(){
 function updateSelectionCount(){
   var badge=document.getElementById('jmQuickSelectionCount');if(badge)badge.textContent=manualFirstTarget?'배정 위치 선택됨 · 멤버 누르기':'선택 '+selectedCount()+'명';
 }
+function updateEligibleCounts(){
+  var badge=document.getElementById('jmQuickEligibleCounts');
+  var heading=badge&&badge.parentElement;if(!heading)heading=Array.prototype.find.call(document.querySelectorAll('#adminApp h1,#adminApp h2,#adminApp h3'),function(h){return compact(h.textContent).indexOf('빠른코트배정')===0;});if(!heading)return;
+  if(!badge){badge=document.createElement('span');badge.id='jmQuickEligibleCounts';heading.appendChild(badge);}
+  var members=[];try{members=Array.isArray(STATE.members)?STATE.members:[];}catch(_){}
+  var eligible=members.filter(function(m){return ['before','rest','away'].indexOf(String(m&&m.status||''))<0;});
+  var female=eligible.filter(function(m){return m&&m.gender==='female';}).length,male=eligible.length-female;
+  badge.textContent='전체 '+eligible.length+'명 · 남자 '+male+'명 · 여자 '+female+'명';
+}
 function removeLegacyBottom(){
   Array.prototype.forEach.call(document.querySelectorAll('#adminApp>.admin-vnext-bottom-bar,#jmBottomActionRowV2079'),function(node){node.remove();});
 }
@@ -222,13 +238,15 @@ function ensure(){
     if(!adminReady()){
       if(existing&&existing.style.getPropertyValue('display')!=='none')existing.style.setProperty('display','none','important');
       var kokPanel=document.querySelector('.admin-kok-submit-panel');if(kokPanel)kokPanel.classList.remove('jm-kok-overlay');
+      var side=document.getElementById('jmKokSideToggle');if(side)side.style.setProperty('display','none','important');
       document.body.classList.remove('jm-quick-collapsed','jm-quick-expanded');
       return;
     }
     var menu=installMenu();
     if(menu.style.getPropertyValue('display')==='none')menu.style.removeProperty('display');
+    var side=installKokSideToggle();if(side.style.getPropertyValue('display')==='none')side.style.removeProperty('display');
     if(!document.body.classList.contains('jm-quick-collapsed')&&!document.body.classList.contains('jm-quick-expanded'))document.body.classList.add('jm-quick-collapsed');
-    removeAutoAssign();removeDuplicatePanels();removeLegacyBottom();detachKokPanel();paintManualFirstTarget();updateSelectionCount();
+    removeAutoAssign();removeDuplicatePanels();removeLegacyBottom();detachKokPanel();paintManualFirstTarget();updateSelectionCount();updateEligibleCounts();
   }finally{running=false;}
 }
 function schedule(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;ensure();});}
@@ -268,7 +286,8 @@ for required in (
     "make('jmQuickRefresh','새로고침'", "make('jmQuickToggle','▼'",
     "['jmQuickAll','모두선택'", "['jmQuickGamePlus','게임 +1'",
     "['jmQuickGameZero','게임 모두 0'", "selection.id='jmQuickSelectionCount'",
-    "['jmQuickKok','콕체크',toggleKokPanel]", 'function detachKokPanel()',
+    "button=make('jmKokSideToggle','◀',toggleKokPanel)", 'function detachKokPanel()',
+    'function updateEligibleCounts()',
     'function removeAutoAssign()', 'function removeDuplicatePanels()',
 ):
     if required not in html:
