@@ -1,4 +1,4 @@
-name: Build admin remove legacy menu and colored actions v208.74
+name: Build admin remove duplicate controls and auto-assign UI v208.75
 # retrigger: base v208.52 toolbar APK (member-replies freeze fix) now published on main
 
 on:
@@ -99,7 +99,7 @@ jobs:
           grep -F 'id="jmGameCountClearSelection"' "$HTML" >/dev/null
           grep -F '>전체 해제</button>' "$HTML" >/dev/null
           grep -F 'window.__jmUnlimitedSelected||[]' "$HTML" >/dev/null
-          grep -F 'jmAdminFixedQuickMenuV20874' "$HTML" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20875' "$HTML" >/dev/null
           grep -F "menu.id='jmAdminFixedQuickMenu'" "$HTML" >/dev/null
           grep -F "make('jmQuickUndo','실행취소'" "$HTML" >/dev/null
           grep -F "make('jmQuickGameMinus','게임 -1'" "$HTML" >/dev/null
@@ -107,7 +107,12 @@ jobs:
           grep -F "make('jmQuickToggle','▼'" "$HTML" >/dev/null
           grep -F "['jmQuickGamePlus','게임 +1'" "$HTML" >/dev/null
           grep -F "['jmQuickGameZero','게임 모두 0'" "$HTML" >/dev/null
-          grep -F "make('jmToolbarAutoAssign','자동배정'" "$HTML" >/dev/null
+          grep -F "selection.id='jmQuickSelectionCount'" "$HTML" >/dev/null
+          grep -F 'function removeAutoAssign()' "$HTML" >/dev/null
+          grep -F 'function removeDuplicatePanels()' "$HTML" >/dev/null
+          grep -F '#adminApp #jmUnlimitedToolbar{display:none!important' "$HTML" >/dev/null
+          grep -F '#adminApp .jm-unlimited-check{display:none!important' "$HTML" >/dev/null
+          ! grep -F "make('jmToolbarAutoAssign','자동배정'" "$HTML" >/dev/null
           ! grep -F 'id="adminBottomAutoAssign"' "$HTML" >/dev/null
 
       - name: Verify the pair-request/reply merge is present (baked into BASE by build-admin-toolbar-v2073.yml, which re-injects deployment/jayuminton/admin_member_replies_v1.js verbatim on every run)
@@ -327,13 +332,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.74";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.75";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 62',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.52'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 63',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.53'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -403,7 +408,13 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'window.__jmUnlimitedSelected=selected;' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmGameCountSelectionUnifiedV20867' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'jmAdminFixedQuickMenuV20874' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20875' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "selection.id='jmQuickSelectionCount'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'function removeAutoAssign()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'function removeDuplicatePanels()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '#adminApp #jmUnlimitedToolbar{display:none!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '#adminApp .jm-unlimited-check{display:none!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F "make('jmToolbarAutoAssign','자동배정'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "menu.id='jmAdminFixedQuickMenu'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "make('jmQuickUndo','실행취소'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "make('jmQuickGameMinus','게임 -1'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -460,8 +471,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.74-remove-legacy-colored-menu.apk
-          printf 'status=success\nversion=208.74\nfeature=remove-legacy-colored-quick-menu\nbase=v208.73-login-gated-quick-menu\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20874-remove-legacy-colored-menu.txt
-          git add releases/jayuminton-admin-v208.74-remove-legacy-colored-menu.apk deployment/status/v20874-remove-legacy-colored-menu.txt
-          git commit -m 'Publish admin v208.74: remove legacy menu and enforce action colors' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.75-clean-duplicate-auto-controls.apk
+          printf 'status=success\nversion=208.75\nfeature=remove-duplicate-controls-auto-assign-and-selection-check\nbase=v208.74-remove-legacy-colored-menu\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20875-clean-duplicate-auto-controls.txt
+          git add releases/jayuminton-admin-v208.75-clean-duplicate-auto-controls.apk deployment/status/v20875-clean-duplicate-auto-controls.txt
+          git commit -m 'Publish admin v208.75: remove duplicate controls and auto-assign UI' || exit 0
           git push origin HEAD:main
