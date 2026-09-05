@@ -100,7 +100,7 @@ jobs:
           grep -F '>전체 해제</button>' "$HTML" >/dev/null
           grep -F 'window.__jmUnlimitedSelected||[]' "$HTML" >/dev/null
           grep -F 'jmAdminAutoAssignToolbarGameMinusV20869' "$HTML" >/dev/null
-          grep -F 'id="jmToolbarAutoAssign"' "$HTML" >/dev/null
+          grep -F "desired.id='jmToolbarAutoAssign'" "$HTML" >/dev/null
           ! grep -F 'id="quickAutoAssignButton"' "$HTML" >/dev/null
           grep -F "b!==desired)b.remove()" "$HTML" >/dev/null
           grep -F 'onclick="decreaseSelectedGames()">게임 -1</button>' "$HTML" >/dev/null
@@ -400,7 +400,7 @@ jobs:
           grep -F 'window.__jmUnlimitedSelected=selected;' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmGameCountSelectionUnifiedV20867' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmAdminAutoAssignToolbarGameMinusV20869' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'id="jmToolbarAutoAssign"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "desired.id='jmToolbarAutoAssign'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="adminBottomGameMinus"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'onclick="decreaseSelectedGames()">게임 -1</button>' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'id="adminBottomAutoAssign"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
