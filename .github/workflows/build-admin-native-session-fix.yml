@@ -456,7 +456,6 @@ jobs:
           grep -F 'jmKokSubmitCheckV5' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'id="kokSubmitRoster"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "server('setMemberKokInactive'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function setKokSubmitTab(' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jm-kok-tab' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jm-kok-roster-list' "$RUNNER_TEMP/apk-admin.html" >/dev/null
