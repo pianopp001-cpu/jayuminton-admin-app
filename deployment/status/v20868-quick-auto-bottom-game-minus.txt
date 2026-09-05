@@ -1,0 +1,6 @@
+status=success
+version=208.68
+feature=quick-auto-assign-bottom-game-minus
+base=v208.67-game-count-selection-fix
+run_id=33964803767
+sha256=5c138fb1bc537484fa243bdde5bdd8607fd5388fd9bcffa76b2289168e4b1e88
