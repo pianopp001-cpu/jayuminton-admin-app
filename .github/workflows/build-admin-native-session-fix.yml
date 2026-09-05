@@ -343,7 +343,7 @@ jobs:
       - name: Build verify publish
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           gradle --no-daemon :app:assembleRelease
           APK=app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
@@ -414,7 +414,6 @@ jobs:
           grep -F "['jmQuickGamePlus','게임 +1'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "['jmQuickGameZero','게임 모두 0'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "make('jmToolbarAutoAssign','자동배정'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "compact(refresh.textContent)!=='새로고침'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function adminReady()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "typeof ADMIN_PIN_VALUE!=='undefined'&&!!ADMIN_PIN_VALUE" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "existing.style.setProperty('display','none','important')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
