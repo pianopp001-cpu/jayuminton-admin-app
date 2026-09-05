@@ -1,0 +1,6 @@
+status=success
+version=208.74
+feature=remove-legacy-colored-quick-menu
+base=v208.73-login-gated-quick-menu
+run_id=33974170580
+sha256=4e49d825577eaa3dfc3ffc08fb35023e5ecf74504c44bd837eda78f0d451c9b8
