@@ -29,3 +29,8 @@ CREATE TABLE IF NOT EXISTS pair_stats (
 
 CREATE INDEX IF NOT EXISTS idx_pair_stats_member_a ON pair_stats(member_a);
 CREATE INDEX IF NOT EXISTS idx_pair_stats_member_b ON pair_stats(member_b);
+
+CREATE TABLE IF NOT EXISTS pair_stat_events (
+  revision TEXT PRIMARY KEY,
+  recorded_at TEXT NOT NULL
+);
