@@ -72,7 +72,6 @@ SCRIPT = r'''
     if(!snapshot||typeof window.setUndoState!=='function')return;
     var s=sig(snapshot);
     if(s&&s===lastPushedSig)return;
-    lastPushedSig=s;
     window.setUndoState(snapshot);
   }
 
