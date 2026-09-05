@@ -1,0 +1,6 @@
+status=success
+version=208.70
+feature=fixed-two-row-quick-menu
+base=v208.69-toolbar-auto-bottom-game-minus
+run_id=33966614127
+sha256=aa80be90fbd78edffd85a2eb9539dfad566999f7ed4cbbe171c4b61b04a29697
