@@ -35,6 +35,11 @@ assert.ok(compatEntry.includes("if(![1,2,3,4].includes(a))throw new Error('inval
 assert.ok(compatEntry.match(/kind==='cross'[\s\S]{0,400}invalid_wait_group/), 'cross swap must validate the wait-group index');
 assert.ok(compatEntry.match(/kind==='cross'[\s\S]{0,1200}games:Math\.max\(0,\(Number\(m\.games\)\|\|0\)\+1\)/), 'members entering a court from a wait group via cross swap must gain a game credit like every other court-entry path');
 assert.ok(mdEntry.includes('pair_stats'), 'D1 pair statistics missing');
+assert.ok(mdEntry.includes('pair_stat_events'), 'pair-stat revision dedup table missing');
+assert.ok(mdEntry.includes('event.courtEntrantIds'), 'pair statistics must use exact serialized court entrants');
+assert.ok(!mdEntry.includes('oldLoc?.type !== \'court\''), 'stale outer before/after location diff must not drive pair statistics');
+assert.ok(mdEntry.includes('NOT EXISTS (SELECT 1 FROM pair_stat_events WHERE revision=?)'), 'pair-stat revision dedup guard missing');
+assert.ok(mdEntry.includes('env.DB.batch(['), 'pair increments and revision marker must be atomic');
 assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS pair_stats'), 'pair_stats missing from persistent schema');
 assert.ok(mdEntry.includes("body.action === 'autoAssign'"), 'MD autoAssign entry missing');
 assert.ok(mdEntry.includes("body.name === 'getPairStatistics'"), 'pair statistics compat RPC missing');
