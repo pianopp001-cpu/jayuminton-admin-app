@@ -343,7 +343,7 @@ jobs:
       - name: Build verify publish
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           gradle --no-daemon :app:assembleRelease
           APK=app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
