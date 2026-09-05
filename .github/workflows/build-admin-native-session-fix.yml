@@ -115,7 +115,7 @@ jobs:
           grep -F '<summary>멤버등록·비밀번호</summary>' "$HTML" >/dev/null
           ! grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$HTML" >/dev/null
           grep -F 'function manualGroupFromEmpty(el)' "$HTML" >/dev/null
-          grep -F "kok.textContent='콕 닫기'" "$HTML" >/dev/null
+          grep -F "button.textContent=opening?'콕 닫기':'콕체크'" "$HTML" >/dev/null
           grep -F "closest('#kokSubmitRoster .jm-kok-row .name')" "$HTML" >/dev/null
           grep -F '#adminApp #jmUnlimitedToolbar{display:none!important' "$HTML" >/dev/null
           grep -F '#adminApp .jm-unlimited-check{display:none!important' "$HTML" >/dev/null
@@ -427,7 +427,7 @@ jobs:
           ! grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function manualGroupFromEmpty(el)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'target.click()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "kok.textContent='콕 닫기'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "button.textContent=opening?'콕 닫기':'콕체크'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "closest('#kokSubmitRoster .jm-kok-row .name')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#adminApp .v4-wait-card .person .meta' "$RUNNER_TEMP/apk-admin.html" >/dev/null
