@@ -151,7 +151,7 @@ export function finishCourtMutation(input, courtNo, now = new Date().toISOString
   addGames(state, entrants, 1);
   syncMemberStatuses(state);
   reconcileTempPairs(state);
-  return { state, event: { type: 'court_finished', courtNo: Number(no), finished, courtEntrants: memberSummaries(state, entrants), wait1Entrants: memberSummaries(state, newlyReady) } };
+  return { state, event: { type: 'court_finished', courtNo: Number(no), finished, courtEntrants: memberSummaries(state, entrants), courtEntrantIds: uniqueIds(entrants), wait1Entrants: memberSummaries(state, newlyReady) } };
 }
 
 export function moveMutation(input, memberIds, destination) {
@@ -171,7 +171,7 @@ export function moveMutation(input, memberIds, destination) {
   }
   syncMemberStatuses(state);
   reconcileTempPairs(state);
-  return { state, event: { type: 'members_moved', memberIds: ids, destination } };
+  return { state, event: { type: 'members_moved', memberIds: ids, destination, courtEntrantIds: enteringCourt } };
 }
 
 export function swapMutation(input, leftIds, rightIds) {
@@ -200,7 +200,7 @@ export function swapMutation(input, leftIds, rightIds) {
   addGames(state, enteringCourt, 1);
   syncMemberStatuses(state);
   reconcileTempPairs(state);
-  return { state, event: { type: 'members_swapped', leftIds: a, rightIds: b } };
+  return { state, event: { type: 'members_swapped', leftIds: a, rightIds: b, courtEntrantIds: uniqueIds(enteringCourt) } };
 }
 
 export function swapLocationsMutation(input, left, right) {
@@ -232,13 +232,14 @@ export function autoAssignMutation(input, candidateIds, destinations) {
   const men = available.filter(id => String(memberById.get(id).gender || '').toLowerCase().startsWith('m') || memberById.get(id).gender === '남');
   const women = available.filter(id => !men.includes(id));
   while (men.length || women.length) { if (men.length) ordered.push(men.shift()); if (women.length) ordered.push(women.shift()); }
-  const assigned = [];
+  const assigned = []; const courtEntrantIds = [];
   for (const destination of Array.isArray(destinations) ? destinations : []) {
     const free = Math.max(0, 4 - container(state, destination).length); const ids = ordered.splice(0, free);
     if (!ids.length) continue;
-    state = moveMutation(state, ids, destination).state; assigned.push({ destination, memberIds: ids });
+    const moved = moveMutation(state, ids, destination); state = moved.state;
+    courtEntrantIds.push(...(moved.event.courtEntrantIds || [])); assigned.push({ destination, memberIds: ids });
   }
-  return { state, event: { type: 'auto_assigned', assigned } };
+  return { state, event: { type: 'auto_assigned', assigned, courtEntrantIds: uniqueIds(courtEntrantIds) } };
 }
 
 export function upsertMemberMutation(input, member) {
@@ -386,9 +387,10 @@ export function respondSwapMutation(input, requestId, responderId, accept, nowMs
   if (!request || request.status !== 'pending' || request.targetId !== String(responderId)) throw new Error('swap_request_not_found');
   if (Number(request.expiresAt) <= nowMs) { request.status = 'expired'; return { state, event: { type: 'swap_expired', requestId: request.id } }; }
   request.status = accept ? 'accepted' : 'rejected'; request.respondedAt = nowMs;
-  if (accept) state = swapMutation(state, [request.requesterId], [request.targetId]).state;
+  let courtEntrantIds = [];
+  if (accept) { const swapped = swapMutation(state, [request.requesterId], [request.targetId]); state = swapped.state; courtEntrantIds = swapped.event.courtEntrantIds || []; }
   const saved = state.swapRequests.find(r => r.id === request.id); if (saved) Object.assign(saved, request);
-  return { state, event: { type: accept ? 'swap_accepted' : 'swap_rejected', requestId: request.id } };
+  return { state, event: { type: accept ? 'swap_accepted' : 'swap_rejected', requestId: request.id, courtEntrantIds: uniqueIds(courtEntrantIds) } };
 }
 
 export function cancelSwapMutation(input, requesterId) {
