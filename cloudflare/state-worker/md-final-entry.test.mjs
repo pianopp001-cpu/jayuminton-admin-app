@@ -49,10 +49,10 @@ assert.ok(mdEntry.includes('[[2, 2], [4, 0], [0, 4]]'), 'MD doubles composition 
 const moveOneBlock = mdEntry.slice(mdEntry.indexOf('async function moveOne('), mdEntry.indexOf('async function mdAutoAssign('));
 assert.ok(moveOneBlock.includes("action: 'moveMembers'"), 'autoassign moveOne action missing');
 assert.equal(moveOneBlock.includes('recordPairTransitions('), false, 'autoassign pair statistics would be recorded twice');
-const outerPairWrites = (mdEntry.match(/if \(before && out\?\.state\) await recordPairTransitions\(env, before, out\.state\);/g) || []).length;
+const outerPairWrites = (mdEntry.match(/if \(out\?\.state\) await recordPairTransitions\(env, out\.state, out\.event\);/g) || []).length;
 assert.equal(outerPairWrites, 2, 'admin and compat autoassign must each record pair statistics exactly once');
 
-assert.ok(mdEntry.includes("await env.DB.prepare('DELETE FROM pair_stats').run();"), 'operation reset must clear pair statistics');
+assert.ok(mdEntry.includes("env.DB.prepare('DELETE FROM pair_stats')") && mdEntry.includes("env.DB.prepare('DELETE FROM pair_stat_events')"), 'operation reset must clear pair statistics and revision dedup markers');
 assert.ok(mdEntry.includes("if (packet?.ok && options.clearPairStats) await clearPairStatistics(env);"), 'pair statistics must clear only after a successful core reset response');
 assert.ok(mdEntry.includes("{ clearPairStats: body.action === 'resetAll' }"), 'direct admin resetAll pair-stat cleanup missing');
 assert.ok(mdEntry.includes("const isRestore = body.name === 'restoreManualBackup';"), 'restore must have an explicit pair-stat consistency path');
