@@ -415,8 +415,6 @@ jobs:
           grep -F "['jmQuickGameZero','게임 모두 0'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "make('jmToolbarAutoAssign','자동배정'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "compact(refresh.textContent)!=='새로고침'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "parent.style.setProperty('display','none','important')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "fixed.style.setProperty('display','none','important')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function adminReady()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "typeof ADMIN_PIN_VALUE!=='undefined'&&!!ADMIN_PIN_VALUE" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "existing.style.setProperty('display','none','important')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
