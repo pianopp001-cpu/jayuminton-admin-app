@@ -1,0 +1,178 @@
+name: Build admin v208.84 universal undo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20884-universal-undo.yml'
+      - 'deployment/jayuminton/admin_v20884_universal_undo_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20884-universal-undo
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'build-tools;35.0.0' >/dev/null
+
+      - name: Patch verified v208.83 APK and test universal undo
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/jm20884"
+          BASE='releases/jayuminton-admin-v208.83-reply-reposition.apk'
+          PATCH='deployment/jayuminton/admin_v20884_universal_undo_patch.py'
+          HTML="$ROOT/assets/admin/index.html"
+          UNSIGNED="$ROOT/jayuminton-admin-v208.84-unsigned.apk"
+          ALIGNED="$ROOT/jayuminton-admin-v208.84-aligned.apk"
+          OUT="$ROOT/jayuminton-admin-v208.84-universal-undo.apk"
+          VERIFY="$ROOT/verify.html"
+
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/assets/admin"
+          test -s "$BASE"
+          test -s "$PATCH"
+          unzip -p "$BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+
+          # v208.83 and older features must exist before patching.
+          grep -F 'jmAdminReplyRepositionV20883' "$HTML" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$HTML" >/dev/null
+          grep -F 'jmAdminEdgeUiV20881' "$HTML" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20880' "$HTML" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$HTML" >/dev/null
+          grep -F "window.undoLastAction=async function()" "$HTML" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$HTML" >/dev/null
+
+          python3 "$PATCH" "$HTML"
+
+          # Static invariants for universal capture and dedupe.
+          grep -F 'jmAdminUniversalUndoV20884' "$HTML" >/dev/null
+          grep -F '__jmUniversalUndoServerV20884' "$HTML" >/dev/null
+          grep -F '__jmUniversalUndoDedupV20884' "$HTML" >/dev/null
+          grep -F "authoritative||currentState()" "$HTML" >/dev/null
+          grep -F 'pushUndo(before)' "$HTML" >/dev/null
+          grep -F "name==='undoLastAction'" "$HTML" >/dev/null
+          grep -F '/^(add|update|set|clear|delete|assign|smartAssign|finish|swap|move|adjust|decrease|reset|restore|dismiss)/' "$HTML" >/dev/null
+
+          # Behavioral test: wait assignment, wait->court move, and member swap all create undo history.
+          python3 - "$HTML" "$ROOT/undo-test.js" <<'PY'
+          import re, sys
+          text=open(sys.argv[1],encoding='utf-8').read()
+          m=re.search(r'<script id="jmAdminUniversalUndoV20884Script">(.*?)</script>',text,re.S)
+          if not m: raise SystemExit('v20884 script not found')
+          script=m.group(1)
+          harness=r'''
+          global.window=global;
+          global.setInterval=function(){return 1;};global.clearInterval=function(){};
+          const clone=x=>JSON.parse(JSON.stringify(x));
+          function S(tag,court,wait){return {tag:tag,members:[{id:'1',status:'active'},{id:'2',status:'active'}],courts:{'1':court||[],'2':[],'3':[],'4':[]},waitGroups:[wait||[],[],[],[],[]],courtStartedAt:{}};}
+          const A=S('A',[],[]),B=S('B',[],['1']),C=S('C',['1'],[]),D=S('D',['2'],['1']);
+          global.STATE=clone(A);global.window.STATE=global.STATE;
+          const hist=[];
+          global.setUndoState=function(s){hist.push(clone(s));if(hist.length>3)hist.shift();};
+          global.undoLastAction=async function(){if(hist.length)hist.pop();return STATE;};
+          const responses={assignMembersToWaitGroup:B,moveOrSwapMember:C,swapMembers:D,getPublicState:A};
+          global.server=async function(name){return clone(responses[name]||STATE);};
+          '''+script+r'''
+          (async()=>{
+            await window.server('getPublicState',[]);
+            if(hist.length!==0)throw new Error('read call created undo history');
+            await window.server('assignMembersToWaitGroup',[]);
+            if(hist.length!==1||hist[0].tag!=='A')throw new Error('wait assignment was not captured');
+            window.setUndoState(clone(A));
+            if(hist.length!==1)throw new Error('duplicate manual setUndoState was not deduped');
+            await window.server('moveOrSwapMember',[]);
+            if(hist.length!==2||hist[1].tag!=='B')throw new Error('wait to court move was not captured');
+            await window.server('swapMembers',[]);
+            if(hist.length!==3||hist[2].tag!=='C')throw new Error('member swap was not captured');
+            console.log('UNIVERSAL_UNDO_BEHAVIOR_OK');
+          })().catch(e=>{console.error(e);process.exit(1);});
+          '''
+          open(sys.argv[2],'w',encoding='utf-8').write(harness)
+          PY
+          node "$ROOT/undo-test.js"
+
+          # Replace only the embedded HTML and re-sign the verified v208.83 APK.
+          cp "$BASE" "$UNSIGNED"
+          zip -d "$UNSIGNED" 'META-INF/*' 'assets/admin/index.html' >/dev/null || true
+          (cd "$ROOT" && zip -q -u "$UNSIGNED" assets/admin/index.html)
+
+          BUILD_TOOLS="${ANDROID_HOME}/build-tools/35.0.0"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" "$ALIGNED"
+          "$BUILD_TOOLS/zipalign" -c -p 4 "$ALIGNED"
+
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
+          test -s "$ROOT/release.jks"
+
+          KS_PASS="$(sed -n "s/^[[:space:]]*storePassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_ALIAS="$(sed -n "s/^[[:space:]]*keyAlias '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_PASS="$(sed -n "s/^[[:space:]]*keyPassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          test -n "$KS_PASS"; test -n "$KEY_ALIAS"; test -n "$KEY_PASS"
+
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$ROOT/release.jks" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KS_PASS" \
+            --key-pass "pass:$KEY_PASS" \
+            --out "$OUT" \
+            "$ALIGNED"
+
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          unzip -p "$OUT" assets/admin/index.html > "$VERIFY"
+          test -s "$VERIFY"
+
+          # Final APK: universal undo plus all previous UI/function markers survive.
+          grep -F 'jmAdminUniversalUndoV20884' "$VERIFY" >/dev/null
+          grep -F '__jmUniversalUndoServerV20884' "$VERIFY" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$VERIFY" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$VERIFY" >/dev/null
+          grep -F '완료 총 0명 · 남자 0명 · 여자 0명' "$VERIFY" >/dev/null
+          grep -F 'jmAdminEdgeUiV20881' "$VERIFY" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20880' "$VERIFY" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$VERIFY" >/dev/null
+          grep -F 'if(undoHistory.length>3)undoHistory.shift()' "$VERIFY" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$VERIFY" >/dev/null
+          grep -F "make('jmQuickUndo','실행취소'" "$VERIFY" >/dev/null
+          grep -F "make('jmQuickGameMinus','게임 -1'" "$VERIFY" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+
+      - name: Publish v208.84 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$APK_PATH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.84-universal-undo.apk
+          printf 'status=success\nversion=208.84\nbase=v208.83-reply-reposition\nfeature=universal-three-step-undo-for-all-state-mutations\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20884-universal-undo.txt
+          git add releases/jayuminton-admin-v208.84-universal-undo.apk deployment/status/v20884-universal-undo.txt
+          git commit -m 'Publish admin v208.84: universal three-step undo' || exit 0
+          git push origin HEAD:main
