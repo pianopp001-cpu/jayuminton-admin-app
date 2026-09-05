@@ -1,4 +1,4 @@
-name: Build admin force-hide legacy quick menu v208.72
+name: Build admin login-gated quick menu v208.73
 # retrigger: base v208.52 toolbar APK (member-replies freeze fix) now published on main
 
 on:
@@ -99,7 +99,7 @@ jobs:
           grep -F 'id="jmGameCountClearSelection"' "$HTML" >/dev/null
           grep -F '>전체 해제</button>' "$HTML" >/dev/null
           grep -F 'window.__jmUnlimitedSelected||[]' "$HTML" >/dev/null
-          grep -F 'jmAdminFixedQuickMenuV20872' "$HTML" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20873' "$HTML" >/dev/null
           grep -F "menu.id='jmAdminFixedQuickMenu'" "$HTML" >/dev/null
           grep -F "make('jmQuickUndo','실행취소'" "$HTML" >/dev/null
           grep -F "make('jmQuickGameMinus','게임 -1'" "$HTML" >/dev/null
@@ -327,13 +327,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.72";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.73";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 60',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.50'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 61',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.51'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -403,7 +403,7 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'window.__jmUnlimitedSelected=selected;' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmGameCountSelectionUnifiedV20867' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'jmAdminFixedQuickMenuV20872' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20873' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "menu.id='jmAdminFixedQuickMenu'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "make('jmQuickUndo','실행취소'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "make('jmQuickGameMinus','게임 -1'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -417,6 +417,10 @@ jobs:
           grep -F "compact(refresh.textContent)!=='새로고침'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "parent.style.setProperty('display','none','important')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "fixed.style.setProperty('display','none','important')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'function adminReady()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "typeof ADMIN_PIN_VALUE!=='undefined'&&!!ADMIN_PIN_VALUE" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "existing.style.setProperty('display','none','important')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "attributeFilter:['class','style','hidden']" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'html body #adminApp .jm-original-bottom-hidden' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "jmBottomActiveButton','jmBottomMoveButton','jmBottomTeamButton" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#jmQuickGamePlus{background:#0f766e' "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -456,8 +460,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.72-force-hide-legacy-quick-menu.apk
-          printf 'status=success\nversion=208.72\nfeature=force-hide-legacy-quick-menu\nbase=v208.71-fixed-quick-menu-cleanup\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20872-force-hide-legacy-quick-menu.txt
-          git add releases/jayuminton-admin-v208.72-force-hide-legacy-quick-menu.apk deployment/status/v20872-force-hide-legacy-quick-menu.txt
-          git commit -m 'Publish admin v208.72: force-hide legacy bottom quick menu' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.73-login-gated-quick-menu.apk
+          printf 'status=success\nversion=208.73\nfeature=login-gated-quick-menu\nbase=v208.72-force-hide-legacy-quick-menu\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20873-login-gated-quick-menu.txt
+          git add releases/jayuminton-admin-v208.73-login-gated-quick-menu.apk deployment/status/v20873-login-gated-quick-menu.txt
+          git commit -m 'Publish admin v208.73: hide quick menu before PIN login' || exit 0
           git push origin HEAD:main
