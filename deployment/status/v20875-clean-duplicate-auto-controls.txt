@@ -1,0 +1,6 @@
+status=success
+version=208.75
+feature=remove-duplicate-controls-auto-assign-and-selection-check
+base=v208.74-remove-legacy-colored-menu
+run_id=33983436675
+sha256=d228d9191e4ba3f27c4baef05149ff36ef361e2d5180754dcb778971666d7b28
