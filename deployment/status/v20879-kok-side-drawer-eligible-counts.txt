@@ -1,0 +1,6 @@
+status=success
+version=208.79
+feature=kok-side-drawer-eligible-gender-counts
+base=v208.78-expanded-menu-kok-check
+run_id=33986675051
+sha256=657afa1f699d553f22bb0c5c065837cf8ed561759f0e51426f62535210fbc754
