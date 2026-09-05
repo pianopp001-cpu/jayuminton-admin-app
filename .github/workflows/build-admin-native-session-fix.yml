@@ -111,14 +111,14 @@ jobs:
           grep -F 'function removeDuplicatePanels()' "$HTML" >/dev/null
           grep -F 'function detachKokPanel()' "$HTML" >/dev/null
           grep -F "button=make('jmKokSideToggle','◀',toggleKokPanel)" "$HTML" >/dev/null
-          grep -F 'jm-kok-detached:not(.jm-kok-overlay)' "$HTML" >/dev/null
+          grep -F 'body>.admin-kok-submit-panel.jm-kok-detached{display:block' "$HTML" >/dev/null
           grep -F 'function updateEligibleCounts()' "$HTML" >/dev/null
           grep -F '#adminApp .excluded-panel h2{font-size:15px' "$HTML" >/dev/null
           ! grep -F "['jmQuickKok','콕체크',toggleKokPanel]" "$HTML" >/dev/null
           grep -F '<summary>멤버등록·비밀번호</summary>' "$HTML" >/dev/null
           ! grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$HTML" >/dev/null
           grep -F 'function manualGroupFromEmpty(el)' "$HTML" >/dev/null
-          grep -F "button.textContent=opening?'콕 닫기':'콕체크'" "$HTML" >/dev/null
+          grep -F "button.textContent=opening?'▶':'◀'" "$HTML" >/dev/null
           grep -F "closest('#kokSubmitRoster .jm-kok-row .name')" "$HTML" >/dev/null
           grep -F '#adminApp #jmUnlimitedToolbar{display:none!important' "$HTML" >/dev/null
           grep -F '#adminApp .jm-unlimited-check{display:none!important' "$HTML" >/dev/null
@@ -424,7 +424,7 @@ jobs:
           grep -F 'function removeDuplicatePanels()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function detachKokPanel()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "button=make('jmKokSideToggle','◀',toggleKokPanel)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'jm-kok-detached:not(.jm-kok-overlay)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'body>.admin-kok-submit-panel.jm-kok-detached{display:block' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function updateEligibleCounts()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "['before','rest','away'].indexOf" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#adminApp .excluded-panel h2{font-size:15px' "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -435,7 +435,7 @@ jobs:
           ! grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function manualGroupFromEmpty(el)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'target.click()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "button.textContent=opening?'콕 닫기':'콕체크'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "button.textContent=opening?'▶':'◀'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "closest('#kokSubmitRoster .jm-kok-row .name')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#adminApp .v4-wait-card .person .meta' "$RUNNER_TEMP/apk-admin.html" >/dev/null
