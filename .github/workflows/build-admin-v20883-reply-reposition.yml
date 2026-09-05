@@ -1,0 +1,141 @@
+name: Build admin v208.83 member reply reposition
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20883-reply-reposition.yml'
+      - 'deployment/jayuminton/admin_v20883_reply_reposition_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20883-reply-reposition
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'build-tools;35.0.0' >/dev/null
+
+      - name: Patch verified v208.82 APK only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/jm20883"
+          BASE='releases/jayuminton-admin-v208.82-kok-compact.apk'
+          PATCH='deployment/jayuminton/admin_v20883_reply_reposition_patch.py'
+          HTML="$ROOT/assets/admin/index.html"
+          UNSIGNED="$ROOT/jayuminton-admin-v208.83-unsigned.apk"
+          ALIGNED="$ROOT/jayuminton-admin-v208.83-aligned.apk"
+          OUT="$ROOT/jayuminton-admin-v208.83-reply-reposition.apk"
+          VERIFY="$ROOT/verify.html"
+
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/assets/admin"
+          test -s "$BASE"
+          test -s "$PATCH"
+          unzip -p "$BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+
+          # v208.82 + 이전 핵심 기능 보존 확인
+          grep -F 'jmAdminKokCompactV20882' "$HTML" >/dev/null
+          grep -F 'jmAdminEdgeUiV20881' "$HTML" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20880' "$HTML" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$HTML" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$HTML" >/dev/null
+          grep -F '완료 총 0명 · 남자 0명 · 여자 0명' "$HTML" >/dev/null
+          grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))!important' "$HTML" >/dev/null
+          grep -F 'min-height:26px!important;height:26px!important' "$HTML" >/dev/null
+          grep -F '#jmAdminReplyButton{position:fixed;right:8px;top:70px' "$HTML" >/dev/null
+
+          python3 "$PATCH" "$HTML"
+
+          # 기존 APK에서 HTML만 교체하여 변경 범위를 제한한다.
+          cp "$BASE" "$UNSIGNED"
+          zip -d "$UNSIGNED" 'META-INF/*' 'assets/admin/index.html' >/dev/null || true
+          (cd "$ROOT" && zip -q -u "$UNSIGNED" assets/admin/index.html)
+
+          BUILD_TOOLS="${ANDROID_HOME}/build-tools/35.0.0"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" "$ALIGNED"
+          "$BUILD_TOOLS/zipalign" -c -p 4 "$ALIGNED"
+
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
+          test -s "$ROOT/release.jks"
+
+          KS_PASS="$(sed -n "s/^[[:space:]]*storePassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_ALIAS="$(sed -n "s/^[[:space:]]*keyAlias '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_PASS="$(sed -n "s/^[[:space:]]*keyPassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          test -n "$KS_PASS"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASS"
+
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$ROOT/release.jks" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KS_PASS" \
+            --key-pass "pass:$KEY_PASS" \
+            --out "$OUT" \
+            "$ALIGNED"
+
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          unzip -p "$OUT" assets/admin/index.html > "$VERIFY"
+          test -s "$VERIFY"
+
+          # v208.83: 콕체크 열림 상태에서 회원쪽지가 상단 바깥으로 이동
+          grep -F 'jmAdminReplyRepositionV20883' "$VERIFY" >/dev/null
+          grep -F "document.body.classList.toggle('jm-kok-panel-open-v20883',opening)" "$VERIFY" >/dev/null
+          grep -F 'body.jm-kok-panel-open-v20883 #jmAdminReplyButton' "$VERIFY" >/dev/null
+          grep -F 'top:1px!important' "$VERIFY" >/dev/null
+
+          # 회원쪽지 자체 기능/원래 위치 규칙과 콕체크 화면은 그대로 보존
+          grep -F '#jmAdminReplyButton{position:fixed;right:8px;top:70px' "$VERIFY" >/dev/null
+          grep -F "id='jmAdminReplyButton';b.innerHTML='회원쪽지" "$VERIFY" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$VERIFY" >/dev/null
+          grep -F '완료 총 0명 · 남자 0명 · 여자 0명' "$VERIFY" >/dev/null
+          grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))!important' "$VERIFY" >/dev/null
+          grep -F 'min-height:26px!important;height:26px!important' "$VERIFY" >/dev/null
+          grep -F 'jmAdminEdgeUiV20881' "$VERIFY" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20880' "$VERIFY" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$VERIFY" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$VERIFY" >/dev/null
+          grep -F "make('jmQuickUndo','실행취소'" "$VERIFY" >/dev/null
+          grep -F "make('jmQuickGameMinus','게임 -1'" "$VERIFY" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+
+      - name: Publish v208.83 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$APK_PATH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.83-reply-reposition.apk
+          printf 'status=success\nversion=208.83\nbase=v208.82-kok-compact\nfeature=move-member-reply-button-above-kok-panel-when-open\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20883-reply-reposition.txt
+          git add releases/jayuminton-admin-v208.83-reply-reposition.apk deployment/status/v20883-reply-reposition.txt
+          git commit -m 'Publish admin v208.83: reposition member reply button' || exit 0
+          git push origin HEAD:main
