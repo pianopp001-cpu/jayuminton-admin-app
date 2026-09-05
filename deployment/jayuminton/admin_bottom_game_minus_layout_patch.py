@@ -6,12 +6,19 @@ import sys
 
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
-MARKER = 'jmAdminFixedQuickMenuV20875'
+MARKER = 'jmAdminFixedQuickMenuV20876'
 if MARKER in html:
     print('ADMIN_FIXED_QUICK_MENU_ALREADY_OK')
     raise SystemExit(0)
 if 'jmGameCountSelectionUnifiedV20867' not in html:
     raise SystemExit('v208.67 unified game-count selection prerequisite missing')
+
+# The game-count controls now live only in the fixed quick menu.
+setup_title = '멤버등록·비밀번호·게임횟수·콕제출체크'
+if setup_title in html:
+    html = html.replace(setup_title, '멤버등록·비밀번호·콕제출체크', 1)
+elif '멤버등록·비밀번호·콕제출체크' not in html:
+    raise SystemExit('admin setup title anchor missing')
 
 # Auto-assign must not remain in the original fixed bottom menu.
 bottom_auto = re.compile(
@@ -37,7 +44,7 @@ html = legacy_bar.sub('', html, count=1)
 
 addon = r'''
 <style id="jmAdminFixedQuickMenuStyle">
-/* jmAdminFixedQuickMenuV20875 */
+/* jmAdminFixedQuickMenuV20876 */
 #jmAdminFixedQuickMenu{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:2147483000!important;background:#fff!important;border-top:2px solid #334155!important;padding:5px max(5px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(5px,env(safe-area-inset-left))!important;box-shadow:0 -4px 18px rgba(15,23,42,.18)!important}
 #jmAdminFixedQuickMenu .jm-q-first{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr)) 28px!important;gap:4px!important;padding:2px!important;border-radius:11px!important;background:#e2e8f0!important;box-shadow:0 2px 8px rgba(15,23,42,.16)!important}
 #jmAdminFixedQuickMenu .jm-q-more{display:none!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important;margin-top:5px!important;padding-top:5px!important;border-top:1px solid #cbd5e1!important}
@@ -55,21 +62,33 @@ addon = r'''
 #jmAdminFixedQuickMenu #jmQuickPerm{background:#7c3aed!important;color:#fff!important}#jmAdminFixedQuickMenu #jmQuickPermClear{background:#ede9fe!important;border-color:#8b5cf6!important;color:#5b21b6!important}
 #jmAdminFixedQuickMenu #jmQuickClear{background:#e2e8f0!important;border-color:#64748b!important;color:#1e293b!important}
 #jmAdminFixedQuickMenu #jmQuickGamePlus{background:#0f766e!important;color:#fff!important}#jmAdminFixedQuickMenu #jmQuickGameZero{background:#991b1b!important;color:#fff!important}
-#jmAdminFixedQuickMenu .jm-q-selection{display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;width:max-content!important;min-width:92px!important;margin:-31px auto 5px!important;padding:5px 13px!important;border:2px solid #15803d!important;border-radius:999px!important;background:#ecfdf5!important;color:#14532d!important;font-size:13px!important;font-weight:1000!important;line-height:1.1!important;box-shadow:0 2px 9px rgba(15,118,55,.24)!important}
+#jmAdminFixedQuickMenu .jm-q-selection{position:absolute!important;left:7px!important;top:-23px!important;display:flex!important;align-items:center!important;justify-content:center!important;width:max-content!important;min-width:66px!important;padding:3px 8px!important;border:1px solid #15803d!important;border-radius:7px!important;background:rgba(236,253,245,.96)!important;color:#14532d!important;font-size:10.5px!important;font-weight:950!important;line-height:1.1!important;box-shadow:0 1px 4px rgba(15,118,55,.18)!important;pointer-events:none!important}
+#jmAdminFixedQuickMenu .jm-q-kok{position:absolute!important;right:7px!important;top:-25px!important;min-height:23px!important;padding:3px 9px!important;border:1px solid #7c3aed!important;border-radius:7px!important;background:#f5f3ff!important;color:#5b21b6!important;font-size:10px!important;font-weight:950!important;box-shadow:0 1px 4px rgba(91,33,182,.18)!important}
 #adminApp #jmUnlimitedToolbar{display:none!important;visibility:hidden!important;height:0!important;min-height:0!important;max-height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important}
 #adminApp .jm-unlimited-check{display:none!important;visibility:hidden!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important;overflow:hidden!important}
 #adminApp .quick-empty-slot.auto-assign-target{outline:0!important;border-color:inherit!important;background:inherit!important;box-shadow:none!important}
 #adminApp .quick-empty-slot.auto-assign-target .empty-slot-label::after{content:none!important;display:none!important}
+#adminApp .quick-empty-slot.jm-manual-first-target{outline:2px dashed #2563eb!important;outline-offset:-3px!important;background:#eff6ff!important;box-shadow:none!important}
+#adminApp .admin-kok-submit-panel #kokSubmitRoster.jm-kok-roster-list{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:4px!important;margin-top:6px!important}
+#adminApp .admin-kok-submit-panel .jm-kok-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;grid-template-areas:'name button' 'meta button'!important;column-gap:4px!important;row-gap:0!important;min-height:43px!important;padding:3px 4px!important;border:1px solid #dbe3ee!important;background:#fff!important}
+#adminApp .admin-kok-submit-panel .jm-kok-row .name{grid-area:name!important;font-size:11px!important;font-weight:900!important;line-height:1.15!important;cursor:pointer!important}
+#adminApp .admin-kok-submit-panel .jm-kok-row .meta{grid-area:meta!important;font-size:8.5px!important;line-height:1.1!important;white-space:nowrap!important}
+#adminApp .admin-kok-submit-panel .jm-kok-complete-btn{grid-area:button!important;align-self:stretch!important;min-height:31px!important;min-width:38px!important;margin:0!important;padding:2px 4px!important;font-size:9px!important;border-radius:7px!important}
+#adminApp .admin-kok-submit-panel .jm-kok-row.jm-kok-inactive{order:2!important;background:#f1f5f9!important;opacity:.58!important}
+#adminApp .admin-kok-submit-panel .jm-kok-row.jm-kok-inactive .name{text-decoration:line-through!important}
+#adminApp .admin-kok-submit-panel.jm-kok-overlay{display:block!important;position:fixed!important;z-index:2147482990!important;left:8px!important;right:8px!important;top:max(44px,env(safe-area-inset-top))!important;bottom:70px!important;margin:0!important;padding:10px!important;overflow:auto!important;background:#fff!important;border:2px solid #7c3aed!important;border-radius:14px!important;box-shadow:0 12px 40px rgba(15,23,42,.32)!important}
+@media(min-width:700px){#adminApp .admin-kok-submit-panel #kokSubmitRoster.jm-kok-roster-list{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 html body .jm-original-bottom-hidden,html body #adminApp .jm-original-bottom-hidden{display:none!important;visibility:hidden!important;height:0!important;min-height:0!important;max-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important}
-body.jm-quick-collapsed{padding-bottom:72px!important}body.jm-quick-expanded{padding-bottom:168px!important}
+body.jm-quick-collapsed{padding-bottom:66px!important}body.jm-quick-expanded{padding-bottom:162px!important}
 @media(max-width:390px){#jmAdminFixedQuickMenu button{font-size:8.3px!important;padding:3px 1px!important}#jmAdminFixedQuickMenu .jm-q-first{grid-template-columns:repeat(7,minmax(0,1fr)) 24px!important;gap:2px!important}}
 </style>
 <script id="jmAdminFixedQuickMenuScript">
 (function(){
 'use strict';
-if(window.__jmAdminFixedQuickMenuV20875)return;
-window.__jmAdminFixedQuickMenuV20875=true;
+if(window.__jmAdminFixedQuickMenuV20876)return;
+window.__jmAdminFixedQuickMenuV20876=true;
 var running=false,queued=false;
+var manualFirstTarget=null,kokWasClosed=false;
 function compact(s){return String(s||'').replace(/\s+/g,'').trim();}
 function adminReady(){
   var app=document.getElementById('adminApp');
@@ -86,6 +105,7 @@ function selectedIds(){
   return Array.from(ids);
 }
 function selectedCount(){return selectedIds().length;}
+function clearManualFirstTarget(){if(manualFirstTarget&&manualFirstTarget.classList)manualFirstTarget.classList.remove('jm-manual-first-target');manualFirstTarget=null;}
 function toggleTempTeam(){
   var ids=selectedIds();if(!ids.length){alert('멤버를 먼저 선택하세요.');return;}
   var teamed=new Set();
@@ -115,6 +135,7 @@ function installMenu(){
   }
   menu=document.createElement('section');menu.id='jmAdminFixedQuickMenu';menu.setAttribute('aria-label','관리자 빠른 메뉴');
   var selection=document.createElement('div');selection.id='jmQuickSelectionCount';selection.className='jm-q-selection';selection.setAttribute('aria-live','polite');selection.textContent='선택 0명';menu.appendChild(selection);
+  var kok=make('jmQuickKok','콕체크',function(){var panel=document.querySelector('.admin-kok-submit-panel'),details=panel&&panel.closest('details');if(!panel)return alert('콕 제출 명단을 찾을 수 없습니다.');var opening=!panel.classList.contains('jm-kok-overlay');if(opening){kokWasClosed=!!(details&&!details.open);if(details)details.open=true;panel.classList.add('jm-kok-overlay');kok.textContent='콕 닫기';}else{panel.classList.remove('jm-kok-overlay');kok.textContent='콕체크';if(details&&kokWasClosed)details.open=false;}},'jm-q-kok');menu.appendChild(kok);
   var first=document.createElement('div');first.className='jm-q-first';
   first.appendChild(make('jmQuickUndo','실행취소',function(){if(typeof window.undoLastAction==='function')window.undoLastAction();else if(typeof undoLastAction==='function')undoLastAction();else alert('실행취소 기능을 찾을 수 없습니다.');}));
   first.appendChild(make('jmQuickActive','배정대기',function(){clickTarget(toolbarButton('active'),'배정대기 기능을 찾을 수 없습니다.');}));
@@ -147,13 +168,10 @@ function installMenu(){
   return menu;
 }
 function removeAutoAssign(){
-  try{AUTO_ASSIGN_TARGET=null;}catch(_){}
-  try{if(Array.isArray(EMPTY_SLOT_TARGETS))EMPTY_SLOT_TARGETS.length=0;}catch(_){}
   Array.prototype.forEach.call(document.querySelectorAll('button'),function(b){
     var auto=compact(b.textContent)==='자동배정'||/smartAssignSelected\s*\(/.test(String(b.getAttribute('onclick')||''));
     if(auto)b.remove();
   });
-  Array.prototype.forEach.call(document.querySelectorAll('.auto-assign-target'),function(n){n.classList.remove('auto-assign-target');});
 }
 function removeDuplicatePanels(){
   Array.prototype.forEach.call(document.querySelectorAll('.admin-game-count-panel'),function(node){node.remove();});
@@ -162,7 +180,7 @@ function removeDuplicatePanels(){
   });
 }
 function updateSelectionCount(){
-  var badge=document.getElementById('jmQuickSelectionCount');if(badge)badge.textContent='선택 '+selectedCount()+'명';
+  var badge=document.getElementById('jmQuickSelectionCount');if(badge)badge.textContent=manualFirstTarget?'빈자리 선택됨 · 멤버 누르기':'선택 '+selectedCount()+'명';
 }
 function removeLegacyBottom(){
   Array.prototype.forEach.call(document.querySelectorAll('#adminApp>.admin-vnext-bottom-bar,#jmBottomActionRowV2079'),function(node){node.remove();});
@@ -191,9 +209,18 @@ function boot(){
   if(app)new MutationObserver(schedule).observe(app,{attributes:true,attributeFilter:['class','style','hidden']});
   document.addEventListener('click',function(ev){
     var empty=ev.target&&ev.target.closest&&ev.target.closest('.empty,.quick-empty-slot,[onclick*="handleEmptySlotTap"],[onclick*="handleMemberWaitEmptyTap"]');
-    if(!empty||selectedCount()>0)return;
-    ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation();removeAutoAssign();
+    if(empty&&selectedCount()===0){
+      ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation();
+      if(manualFirstTarget===empty)clearManualFirstTarget();else{clearManualFirstTarget();manualFirstTarget=empty;empty.classList.add('jm-manual-first-target');}
+      updateSelectionCount();return;
+    }
+    if(!manualFirstTarget)return;
+    var card=ev.target&&ev.target.closest&&ev.target.closest('.member,.person:not(.empty),.quick-member,.member-card,.member-item,.player-card,.court-player');
+    if(!card||card.closest('.jm-kok-row')||ev.target.closest('button,select,input,textarea,a[href]'))return;
+    var target=manualFirstTarget;clearManualFirstTarget();
+    setTimeout(function(){if(selectedCount()>0&&target&&target.isConnected)target.click();updateSelectionCount();},0);
   },true);
+  document.addEventListener('click',function(ev){var name=ev.target&&ev.target.closest&&ev.target.closest('#kokSubmitRoster .jm-kok-row .name');if(!name)return;var row=name.closest('.jm-kok-row'),button=row&&row.querySelector('.jm-kok-complete-btn');if(button){ev.preventDefault();ev.stopPropagation();button.click();}},true);
   document.addEventListener('click',schedule,true);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
