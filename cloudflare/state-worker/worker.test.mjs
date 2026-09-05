@@ -63,6 +63,7 @@ function fixture() {
   assert.deepEqual(state.waitGroups, [['7', '8', '9', '10'], ['11'], ['12'], ['13'], []]);
   assert.deepEqual(event.finished, ['1', '2']);
   assert.deepEqual(event.courtEntrants.map(x => x.id), ['3', '4', '5', '6']);
+  assert.deepEqual(event.courtEntrantIds, ['3', '4', '5', '6']);
   assert.deepEqual(event.wait1Entrants.map(x => x.id), ['7', '8', '9', '10']);
   assert.equal(state.members.find(x => x.id === '3').games, 1);
   assert.equal(state.members.find(x => x.id === '7').games, 0);
@@ -74,6 +75,7 @@ function fixture() {
   assert.deepEqual(finished.waitGroups, [['7', '8', '9', '10'], ['11'], ['12'], ['13'], []]);
   assert.deepEqual(event.finished, []);
   assert.deepEqual(event.courtEntrants.map(x => x.id), ['3', '4', '5', '6']);
+  assert.deepEqual(event.courtEntrantIds, ['3', '4', '5', '6']);
   assert.deepEqual(event.wait1Entrants.map(x => x.id), ['7', '8', '9', '10']);
 }
 {
@@ -81,12 +83,14 @@ function fixture() {
   assert.deepEqual(result.state.courts['3'], ['7']);
   assert.equal(result.state.waitGroups.flat().includes('7'), false);
   assert.equal(result.state.members.find(x => x.id === '7').games, 1);
+  assert.deepEqual(result.event.courtEntrantIds, ['7']);
 }
 {
   const result = swapMutation(fixture(), ['1', '2'], ['7', '8']);
   assert.deepEqual(result.state.courts['1'], ['7', '8']);
   assert.deepEqual(result.state.waitGroups[1], ['1', '2', '9', '10']);
   assert.equal(result.state.members.find(x => x.id === '7').games, 1);
+  assert.deepEqual(result.event.courtEntrantIds, ['7', '8']);
 }
 {
   const state = fixture();
@@ -108,6 +112,13 @@ function fixture() {
   assert.deepEqual(result.state.waitGroups[2], ['3', '4', '5', '6']);
 }
 {
+  // Reapplying a move to the same court must not emit another statistical entrance.
+  const first = moveMutation(fixture(), ['7'], { type: 'court', key: '3' });
+  const repeated = moveMutation(first.state, ['7'], { type: 'court', key: '3' });
+  assert.deepEqual(repeated.event.courtEntrantIds, []);
+  assert.equal(repeated.state.members.find(x => x.id === '7').games, 1);
+}
+{
   assert.throws(() => swapMutation(fixture(), ['1', '2'], ['7']), /equal_swap_groups_required/);
 }
 {
@@ -118,6 +129,7 @@ function fixture() {
   const result = autoAssignMutation(fixture(), ['14', '15', '16', '17'], [{ type: 'court', key: '2' }]);
   assert.deepEqual(result.state.courts['2'], ['14', '15', '16', '17']);
   assert.equal(result.event.assigned[0].memberIds.length, 4);
+  assert.deepEqual(result.event.courtEntrantIds, ['14', '15', '16', '17']);
 }
 {
   // 사용자 자기배정이 먼저 저장된 경우, 관리자의 오래된 자동배정 후보 목록이 그 자리를 덮어쓰면 안 된다.
