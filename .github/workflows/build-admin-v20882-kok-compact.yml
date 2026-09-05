@@ -1,0 +1,146 @@
+name: Build admin v208.82 compact kok checklist
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20882-kok-compact.yml'
+      - 'deployment/jayuminton/admin_v20882_kok_compact_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20882-kok-compact
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'build-tools;35.0.0' >/dev/null
+
+      - name: Patch verified v208.81 APK only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/jm20882"
+          BASE='releases/jayuminton-admin-v208.81-edge-ui.apk'
+          PATCH='deployment/jayuminton/admin_v20882_kok_compact_patch.py'
+          HTML="$ROOT/assets/admin/index.html"
+          UNSIGNED="$ROOT/jayuminton-admin-v208.82-unsigned.apk"
+          ALIGNED="$ROOT/jayuminton-admin-v208.82-aligned.apk"
+          OUT="$ROOT/jayuminton-admin-v208.82-kok-compact.apk"
+          VERIFY="$ROOT/verify.html"
+
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/assets/admin"
+          test -s "$BASE"
+          test -s "$PATCH"
+          unzip -p "$BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+
+          # v208.81 + v208.80 핵심 기능 보존 확인
+          grep -F 'jmAdminEdgeUiV20881' "$HTML" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20880' "$HTML" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$HTML" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$HTML" >/dev/null
+          grep -F "button.innerHTML=opening?'콕<br>체<br>크<br>▶':'콕<br>체<br>크<br>◀'" "$HTML" >/dev/null
+
+          python3 "$PATCH" "$HTML"
+
+          # 기존 APK에서 HTML만 교체하여 기능 변경 범위를 제한한다.
+          cp "$BASE" "$UNSIGNED"
+          zip -d "$UNSIGNED" 'META-INF/*' 'assets/admin/index.html' >/dev/null || true
+          (cd "$ROOT" && zip -q -u "$UNSIGNED" assets/admin/index.html)
+
+          BUILD_TOOLS="${ANDROID_HOME}/build-tools/35.0.0"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" "$ALIGNED"
+          "$BUILD_TOOLS/zipalign" -c -p 4 "$ALIGNED"
+
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > "$ROOT/release.jks"
+          test -s "$ROOT/release.jks"
+
+          KS_PASS="$(sed -n "s/^[[:space:]]*storePassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_ALIAS="$(sed -n "s/^[[:space:]]*keyAlias '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_PASS="$(sed -n "s/^[[:space:]]*keyPassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          test -n "$KS_PASS"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASS"
+
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$ROOT/release.jks" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KS_PASS" \
+            --key-pass "pass:$KEY_PASS" \
+            --out "$OUT" \
+            "$ALIGNED"
+
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          unzip -p "$OUT" assets/admin/index.html > "$VERIFY"
+          test -s "$VERIFY"
+
+          # v208.82 요구사항 확인: 설명 제거, 총/남/여 완료집계, 2열 40명 압축, 폰트 축소 없음.
+          grep -F 'jmAdminKokCompactV20882' "$VERIFY" >/dev/null
+          grep -F '완료 총 0명 · 남자 0명 · 여자 0명' "$VERIFY" >/dev/null
+          grep -F "totalEl.textContent = '완료 총 ' + doneCount + '명 · 남자 ' + maleDoneCount + '명 · 여자 ' + femaleDoneCount + '명';" "$VERIFY" >/dev/null
+          grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))!important' "$VERIFY" >/dev/null
+          grep -F 'min-height:26px!important;height:26px!important' "$VERIFY" >/dev/null
+          grep -F '.jm-kok-row .meta{display:none!important}' "$VERIFY" >/dev/null
+          if grep -F '완료를 누르면 그 회원의 콕 제출이 완료 처리되어' "$VERIFY" >/dev/null; then
+            echo 'removed description still present' >&2
+            exit 1
+          fi
+          python3 - "$VERIFY" <<'PY'
+          import re, sys
+          text=open(sys.argv[1],encoding='utf-8').read()
+          m=re.search(r'<style id="jmAdminKokCompactV20882Style">(.*?)</style>',text,re.S)
+          if not m: raise SystemExit('v20882 style missing')
+          if 'font-size' in m.group(1): raise SystemExit('v20882 unexpectedly changes font size')
+          PY
+
+          # 이전 기능이 최종 APK에도 그대로 남는지 재확인
+          grep -F 'jmAdminEdgeUiV20881' "$VERIFY" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20880' "$VERIFY" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$VERIFY" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$VERIFY" >/dev/null
+          grep -F "make('jmQuickUndo','실행취소'" "$VERIFY" >/dev/null
+          grep -F "make('jmQuickGameMinus','게임 -1'" "$VERIFY" >/dev/null
+          grep -F 'function updateEligibleCounts()' "$VERIFY" >/dev/null
+          grep -F "button.innerHTML='콕<br>체<br>크<br>◀'" "$VERIFY" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+
+      - name: Publish v208.82 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$APK_PATH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.82-kok-compact.apk
+          printf 'status=success\nversion=208.82\nbase=v208.81-edge-ui\nfeature=remove-kok-description-completed-total-gender-count-40-compact-no-font-shrink\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20882-kok-compact.txt
+          git add releases/jayuminton-admin-v208.82-kok-compact.apk deployment/status/v20882-kok-compact.txt
+          git commit -m 'Publish admin v208.82: compact kok checklist' || exit 0
+          git push origin HEAD:main
