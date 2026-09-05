@@ -1,0 +1,133 @@
+name: Build admin v208.81 edge UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20881-edge-ui.yml'
+      - 'deployment/jayuminton/admin_v20881_edge_ui_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20881-edge-ui
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'build-tools;35.0.0' >/dev/null
+
+      - name: Patch verified v208.80 APK only
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='releases/jayuminton-admin-v208.80-undo3-direct-placement.apk'
+          PATCH='deployment/jayuminton/admin_v20881_edge_ui_patch.py'
+          HTML='/tmp/admin-v20881-index.html'
+          UNSIGNED='/tmp/jayuminton-admin-v208.81-unsigned.apk'
+          ALIGNED='/tmp/jayuminton-admin-v208.81-aligned.apk'
+          OUT='/tmp/jayuminton-admin-v208.81-edge-ui.apk'
+
+          test -s "$BASE"
+          test -s "$PATCH"
+          unzip -p "$BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+
+          grep -F 'jmAdminFixedQuickMenuV20880' "$HTML" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$HTML" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$HTML" >/dev/null
+
+          python3 "$PATCH" "$HTML"
+
+          grep -F 'jmAdminEdgeUiV20881' "$HTML" >/dev/null
+          grep -F 'left:max(5px,env(safe-area-inset-left))' "$HTML" >/dev/null
+          grep -F 'top:max(5px,env(safe-area-inset-top))' "$HTML" >/dev/null
+          grep -F 'width:28px!important;height:82px!important' "$HTML" >/dev/null
+          grep -F "button.innerHTML=opening?'콕<br>체<br>크<br>▶':'콕<br>체<br>크<br>◀'" "$HTML" >/dev/null
+          grep -F "button.innerHTML='콕<br>체<br>크<br>◀'" "$HTML" >/dev/null
+
+          python3 - "$BASE" "$HTML" "$UNSIGNED" <<'PY'
+          import sys, zipfile
+          from pathlib import Path
+
+          base, html_path, out = map(Path, sys.argv[1:4])
+          html = html_path.read_bytes()
+          with zipfile.ZipFile(base, 'r') as zin, zipfile.ZipFile(out, 'w') as zout:
+              for info in zin.infolist():
+                  name = info.filename
+                  upper = name.upper()
+                  if name == 'assets/admin/index.html':
+                      continue
+                  if upper.startswith('META-INF/') and (upper.endswith('.RSA') or upper.endswith('.DSA') or upper.endswith('.EC') or upper.endswith('.SF') or upper.endswith('MANIFEST.MF')):
+                      continue
+                  data = zin.read(name)
+                  clone = zipfile.ZipInfo(filename=name, date_time=info.date_time)
+                  clone.compress_type = info.compress_type
+                  clone.comment = info.comment
+                  clone.extra = info.extra
+                  clone.internal_attr = info.internal_attr
+                  clone.external_attr = info.external_attr
+                  clone.create_system = info.create_system
+                  clone.flag_bits = info.flag_bits
+                  zout.writestr(clone, data)
+              zout.writestr('assets/admin/index.html', html, compress_type=zipfile.ZIP_DEFLATED)
+          PY
+
+          BUILD_TOOLS="${ANDROID_HOME}/build-tools/35.0.0"
+          "$BUILD_TOOLS/zipalign" -p -f 4 "$UNSIGNED" "$ALIGNED"
+
+          test -s signing/jayuminton-release.jks
+          KS_PASS="$(sed -n "s/^[[:space:]]*storePassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_ALIAS="$(sed -n "s/^[[:space:]]*keyAlias '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          KEY_PASS="$(sed -n "s/^[[:space:]]*keyPassword '\(.*\)'[[:space:]]*$/\1/p" app/build.gradle | head -n1)"
+          test -n "$KS_PASS"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASS"
+
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks signing/jayuminton-release.jks \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KS_PASS" \
+            --key-pass "pass:$KEY_PASS" \
+            --out "$OUT" \
+            "$ALIGNED"
+
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          unzip -p "$OUT" assets/admin/index.html | grep -F 'jmAdminEdgeUiV20881' >/dev/null
+          unzip -p "$OUT" assets/admin/index.html | grep -F 'jmAdminFixedQuickMenuV20880' >/dev/null
+          unzip -p "$OUT" assets/admin/index.html | grep -F 'function installThreeStepUndo()' >/dev/null
+          unzip -p "$OUT" assets/admin/index.html | grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          cp "$OUT" /tmp/jayuminton-admin-v208.81-edge-ui.apk
+
+      - name: Publish v208.81 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          mkdir -p releases deployment/status
+          cp /tmp/jayuminton-admin-v208.81-edge-ui.apk releases/jayuminton-admin-v208.81-edge-ui.apk
+          printf 'status=success\nversion=208.81\nbase=v208.80-undo3-direct-placement\nfeature=vertical-kok-edge-tab-top-left-selection-badge\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20881-edge-ui.txt
+          git add releases/jayuminton-admin-v208.81-edge-ui.apk deployment/status/v20881-edge-ui.txt
+          git commit -m 'Publish admin v208.81: edge UI placement' || exit 0
+          git push origin HEAD:main
