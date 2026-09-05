@@ -6,7 +6,7 @@ import sys
 
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
-MARKER = 'jmAdminFixedQuickMenuV20876'
+MARKER = 'jmAdminFixedQuickMenuV20877'
 if MARKER in html:
     print('ADMIN_FIXED_QUICK_MENU_ALREADY_OK')
     raise SystemExit(0)
@@ -44,7 +44,7 @@ html = legacy_bar.sub('', html, count=1)
 
 addon = r'''
 <style id="jmAdminFixedQuickMenuStyle">
-/* jmAdminFixedQuickMenuV20876 */
+/* jmAdminFixedQuickMenuV20877 */
 #jmAdminFixedQuickMenu{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:2147483000!important;background:#fff!important;border-top:2px solid #334155!important;padding:5px max(5px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(5px,env(safe-area-inset-left))!important;box-shadow:0 -4px 18px rgba(15,23,42,.18)!important}
 #jmAdminFixedQuickMenu .jm-q-first{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr)) 28px!important;gap:4px!important;padding:2px!important;border-radius:11px!important;background:#e2e8f0!important;box-shadow:0 2px 8px rgba(15,23,42,.16)!important}
 #jmAdminFixedQuickMenu .jm-q-more{display:none!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important;margin-top:5px!important;padding-top:5px!important;border-top:1px solid #cbd5e1!important}
@@ -77,6 +77,7 @@ addon = r'''
 #adminApp .admin-kok-submit-panel .jm-kok-row.jm-kok-inactive{order:2!important;background:#f1f5f9!important;opacity:.58!important}
 #adminApp .admin-kok-submit-panel .jm-kok-row.jm-kok-inactive .name{text-decoration:line-through!important}
 #adminApp .admin-kok-submit-panel.jm-kok-overlay{display:block!important;position:fixed!important;z-index:2147482990!important;left:8px!important;right:8px!important;top:max(44px,env(safe-area-inset-top))!important;bottom:70px!important;margin:0!important;padding:10px!important;overflow:auto!important;background:#fff!important;border:2px solid #7c3aed!important;border-radius:14px!important;box-shadow:0 12px 40px rgba(15,23,42,.32)!important}
+#adminApp .v4-wait-card .person .meta,#adminApp .wait-group .person .meta,#adminApp #waitGroups .person .meta{display:block!important;visibility:visible!important;margin-top:2px!important;font-size:9px!important;font-weight:900!important;line-height:1.05!important;opacity:.82!important;text-align:center!important;white-space:nowrap!important}
 @media(min-width:700px){#adminApp .admin-kok-submit-panel #kokSubmitRoster.jm-kok-roster-list{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 html body .jm-original-bottom-hidden,html body #adminApp .jm-original-bottom-hidden{display:none!important;visibility:hidden!important;height:0!important;min-height:0!important;max-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important}
 body.jm-quick-collapsed{padding-bottom:66px!important}body.jm-quick-expanded{padding-bottom:162px!important}
@@ -85,8 +86,8 @@ body.jm-quick-collapsed{padding-bottom:66px!important}body.jm-quick-expanded{pad
 <script id="jmAdminFixedQuickMenuScript">
 (function(){
 'use strict';
-if(window.__jmAdminFixedQuickMenuV20876)return;
-window.__jmAdminFixedQuickMenuV20876=true;
+if(window.__jmAdminFixedQuickMenuV20877)return;
+window.__jmAdminFixedQuickMenuV20877=true;
 var running=false,queued=false;
 var manualFirstTarget=null,kokWasClosed=false;
 function compact(s){return String(s||'').replace(/\s+/g,'').trim();}
@@ -105,7 +106,21 @@ function selectedIds(){
   return Array.from(ids);
 }
 function selectedCount(){return selectedIds().length;}
-function clearManualFirstTarget(){if(manualFirstTarget&&manualFirstTarget.classList)manualFirstTarget.classList.remove('jm-manual-first-target');manualFirstTarget=null;}
+function manualGroupFromEmpty(el){
+  var raw=String(el&&el.getAttribute&&el.getAttribute('onclick')||'');
+  var m=raw.match(/handleEmptySlotTap\(['\"](court|wait)['\"],['\"]?([^,'\")]+)['\"]?,\s*\d+/);
+  if(m)return {type:m[1],index:String(m[2])};
+  m=raw.match(/handleMemberWaitEmptyTap\((\d+),/);if(m)return {type:'wait',index:String(m[1])};
+  return null;
+}
+function sameManualGroup(a,b){return !!a&&!!b&&a.type===b.type&&String(a.index)===String(b.index);}
+function manualEmptyCards(){return Array.prototype.slice.call(document.querySelectorAll('#adminApp .empty,#adminApp .quick-empty-slot,#adminApp [onclick*="handleEmptySlotTap"],#adminApp [onclick*="handleMemberWaitEmptyTap"]'));}
+function clearManualFirstTarget(){manualEmptyCards().forEach(function(n){n.classList.remove('jm-manual-first-target');});manualFirstTarget=null;}
+function paintManualFirstTarget(){
+  manualEmptyCards().forEach(function(n){n.classList.toggle('jm-manual-first-target',sameManualGroup(manualFirstTarget,manualGroupFromEmpty(n)));});
+  if(manualFirstTarget&&!manualEmptyCards().some(function(n){return sameManualGroup(manualFirstTarget,manualGroupFromEmpty(n));}))manualFirstTarget=null;
+}
+function firstEmptyInManualGroup(){return manualEmptyCards().find(function(n){return sameManualGroup(manualFirstTarget,manualGroupFromEmpty(n));})||null;}
 function toggleTempTeam(){
   var ids=selectedIds();if(!ids.length){alert('멤버를 먼저 선택하세요.');return;}
   var teamed=new Set();
@@ -180,7 +195,7 @@ function removeDuplicatePanels(){
   });
 }
 function updateSelectionCount(){
-  var badge=document.getElementById('jmQuickSelectionCount');if(badge)badge.textContent=manualFirstTarget?'빈자리 선택됨 · 멤버 누르기':'선택 '+selectedCount()+'명';
+  var badge=document.getElementById('jmQuickSelectionCount');if(badge)badge.textContent=manualFirstTarget?'배정 위치 선택됨 · 멤버 누르기':'선택 '+selectedCount()+'명';
 }
 function removeLegacyBottom(){
   Array.prototype.forEach.call(document.querySelectorAll('#adminApp>.admin-vnext-bottom-bar,#jmBottomActionRowV2079'),function(node){node.remove();});
@@ -197,7 +212,7 @@ function ensure(){
     var menu=installMenu();
     if(menu.style.getPropertyValue('display')==='none')menu.style.removeProperty('display');
     if(!document.body.classList.contains('jm-quick-collapsed')&&!document.body.classList.contains('jm-quick-expanded'))document.body.classList.add('jm-quick-collapsed');
-    removeAutoAssign();removeDuplicatePanels();removeLegacyBottom();updateSelectionCount();
+    removeAutoAssign();removeDuplicatePanels();removeLegacyBottom();paintManualFirstTarget();updateSelectionCount();
   }finally{running=false;}
 }
 function schedule(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;ensure();});}
@@ -211,14 +226,14 @@ function boot(){
     var empty=ev.target&&ev.target.closest&&ev.target.closest('.empty,.quick-empty-slot,[onclick*="handleEmptySlotTap"],[onclick*="handleMemberWaitEmptyTap"]');
     if(empty&&selectedCount()===0){
       ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation();
-      if(manualFirstTarget===empty)clearManualFirstTarget();else{clearManualFirstTarget();manualFirstTarget=empty;empty.classList.add('jm-manual-first-target');}
+      var group=manualGroupFromEmpty(empty);
+      if(sameManualGroup(manualFirstTarget,group))clearManualFirstTarget();else{clearManualFirstTarget();manualFirstTarget=group;paintManualFirstTarget();}
       updateSelectionCount();return;
     }
     if(!manualFirstTarget)return;
     var card=ev.target&&ev.target.closest&&ev.target.closest('.member,.person:not(.empty),.quick-member,.member-card,.member-item,.player-card,.court-player');
     if(!card||card.closest('.jm-kok-row')||ev.target.closest('button,select,input,textarea,a[href]'))return;
-    var target=manualFirstTarget;clearManualFirstTarget();
-    setTimeout(function(){if(selectedCount()>0&&target&&target.isConnected)target.click();updateSelectionCount();},0);
+    setTimeout(function(){var target=firstEmptyInManualGroup();if(selectedCount()>0&&target)target.click();paintManualFirstTarget();updateSelectionCount();},0);
   },true);
   document.addEventListener('click',function(ev){var name=ev.target&&ev.target.closest&&ev.target.closest('#kokSubmitRoster .jm-kok-row .name');if(!name)return;var row=name.closest('.jm-kok-row'),button=row&&row.querySelector('.jm-kok-complete-btn');if(button){ev.preventDefault();ev.stopPropagation();button.click();}},true);
   document.addEventListener('click',schedule,true);
