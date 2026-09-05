@@ -6,7 +6,7 @@ import sys
 
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
-MARKER = 'jmAdminFixedQuickMenuV20871'
+MARKER = 'jmAdminFixedQuickMenuV20872'
 if MARKER in html:
     print('ADMIN_FIXED_QUICK_MENU_ALREADY_OK')
     raise SystemExit(0)
@@ -26,7 +26,7 @@ html = bottom_auto.sub('', html, count=1)
 
 addon = r'''
 <style id="jmAdminFixedQuickMenuStyle">
-/* jmAdminFixedQuickMenuV20871 */
+/* jmAdminFixedQuickMenuV20872 */
 #jmAdminFixedQuickMenu{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:2147483000!important;background:#fff!important;border-top:2px solid #334155!important;padding:5px max(5px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(5px,env(safe-area-inset-left))!important;box-shadow:0 -4px 18px rgba(15,23,42,.18)!important}
 #jmAdminFixedQuickMenu .jm-q-first{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr)) 28px!important;gap:3px!important}
 #jmAdminFixedQuickMenu .jm-q-more{display:none!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important;margin-top:5px!important;padding-top:5px!important;border-top:1px solid #cbd5e1!important}
@@ -44,15 +44,15 @@ addon = r'''
 #jmQuickClear{background:#e2e8f0!important;border-color:#64748b!important;color:#1e293b!important}
 #jmQuickGamePlus{background:#0f766e!important;color:#fff!important}#jmQuickGameZero{background:#991b1b!important;color:#fff!important}
 #jmToolbarAutoAssign{background:#166534!important;border-color:#166534!important;color:#fff!important;font-weight:950!important}
-.jm-original-bottom-hidden{display:none!important}
+html body .jm-original-bottom-hidden,html body #adminApp .jm-original-bottom-hidden{display:none!important;visibility:hidden!important;height:0!important;min-height:0!important;max-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important}
 body.jm-quick-collapsed{padding-bottom:58px!important}body.jm-quick-expanded{padding-bottom:154px!important}
 @media(max-width:390px){#jmAdminFixedQuickMenu button{font-size:8.3px!important;padding:3px 1px!important}#jmAdminFixedQuickMenu .jm-q-first{grid-template-columns:repeat(7,minmax(0,1fr)) 24px!important;gap:2px!important}}
 </style>
 <script id="jmAdminFixedQuickMenuScript">
 (function(){
 'use strict';
-if(window.__jmAdminFixedQuickMenuV20871)return;
-window.__jmAdminFixedQuickMenuV20871=true;
+if(window.__jmAdminFixedQuickMenuV20872)return;
+window.__jmAdminFixedQuickMenuV20872=true;
 var running=false,queued=false;
 function compact(s){return String(s||'').replace(/\s+/g,'').trim();}
 function toolbarButton(action){return document.querySelector('#jmUnlimitedToolbar [data-a="'+action+'"]');}
@@ -125,9 +125,17 @@ function hideOriginalBottom(){
   Array.prototype.forEach.call(document.querySelectorAll('button'),function(refresh){
     if(refresh.closest('#jmAdminFixedQuickMenu')||refresh.closest('#jmUnlimitedToolbar')||compact(refresh.textContent)!=='새로고침')return;
     var parent=refresh.parentElement;
-    if(parent&&parent!==document.body&&parent!==document.documentElement&&!parent.classList.contains('jm-original-bottom-hidden'))parent.classList.add('jm-original-bottom-hidden');
+    if(parent&&parent!==document.body&&parent!==document.documentElement){
+      if(!parent.classList.contains('jm-original-bottom-hidden'))parent.classList.add('jm-original-bottom-hidden');
+      parent.style.setProperty('display','none','important');parent.style.setProperty('visibility','hidden','important');
+      parent.setAttribute('aria-hidden','true');
+    }
     var fixed=refresh.closest('[style*="fixed"],.mobile-bottom-bar,.bottom-bar,.bottom-actions,.admin-bottom-actions,.admin-vnext-bottom-bar');
-    if(fixed&&fixed!==menu&&!fixed.classList.contains('jm-original-bottom-hidden'))fixed.classList.add('jm-original-bottom-hidden');
+    if(fixed&&fixed!==menu){
+      if(!fixed.classList.contains('jm-original-bottom-hidden'))fixed.classList.add('jm-original-bottom-hidden');
+      fixed.style.setProperty('display','none','important');fixed.style.setProperty('visibility','hidden','important');
+      fixed.setAttribute('aria-hidden','true');
+    }
   });
   ['jmBottomActiveButton','jmBottomMoveButton','jmBottomTeamButton','adminBottomGameMinus','adminBottomAutoAssign'].forEach(function(id){
     var b=document.getElementById(id);if(b&&!b.closest('#jmAdminFixedQuickMenu'))b.style.setProperty('display','none','important');
