@@ -132,23 +132,25 @@ async function moveOne(request, env, memberIds, destination) {
   }), env);
   const packet = await res.json();
   if (!packet.ok) throw new Error(packet.error || 'autoassign_move_failed');
-  return packet.state;
+  return packet;
 }
 
 async function mdAutoAssign(request, env, candidateIds, destinations) {
   let state = await getAdminState(request, env);
   const membersById = new Map((state.members || []).map(m => [String(m.id), m]));
   const pool = eligibleAutoAssignPool(state, candidateIds);
-  const assigned = [];
+  const assigned = []; const courtEntrantIds = [];
   for (const destination of Array.isArray(destinations) ? destinations : []) {
     const ids = selectValidFill(state, pool, destination, membersById);
     if (!ids.length) continue;
-    state = await moveOne(request, env, ids, destination);
+    const moved = await moveOne(request, env, ids, destination);
+    state = moved.state;
+    courtEntrantIds.push(...(moved.event?.courtEntrantIds || []));
     const chosen = new Set(ids);
     for (let i = pool.length - 1; i >= 0; i -= 1) if (chosen.has(pool[i])) pool.splice(i, 1);
     assigned.push({ destination, memberIds: ids });
   }
-  return { state, event: { type: 'auto_assigned', assigned } };
+  return { state, event: { type: 'auto_assigned', assigned, courtEntrantIds: [...new Set(courtEntrantIds.map(String))] } };
 }
 
 async function ensurePairTable(env) {
@@ -158,11 +160,18 @@ async function ensurePairTable(env) {
     count INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (member_a, member_b)
   )`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS pair_stat_events (
+    revision TEXT PRIMARY KEY,
+    recorded_at TEXT NOT NULL
+  )`).run();
 }
 
 async function clearPairStatistics(env) {
   await ensurePairTable(env);
-  await env.DB.prepare('DELETE FROM pair_stats').run();
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM pair_stats'),
+    env.DB.prepare('DELETE FROM pair_stat_events'),
+  ]);
 }
 
 async function incrementPair(env, a, b) {
@@ -172,17 +181,11 @@ async function incrementPair(env, a, b) {
     ON CONFLICT(member_a,member_b) DO UPDATE SET count=count+1`).bind(ids[0], ids[1]).run();
 }
 
-async function recordPairTransitions(env, before, after) {
-  if (!before || !after) return;
-  const entered = [];
-  for (const member of after.members || []) {
-    const id = String(member?.id || '');
-    if (!id) continue;
-    const oldLoc = stateLocation(before, id);
-    const newLoc = stateLocation(after, id);
-    if (newLoc?.type === 'court' && oldLoc?.type !== 'court') entered.push(id);
-  }
-  if (!entered.length) return;
+async function recordPairTransitions(env, after, event) {
+  if (!after || !event) return;
+  const revision = String(after.revision || '');
+  const entered = [...new Set((event.courtEntrantIds || []).map(String).filter(Boolean))];
+  if (!revision || !entered.length) return;
   await ensurePairTable(env);
   const pairs = new Set();
   for (const id of entered) {
@@ -194,10 +197,20 @@ async function recordPairTransitions(env, before, after) {
       pairs.add([id, other].sort().join('::'));
     }
   }
-  for (const key of pairs) {
-    const [a, b] = key.split('::');
-    await incrementPair(env, a, b);
-  }
+  if (!pairs.size) return;
+  const rows = [...pairs].map(key => key.split('::'));
+  // One atomic D1 batch: a committed state revision can contribute its pairs
+  // only once. Concurrent admin/member requests may obtain stale outer
+  // snapshots, but the entrant list comes from the exact serialized DO event.
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO pair_stats(member_a,member_b,count)
+      SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),1
+      FROM json_each(?)
+      WHERE NOT EXISTS (SELECT 1 FROM pair_stat_events WHERE revision=?)
+      ON CONFLICT(member_a,member_b) DO UPDATE SET count=count+1`).bind(JSON.stringify(rows), revision),
+    env.DB.prepare('INSERT OR IGNORE INTO pair_stat_events(revision,recorded_at) VALUES(?,?)')
+      .bind(revision, new Date().toISOString()),
+  ]);
 }
 
 function extractStateFromCompat(packet) {
@@ -232,7 +245,8 @@ async function forwardAndRecord(request, env, before, options = {}) {
   const packet = await clone.json().catch(() => null);
   if (packet?.ok && options.clearPairStats) await clearPairStatistics(env);
   const after = packet?.state?.members ? packet.state : extractStateFromCompat(packet);
-  if (before && after) await recordPairTransitions(env, before, after);
+  const exactEvent = packet?.event || after?.actionHistory?.[after.actionHistory.length - 1]?.event || null;
+  if (after && exactEvent) await recordPairTransitions(env, after, exactEvent);
   return response;
 }
 
@@ -246,7 +260,7 @@ export default {
         try {
           const before = await getAdminState(request, env).catch(() => null);
           const out = await mdAutoAssign(request, env, body.candidateIds, body.destinations);
-          if (before && out?.state) await recordPairTransitions(env, before, out.state);
+          if (out?.state) await recordPairTransitions(env, out.state, out.event);
           return reply({ ok: true, state: out.state, event: out.event });
         } catch (error) { return reply({ ok: false, error: String(error?.message || error) }, 400); }
       }
@@ -268,7 +282,7 @@ export default {
           const args = Array.isArray(body.args) ? body.args : [];
           const before = await getVisibleState(request, env).catch(() => null);
           const out = await mdAutoAssign(request, env, args[1], [{ type: 'court', key: String(args[2]) }]);
-          if (before && out?.state) await recordPairTransitions(env, before, out.state);
+          if (out?.state) await recordPairTransitions(env, out.state, out.event);
           return reply({ ok: true, result: out.state });
         } catch (error) { return reply({ ok: false, error: String(error?.message || error) }); }
       }
