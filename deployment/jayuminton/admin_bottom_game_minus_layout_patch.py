@@ -18,7 +18,8 @@ if 'jmGameCountSelectionUnifiedV20867' not in html:
 # The live bottom bar has one uniquely identified auto-assign button. Replace it
 # in-place with game -1 so the fixed bar keeps the same compact button count.
 bottom_auto = re.compile(
-    r'<button\b(?=[^>]*\bid=["\']adminBottomAutoAssign["\'])[^>]*>.*?</button>',
+    r'<button\b(?=[^>]*(?:\bid=["\']adminBottomAutoAssign["\']|\bclass=["\'][^"\']*mobile-assign-button[^"\']*["\']))'
+    r'(?=[^>]*\bonclick=["\']smartAssignSelected\(\)["\'])[^>]*>.*?</button>',
     re.S | re.I,
 )
 matches = list(bottom_auto.finditer(html))
@@ -72,7 +73,12 @@ for required in (
     if required not in html:
         raise SystemExit('layout requirement missing: ' + required)
 
-if 'id="adminBottomAutoAssign"' in html:
+remaining_bottom_auto = re.findall(
+    r'<button\b(?=[^>]*mobile-assign-button)(?=[^>]*smartAssignSelected\(\))[^>]*>',
+    html,
+    re.I,
+)
+if remaining_bottom_auto:
     raise SystemExit('old bottom auto-assign button still present')
 
 path.write_text(html, encoding='utf-8')
