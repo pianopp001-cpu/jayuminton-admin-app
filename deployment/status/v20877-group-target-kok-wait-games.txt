@@ -1,0 +1,6 @@
+status=success
+version=208.77
+feature=group-target-first-compact-kok-grid-wait-game-counts
+base=v208.76-manual-target-kok-grid
+run_id=33985401487
+sha256=d02c9f944d769f6c767d234da76e07bb6f1a9a4a848ccf0830fa67be5b2dabed
