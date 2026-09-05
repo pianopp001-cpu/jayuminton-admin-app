@@ -134,7 +134,7 @@ export class StateCoordinator extends BaseStateCoordinator{
             state.members=(state.members||[]).map(m=>entering.has(String(m&&m.id))?{...m,games:Math.max(0,(Number(m.games)||0)+1)}:m);
           }
         }else throw new Error('invalid_location_kind');
-        const event={type:action==='mdSwapLocations'?'locations_swapped':'locations_adjusted',kind,a,b};
+        const event={type:action==='mdSwapLocations'?'locations_swapped':'locations_adjusted',kind,a,b,courtEntrantIds:kind==='cross'?(state.courts[String(a)]||[]).map(String):[]};
         return reply({ok:true,state:await writeCustom(this.env.DB,state,action,event,before,body.operationId),event});
       }catch(error){return reply({ok:false,error:String(error?.message||error)},400);}
     }
