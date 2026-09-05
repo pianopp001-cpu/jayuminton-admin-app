@@ -1,0 +1,6 @@
+status=success
+version=208.71
+feature=fixed-quick-menu-cleanup-colors
+base=v208.70-fixed-two-row-quick-menu
+run_id=33970144404
+sha256=67f5e21f8cb3392fdb182f6abd114ff585c295529265870b259474c6a9f850e6
