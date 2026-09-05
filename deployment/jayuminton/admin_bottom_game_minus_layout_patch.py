@@ -6,7 +6,7 @@ import sys
 
 path = Path(sys.argv[1] if len(sys.argv) > 1 else 'app/src/main/assets/admin/index.html')
 html = path.read_text(encoding='utf-8')
-MARKER = 'jmAdminFixedQuickMenuV20872'
+MARKER = 'jmAdminFixedQuickMenuV20873'
 if MARKER in html:
     print('ADMIN_FIXED_QUICK_MENU_ALREADY_OK')
     raise SystemExit(0)
@@ -26,7 +26,7 @@ html = bottom_auto.sub('', html, count=1)
 
 addon = r'''
 <style id="jmAdminFixedQuickMenuStyle">
-/* jmAdminFixedQuickMenuV20872 */
+/* jmAdminFixedQuickMenuV20873 */
 #jmAdminFixedQuickMenu{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:2147483000!important;background:#fff!important;border-top:2px solid #334155!important;padding:5px max(5px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(5px,env(safe-area-inset-left))!important;box-shadow:0 -4px 18px rgba(15,23,42,.18)!important}
 #jmAdminFixedQuickMenu .jm-q-first{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr)) 28px!important;gap:3px!important}
 #jmAdminFixedQuickMenu .jm-q-more{display:none!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important;margin-top:5px!important;padding-top:5px!important;border-top:1px solid #cbd5e1!important}
@@ -51,10 +51,17 @@ body.jm-quick-collapsed{padding-bottom:58px!important}body.jm-quick-expanded{pad
 <script id="jmAdminFixedQuickMenuScript">
 (function(){
 'use strict';
-if(window.__jmAdminFixedQuickMenuV20872)return;
-window.__jmAdminFixedQuickMenuV20872=true;
+if(window.__jmAdminFixedQuickMenuV20873)return;
+window.__jmAdminFixedQuickMenuV20873=true;
 var running=false,queued=false;
 function compact(s){return String(s||'').replace(/\s+/g,'').trim();}
+function adminReady(){
+  var app=document.getElementById('adminApp');
+  var hasCredential=false;try{hasCredential=typeof ADMIN_PIN_VALUE!=='undefined'&&!!ADMIN_PIN_VALUE;}catch(_){}
+  if(!app||!hasCredential||app.classList.contains('hidden')||app.hidden)return false;
+  try{var css=getComputedStyle(app);if(css.display==='none'||css.visibility==='hidden')return false;}catch(_){}
+  return true;
+}
 function toolbarButton(action){return document.querySelector('#jmUnlimitedToolbar [data-a="'+action+'"]');}
 function sourceButton(text){
   return Array.prototype.find.call(document.querySelectorAll('button'),function(b){
@@ -143,10 +150,27 @@ function hideOriginalBottom(){
 }
 function ensure(){
   if(running)return;running=true;
-  try{installMenu();keepAutoInMemberToolbar();hideOriginalBottom();}finally{running=false;}
+  try{
+    var existing=document.getElementById('jmAdminFixedQuickMenu');
+    if(!adminReady()){
+      if(existing&&existing.style.getPropertyValue('display')!=='none')existing.style.setProperty('display','none','important');
+      document.body.classList.remove('jm-quick-collapsed','jm-quick-expanded');
+      return;
+    }
+    var menu=installMenu();
+    if(menu.style.getPropertyValue('display')==='none')menu.style.removeProperty('display');
+    if(!document.body.classList.contains('jm-quick-collapsed')&&!document.body.classList.contains('jm-quick-expanded'))document.body.classList.add('jm-quick-collapsed');
+    keepAutoInMemberToolbar();hideOriginalBottom();
+  }finally{running=false;}
 }
 function schedule(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;ensure();});}
-function boot(){ensure();var root=document.getElementById('adminApp')||document.body;new MutationObserver(schedule).observe(root,{childList:true,subtree:true});}
+function boot(){
+  ensure();
+  var app=document.getElementById('adminApp');
+  var root=app||document.body;
+  new MutationObserver(schedule).observe(root,{childList:true,subtree:true});
+  if(app)new MutationObserver(schedule).observe(app,{attributes:true,attributeFilter:['class','style','hidden']});
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
 </script>
