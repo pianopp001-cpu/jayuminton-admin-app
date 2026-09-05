@@ -87,7 +87,7 @@ if close < 0:
     raise SystemExit('body close not found')
 html = html[:close] + runtime + '\n' + html[close:]
 for required in (
-    MARKER, 'id="jmToolbarAutoAssign"', 'window.smartAssignSelected()',
+    MARKER, "desired.id='jmToolbarAutoAssign'", 'window.smartAssignSelected()',
     'id="adminBottomGameMinus"',
     'onclick="decreaseSelectedGames()">게임 -1</button>',
     "label(b)==='자동배정'",
