@@ -1,4 +1,4 @@
-name: Build admin right-drawer kok and eligible counts v208.79
+name: Build admin three-step undo and direct placement v208.80
 # retrigger: base v208.52 toolbar APK (member-replies freeze fix) now published on main
 
 on:
@@ -98,7 +98,7 @@ jobs:
           grep -F 'id="jmGameCountClearSelection"' "$HTML" >/dev/null
           grep -F '>전체 해제</button>' "$HTML" >/dev/null
           grep -F 'window.__jmUnlimitedSelected||[]' "$HTML" >/dev/null
-          grep -F 'jmAdminFixedQuickMenuV20879' "$HTML" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20880' "$HTML" >/dev/null
           grep -F "menu.id='jmAdminFixedQuickMenu'" "$HTML" >/dev/null
           grep -F "make('jmQuickUndo','실행취소'" "$HTML" >/dev/null
           grep -F "make('jmQuickGameMinus','게임 -1'" "$HTML" >/dev/null
@@ -110,15 +110,17 @@ jobs:
           grep -F 'function removeAutoAssign()' "$HTML" >/dev/null
           grep -F 'function removeDuplicatePanels()' "$HTML" >/dev/null
           grep -F 'function detachKokPanel()' "$HTML" >/dev/null
-          grep -F "button=make('jmKokSideToggle','◀',toggleKokPanel)" "$HTML" >/dev/null
+          grep -F "button=make('jmKokSideToggle','콕체크 ◀',toggleKokPanel)" "$HTML" >/dev/null
           grep -F 'body>.admin-kok-submit-panel.jm-kok-detached{display:block' "$HTML" >/dev/null
           grep -F 'function updateEligibleCounts()' "$HTML" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$HTML" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$HTML" >/dev/null
           grep -F '#adminApp .excluded-panel h2{font-size:15px' "$HTML" >/dev/null
           ! grep -F "['jmQuickKok','콕체크',toggleKokPanel]" "$HTML" >/dev/null
           grep -F '<summary>멤버등록·비밀번호</summary>' "$HTML" >/dev/null
           ! grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$HTML" >/dev/null
           grep -F 'function manualGroupFromEmpty(el)' "$HTML" >/dev/null
-          grep -F "button.textContent=opening?'▶':'◀'" "$HTML" >/dev/null
+          grep -F "button.textContent=opening?'콕체크 ▶':'콕체크 ◀'" "$HTML" >/dev/null
           grep -F "closest('#kokSubmitRoster .jm-kok-row .name')" "$HTML" >/dev/null
           grep -F '#adminApp #jmUnlimitedToolbar{display:none!important' "$HTML" >/dev/null
           grep -F '#adminApp .jm-unlimited-check{display:none!important' "$HTML" >/dev/null
@@ -342,13 +344,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.79";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=208.80";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 67',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.57'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 68',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '1.58'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -418,12 +420,12 @@ jobs:
           grep -F '__JAYUMINTON_ADMIN_EMPTY_SLOT_MANUAL_ASSIGN_FIX_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'window.__jmUnlimitedSelected=selected;' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'jmGameCountSelectionUnifiedV20867' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'jmAdminFixedQuickMenuV20879' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'jmAdminFixedQuickMenuV20880' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "selection.id='jmQuickSelectionCount'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function removeAutoAssign()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function removeDuplicatePanels()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function detachKokPanel()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "button=make('jmKokSideToggle','◀',toggleKokPanel)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "button=make('jmKokSideToggle','콕체크 ◀',toggleKokPanel)" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'body>.admin-kok-submit-panel.jm-kok-detached{display:block' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function updateEligibleCounts()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "['before','rest','away'].indexOf" "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -435,12 +437,16 @@ jobs:
           ! grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'function manualGroupFromEmpty(el)' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'target.click()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F "button.textContent=opening?'▶':'◀'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "button.textContent=opening?'콕체크 ▶':'콕체크 ◀'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "closest('#kokSubmitRoster .jm-kok-row .name')" "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#adminApp .v4-wait-card .person .meta' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "classList.toggle('jm-manual-first-target',sameManualGroup" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F 'firstEmptyInManualGroup()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'if(undoHistory.length>3)undoHistory.shift()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F "batchAssignToTarget([memberId],targetGroup.type,Number(targetGroup.index))" "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          ! grep -F 'function firstEmptyInManualGroup()' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'width:52px!important;height:36px!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#adminApp #jmUnlimitedToolbar{display:none!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '#adminApp .jm-unlimited-check{display:none!important' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F "make('jmToolbarAutoAssign','자동배정'" "$RUNNER_TEMP/apk-admin.html" >/dev/null
@@ -498,8 +504,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v208.79-kok-side-drawer-eligible-counts.apk
-          printf 'status=success\nversion=208.79\nfeature=kok-side-drawer-eligible-gender-counts\nbase=v208.78-expanded-menu-kok-check\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20879-kok-side-drawer-eligible-counts.txt
-          git add releases/jayuminton-admin-v208.79-kok-side-drawer-eligible-counts.apk deployment/status/v20879-kok-side-drawer-eligible-counts.txt
-          git commit -m 'Publish admin v208.79: right kok drawer and eligible counts' || exit 0
+          cp "$APK" releases/jayuminton-admin-v208.80-undo3-direct-placement.apk
+          printf 'status=success\nversion=208.80\nfeature=three-step-undo-direct-target-first-placement\nbase=v208.79-kok-side-drawer-eligible-counts\nrun_id=%s\nsha256=%s\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v20880-undo3-direct-placement.txt
+          git add releases/jayuminton-admin-v208.80-undo3-direct-placement.apk deployment/status/v20880-undo3-direct-placement.txt
+          git commit -m 'Publish admin v208.80: three-step undo and direct placement' || exit 0
           git push origin HEAD:main
