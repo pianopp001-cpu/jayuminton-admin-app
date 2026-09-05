@@ -426,7 +426,6 @@ jobs:
           grep -F '#jmAdminFixedQuickMenu #jmQuickGamePlus{background:#0f766e' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F 'html body #adminApp .jm-original-bottom-hidden' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F "jmBottomActiveButton','jmBottomMoveButton','jmBottomTeamButton" "$RUNNER_TEMP/apk-admin.html" >/dev/null
-          grep -F '#jmQuickGamePlus{background:#0f766e' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'id="adminBottomAutoAssign"' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_SELECTED_IDS_PERSISTENT_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '__JAYUMINTON_ADMIN_ASSIGN_FULL_SELECTION_V1__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
