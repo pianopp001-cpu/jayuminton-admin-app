@@ -1,0 +1,6 @@
+status=success
+version=208.69
+feature=toolbar-auto-assign-bottom-game-minus
+base=v208.68-quick-auto-bottom-game-minus
+run_id=33965748831
+sha256=66a5cbae69902b14d6f0f09d637c6edbaca3a61dc889a29cf58c0bd962374a45
