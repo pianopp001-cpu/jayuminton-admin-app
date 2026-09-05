@@ -1,0 +1,6 @@
+status=success
+version=208.82
+base=v208.81-edge-ui
+feature=remove-kok-description-completed-total-gender-count-40-compact-no-font-shrink
+run_id=33988359696
+sha256=e7004a92555d474e91984faab6cbb99c5e35f539d1186b0e4e8d6375262a3d6f
