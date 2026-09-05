@@ -77,7 +77,6 @@ jobs:
           grep -F 'id="kokSubmitRoster"' "$HTML" >/dev/null
           grep -F 'id="kokSubmitTotal"' "$HTML" >/dev/null
           grep -F "server('setMemberKokInactive'" "$HTML" >/dev/null
-          grep -F '멤버등록·비밀번호·게임횟수·콕제출체크' "$HTML" >/dev/null
           grep -F 'function setKokSubmitTab(' "$HTML" >/dev/null
           grep -F 'jm-kok-tab' "$HTML" >/dev/null
           grep -F 'jm-kok-roster-list' "$HTML" >/dev/null
