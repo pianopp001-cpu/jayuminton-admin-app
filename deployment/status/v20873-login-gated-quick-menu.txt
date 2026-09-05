@@ -1,0 +1,6 @@
+status=success
+version=208.73
+feature=login-gated-quick-menu
+base=v208.72-force-hide-legacy-quick-menu
+run_id=33973151832
+sha256=d8ecf6ddcc4fc588da3803a3ba9061e851d2cdeb30231bc3894dd4c5adc56c9d
