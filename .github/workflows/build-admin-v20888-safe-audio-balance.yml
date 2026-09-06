@@ -1,0 +1,173 @@
+name: Build admin v208.88 safe audio balance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20888-safe-audio-balance.yml'
+      - 'deployment/jayuminton/admin_v20888_safe_audio_balance_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20888-safe-audio-balance
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
+
+      - name: Build v208.88 safe voice and music balance
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='releases/jayuminton-admin-v208.87-system-tts-profile.apk'
+          JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
+          PATCH86='deployment/jayuminton/admin_v20886_galaxy_tab_tts_patch.py'
+          PATCH87='deployment/jayuminton/admin_v20887_system_tts_profile_patch.py'
+          PATCH88='deployment/jayuminton/admin_v20888_safe_audio_balance_patch.py'
+          HTML='app/src/main/assets/admin/index.html'
+          OUT='app/build/outputs/apk/release/app-release.apk'
+          BUILD_TOOLS="${ANDROID_HOME}/build-tools/35.0.0"
+
+          test -s "$BASE"
+          test -s "$JAVA"
+          test -s "$PATCH86"
+          test -s "$PATCH87"
+          test -s "$PATCH88"
+          mkdir -p app/src/main/assets/admin
+
+          # Preserve the exact verified v208.87 web UI; v208.88 changes native audio only.
+          unzip -p "$BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+          grep -F 'jmAdminRestoreKokTotalV20885' "$HTML" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$HTML" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$HTML" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$HTML" >/dev/null
+          grep -F '총 콕개수 0개  완료: 총 0명 (남자: 0명 여자: 0명)' "$HTML" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$HTML" >/dev/null
+
+          # Reproduce verified native fixes, then apply v208.88.
+          python3 "$PATCH86" "$JAVA"
+          python3 "$PATCH87" "$JAVA"
+          python3 "$PATCH88" "$JAVA"
+
+          grep -F 'JAYUMINTON_GALAXY_TAB_TTS_V20886' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_SYSTEM_TTS_PROFILE_V20887' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_SAFE_AUDIO_BALANCE_V20888' "$JAVA" >/dev/null
+          grep -F 'private boolean useMediaVoiceRoute()' "$JAVA" >/dev/null
+          grep -F 'params.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, voiceStreamType());' "$JAVA" >/dev/null
+          grep -F 'tts.setSpeechRate(systemSpeechRate());' "$JAVA" >/dev/null
+          grep -F 'tts.setPitch(systemSpeechPitch());' "$JAVA" >/dev/null
+          grep -F 'audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0);' "$JAVA" >/dev/null
+          ! grep -F 'audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxMedia, 0);' "$JAVA" >/dev/null
+
+          # Hard safety gate: the normal announcement path may never write STREAM_MUSIC.
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java').read_text(encoding='utf-8')
+          a=s.index('    private void beginStrongDucking()')
+          b=s.index('    private void restoreAudio()', a)
+          block=s[a:b]
+          assert 'setStreamVolume(AudioManager.STREAM_MUSIC' not in block, 'normal voice path writes media volume'
+          assert 'AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK' in block
+          assert 'setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)' in block
+          PY
+
+          "$BUILD_TOOLS/aapt" dump badging "$BASE" > "$RUNNER_TEMP/v20888-base-badging.txt"
+          BASE_CODE="$(sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" "$RUNNER_TEMP/v20888-base-badging.txt" | sed -n '1p')"
+          test -n "$BASE_CODE"
+          NEW_CODE=$((BASE_CODE + 1))
+          python3 - "$NEW_CODE" <<'PY'
+          from pathlib import Path
+          import re, sys
+          p=Path('app/build.gradle')
+          s=p.read_text(encoding='utf-8')
+          code=sys.argv[1]
+          s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$', f'        versionCode {code}', s, count=1)
+          if n!=1: raise SystemExit('versionCode anchor mismatch')
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$", "        versionName '208.88'", s, count=1)
+          if n!=1: raise SystemExit('versionName anchor mismatch')
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          test -s signing/jayuminton-release.jks
+
+          # Build-only launcher resource restoration.
+          test -s app/src/main/res/drawable/icon_from_library.b64
+          base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
+          test -s app/src/main/res/drawable/icon.png
+          rm -f app/src/main/res/drawable/icon_from_library.b64
+
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          test -s "$OUT"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+
+          "$BUILD_TOOLS/aapt" dump badging "$OUT" > "$RUNNER_TEMP/v20888-new-badging.txt"
+          grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/v20888-new-badging.txt" >/dev/null
+          grep -F "versionName='208.88'" "$RUNNER_TEMP/v20888-new-badging.txt" >/dev/null
+
+          unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/v20888-html"
+          grep -F 'jmAdminRestoreKokTotalV20885' "$RUNNER_TEMP/v20888-html" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$RUNNER_TEMP/v20888-html" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$RUNNER_TEMP/v20888-html" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$RUNNER_TEMP/v20888-html" >/dev/null
+          grep -F '총 콕개수 0개  완료: 총 0명 (남자: 0명 여자: 0명)' "$RUNNER_TEMP/v20888-html" >/dev/null
+          grep -F 'function installThreeStepUndo()' "$RUNNER_TEMP/v20888-html" >/dev/null
+
+          unzip -p "$OUT" classes.dex > "$RUNNER_TEMP/v20888-classes.dex"
+          strings "$RUNNER_TEMP/v20888-classes.dex" > "$RUNNER_TEMP/v20888-dex-strings.txt"
+          grep -F 'JAYUMINTON_GALAXY_TAB_TTS_V20886' "$RUNNER_TEMP/v20888-dex-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_SYSTEM_TTS_PROFILE_V20887' "$RUNNER_TEMP/v20888-dex-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_SAFE_AUDIO_BALANCE_V20888' "$RUNNER_TEMP/v20888-dex-strings.txt" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
+          echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
+
+      - name: Publish v208.88 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$APK_PATH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.88-safe-audio-balance.apk
+          printf 'status=success\nversion=208.88\nbase=v208.87-system-tts-profile\nfeature=safe-music-volume-phone-loud-voice-tablet-media-route\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20888-safe-audio-balance.txt
+          git add releases/jayuminton-admin-v208.88-safe-audio-balance.apk deployment/status/v20888-safe-audio-balance.txt
+          git commit -m 'Publish admin v208.88: safe audio balance' || exit 0
+          git push origin HEAD:main
