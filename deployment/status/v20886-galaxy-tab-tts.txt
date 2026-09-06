@@ -1,0 +1,8 @@
+status=success
+version=208.86
+base=v208.85-restore-kok-total
+feature=galaxy-tab-tts-reinit-and-media-routing
+base_version_code=68
+new_version_code=69
+run_id=34007217743
+sha256=3a57dd1cfd27fd6fd1d36cfd36617ffbd2d2c02296c635008681309993a8a6c3
