@@ -1,0 +1,8 @@
+status=success
+version=208.87
+base=v208.86-galaxy-tab-tts
+feature=follow-system-selected-korean-tts-voice-rate-pitch
+base_version_code=69
+new_version_code=70
+run_id=34009637301
+sha256=d8d1d7f1d9ac887b86eba0105c3d1cd2fbc3fcb9be7b663d4dfc9d607fc12ffc
