@@ -102,6 +102,13 @@ jobs:
           base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
           test -s signing/jayuminton-release.jks
 
+          # Repository carries this image as base64 scratch data inside res/drawable.
+          # Android rejects .b64 resource extensions, so materialize the intended PNG for this build only.
+          test -s app/src/main/res/drawable/icon_from_library.b64
+          base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon_from_library.png
+          test -s app/src/main/res/drawable/icon_from_library.png
+          rm -f app/src/main/res/drawable/icon_from_library.b64
+
           gradle :app:assembleRelease --no-daemon --stacktrace
           test -s "$OUT"
           "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
