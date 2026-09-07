@@ -42,7 +42,7 @@ java = java.replace(
 # synthesizing any audio. Real announcements are untouched.
 warmup_re = re.compile(
     r"if\s*\(!VOICE_WARMED\)\s*\{\s*"
-    r"const\s+utterance\s*=\s*new\s+SpeechSynthesisUtterance\('\\\\u200b'\);\s*"
+    r"const\s+utterance\s*=\s*new\s+SpeechSynthesisUtterance\('\\u200b'\);\s*"
     r"utterance\.lang\s*=\s*'ko-KR';\s*"
     r"utterance\.volume\s*=\s*0;\s*"
     r"utterance\.onstart\s*=\s*utterance\.onend\s*=\s*function\(\)\s*\{\s*"
@@ -63,7 +63,23 @@ html, count = warmup_re.subn(
     count=1,
 )
 if count != 1:
-    raise SystemExit('v208.92 silent warmup anchor mismatch: ' + str(count))
+    # Formatting-safe fallback: bound replacement by the warmup's unique statements.
+    start = html.find('if (!VOICE_WARMED) {')
+    synth = html.find("new SpeechSynthesisUtterance('\\u200b')", start if start >= 0 else 0)
+    speak = html.find('window.speechSynthesis.speak(utterance);', synth if synth >= 0 else 0)
+    if start < 0 or synth < start or speak < synth or synth - start > 500:
+        raise SystemExit('v208.92 silent warmup anchor mismatch: ' + str(count))
+    end = html.find('}', speak)
+    if end < 0 or end - start > 1200:
+        raise SystemExit('v208.92 silent warmup closing brace missing')
+    replacement = (
+        "if (!VOICE_WARMED) {\n"
+        "      // v208.92: no silent TTS warmup; Samsung audio-route clicks are avoided.\n"
+        "      VOICE_WARMED = true;\n"
+        "      updateSoundUnlockButton();\n"
+        "    }"
+    )
+    html = html[:start] + replacement + html[end + 1:]
 
 # Extend native diagnostics while keeping the existing bridge contract.
 status_old = '+ ":" + FAST_PEAK_GUARD + ":ready="'
@@ -82,10 +98,6 @@ for item in (
 
 if "new SpeechSynthesisUtterance('\\u200b')" in html:
     raise SystemExit('legacy zero-width TTS warmup survived')
-if 'utterance.volume = 0;' in html and 'VOICE_WARMED' in html:
-    # This does not reject unrelated utterances globally; the exact legacy warmup above
-    # has already been required and removed. Keep this as a soft structural check only.
-    pass
 if 'v208.92: no silent TTS warmup' not in html:
     raise SystemExit('v208.92 no-warmup marker missing')
 if 'setStreamVolume(AudioManager.STREAM_MUSIC, 0,' in java:
