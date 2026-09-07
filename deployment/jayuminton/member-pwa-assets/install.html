@@ -1,930 +1,185 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>자유민턴 공식 설치</title>
-  <meta name="description" content="Google Play에서 자유민턴을 설치하거나 iPhone 홈 화면에 추가하세요.">
-  <meta name="theme-color" content="#347d68">
-  <meta name="color-scheme" content="light">
-  <link rel="canonical" href="https://jayuminton-push.web.app/install.html">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="자유민턴 공식 설치">
-  <meta property="og:description" content="Google Play 정식 출시 · iPhone 홈 화면 추가">
-  <meta property="og:url" content="https://jayuminton-push.web.app/install.html">
-  <meta property="og:image" content="https://jayuminton-push.web.app/icon-512.png">
-  <style>
-    :root {
-      --navy: #082457;
-      --blue: #1d6fdf;
-      --blue-dark: #1755b3;
-      --muted: #61708a;
-      --line: #dfe6f0;
-      --paper: #ffffff;
-      --soft: #f5f8fc;
-      --green: #5db68d;
-      --page-width: 960px;
-    }
-
-    * { box-sizing: border-box; }
-
-    html {
-      scroll-behavior: smooth;
-      background: #eef3f8;
-    }
-
-    body {
-      margin: 0;
-      min-width: 320px;
-      color: var(--navy);
-      background:
-        radial-gradient(circle at 50% 100%, rgba(115, 151, 190, .14), transparent 48%),
-        #f7f9fc;
-      font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-      -webkit-font-smoothing: antialiased;
-      text-rendering: optimizeLegibility;
-    }
-
-    button,
-    a { -webkit-tap-highlight-color: transparent; }
-
-    .page-shell {
-      width: min(100%, var(--page-width));
-      min-height: 100vh;
-      margin: 0 auto;
-      overflow: hidden;
-      background: #f9fbfe;
-      box-shadow: 0 0 70px rgba(20, 45, 79, .12);
-    }
-
-    .hero {
-      position: relative;
-      height: clamp(330px, 54vw, 540px);
-      overflow: hidden;
-      isolation: isolate;
-      color: #fff;
-      background: #397c69;
-    }
-
-    .hero::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      pointer-events: none;
-      background:
-        linear-gradient(180deg, rgba(9, 45, 39, .02), rgba(10, 40, 35, .14)),
-        radial-gradient(circle at 50% 46%, transparent 0 30%, rgba(5, 35, 29, .08) 85%);
-    }
-
-    .court-scene {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 0;
-    }
-
-    .brand-note {
-      position: absolute;
-      z-index: 2;
-      top: clamp(48px, 9.5vw, 94px);
-      left: clamp(22px, 8.2vw, 78px);
-      font-size: clamp(8px, 1.45vw, 14px);
-      line-height: 1.75;
-      letter-spacing: .35em;
-      font-weight: 500;
-      color: rgba(255,255,255,.72);
-      text-shadow: 0 1px 8px rgba(0,0,0,.18);
-    }
-
-    .hero-logo {
-      position: absolute;
-      z-index: 3;
-      top: clamp(24px, 3.8vw, 38px);
-      left: 50%;
-      width: clamp(88px, 16.3vw, 156px);
-      aspect-ratio: 1;
-      padding: clamp(5px, .8vw, 8px);
-      transform: translateX(-50%);
-      border-radius: 50%;
-      background: rgba(255,255,255,.96);
-      box-shadow:
-        0 10px 24px rgba(8, 40, 33, .27),
-        inset 0 0 0 1px rgba(255,255,255,.8);
-    }
-
-    .hero-logo img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      object-fit: cover;
-    }
-
-    .hero-copy {
-      position: absolute;
-      z-index: 3;
-      right: 14px;
-      bottom: clamp(56px, 7vw, 70px);
-      left: 14px;
-      text-align: center;
-      text-shadow: 0 3px 15px rgba(9, 39, 33, .28);
-    }
-
-    .hero-eyebrow {
-      margin: 0 0 clamp(5px, 1.2vw, 12px);
-      font-size: clamp(13px, 2.25vw, 21px);
-      font-weight: 400;
-      letter-spacing: .02em;
-      color: rgba(255,255,255,.91);
-    }
-
-    .hero h1 {
-      margin: 0;
-      font-size: clamp(47px, 8.35vw, 80px);
-      line-height: .98;
-      letter-spacing: -.055em;
-      font-weight: 900;
-      color: #fff;
-    }
-
-    .hero-subtitle {
-      margin: clamp(9px, 1.5vw, 15px) 0 0;
-      font-size: clamp(13px, 2.1vw, 20px);
-      font-weight: 400;
-      letter-spacing: -.015em;
-      color: rgba(255,255,255,.88);
-    }
-
-    .content-wrap {
-      position: relative;
-      z-index: 5;
-      padding: 0 clamp(12px, 3.4vw, 32px);
-      margin-top: clamp(-70px, -7.35vw, -30px);
-    }
-
-    .install-card {
-      border: 1px solid rgba(218, 226, 237, .9);
-      border-radius: clamp(20px, 2.7vw, 27px);
-      padding: clamp(24px, 4vw, 40px) clamp(14px, 3.2vw, 31px) clamp(20px, 3vw, 30px);
-      background: rgba(255,255,255,.975);
-      box-shadow:
-        0 22px 55px rgba(26, 54, 91, .13),
-        0 3px 10px rgba(26, 54, 91, .04);
-      backdrop-filter: blur(12px);
-    }
-
-    .launch-heading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: clamp(8px, 2vw, 19px);
-      min-width: 0;
-    }
-
-    .launch-heading h2 {
-      margin: 0;
-      white-space: nowrap;
-      font-size: clamp(22px, 4.25vw, 41px);
-      line-height: 1.15;
-      letter-spacing: -.045em;
-      font-weight: 850;
-      color: var(--navy);
-    }
-
-    .laurel {
-      flex: 0 1 clamp(29px, 6vw, 58px);
-      width: clamp(29px, 6vw, 58px);
-      height: clamp(37px, 7.5vw, 72px);
-      color: #577b9c;
-    }
-
-    .laurel.right { transform: scaleX(-1); }
-
-    .launch-subtitle {
-      margin: clamp(4px, .8vw, 8px) 0 clamp(24px, 3.5vw, 34px);
-      text-align: center;
-      font-size: clamp(13px, 2.2vw, 20px);
-      color: #60708d;
-      letter-spacing: -.02em;
-    }
-
-    .device-tabs {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      overflow: hidden;
-      margin-bottom: clamp(17px, 2.3vw, 23px);
-      border: 1px solid #d9e0ea;
-      border-radius: clamp(13px, 2vw, 20px);
-      background: #f7f9fc;
-      box-shadow: inset 0 1px 3px rgba(19, 48, 84, .04);
-    }
-
-    .device-tab {
-      position: relative;
-      min-width: 0;
-      min-height: clamp(72px, 10vw, 98px);
-      margin: 0;
-      padding: clamp(9px, 1.5vw, 15px) clamp(8px, 2vw, 20px);
-      border: 0;
-      border-radius: inherit;
-      color: #222d40;
-      background: transparent;
-      font: inherit;
-      cursor: pointer;
-    }
-
-    .device-tab + .device-tab::before {
-      content: "";
-      position: absolute;
-      top: 18%;
-      bottom: 18%;
-      left: 0;
-      width: 1px;
-      background: #dce3ed;
-    }
-
-    .device-tab[aria-selected="true"] {
-      z-index: 1;
-      color: var(--navy);
-      background: linear-gradient(135deg, rgba(229,240,255,.98), rgba(255,255,255,.98));
-      box-shadow:
-        inset 0 0 0 2px #1876ef,
-        0 5px 17px rgba(35, 111, 207, .10);
-    }
-
-    .device-tab[aria-selected="true"] + .device-tab::before,
-    .device-tab + .device-tab[aria-selected="true"]::before { opacity: 0; }
-
-    .tab-inner {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: clamp(10px, 2.2vw, 21px);
-    }
-
-    .tab-icon {
-      flex: 0 0 auto;
-      width: clamp(32px, 5.4vw, 52px);
-      height: clamp(36px, 5.8vw, 56px);
-    }
-
-    .tab-copy {
-      min-width: 0;
-      text-align: left;
-      line-height: 1.12;
-    }
-
-    .tab-copy strong {
-      display: block;
-      font-size: clamp(16px, 2.65vw, 25px);
-      letter-spacing: -.03em;
-      font-weight: 800;
-    }
-
-    .tab-copy span {
-      display: block;
-      margin-top: 4px;
-      white-space: nowrap;
-      font-size: clamp(11px, 2vw, 18px);
-      color: #8a98af;
-    }
-
-    .install-panel {
-      position: relative;
-      overflow: hidden;
-      border: 1px solid #edf1f6;
-      border-radius: clamp(17px, 2.2vw, 22px);
-      background:
-        radial-gradient(circle at 80% 40%, rgba(199, 220, 248, .22), transparent 32%),
-        linear-gradient(135deg, #fbfdff, #f3f7fc);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.9),
-        0 8px 20px rgba(25, 57, 94, .045);
-      scroll-margin-top: 16px;
-    }
-
-    .install-panel[hidden] {
-      display: none !important;
-    }
-
-    .android-panel {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(90px, 26%);
-      gap: 10px clamp(6px, 2vw, 20px);
-      padding: clamp(22px, 3.6vw, 35px) clamp(20px, 4vw, 38px) clamp(19px, 2.8vw, 27px);
-    }
-
-    .android-copy { position: relative; z-index: 2; }
-
-    .panel-eyebrow {
-      margin: 0 0 clamp(8px, 1vw, 10px);
-      font-size: clamp(14px, 2.45vw, 23px);
-      line-height: 1.2;
-      font-weight: 700;
-      color: #2566b6;
-      letter-spacing: -.025em;
-    }
-
-    .panel-title {
-      margin: 0;
-      font-size: clamp(21px, 3.65vw, 35px);
-      line-height: 1.25;
-      font-weight: 850;
-      letter-spacing: -.055em;
-      color: var(--navy);
-    }
-
-    .android-panel .panel-title {
-      font-size: clamp(19px, 3.65vw, 35px);
-      line-height: 1.22;
-    }
-
-    .panel-title-line {
-      display: block;
-      white-space: nowrap;
-    }
-
-    .panel-title-line + .panel-title-line {
-      margin-top: clamp(3px, .55vw, 6px);
-    }
-
-    .benefits {
-      display: grid;
-      gap: clamp(8px, 1.15vw, 11px);
-      margin: clamp(19px, 2.4vw, 23px) 0 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    .benefits li {
-      display: flex;
-      align-items: center;
-      gap: clamp(8px, 1.35vw, 13px);
-      font-size: clamp(12px, 2vw, 19px);
-      line-height: 1.3;
-      color: #5a6981;
-      white-space: nowrap;
-    }
-
-    .check {
-      display: grid;
-      flex: 0 0 auto;
-      width: clamp(22px, 3.4vw, 33px);
-      height: clamp(22px, 3.4vw, 33px);
-      place-items: center;
-      border-radius: 50%;
-      color: #fff;
-      background: linear-gradient(145deg, #67c39b, #4fae80);
-      box-shadow: 0 3px 8px rgba(75, 163, 119, .22);
-    }
-
-    .check svg { width: 59%; height: 59%; }
-
-    .play-watermark {
-      align-self: center;
-      justify-self: center;
-      width: min(100%, 155px);
-      opacity: .22;
-      filter: saturate(.8);
-    }
-
-    .play-cta {
-      grid-column: 1 / -1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: clamp(12px, 2vw, 20px);
-      min-height: clamp(58px, 8.4vw, 82px);
-      margin-top: clamp(14px, 2vw, 19px);
-      border-radius: clamp(13px, 1.8vw, 18px);
-      color: #fff;
-      background: linear-gradient(105deg, #2869c6, #1855b8 47%, #2469c8);
-      box-shadow: 0 11px 24px rgba(30, 89, 178, .24);
-      text-decoration: none;
-      font-size: clamp(16px, 2.75vw, 26px);
-      line-height: 1;
-      letter-spacing: -.035em;
-      font-weight: 750;
-      transition: transform .18s ease, box-shadow .18s ease;
-    }
-
-    .play-cta:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 14px 28px rgba(30, 89, 178, .29);
-    }
-
-    .play-cta:active { transform: translateY(1px); }
-    .play-cta .play-icon { width: clamp(31px, 4.6vw, 45px); height: auto; }
-    .play-cta .arrow { width: clamp(16px, 2.2vw, 21px); height: auto; }
-
-    .ios-panel {
-      margin-top: 0;
-      padding: clamp(22px, 3.4vw, 33px) clamp(12px, 3.8vw, 36px) clamp(19px, 3.1vw, 30px);
-    }
-
-    .ios-heading-row {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 0 clamp(7px, .7vw, 8px);
-    }
-
-    .ios-label {
-      flex: 0 0 auto;
-      font-size: clamp(11px, 1.8vw, 17px);
-      color: #94a0b4;
-    }
-
-    .ios-panel .panel-title {
-      margin: 0 clamp(7px, .7vw, 8px);
-      font-size: clamp(20px, 3.35vw, 32px);
-    }
-
-    .standalone-note {
-      display: flex;
-      align-items: center;
-      gap: clamp(8px, 1.3vw, 12px);
-      margin: clamp(13px, 1.8vw, 18px) clamp(7px, .7vw, 8px) 0;
-      padding: clamp(10px, 1.5vw, 14px) clamp(11px, 1.8vw, 17px);
-      border-radius: clamp(10px, 1.4vw, 14px);
-      color: #35618e;
-      background: rgba(225, 239, 255, .72);
-      font-size: clamp(11px, 1.75vw, 16px);
-      line-height: 1.4;
-      letter-spacing: -.025em;
-    }
-
-    .standalone-note .check {
-      width: clamp(20px, 2.8vw, 27px);
-      height: clamp(20px, 2.8vw, 27px);
-    }
-
-    .ios-steps {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      margin-top: clamp(19px, 2.9vw, 28px);
-    }
-
-    .step {
-      position: relative;
-      min-width: 0;
-      padding: 0 clamp(5px, 2vw, 19px);
-      text-align: center;
-    }
-
-    .step + .step::before {
-      content: "";
-      position: absolute;
-      top: 4px;
-      bottom: 2px;
-      left: 0;
-      width: 1px;
-      background: #dfe5ef;
-    }
-
-    .step-top {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: clamp(48px, 6.5vw, 63px);
-      gap: clamp(8px, 3.7vw, 36px);
-    }
-
-    .step-number {
-      display: grid;
-      flex: 0 0 auto;
-      width: clamp(31px, 4.6vw, 44px);
-      height: clamp(31px, 4.6vw, 44px);
-      place-items: center;
-      border-radius: 50%;
-      color: var(--navy);
-      background: #e7eef7;
-      font-size: clamp(15px, 2.25vw, 21px);
-      font-weight: 800;
-    }
-
-    .step-icon {
-      flex: 0 0 auto;
-      width: clamp(39px, 5.8vw, 56px);
-      height: clamp(39px, 5.8vw, 56px);
-    }
-
-    .step strong {
-      display: block;
-      margin-top: clamp(9px, 1.1vw, 11px);
-      font-size: clamp(13px, 2.2vw, 21px);
-      line-height: 1.22;
-      white-space: nowrap;
-      letter-spacing: -.04em;
-      color: var(--navy);
-    }
-
-    .step p {
-      margin: clamp(7px, 1vw, 10px) 0 0;
-      font-size: clamp(10px, 1.7vw, 16px);
-      line-height: 1.45;
-      letter-spacing: -.035em;
-      color: #718098;
-    }
-
-    .step a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    .footer {
-      padding: clamp(29px, 4.7vw, 45px) 16px clamp(17px, 2.7vw, 26px);
-      text-align: center;
-      color: #7f8ba3;
-      font-size: clamp(9px, 1.45vw, 14px);
-      font-weight: 600;
-      letter-spacing: .3em;
-    }
-
-    .footer::after {
-      content: "";
-      display: block;
-      width: clamp(29px, 6.6vw, 63px);
-      height: 2px;
-      margin: clamp(11px, 1.7vw, 16px) auto 0;
-      border-radius: 2px;
-      background: #7d8ba2;
-    }
-
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0,0,0,0);
-      white-space: nowrap;
-      border: 0;
-    }
-
-    :focus-visible {
-      outline: 3px solid #f7b32b;
-      outline-offset: 3px;
-    }
-
-    @media (max-width: 520px) {
-      .hero { height: 338px; }
-      .brand-note { top: 47px; left: 20px; letter-spacing: .27em; }
-      .hero-copy { bottom: 60px; }
-      .install-card { padding-right: 13px; padding-left: 13px; }
-      .launch-heading { gap: 6px; }
-      .laurel { flex-basis: 27px; width: 27px; height: 42px; }
-      .device-tab { min-height: 70px; }
-      .android-panel { grid-template-columns: minmax(0, 1fr) 86px; padding-right: 18px; padding-left: 18px; }
-      .android-panel .panel-title { font-size: clamp(18px, 4.75vw, 22px); }
-      .play-watermark { width: 86px; }
-      .benefits li { letter-spacing: -.04em; }
-      .step { padding-right: 4px; padding-left: 4px; }
-      .step-top { gap: 7px; }
-      .step p br { display: none; }
-    }
-
-    @media (max-width: 365px) {
-      .hero { height: 326px; }
-      .brand-note { opacity: .62; }
-      .hero h1 { font-size: 44px; }
-      .tab-inner { gap: 7px; }
-      .tab-icon { width: 28px; }
-      .tab-copy strong { font-size: 14px; }
-      .android-panel { grid-template-columns: minmax(0, 1fr); padding-right: 14px; padding-left: 14px; }
-      .android-panel .panel-title { font-size: clamp(17px, 5.4vw, 19px); }
-      .play-watermark { position: absolute; top: 68px; right: 15px; width: 66px; opacity: .12; }
-      .benefits li { font-size: 11px; }
-      .play-cta { gap: 8px; font-size: 15px; }
-      .step-number { width: 27px; height: 27px; font-size: 13px; }
-      .step-icon { width: 34px; height: 34px; }
-      .step strong { font-size: 11.5px; }
-      .step p { font-size: 9px; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      html { scroll-behavior: auto; }
-      .play-cta { transition: none; }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#397d6b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="자유민턴">
+<title>자유민턴 공식 설치</title>
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="canonical" href="https://jayuminton-push.web.app/install.html">
+<meta name="description" content="Google Play에서 자유민턴 코트현황 앱을 설치하거나 iPhone 홈 화면에 웹앱을 설치하세요.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="자유민턴 공식 설치">
+<meta property="og:description" content="Google Play 정식 출시 · iPhone PWA 설치">
+<meta property="og:url" content="https://jayuminton-push.web.app/install.html">
+<meta property="og:image" content="https://jayuminton-push.web.app/icon-512.png">
+<style>
+:root{--navy:#0c285f;--blue:#286fd9;--blue2:#1d59b4;--muted:#66758f;--line:#e1e8f1;--soft:#f5f8fc;--green:#60b98a}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#eef3f7}
+body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic","Segoe UI",sans-serif;color:#17243f;-webkit-font-smoothing:antialiased}
+button,a{-webkit-tap-highlight-color:transparent}
+.page{width:min(560px,100%);min-height:100vh;margin:0 auto;background:#f8fafc;overflow:hidden;box-shadow:0 0 44px rgba(22,47,78,.09)}
+.hero{position:relative;min-height:clamp(345px,92vw,440px);overflow:hidden;background:linear-gradient(145deg,#5a9a87 0%,#3f806f 45%,#2e675b 100%)}
+.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,25,21,.01),rgba(2,25,21,.17));pointer-events:none}
+.court{position:absolute;inset:0;width:100%;height:100%;opacity:.97}
+.brand-note{position:absolute;z-index:2;left:7.5%;top:14%;color:rgba(255,255,255,.72);font-size:clamp(8px,2.2vw,11px);line-height:1.8;letter-spacing:.3em;font-weight:650}
+.hero-main{position:relative;z-index:3;display:flex;min-height:clamp(345px,92vw,440px);flex-direction:column;align-items:center;justify-content:flex-start;padding:clamp(24px,7vw,34px) 18px 58px;text-align:center}
+.mascot{width:clamp(78px,21vw,98px);height:clamp(78px,21vw,98px);padding:5px;border-radius:50%;background:#fff;box-shadow:0 10px 25px rgba(0,0,0,.18)}
+.mascot img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover}
+.hero-copy{margin-top:clamp(7px,1.9vw,11px)}
+.eyebrow{margin:0;color:rgba(255,255,255,.92);font-size:clamp(12px,3.5vw,16px);font-weight:650;line-height:1.35}
+.hero-title{margin:clamp(3px,1vw,5px) 0 0;color:#fff;font-size:clamp(48px,14vw,62px);line-height:.98;font-weight:900;letter-spacing:-.065em;text-shadow:0 4px 14px rgba(0,0,0,.16)}
+.hero-sub{margin:clamp(10px,2.7vw,14px) 0 0;color:rgba(255,255,255,.88);font-size:clamp(12px,3.4vw,15px);font-weight:600}
+.content{position:relative;z-index:5;margin-top:clamp(-62px,-11vw,-42px);padding:0 clamp(12px,3.2vw,18px) 22px}
+.card{padding:clamp(24px,6vw,31px) clamp(14px,4vw,20px) 22px;border:1px solid #e1e7ee;border-radius:clamp(22px,5vw,28px);background:rgba(255,255,255,.98);box-shadow:0 18px 42px rgba(27,52,86,.13)}
+.release{text-align:center}
+.release h2{margin:0;color:var(--navy);font-size:clamp(23px,6.7vw,31px);line-height:1.15;font-weight:900;letter-spacing:-.045em}
+.release p{margin:7px 0 0;color:#77839a;font-size:clamp(12px,3.4vw,14px);line-height:1.5;font-weight:600}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:clamp(20px,5vw,25px);padding:3px;border:1px solid #e0e6ee;border-radius:18px;background:#f2f5f9}
+.tab{appearance:none;border:0;min-height:clamp(64px,17vw,76px);padding:10px 8px;border-radius:14px;background:transparent;color:#606a79;display:flex;align-items:center;justify-content:center;gap:9px;cursor:pointer}
+.tab[aria-selected="true"]{background:linear-gradient(180deg,#fff,#edf4ff);color:#15264b;box-shadow:inset 0 0 0 2px #3479e9,0 3px 9px rgba(47,111,228,.08)}
+.tab svg{flex:0 0 auto}.tab-copy{text-align:left}.tab-copy strong{display:block;font-size:clamp(14px,4vw,16px);line-height:1.15;font-weight:900}.tab-copy small{display:block;margin-top:3px;color:#949dad;font-size:clamp(10px,2.8vw,12px);font-weight:700}
+.panel{margin-top:16px;padding:clamp(19px,5vw,24px) clamp(15px,4.5vw,21px);border:1px solid #e4eaf1;border-radius:22px;background:linear-gradient(180deg,#f8fbff,#f4f7fb)}
+.panel[hidden]{display:none!important}.panel-kicker{margin:0;color:#3373d4;font-size:clamp(13px,3.8vw,15px);font-weight:850}.panel-title{margin:7px 0 0;color:#10265b;font-size:clamp(23px,6.5vw,29px);line-height:1.35;letter-spacing:-.045em;font-weight:900}
+.google-copy{display:flex;flex-direction:column;gap:clamp(8px,2.6vw,14px);margin-top:clamp(10px,3vw,14px);color:#10265b;font-size:clamp(23px,6.5vw,29px);line-height:1.18;letter-spacing:-.045em;font-weight:900}.google-copy span{display:block}
+.benefits{display:grid;gap:10px;margin:clamp(18px,5vw,22px) 0 0;padding:0;list-style:none}.benefits li{display:flex;align-items:center;gap:10px;color:#5f6c81;font-size:clamp(12px,3.5vw,14px);font-weight:700}.check{width:24px;height:24px;flex:0 0 24px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff;font-weight:900}
+.cta{width:100%;min-height:clamp(54px,15vw,62px);margin-top:clamp(18px,5vw,23px);border:0;border-radius:16px;display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(180deg,var(--blue),var(--blue2));color:#fff;text-decoration:none;font-size:clamp(15px,4.3vw,18px);font-weight:900;box-shadow:0 8px 18px rgba(47,111,228,.20);cursor:pointer}
+.ios-summary{margin:10px 0 0;color:#5f6d85;font-size:clamp(12px,3.6vw,14px);line-height:1.65;font-weight:650}.pwa-note{margin:12px 0 0;padding:11px 12px;border-radius:12px;background:#edf4ff;color:#456188;font-size:clamp(11px,3.2vw,13px);line-height:1.55;font-weight:650}
+.steps{display:grid;grid-template-columns:1fr 1fr 1fr;margin-top:clamp(20px,5.5vw,25px)}.step{position:relative;padding:0 clamp(6px,2vw,10px);text-align:center}.step+.step:before{content:"";position:absolute;left:0;top:5px;bottom:5px;width:1px;background:#dfe5ed}.num{width:31px;height:31px;margin:0 auto 8px;border-radius:50%;display:grid;place-items:center;background:#eaf0f7;color:#17315f;font-size:14px;font-weight:900}.step-icon{height:43px;display:grid;place-items:center;margin:0 auto 7px}.step b{display:block;color:#172541;font-size:clamp(11px,3.2vw,13px);line-height:1.35}.step span{display:block;margin-top:5px;color:#8c96a6;font-size:clamp(9px,2.6vw,11px);line-height:1.45}
+.footer{padding:23px 0 2px;text-align:center;color:#99a3b2;font-size:9px;font-weight:700;letter-spacing:.25em}
+@media(max-width:380px){.hero-main{padding-top:21px}.mascot{width:76px;height:76px}.hero-copy{margin-top:5px}.hero-title{font-size:46px}.card{padding-left:12px;padding-right:12px}.panel{padding-left:13px;padding-right:13px}.google-copy{font-size:22px}.steps{margin-left:-4px;margin-right:-4px}}
+</style>
 </head>
 <body>
-  <svg class="sr-only" aria-hidden="true" focusable="false">
-    <symbol id="icon-play" viewBox="0 0 64 72">
-      <defs>
-        <linearGradient id="play-green" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#25d780"/><stop offset="1" stop-color="#18a766"/>
-        </linearGradient>
-        <linearGradient id="play-blue" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#48b9ff"/><stop offset="1" stop-color="#1478df"/>
-        </linearGradient>
-        <linearGradient id="play-red" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#ff755f"/><stop offset="1" stop-color="#e73546"/>
-        </linearGradient>
-        <linearGradient id="play-yellow" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#ffd866"/><stop offset="1" stop-color="#f5aa27"/>
-        </linearGradient>
-      </defs>
-      <path d="M5 5.2c-1.2 1.6-1.8 3.8-1.8 6.5v48.6c0 2.7.6 4.9 1.8 6.5L35.6 36 5 5.2z" fill="url(#play-blue)"/>
-      <path d="M35.6 36 5 5.2c1.8-2.4 4.7-2.7 7.9-.9l35.7 20.3L35.6 36z" fill="url(#play-green)"/>
-      <path d="M35.6 36 5 66.8c1.8 2.4 4.7 2.7 7.9.9l35.7-20.3L35.6 36z" fill="url(#play-red)"/>
-      <path d="m48.6 24.6 7.3 4.2c5 2.8 5 7.7 0 10.5l-7.3 4.1L35.6 36l13-11.4z" fill="url(#play-yellow)"/>
-    </symbol>
-
-    <symbol id="icon-apple" viewBox="0 0 64 74">
-      <path fill="currentColor" d="M50.6 39.3c.1-8.3 6.8-12.3 7.1-12.5-3.9-5.7-10-6.5-12.1-6.6-5.1-.5-10 3.1-12.6 3.1-2.7 0-6.7-3-11.1-2.9-5.6.1-10.9 3.3-13.8 8.4-5.9 10.2-1.5 25.2 4.1 33.4 2.8 4 6 8.4 10.4 8.2 4.2-.2 5.8-2.7 10.8-2.7 5 0 6.4 2.7 10.9 2.6 4.6-.1 7.4-4 10.1-8 3.2-4.6 4.5-9.2 4.5-9.4-.1 0-8.2-3.2-8.3-12.6zM42.3 14.8c2.2-2.7 3.7-6.4 3.3-10.1-3.2.1-7.2 2.2-9.5 4.9-2 2.3-3.8 6.2-3.3 9.7 3.6.3 7.3-1.8 9.5-4.5z"/>
-    </symbol>
-
-    <symbol id="icon-check" viewBox="0 0 24 24">
-      <path d="m5 12.4 4.2 4.1L19 7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-
-    <symbol id="icon-arrow" viewBox="0 0 24 24">
-      <path d="m8.5 4.5 7.5 7.5-7.5 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-
-    <symbol id="icon-share" viewBox="0 0 64 64">
-      <path d="M32 38V7m0 0L21 18M32 7l11 11" fill="none" stroke="#2378df" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M20 27h-6a5 5 0 0 0-5 5v21a5 5 0 0 0 5 5h36a5 5 0 0 0 5-5V32a5 5 0 0 0-5-5h-6" fill="none" stroke="#2378df" stroke-width="5" stroke-linecap="round"/>
-    </symbol>
-
-    <symbol id="icon-plus" viewBox="0 0 64 64">
-      <defs>
-        <linearGradient id="plus-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#2c89f6"/><stop offset="1" stop-color="#1261d1"/>
-        </linearGradient>
-      </defs>
-      <rect x="6" y="6" width="52" height="52" rx="13" fill="url(#plus-bg)"/>
-      <path d="M32 18v28M18 32h28" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-    </symbol>
-
-    <symbol id="icon-safari" viewBox="0 0 64 64">
-      <defs>
-        <radialGradient id="safari-bg" cx="35%" cy="25%" r="80%">
-          <stop offset="0" stop-color="#6ed5ff"/><stop offset="1" stop-color="#1686e8"/>
-        </radialGradient>
-      </defs>
-      <rect x="5" y="5" width="54" height="54" rx="14" fill="url(#safari-bg)"/>
-      <circle cx="32" cy="32" r="20" fill="#fff" opacity=".97"/>
-      <circle cx="32" cy="32" r="17" fill="#47b9ef"/>
-      <g stroke="#fff" stroke-width="1" opacity=".92">
-        <path d="M32 15v4M32 45v4M15 32h4M45 32h4M20 20l3 3M41 41l3 3M44 20l-3 3M23 41l-3 3"/>
-      </g>
-      <path d="m38.5 24.5-4.2 10-9.8 5 4.2-10 9.8-5z" fill="#e64b50"/>
-      <path d="m25.5 39.5 3.2-10 5.6 5-8.8 5z" fill="#fff"/>
-      <circle cx="32" cy="32" r="2" fill="#174b87"/>
-    </symbol>
-  </svg>
-
-  <main class="page-shell">
-    <section class="hero" aria-labelledby="page-title">
-      <svg class="court-scene" viewBox="0 0 942 540" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <defs>
-          <linearGradient id="court-bg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#4e927d"/>
-            <stop offset=".52" stop-color="#438571"/>
-            <stop offset="1" stop-color="#2f6f5f"/>
-          </linearGradient>
-          <radialGradient id="court-light" cx="38%" cy="34%" r="82%">
-            <stop offset="0" stop-color="#84bbaa" stop-opacity=".26"/>
-            <stop offset=".62" stop-color="#173e36" stop-opacity="0"/>
-            <stop offset="1" stop-color="#123a32" stop-opacity=".18"/>
-          </radialGradient>
-          <filter id="grain" x="-20%" y="-20%" width="140%" height="140%">
-            <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" seed="7"/>
-            <feColorMatrix type="saturate" values="0"/>
-          </filter>
-          <filter id="object-shadow" x="-40%" y="-40%" width="180%" height="180%">
-            <feDropShadow dx="9" dy="14" stdDeviation="8" flood-color="#123c34" flood-opacity=".42"/>
-          </filter>
-          <clipPath id="racket-face">
-            <ellipse cx="790" cy="125" rx="118" ry="77" transform="rotate(27 790 125)"/>
-          </clipPath>
-          <linearGradient id="shuttle-feather" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#f9fbf7"/>
-            <stop offset="1" stop-color="#cfd8d3"/>
-          </linearGradient>
-          <pattern id="net-grid" width="21" height="17" patternUnits="userSpaceOnUse" patternTransform="skewX(-15)">
-            <path d="M0 0H21M0 0V17" fill="none" stroke="#153d35" stroke-width="1.6" opacity=".58"/>
-          </pattern>
-        </defs>
-
-        <rect width="942" height="540" fill="url(#court-bg)"/>
-        <rect width="942" height="540" fill="url(#court-light)"/>
-        <rect width="942" height="540" filter="url(#grain)" opacity=".075"/>
-
-        <g opacity=".95" fill="none" stroke="#eff3eb" stroke-width="12">
-          <path d="M-80 512 247 0"/>
-          <path d="M268 540 505 0"/>
-          <path d="M824 540 720 0"/>
-          <path d="M1012 441 832 0"/>
-          <path d="M-10 79 950 16"/>
-          <path d="M-8 366 965 339"/>
-        </g>
-
-        <g opacity=".36">
-          <path d="M570 -18 964 44 930 201 552 133Z" fill="url(#net-grid)"/>
-          <path d="M565 -12 957 49" fill="none" stroke="#e8eee9" stroke-width="8"/>
-          <path d="M552 133 930 201" fill="none" stroke="#214b42" stroke-width="5"/>
-        </g>
-
-        <g filter="url(#object-shadow)">
-          <ellipse cx="790" cy="125" rx="127" ry="85" transform="rotate(27 790 125)" fill="#dae4df" fill-opacity=".18" stroke="#14235f" stroke-width="12"/>
-          <ellipse cx="790" cy="125" rx="114" ry="73" transform="rotate(27 790 125)" fill="#b6ccc5" fill-opacity=".18" stroke="#82a09b" stroke-width="3"/>
-          <g clip-path="url(#racket-face)" opacity=".85" stroke="#dbe8e5" stroke-width="2.1">
-            <path d="M650 44 930 205M647 62 927 223M646 80 920 241M649 99 912 257M653 119 900 269M661 142 888 279M672 166 871 286M686 190 850 289M704 213 828 288"/>
-            <path d="M688 10 675 237M714 6 705 257M741 4 736 273M769 3 768 283M797 7 801 287M826 13 835 282M854 25 870 268M881 40 903 248M905 61 932 220"/>
-          </g>
-          <path d="M889 199 964 313" fill="none" stroke="#192860" stroke-width="13" stroke-linecap="round"/>
-          <path d="M902 218 965 314" fill="none" stroke="#4258a1" stroke-width="4" stroke-linecap="round" opacity=".8"/>
-          <path d="M956 302 984 345" fill="none" stroke="#171c30" stroke-width="20" stroke-linecap="round"/>
-          <path d="M954 302 981 344" fill="none" stroke="#8e7651" stroke-width="3" opacity=".55"/>
-        </g>
-
-        <g transform="translate(808 318) rotate(18)" filter="url(#object-shadow)">
-          <ellipse cx="0" cy="0" rx="34" ry="18" fill="#dfe5e2" stroke="#b8c1be" stroke-width="2"/>
-          <path d="M-31 5-63 92 0 110 63 92 31 5Z" fill="url(#shuttle-feather)" stroke="#d6ddda" stroke-width="2"/>
-          <path d="M-22 12-42 93M-8 15-15 104M8 15 15 104M22 12 42 93" fill="none" stroke="#b5c2bd" stroke-width="2.4"/>
-          <path d="M-53 73 53 73M-59 89 59 89" fill="none" stroke="#adbcb6" stroke-width="3"/>
-          <ellipse cx="0" cy="0" rx="34" ry="18" fill="#e9edeb"/>
-          <path d="M-31-2c3-22 13-34 31-34S28-24 31-2c-18 8-44 8-62 0z" fill="#d0d6d3"/>
-          <path d="M-25-8c5-14 13-21 25-21s20 7 25 21" fill="none" stroke="#aeb6b3" stroke-width="3" opacity=".75"/>
-        </g>
-      </svg>
-
-      <div class="brand-note" aria-hidden="true">BADMINTON<br>BRINGS<br>PEOPLE TOGETHER</div>
-
-      <div class="hero-logo">
-        <img src="/icon-512.png" alt="자유민턴 로고">
-      </div>
-
+<!-- JAYUMINTON_INSTALL_LANDING_V1 -->
+<main class="page">
+  <section class="hero" aria-labelledby="pageTitle">
+    <svg class="court" viewBox="0 0 560 440" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs><linearGradient id="courtBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#579884"/><stop offset="1" stop-color="#2f6d5e"/></linearGradient><pattern id="net" width="14" height="12" patternUnits="userSpaceOnUse"><path d="M0 0H14M0 0V12" fill="none" stroke="#153e36" stroke-width="1" opacity=".58"/></pattern><filter id="shadow"><feDropShadow dx="5" dy="8" stdDeviation="5" flood-color="#123c34" flood-opacity=".4"/></filter></defs>
+      <rect width="560" height="440" fill="url(#courtBg)"/>
+      <g fill="none" stroke="#eef3eb" stroke-width="8" opacity=".96"><path d="M-30 430 135 0"/><path d="M153 440 284 0"/><path d="M489 440 425 0"/><path d="M590 376 490 0"/><path d="M-10 62 575 22"/><path d="M-5 305 575 286"/></g>
+      <path d="M340-10 575 28 550 150 330 109Z" fill="url(#net)" opacity=".42"/>
+      <g transform="translate(465 98) rotate(28)" filter="url(#shadow)"><ellipse rx="73" ry="48" fill="#c5d7d1" fill-opacity=".2" stroke="#17255f" stroke-width="8"/><ellipse rx="65" ry="40" fill="none" stroke="#dce8e5" stroke-width="2"/><g stroke="#dbe8e5" stroke-width="1.2" opacity=".82"><path d="M-55-30 55 30M-60-17 60 17M-62-4 62 4M-60 10 60-10M-55 24 55-24M-35-40 35 40M-17-44 17 44M0-46V46M17-44-17 44M35-40-35 40"/></g><path d="M64 27 118 107" stroke="#192860" stroke-width="9" stroke-linecap="round"/><path d="M115 101 138 135" stroke="#1d2034" stroke-width="14" stroke-linecap="round"/></g>
+      <g transform="translate(451 290) rotate(14)" filter="url(#shadow)"><ellipse rx="21" ry="11" fill="#e5eae7"/><path d="M-19 4-38 58 0 68 38 58 19 4Z" fill="#edf1ef" stroke="#cfd9d5"/><path d="M-31 46H31M-35 56H35M-12 8-22 58M0 9V66M12 8 22 58" fill="none" stroke="#b5c2bd" stroke-width="1.5"/></g>
+    </svg>
+    <div class="brand-note" aria-hidden="true">BADMINTON<br>BRINGS<br>PEOPLE TOGETHER</div>
+    <div class="hero-main">
+      <div class="mascot"><img src="/icon-512.png" alt="자유민턴 캐릭터"></div>
       <div class="hero-copy">
-        <p class="hero-eyebrow">언제 어디서나, 함께하는 배드민턴</p>
-        <h1 id="page-title">자유민턴</h1>
-        <p class="hero-subtitle">코트가 사람을, 오늘이 더 특별해지도록</p>
+        <p class="eyebrow">언제 어디서나, 함께하는 배드민턴</p>
+        <h1 class="hero-title" id="pageTitle">자유민턴</h1>
+        <p class="hero-sub">코트가 사람을, 오늘이 더 특별해지도록</p>
       </div>
-    </section>
-
-    <div class="content-wrap">
-      <section class="install-card" aria-labelledby="launch-title">
-        <div class="launch-heading">
-          <svg class="laurel" viewBox="0 0 58 72" aria-hidden="true">
-            <path d="M45 5C14 25 10 50 29 67" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-            <g fill="currentColor">
-              <ellipse cx="39" cy="13" rx="4" ry="8" transform="rotate(35 39 13)"/>
-              <ellipse cx="30" cy="21" rx="4" ry="8" transform="rotate(22 30 21)"/>
-              <ellipse cx="23" cy="31" rx="4" ry="8" transform="rotate(8 23 31)"/>
-              <ellipse cx="20" cy="43" rx="4" ry="8" transform="rotate(-8 20 43)"/>
-              <ellipse cx="22" cy="55" rx="4" ry="8" transform="rotate(-25 22 55)"/>
-              <ellipse cx="48" cy="22" rx="4" ry="8" transform="rotate(57 48 22)"/>
-              <ellipse cx="40" cy="33" rx="4" ry="8" transform="rotate(45 40 33)"/>
-              <ellipse cx="35" cy="45" rx="4" ry="8" transform="rotate(28 35 45)"/>
-            </g>
-          </svg>
-          <h2 id="launch-title">Google Play 정식 출시</h2>
-          <svg class="laurel right" viewBox="0 0 58 72" aria-hidden="true">
-            <path d="M45 5C14 25 10 50 29 67" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-            <g fill="currentColor">
-              <ellipse cx="39" cy="13" rx="4" ry="8" transform="rotate(35 39 13)"/>
-              <ellipse cx="30" cy="21" rx="4" ry="8" transform="rotate(22 30 21)"/>
-              <ellipse cx="23" cy="31" rx="4" ry="8" transform="rotate(8 23 31)"/>
-              <ellipse cx="20" cy="43" rx="4" ry="8" transform="rotate(-8 20 43)"/>
-              <ellipse cx="22" cy="55" rx="4" ry="8" transform="rotate(-25 22 55)"/>
-              <ellipse cx="48" cy="22" rx="4" ry="8" transform="rotate(57 48 22)"/>
-              <ellipse cx="40" cy="33" rx="4" ry="8" transform="rotate(45 40 33)"/>
-              <ellipse cx="35" cy="45" rx="4" ry="8" transform="rotate(28 35 45)"/>
-            </g>
-          </svg>
-        </div>
-        <p class="launch-subtitle" id="launch-subtitle">공개 테스트가 아닌 정식 출시 버전입니다.</p>
-
-        <div class="device-tabs" role="tablist" aria-label="기기별 설치 안내">
-          <button class="device-tab" id="tab-android" type="button" role="tab" aria-selected="true" aria-controls="android-guide" data-guide="android-guide">
-            <span class="tab-inner">
-              <svg class="tab-icon" viewBox="0 0 64 72" aria-hidden="true"><use href="#icon-play"/></svg>
-              <span class="tab-copy"><strong>Google Play</strong><span>Android</span></span>
-            </span>
-          </button>
-          <button class="device-tab" id="tab-ios" type="button" role="tab" aria-selected="false" aria-controls="ios-guide" data-guide="ios-guide">
-            <span class="tab-inner">
-              <svg class="tab-icon" viewBox="0 0 64 74" aria-hidden="true" style="color:#5e5e60"><use href="#icon-apple"/></svg>
-              <span class="tab-copy"><strong>iPhone</strong><span>iOS (PWA)</span></span>
-            </span>
-          </button>
-        </div>
-
-        <section class="install-panel android-panel" id="android-guide" role="tabpanel" aria-labelledby="tab-android android-title">
-          <div class="android-copy">
-            <p class="panel-eyebrow">Android 사용자는</p>
-            <h3 class="panel-title" id="android-title">
-              <span class="panel-title-line">Google Play에서</span>
-              <span class="panel-title-line">자유민턴 코트현황 앱을</span>
-              <span class="panel-title-line">바로 설치할 수 있습니다.</span>
-            </h3>
-            <ul class="benefits">
-              <li><span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>공식으로 검수된 안전한 앱</li>
-              <li><span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>빠르고 간편한 설치</li>
-              <li><span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>언제 어디서나 편리한 코트 이용</li>
-            </ul>
-          </div>
-          <svg class="play-watermark" viewBox="0 0 64 72" aria-hidden="true"><use href="#icon-play"/></svg>
-          <a class="play-cta" href="https://play.google.com/store/apps/details?id=com.jayuminton.user" target="_blank" rel="noopener noreferrer">
-            <svg class="play-icon" viewBox="0 0 64 72" aria-hidden="true"><use href="#icon-play"/></svg>
-            <span>Google Play에서 바로 설치</span>
-            <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-arrow"/></svg>
-          </a>
-        </section>
-
-        <section class="install-panel ios-panel" id="ios-guide" role="tabpanel" aria-labelledby="tab-ios ios-title" hidden>
-          <div class="ios-heading-row">
-            <p class="panel-eyebrow">iPhone 사용자는</p>
-            <span class="ios-label">iOS (PWA)</span>
-          </div>
-          <h3 class="panel-title" id="ios-title">아래 방법으로 홈 화면에 추가해 주세요.</h3>
-          <p class="standalone-note">
-            <span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>
-            홈 화면 아이콘으로 열면 주소창 없이 PWA 앱 화면으로 실행됩니다.
-          </p>
-
-          <div class="ios-steps">
-            <div class="step">
-              <div class="step-top">
-                <span class="step-number">1</span>
-                <a href="https://jayuminton-push.web.app/" aria-label="자유민턴을 Safari에서 열기">
-                  <svg class="step-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#icon-safari"/></svg>
-                </a>
-              </div>
-              <strong><a href="https://jayuminton-push.web.app/">Safari로 열기</a></strong>
-              <p>이 페이지를<br>Safari에서 엽니다.</p>
-            </div>
-
-            <div class="step">
-              <div class="step-top">
-                <span class="step-number">2</span>
-                <svg class="step-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#icon-share"/></svg>
-              </div>
-              <strong>공유 버튼 누르기</strong>
-              <p>하단의 공유 버튼을<br>선택합니다.</p>
-            </div>
-
-            <div class="step">
-              <div class="step-top">
-                <span class="step-number">3</span>
-                <svg class="step-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#icon-plus"/></svg>
-              </div>
-              <strong>홈 화면에 추가</strong>
-              <p>‘홈 화면에 추가’를<br>선택하면 설치가 완료됩니다.</p>
-            </div>
-          </div>
-        </section>
-      </section>
     </div>
+  </section>
 
-    <footer class="footer">MORE BADMINTON, A BRIGHTER TOMORROW</footer>
-  </main>
+  <div class="content">
+    <section class="card">
+      <header class="release">
+        <h2>Google Play 정식 출시</h2>
+        <p>공개 테스트가 아닌 정식 출시 버전입니다.</p>
+      </header>
 
-  <script>
-    /* JAYUMINTON_INSTALL_LANDING_V1 */
-    (function () {
-      var tabs = Array.prototype.slice.call(document.querySelectorAll('.device-tab'));
-      var launchTitle = document.getElementById('launch-title');
-      var launchSubtitle = document.getElementById('launch-subtitle');
+      <div class="tabs" role="tablist" aria-label="설치 방법 선택">
+        <button class="tab" id="tabAndroid" type="button" role="tab" aria-selected="true" aria-controls="androidPanel">
+          <svg width="29" height="29" viewBox="0 0 48 48" aria-hidden="true"><path d="M10 7l26 17-26 17z" fill="#34b45a"/><path d="M10 7l16 17-16 17z" fill="#4a84f3"/><path d="M26 24l10-7 5 7-5 7z" fill="#f4c94c"/><path d="M36 17l5 7-5 7-10-7z" fill="#e96262" opacity=".78"/></svg>
+          <span class="tab-copy"><strong>Google Play</strong><small>Android</small></span>
+        </button>
+        <button class="tab" id="tabIos" type="button" role="tab" aria-selected="false" aria-controls="iosPanel">
+          <svg width="28" height="28" viewBox="0 0 48 48" aria-hidden="true"><path d="M30 11c-2 1-4 4-4 6 3 0 6-2 7-5 1-2 1-3 0-4-1 0-2 1-3 3z" fill="#5b5b5b"/><path d="M34 24c0-5 4-7 4-7-3-4-8-3-10-2-2 1-4 1-6 0-3-1-7-1-10 2-5 5-2 15 1 20 2 3 4 6 7 6 2 0 3-1 6-1 2 0 4 1 6 1 3 0 5-3 7-6 2-3 3-6 3-6s-8-3-8-7z" fill="#5b5b5b"/></svg>
+          <span class="tab-copy"><strong>iPhone</strong><small>iOS (PWA)</small></span>
+        </button>
+      </div>
 
-      function showGuide(selected) {
-        var iosSelected = selected && selected.id === 'tab-ios';
-        tabs.forEach(function (tab) {
-          var active = tab === selected;
-          var guide = document.getElementById(tab.getAttribute('data-guide'));
-          tab.setAttribute('aria-selected', active ? 'true' : 'false');
-          if (guide) guide.hidden = !active;
-        });
-        if (launchTitle) {
-          launchTitle.textContent = iosSelected ? 'iPhone PWA 설치 안내' : 'Google Play 정식 출시';
-        }
-        if (launchSubtitle) {
-          launchSubtitle.textContent = iosSelected
-            ? '홈 화면에 추가하면 주소창 없이 앱처럼 실행됩니다.'
-            : '공개 테스트가 아닌 정식 출시 버전입니다.';
-        }
-      }
+      <section class="panel" id="androidPanel" role="tabpanel" aria-labelledby="tabAndroid">
+        <p class="panel-kicker">Android 사용자는</p>
+        <div class="google-copy" aria-label="Google Play에서 자유민턴 코트현황 앱을 바로 설치할 수 있습니다.">
+          <span>Google Play에서</span>
+          <span>자유민턴 코트현황 앱</span>
+          <span>바로 설치할 수 있습니다.</span>
+        </div>
+        <ul class="benefits">
+          <li><span class="check">✓</span><span>공개 테스트가 아닌 정식 출시 앱</span></li>
+          <li><span class="check">✓</span><span>빠르고 간편한 설치</span></li>
+          <li><span class="check">✓</span><span>Google Play를 통한 자동 업데이트</span></li>
+        </ul>
+        <a class="cta" href="https://play.google.com/store/apps/details?id=com.jayuminton.user" target="_blank" rel="noopener noreferrer">
+          <svg width="25" height="25" viewBox="0 0 48 48" aria-hidden="true"><path d="M10 7l26 17-26 17z" fill="#5dd47a"/><path d="M10 7l16 17-16 17z" fill="#7da8ff"/><path d="M26 24l10-7 5 7-5 7z" fill="#ffd35d"/></svg>
+          <span>Google Play에서 바로 설치</span>
+        </a>
+      </section>
 
-      tabs.forEach(function (tab) {
-        tab.addEventListener('click', function () {
-          showGuide(tab);
-        });
-      });
+      <section class="panel" id="iosPanel" role="tabpanel" aria-labelledby="tabIos" hidden>
+        <p class="panel-kicker">iPhone 사용자는</p>
+        <h3 class="panel-title">자유민턴 코트현황 웹앱을<br>홈 화면에 설치해 사용하세요.</h3>
+        <p class="ios-summary">앱스토어 주소를 찾을 필요 없이 Safari에서 홈 화면에 추가하면 일반 앱처럼 아이콘으로 실행할 수 있습니다.</p>
+        <button class="cta" type="button" id="pwaInstallBtn">
+          <svg width="27" height="27" viewBox="0 0 48 48" aria-hidden="true"><rect x="7" y="7" width="34" height="34" rx="9" fill="rgba(255,255,255,.16)"/><path d="M24 14v20M14 24h20" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>
+          <span id="pwaInstallText">자유민턴 웹앱 설치</span>
+        </button>
+        <div class="pwa-note" id="pwaNote">설치 버튼을 누른 뒤 아래 순서대로 진행하면 됩니다.</div>
+        <div class="steps" id="iosSteps">
+          <div class="step"><div class="num">1</div><div class="step-icon"><svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="18" fill="#4d8fe8"/><circle cx="24" cy="24" r="14" fill="#fff"/><path d="M29 17l-4 10-7 4 4-10z" fill="#4d8fe8"/></svg></div><b>Safari로 열기</b><span>이 페이지를 Safari에서 엽니다.</span></div>
+          <div class="step"><div class="num">2</div><div class="step-icon"><svg width="39" height="39" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 30V8M18 14l6-6 6 6" fill="none" stroke="#3974d8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 22h-4v18h28V22h-4" fill="none" stroke="#3974d8" stroke-width="3.2" stroke-linecap="round"/></svg></div><b>공유 버튼 누르기</b><span>Safari의 공유 버튼을 누릅니다.</span></div>
+          <div class="step"><div class="num">3</div><div class="step-icon"><svg width="39" height="39" viewBox="0 0 48 48" aria-hidden="true"><rect x="8" y="8" width="32" height="32" rx="8" fill="#2f78e7"/><path d="M24 15v18M15 24h18" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg></div><b>홈 화면에 추가</b><span>‘홈 화면에 추가’를 선택하면 설치됩니다.</span></div>
+        </div>
+      </section>
 
-      if (window.location.hash === '#iphone' || window.location.hash === '#ios-guide') {
-        showGuide(document.getElementById('tab-ios'));
-      } else {
-        showGuide(document.getElementById('tab-android'));
-      }
-    })();
-  </script>
+      <div class="footer">MORE BADMINTON, A BRIGHTER TOMORROW</div>
+    </section>
+  </div>
+</main>
+<script>
+/* JAYUMINTON_INSTALL_LANDING_V1 */
+(function(){
+  var androidTab=document.getElementById('tabAndroid');
+  var iosTab=document.getElementById('tabIos');
+  var androidPanel=document.getElementById('androidPanel');
+  var iosPanel=document.getElementById('iosPanel');
+  var pwaButton=document.getElementById('pwaInstallBtn');
+  var pwaText=document.getElementById('pwaInstallText');
+  var pwaNote=document.getElementById('pwaNote');
+  var iosSteps=document.getElementById('iosSteps');
+  var deferredPrompt=null;
+  var ua=String(navigator.userAgent||'');
+  var isIOS=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  var standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+
+  function select(kind){
+    var ios=kind==='ios';
+    androidTab.setAttribute('aria-selected',ios?'false':'true');
+    iosTab.setAttribute('aria-selected',ios?'true':'false');
+    androidPanel.hidden=ios;
+    iosPanel.hidden=!ios;
+    history.replaceState(null,'',ios?'#iphone':'#google-play');
+  }
+
+  androidTab.addEventListener('click',function(){select('android');});
+  iosTab.addEventListener('click',function(){select('ios');});
+
+  window.addEventListener('beforeinstallprompt',function(event){
+    event.preventDefault();
+    deferredPrompt=event;
+  });
+
+  pwaButton.addEventListener('click',function(){
+    if(standalone){location.href='/game.html';return;}
+    if(deferredPrompt){
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.finally(function(){deferredPrompt=null;});
+      return;
+    }
+    pwaNote.textContent='iPhone Safari에서는 설치 확인창을 자동으로 띄울 수 없습니다. 아래의 공유 버튼 → 홈 화면에 추가 순서로 설치해 주세요.';
+    iosSteps.scrollIntoView({behavior:'smooth',block:'center'});
+  });
+
+  if(standalone){pwaText.textContent='설치 완료 · 자유민턴 열기';}
+  if(location.hash==='#iphone'||location.hash==='#ios'||isIOS){select('ios');}else{select('android');}
+})();
+</script>
 </body>
 </html>
