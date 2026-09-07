@@ -1,0 +1,214 @@
+name: Build admin v208.91b fast peak guard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20891b-fast-peak-guard.yml'
+      - 'deployment/jayuminton/admin_v20891b_fast_peak_guard_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20891b-fast-peak-guard
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
+
+      - name: Build v208.91 normalized voice with fast peak guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='releases/jayuminton-admin-v208.90-voice-boost-swap-label.apk'
+          JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
+          P86='deployment/jayuminton/admin_v20886_galaxy_tab_tts_patch.py'
+          P87='deployment/jayuminton/admin_v20887_system_tts_profile_patch.py'
+          P88='deployment/jayuminton/admin_v20888_safe_audio_balance_patch.py'
+          P89='deployment/jayuminton/admin_v20889_audible_music_duck_patch.py'
+          P90='deployment/jayuminton/admin_v20890_voice_boost_swap_label_patch.py'
+          P91='deployment/jayuminton/admin_v20891_energy_normalize_limiter_patch.py'
+          P91B='deployment/jayuminton/admin_v20891b_fast_peak_guard_patch.py'
+          HTML='app/src/main/assets/admin/index.html'
+          OUT='app/build/outputs/apk/release/app-release.apk'
+          BT="${ANDROID_HOME}/build-tools/35.0.0"
+
+          for f in "$BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B"; do test -s "$f"; done
+          mkdir -p app/src/main/assets/admin
+
+          # Preserve exact v208.90 UI and every earlier verified marker/function.
+          unzip -p "$BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+          grep -F 'jmAdminRestoreKokTotalV20885' "$HTML" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$HTML" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$HTML" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$HTML" >/dev/null
+          grep -F '총 콕개수 0개  완료: 총 0명 (남자: 0명 여자: 0명)' "$HTML" >/dev/null
+          grep -F "make('jmQuickMultiSwap','교환'" "$HTML" >/dev/null
+
+          python3 "$P86" "$JAVA"
+          python3 "$P87" "$JAVA"
+          python3 "$P88" "$JAVA"
+          python3 "$P89" "$JAVA"
+
+          # P90 changes HTML label as well as native voice code. Feed it a temporary
+          # old-label HTML, then restore the already verified v208.90 final UI.
+          cp "$HTML" "$RUNNER_TEMP/final-v20890.html"
+          sed -i "0,/make('jmQuickMultiSwap','교환'/s//make('jmQuickMultiSwap','다중교환'/" "$HTML"
+          python3 "$P90" "$JAVA" "$HTML"
+          cp "$RUNNER_TEMP/final-v20890.html" "$HTML"
+
+          python3 "$P91" "$JAVA"
+          python3 "$P91B" "$JAVA"
+
+          # Source gates: measured energy normalization, fast transient guard,
+          # sample peak ceiling, no blind +7dB enhancer in final playback.
+          grep -F 'JAYUMINTON_ENERGY_NORMALIZE_LIMITER_V20891' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_FAST_PEAK_GUARD_V20891B' "$JAVA" >/dev/null
+          grep -F 'VOICE_TARGET_RMS_DBFS = -13.0' "$JAVA" >/dev/null
+          grep -F 'VOICE_PEAK_CEILING_DBFS = -2.0' "$JAVA" >/dev/null
+          grep -F 'VOICE_COMP_THRESHOLD_DBFS = -18.0' "$JAVA" >/dev/null
+          grep -F 'VOICE_COMP_RATIO = 3.0' "$JAVA" >/dev/null
+          grep -F 'double instantGain = Math.pow(' "$JAVA" >/dev/null
+          grep -F 'gain = Math.min(gain, instantGain);' "$JAVA" >/dev/null
+          grep -F 'finalPeak > ceiling + 1.0e-6' "$JAVA" >/dev/null
+          ! grep -F 'new LoudnessEnhancer(mp.getAudioSessionId())' "$JAVA" >/dev/null
+          grep -F 'private static final float MUSIC_DUCK_RATIO = 0.35f;' "$JAVA" >/dev/null
+          ! grep -F 'setStreamVolume(AudioManager.STREAM_MUSIC, 0,' "$JAVA" >/dev/null
+          ! grep -F 'setStreamVolume(AudioManager.STREAM_MUSIC, maxMedia' "$JAVA" >/dev/null
+          grep -F "make('jmQuickMultiSwap','교환'" "$HTML" >/dev/null
+
+          # DSP sanity test mirrors Java algorithm. Synthetic speech contains isolated
+          # 0.94-FS spikes specifically to prove the fast guard raises average energy
+          # while the final sample peak stays at/below -2 dBFS and never reaches 0 dBFS.
+          python3 - <<'PY'
+          import math
+          sr=24000
+          threshold=10**(-18/20)
+          target=10**(-13/20)
+          ceiling=10**(-2/20)
+          ratio=3.0
+          attack=math.exp(-1/(0.004*sr))
+          release=math.exp(-1/(0.120*sr))
+          x=[]
+          for i in range(sr*2):
+              v=0.055*math.sin(2*math.pi*220*i/sr)+0.025*math.sin(2*math.pi*440*i/sr)
+              if i in (4000,10000,19000,32000): v=0.94
+              x.append(v)
+          before=(sum(v*v for v in x)/len(x))**0.5
+          env=0.0; y=[]
+          for v in x:
+              a=abs(v)
+              c=attack if a>env else release
+              env=c*env+(1-c)*a
+              g=1.0 if env<=threshold else (env/threshold)**((1/ratio)-1)
+              if a>threshold:
+                  instant=(a/threshold)**((1/ratio)-1)
+                  g=min(g,instant)
+              y.append(v*g)
+          rms=(sum(v*v for v in y)/len(y))**0.5
+          peak=max(abs(v) for v in y)
+          makeup=min(target/rms,ceiling/peak)
+          z=[max(-ceiling,min(ceiling,v*makeup)) for v in y]
+          after=(sum(v*v for v in z)/len(z))**0.5
+          final_peak=max(abs(v) for v in z)
+          assert final_peak <= ceiling + 1e-12
+          assert final_peak < 1.0
+          assert after > before, (before,after)
+          assert 20*math.log10(final_peak) <= -1.999999
+          print('DSP_SANITY_OK before=%.2fdBFS after=%.2fdBFS peak=%.2fdBFS' % (
+              20*math.log10(before),20*math.log10(after),20*math.log10(final_peak)))
+          PY
+
+          "$BT/aapt" dump badging "$BASE" > "$RUNNER_TEMP/base-badging.txt"
+          BASE_CODE="$(sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" "$RUNNER_TEMP/base-badging.txt" | sed -n '1p')"
+          test -n "$BASE_CODE"
+          NEW_CODE=$((BASE_CODE + 1))
+          python3 - "$NEW_CODE" <<'PY'
+          from pathlib import Path
+          import re,sys
+          p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
+          s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
+          if n!=1: raise SystemExit('versionCode anchor mismatch')
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '208.91'",s,count=1)
+          if n!=1: raise SystemExit('versionName anchor mismatch')
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          test -s signing/jayuminton-release.jks
+          test -s app/src/main/res/drawable/icon_from_library.b64
+          base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
+          test -s app/src/main/res/drawable/icon.png
+          rm -f app/src/main/res/drawable/icon_from_library.b64
+
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          test -s "$OUT"
+          "$BT/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
+          grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='208.91'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+
+          unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
+          grep -F 'jmAdminRestoreKokTotalV20885' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F '총 콕개수 0개  완료: 총 0명 (남자: 0명 여자: 0명)' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F "make('jmQuickMultiSwap','교환'" "$RUNNER_TEMP/final-html" >/dev/null
+
+          unzip -p "$OUT" classes.dex > "$RUNNER_TEMP/classes.dex"
+          strings "$RUNNER_TEMP/classes.dex" > "$RUNNER_TEMP/dex-strings.txt"
+          grep -F 'JAYUMINTON_ENERGY_NORMALIZE_LIMITER_V20891' "$RUNNER_TEMP/dex-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_FAST_PEAK_GUARD_V20891B' "$RUNNER_TEMP/dex-strings.txt" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
+          echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
+
+      - name: Publish v208.91 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$APK_PATH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk
+          printf 'status=success\nversion=208.91\nbase=v208.90-voice-boost-swap-label\nfeature=rms-energy-normalize-minus13dbfs-compressor3to1-fast-peak-guard-sample-ceiling-minus2dbfs-music35pct-swap-label-preserved\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20891-energy-normalize-limiter.txt
+          git add releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk deployment/status/v20891-energy-normalize-limiter.txt
+          git commit -m 'Publish admin v208.91: normalized limited voice with fast peak guard' || exit 0
+          git push origin HEAD:main
