@@ -1,13 +1,12 @@
-/* JAYUMINTON_MEMBER_PWA_SW_V3
-   One root-scope service worker for PWA installability + foreground bootstrap
+/* JAYUMINTON_MEMBER_PWA_SW_V4
+   One root-scope service worker for PWA installability + iPhone consent UI
    + Firebase Web Push background delivery.
 */
-const JAYUMINTON_SW_VERSION = 'member-pwa-push-v3-20260908';
+const JAYUMINTON_SW_VERSION = 'member-pwa-push-v4-20260908';
 
-const IOS_PUSH_BOOTSTRAP = String.raw`
-<script>
-/* JAYUMINTON_IOS_PWA_PUSH_CONSENT_V1 */
+const IOS_PUSH_BOOTSTRAP_JS = String.raw`
 (function(){
+  'use strict';
   if (window.__JAYUMINTON_IOS_PWA_PUSH_CONSENT_V1__) return;
   window.__JAYUMINTON_IOS_PWA_PUSH_CONSENT_V1__ = true;
 
@@ -59,6 +58,7 @@ const IOS_PUSH_BOOTSTRAP = String.raw`
     sdkPromise=load('https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js')
       .then(function(){return load('https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging-compat.js');})
       .then(function(){
+        if(!window.firebase)throw new Error('Firebase 알림 모듈 초기화 실패');
         if(!firebase.apps.length)firebase.initializeApp({
           apiKey:'AIzaSyCS8MJsLHfjsiaQymEyEn-qqp_05WSW1cI',
           authDomain:'jayuminton-push.firebaseapp.com',
@@ -129,8 +129,7 @@ const IOS_PUSH_BOOTSTRAP = String.raw`
   window.JayumintonPwaPush={requestConsent:function(){prompt(true);},refresh:reconcile,unregister:unregister};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(reconcile,500);},{once:true});else setTimeout(reconcile,500);
   setInterval(reconcile,2500);
-})();
-</script>`;
+})();`;
 
 self.addEventListener('install', function () {
   self.skipWaiting();
@@ -145,6 +144,17 @@ self.addEventListener('fetch', function (event) {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
+  if (url.pathname === '/ios-pwa-push.js') {
+    event.respondWith(new Response(IOS_PUSH_BOOTSTRAP_JS, {
+      status: 200,
+      headers: {
+        'content-type': 'application/javascript; charset=utf-8',
+        'cache-control': 'no-store'
+      }
+    }));
+    return;
+  }
+
   if (event.request.mode === 'navigate' && (url.pathname === '/' || url.pathname === '/index.html')) {
     event.respondWith((async function () {
       const response = await fetch(event.request, { cache: 'no-store' });
@@ -153,14 +163,15 @@ self.addEventListener('fetch', function (event) {
       let html = await response.text();
       html = html.split('/firebase-messaging-sw.js').join('/sw.js');
       if (!html.includes('JAYUMINTON_IOS_PWA_PUSH_CONSENT_V1')) {
+        const tag = '<script src="/ios-pwa-push.js?v=' + encodeURIComponent(JAYUMINTON_SW_VERSION) + '"></script>';
         const bodyClose = html.toLowerCase().lastIndexOf('</body>');
-        html = bodyClose >= 0
-          ? html.slice(0, bodyClose) + IOS_PUSH_BOOTSTRAP + html.slice(bodyClose)
-          : html + IOS_PUSH_BOOTSTRAP;
+        html = bodyClose >= 0 ? html.slice(0, bodyClose) + tag + html.slice(bodyClose) : html + tag;
       }
       const headers = new Headers(response.headers);
       headers.set('cache-control', 'no-store');
       headers.delete('content-length');
+      headers.delete('content-encoding');
+      headers.delete('transfer-encoding');
       return new Response(html, { status: response.status, statusText: response.statusText, headers: headers });
     })());
     return;
