@@ -1,225 +1,869 @@
 <!doctype html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>자유민턴 게임 현황 보기</title>
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta name="theme-color" content="#315efb">
-<meta name="description" content="안드로이드 앱 설치와 아이폰 홈 화면 추가 방법을 안내합니다.">
-<meta property="og:type" content="website">
-<meta property="og:title" content="자유민턴 게임 현황 보기">
-<meta property="og:description" content="안드로이드 앱 설치 · 아이폰 홈 화면 추가">
-<meta property="og:url" content="https://jayuminton-push.web.app/install.html">
-<meta property="og:image" content="https://jayuminton-push.web.app/icon-512.png">
-<style>
-  :root{
-    --bg:#f3f5fa;
-    --card:#ffffff;
-    --ink:#111827;
-    --sub:#6b7280;
-    --accent:#315efb;
-    --border:#e5e7eb;
-  }
-  *{box-sizing:border-box}
-  body{
-    margin:0;
-    min-height:100vh;
-    background:var(--bg);
-    color:var(--ink);
-    font-family:-apple-system,BlinkMacSystemFont,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:24px 16px;
-  }
-  .card{
-    width:100%;
-    max-width:420px;
-    background:var(--card);
-    border-radius:20px;
-    padding:28px 24px 32px;
-    box-shadow:0 8px 30px rgba(15,23,42,.08);
-  }
-  h1{
-    font-size:22px;
-    margin:0 0 6px;
-    text-align:center;
-  }
-  .sub{
-    text-align:center;
-    color:var(--sub);
-    font-size:14px;
-    margin:0 0 22px;
-    line-height:1.5;
-  }
-  .switcher{
-    display:flex;
-    gap:8px;
-    background:var(--bg);
-    border-radius:12px;
-    padding:4px;
-    margin-bottom:22px;
-  }
-  .switcher button{
-    flex:1;
-    border:0;
-    background:transparent;
-    padding:10px 0;
-    border-radius:9px;
-    font-size:13px;
-    font-weight:700;
-    color:var(--sub);
-    cursor:pointer;
-  }
-  .switcher button.active{
-    background:#fff;
-    color:var(--ink);
-    box-shadow:0 1px 4px rgba(15,23,42,.12);
-  }
-  .panel{ display:none; }
-  .panel.active{ display:block; }
-  .icon-row{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    margin-bottom:12px;
-  }
-  .icon-row .emoji{ font-size:26px; }
-  .icon-row .title{ font-size:17px; font-weight:800; }
-  .desc{
-    font-size:14px;
-    color:var(--sub);
-    line-height:1.6;
-    margin-bottom:18px;
-  }
-  .cta{
-    display:block;
-    width:100%;
-    text-align:center;
-    text-decoration:none;
-    background:var(--accent);
-    color:#fff;
-    font-weight:800;
-    font-size:15px;
-    padding:14px 0;
-    border-radius:12px;
-  }
-  .steps{
-    margin:16px 0 0;
-    padding:0;
-    list-style:none;
-  }
-  .steps li{
-    display:flex;
-    align-items:flex-start;
-    gap:10px;
-    font-size:13px;
-    color:var(--ink);
-    margin-bottom:10px;
-  }
-  .steps li .num{
-    flex:0 0 auto;
-    width:22px;
-    height:22px;
-    border-radius:50%;
-    background:var(--accent);
-    color:#fff;
-    font-size:12px;
-    font-weight:800;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-  }
-  .pc-links{
-    display:flex;
-    gap:10px;
-    margin-top:6px;
-  }
-  .pc-links a{
-    flex:1;
-    text-align:center;
-    text-decoration:none;
-    color:var(--ink);
-    font-size:13px;
-    font-weight:700;
-    border:1px solid var(--border);
-    border-radius:10px;
-    padding:10px 0;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --bg:#0f1420;
-      --card:#171d2b;
-      --ink:#f3f4f6;
-      --sub:#9ca3af;
-      --border:#2a3142;
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>자유민턴 공식 설치</title>
+  <meta name="description" content="Google Play에서 자유민턴을 설치하거나 iPhone 홈 화면에 추가하세요.">
+  <meta name="theme-color" content="#347d68">
+  <meta name="color-scheme" content="light">
+  <link rel="canonical" href="https://jayuminton-push.web.app/install.html">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="자유민턴 공식 설치">
+  <meta property="og:description" content="Google Play 정식 출시 · iPhone 홈 화면 추가">
+  <meta property="og:url" content="https://jayuminton-push.web.app/install.html">
+  <meta property="og:image" content="https://jayuminton-push.web.app/icon-512.png">
+  <style>
+    :root {
+      --navy: #082457;
+      --blue: #1d6fdf;
+      --blue-dark: #1755b3;
+      --muted: #61708a;
+      --line: #dfe6f0;
+      --paper: #ffffff;
+      --soft: #f5f8fc;
+      --green: #5db68d;
+      --page-width: 960px;
     }
-  }
-</style>
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: #eef3f8;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--navy);
+      background:
+        radial-gradient(circle at 50% 100%, rgba(115, 151, 190, .14), transparent 48%),
+        #f7f9fc;
+      font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    button,
+    a { -webkit-tap-highlight-color: transparent; }
+
+    .page-shell {
+      width: min(100%, var(--page-width));
+      min-height: 100vh;
+      margin: 0 auto;
+      overflow: hidden;
+      background: #f9fbfe;
+      box-shadow: 0 0 70px rgba(20, 45, 79, .12);
+    }
+
+    .hero {
+      position: relative;
+      height: clamp(330px, 54vw, 540px);
+      overflow: hidden;
+      isolation: isolate;
+      color: #fff;
+      background: #397c69;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(9, 45, 39, .02), rgba(10, 40, 35, .14)),
+        radial-gradient(circle at 50% 46%, transparent 0 30%, rgba(5, 35, 29, .08) 85%);
+    }
+
+    .court-scene {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    .brand-note {
+      position: absolute;
+      z-index: 2;
+      top: clamp(48px, 9.5vw, 94px);
+      left: clamp(22px, 8.2vw, 78px);
+      font-size: clamp(8px, 1.45vw, 14px);
+      line-height: 1.75;
+      letter-spacing: .35em;
+      font-weight: 500;
+      color: rgba(255,255,255,.72);
+      text-shadow: 0 1px 8px rgba(0,0,0,.18);
+    }
+
+    .hero-logo {
+      position: absolute;
+      z-index: 3;
+      top: clamp(24px, 3.8vw, 38px);
+      left: 50%;
+      width: clamp(88px, 16.3vw, 156px);
+      aspect-ratio: 1;
+      padding: clamp(5px, .8vw, 8px);
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: rgba(255,255,255,.96);
+      box-shadow:
+        0 10px 24px rgba(8, 40, 33, .27),
+        inset 0 0 0 1px rgba(255,255,255,.8);
+    }
+
+    .hero-logo img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .hero-copy {
+      position: absolute;
+      z-index: 3;
+      right: 14px;
+      bottom: clamp(56px, 7vw, 70px);
+      left: 14px;
+      text-align: center;
+      text-shadow: 0 3px 15px rgba(9, 39, 33, .28);
+    }
+
+    .hero-eyebrow {
+      margin: 0 0 clamp(5px, 1.2vw, 12px);
+      font-size: clamp(13px, 2.25vw, 21px);
+      font-weight: 400;
+      letter-spacing: .02em;
+      color: rgba(255,255,255,.91);
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(47px, 8.35vw, 80px);
+      line-height: .98;
+      letter-spacing: -.055em;
+      font-weight: 900;
+      color: #fff;
+    }
+
+    .hero-subtitle {
+      margin: clamp(9px, 1.5vw, 15px) 0 0;
+      font-size: clamp(13px, 2.1vw, 20px);
+      font-weight: 400;
+      letter-spacing: -.015em;
+      color: rgba(255,255,255,.88);
+    }
+
+    .content-wrap {
+      position: relative;
+      z-index: 5;
+      padding: 0 clamp(12px, 3.4vw, 32px);
+      margin-top: clamp(-70px, -7.35vw, -30px);
+    }
+
+    .install-card {
+      border: 1px solid rgba(218, 226, 237, .9);
+      border-radius: clamp(20px, 2.7vw, 27px);
+      padding: clamp(24px, 4vw, 40px) clamp(14px, 3.2vw, 31px) clamp(20px, 3vw, 30px);
+      background: rgba(255,255,255,.975);
+      box-shadow:
+        0 22px 55px rgba(26, 54, 91, .13),
+        0 3px 10px rgba(26, 54, 91, .04);
+      backdrop-filter: blur(12px);
+    }
+
+    .launch-heading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(8px, 2vw, 19px);
+      min-width: 0;
+    }
+
+    .launch-heading h2 {
+      margin: 0;
+      white-space: nowrap;
+      font-size: clamp(22px, 4.25vw, 41px);
+      line-height: 1.15;
+      letter-spacing: -.045em;
+      font-weight: 850;
+      color: var(--navy);
+    }
+
+    .laurel {
+      flex: 0 1 clamp(29px, 6vw, 58px);
+      width: clamp(29px, 6vw, 58px);
+      height: clamp(37px, 7.5vw, 72px);
+      color: #577b9c;
+    }
+
+    .laurel.right { transform: scaleX(-1); }
+
+    .launch-subtitle {
+      margin: clamp(4px, .8vw, 8px) 0 clamp(24px, 3.5vw, 34px);
+      text-align: center;
+      font-size: clamp(13px, 2.2vw, 20px);
+      color: #60708d;
+      letter-spacing: -.02em;
+    }
+
+    .device-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+      margin-bottom: clamp(17px, 2.3vw, 23px);
+      border: 1px solid #d9e0ea;
+      border-radius: clamp(13px, 2vw, 20px);
+      background: #f7f9fc;
+      box-shadow: inset 0 1px 3px rgba(19, 48, 84, .04);
+    }
+
+    .device-tab {
+      position: relative;
+      min-width: 0;
+      min-height: clamp(72px, 10vw, 98px);
+      margin: 0;
+      padding: clamp(9px, 1.5vw, 15px) clamp(8px, 2vw, 20px);
+      border: 0;
+      border-radius: inherit;
+      color: #222d40;
+      background: transparent;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .device-tab + .device-tab::before {
+      content: "";
+      position: absolute;
+      top: 18%;
+      bottom: 18%;
+      left: 0;
+      width: 1px;
+      background: #dce3ed;
+    }
+
+    .device-tab[aria-selected="true"] {
+      z-index: 1;
+      color: var(--navy);
+      background: linear-gradient(135deg, rgba(229,240,255,.98), rgba(255,255,255,.98));
+      box-shadow:
+        inset 0 0 0 2px #1876ef,
+        0 5px 17px rgba(35, 111, 207, .10);
+    }
+
+    .device-tab[aria-selected="true"] + .device-tab::before,
+    .device-tab + .device-tab[aria-selected="true"]::before { opacity: 0; }
+
+    .tab-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(10px, 2.2vw, 21px);
+    }
+
+    .tab-icon {
+      flex: 0 0 auto;
+      width: clamp(32px, 5.4vw, 52px);
+      height: clamp(36px, 5.8vw, 56px);
+    }
+
+    .tab-copy {
+      min-width: 0;
+      text-align: left;
+      line-height: 1.12;
+    }
+
+    .tab-copy strong {
+      display: block;
+      font-size: clamp(16px, 2.65vw, 25px);
+      letter-spacing: -.03em;
+      font-weight: 800;
+    }
+
+    .tab-copy span {
+      display: block;
+      margin-top: 4px;
+      white-space: nowrap;
+      font-size: clamp(11px, 2vw, 18px);
+      color: #8a98af;
+    }
+
+    .install-panel {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #edf1f6;
+      border-radius: clamp(17px, 2.2vw, 22px);
+      background:
+        radial-gradient(circle at 80% 40%, rgba(199, 220, 248, .22), transparent 32%),
+        linear-gradient(135deg, #fbfdff, #f3f7fc);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.9),
+        0 8px 20px rgba(25, 57, 94, .045);
+      scroll-margin-top: 16px;
+    }
+
+    .android-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(90px, 26%);
+      gap: 10px clamp(6px, 2vw, 20px);
+      padding: clamp(22px, 3.6vw, 35px) clamp(20px, 4vw, 38px) clamp(19px, 2.8vw, 27px);
+    }
+
+    .android-copy { position: relative; z-index: 2; }
+
+    .panel-eyebrow {
+      margin: 0 0 clamp(8px, 1vw, 10px);
+      font-size: clamp(14px, 2.45vw, 23px);
+      line-height: 1.2;
+      font-weight: 700;
+      color: #2566b6;
+      letter-spacing: -.025em;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: clamp(21px, 3.65vw, 35px);
+      line-height: 1.25;
+      font-weight: 850;
+      letter-spacing: -.055em;
+      color: var(--navy);
+    }
+
+    .benefits {
+      display: grid;
+      gap: clamp(8px, 1.15vw, 11px);
+      margin: clamp(19px, 2.4vw, 23px) 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .benefits li {
+      display: flex;
+      align-items: center;
+      gap: clamp(8px, 1.35vw, 13px);
+      font-size: clamp(12px, 2vw, 19px);
+      line-height: 1.3;
+      color: #5a6981;
+      white-space: nowrap;
+    }
+
+    .check {
+      display: grid;
+      flex: 0 0 auto;
+      width: clamp(22px, 3.4vw, 33px);
+      height: clamp(22px, 3.4vw, 33px);
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: linear-gradient(145deg, #67c39b, #4fae80);
+      box-shadow: 0 3px 8px rgba(75, 163, 119, .22);
+    }
+
+    .check svg { width: 59%; height: 59%; }
+
+    .play-watermark {
+      align-self: center;
+      justify-self: center;
+      width: min(100%, 155px);
+      opacity: .22;
+      filter: saturate(.8);
+    }
+
+    .play-cta {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(12px, 2vw, 20px);
+      min-height: clamp(58px, 8.4vw, 82px);
+      margin-top: clamp(14px, 2vw, 19px);
+      border-radius: clamp(13px, 1.8vw, 18px);
+      color: #fff;
+      background: linear-gradient(105deg, #2869c6, #1855b8 47%, #2469c8);
+      box-shadow: 0 11px 24px rgba(30, 89, 178, .24);
+      text-decoration: none;
+      font-size: clamp(16px, 2.75vw, 26px);
+      line-height: 1;
+      letter-spacing: -.035em;
+      font-weight: 750;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .play-cta:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 28px rgba(30, 89, 178, .29);
+    }
+
+    .play-cta:active { transform: translateY(1px); }
+    .play-cta .play-icon { width: clamp(31px, 4.6vw, 45px); height: auto; }
+    .play-cta .arrow { width: clamp(16px, 2.2vw, 21px); height: auto; }
+
+    .ios-panel {
+      margin-top: clamp(17px, 2.2vw, 22px);
+      padding: clamp(22px, 3.4vw, 33px) clamp(12px, 3.8vw, 36px) clamp(19px, 3.1vw, 30px);
+    }
+
+    .ios-heading-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 clamp(7px, .7vw, 8px);
+    }
+
+    .ios-label {
+      flex: 0 0 auto;
+      font-size: clamp(11px, 1.8vw, 17px);
+      color: #94a0b4;
+    }
+
+    .ios-panel .panel-title {
+      margin: 0 clamp(7px, .7vw, 8px);
+      font-size: clamp(20px, 3.35vw, 32px);
+    }
+
+    .ios-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: clamp(19px, 2.9vw, 28px);
+    }
+
+    .step {
+      position: relative;
+      min-width: 0;
+      padding: 0 clamp(5px, 2vw, 19px);
+      text-align: center;
+    }
+
+    .step + .step::before {
+      content: "";
+      position: absolute;
+      top: 4px;
+      bottom: 2px;
+      left: 0;
+      width: 1px;
+      background: #dfe5ef;
+    }
+
+    .step-top {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: clamp(48px, 6.5vw, 63px);
+      gap: clamp(8px, 3.7vw, 36px);
+    }
+
+    .step-number {
+      display: grid;
+      flex: 0 0 auto;
+      width: clamp(31px, 4.6vw, 44px);
+      height: clamp(31px, 4.6vw, 44px);
+      place-items: center;
+      border-radius: 50%;
+      color: var(--navy);
+      background: #e7eef7;
+      font-size: clamp(15px, 2.25vw, 21px);
+      font-weight: 800;
+    }
+
+    .step-icon {
+      flex: 0 0 auto;
+      width: clamp(39px, 5.8vw, 56px);
+      height: clamp(39px, 5.8vw, 56px);
+    }
+
+    .step strong {
+      display: block;
+      margin-top: clamp(9px, 1.1vw, 11px);
+      font-size: clamp(13px, 2.2vw, 21px);
+      line-height: 1.22;
+      white-space: nowrap;
+      letter-spacing: -.04em;
+      color: var(--navy);
+    }
+
+    .step p {
+      margin: clamp(7px, 1vw, 10px) 0 0;
+      font-size: clamp(10px, 1.7vw, 16px);
+      line-height: 1.45;
+      letter-spacing: -.035em;
+      color: #718098;
+    }
+
+    .step a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .footer {
+      padding: clamp(29px, 4.7vw, 45px) 16px clamp(17px, 2.7vw, 26px);
+      text-align: center;
+      color: #7f8ba3;
+      font-size: clamp(9px, 1.45vw, 14px);
+      font-weight: 600;
+      letter-spacing: .3em;
+    }
+
+    .footer::after {
+      content: "";
+      display: block;
+      width: clamp(29px, 6.6vw, 63px);
+      height: 2px;
+      margin: clamp(11px, 1.7vw, 16px) auto 0;
+      border-radius: 2px;
+      background: #7d8ba2;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    :focus-visible {
+      outline: 3px solid #f7b32b;
+      outline-offset: 3px;
+    }
+
+    @media (max-width: 520px) {
+      .hero { height: 338px; }
+      .brand-note { top: 47px; left: 20px; letter-spacing: .27em; }
+      .hero-copy { bottom: 60px; }
+      .install-card { padding-right: 13px; padding-left: 13px; }
+      .launch-heading { gap: 6px; }
+      .laurel { flex-basis: 27px; width: 27px; height: 42px; }
+      .device-tab { min-height: 70px; }
+      .android-panel { grid-template-columns: minmax(0, 1fr) 86px; padding-right: 18px; padding-left: 18px; }
+      .play-watermark { width: 86px; }
+      .benefits li { letter-spacing: -.04em; }
+      .step { padding-right: 4px; padding-left: 4px; }
+      .step-top { gap: 7px; }
+      .step p br { display: none; }
+    }
+
+    @media (max-width: 365px) {
+      .hero { height: 326px; }
+      .brand-note { opacity: .62; }
+      .hero h1 { font-size: 44px; }
+      .tab-inner { gap: 7px; }
+      .tab-icon { width: 28px; }
+      .tab-copy strong { font-size: 14px; }
+      .android-panel { grid-template-columns: minmax(0, 1fr) 64px; padding-right: 14px; padding-left: 14px; }
+      .play-watermark { width: 66px; }
+      .benefits li { font-size: 11px; }
+      .play-cta { gap: 8px; font-size: 15px; }
+      .step-number { width: 27px; height: 27px; font-size: 13px; }
+      .step-icon { width: 34px; height: 34px; }
+      .step strong { font-size: 11.5px; }
+      .step p { font-size: 9px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .play-cta { transition: none; }
+    }
+  </style>
 </head>
 <body>
-  <div class="card">
-    <h1>🏸 자유민턴 게임 현황 보기</h1>
-    <p class="sub">기기에 맞게 앱을 설치하거나 홈 화면에 추가해 게임 현황을 확인하세요.</p>
+  <svg class="sr-only" aria-hidden="true" focusable="false">
+    <symbol id="icon-play" viewBox="0 0 64 72">
+      <defs>
+        <linearGradient id="play-green" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#25d780"/><stop offset="1" stop-color="#18a766"/>
+        </linearGradient>
+        <linearGradient id="play-blue" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#48b9ff"/><stop offset="1" stop-color="#1478df"/>
+        </linearGradient>
+        <linearGradient id="play-red" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff755f"/><stop offset="1" stop-color="#e73546"/>
+        </linearGradient>
+        <linearGradient id="play-yellow" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffd866"/><stop offset="1" stop-color="#f5aa27"/>
+        </linearGradient>
+      </defs>
+      <path d="M5 5.2c-1.2 1.6-1.8 3.8-1.8 6.5v48.6c0 2.7.6 4.9 1.8 6.5L35.6 36 5 5.2z" fill="url(#play-blue)"/>
+      <path d="M35.6 36 5 5.2c1.8-2.4 4.7-2.7 7.9-.9l35.7 20.3L35.6 36z" fill="url(#play-green)"/>
+      <path d="M35.6 36 5 66.8c1.8 2.4 4.7 2.7 7.9.9l35.7-20.3L35.6 36z" fill="url(#play-red)"/>
+      <path d="m48.6 24.6 7.3 4.2c5 2.8 5 7.7 0 10.5l-7.3 4.1L35.6 36l13-11.4z" fill="url(#play-yellow)"/>
+    </symbol>
 
-    <div class="switcher">
-      <button type="button" data-target="ios">🍎 iPhone</button>
-      <button type="button" data-target="android">🤖 Android</button>
-      <button type="button" data-target="pc">💻 PC</button>
-    </div>
+    <symbol id="icon-apple" viewBox="0 0 64 74">
+      <path fill="currentColor" d="M50.6 39.3c.1-8.3 6.8-12.3 7.1-12.5-3.9-5.7-10-6.5-12.1-6.6-5.1-.5-10 3.1-12.6 3.1-2.7 0-6.7-3-11.1-2.9-5.6.1-10.9 3.3-13.8 8.4-5.9 10.2-1.5 25.2 4.1 33.4 2.8 4 6 8.4 10.4 8.2 4.2-.2 5.8-2.7 10.8-2.7 5 0 6.4 2.7 10.9 2.6 4.6-.1 7.4-4 10.1-8 3.2-4.6 4.5-9.2 4.5-9.4-.1 0-8.2-3.2-8.3-12.6zM42.3 14.8c2.2-2.7 3.7-6.4 3.3-10.1-3.2.1-7.2 2.2-9.5 4.9-2 2.3-3.8 6.2-3.3 9.7 3.6.3 7.3-1.8 9.5-4.5z"/>
+    </symbol>
 
-    <div class="panel" id="panel-ios">
-      <div class="icon-row"><span class="emoji">🍎</span><span class="title">iPhone</span></div>
-      <p class="desc">앱 설치 없이 홈 화면에 추가해서 앱처럼 바로 열 수 있어요.</p>
-      <a class="cta" href="https://jayuminton-push.web.app/" id="iosOpenLink">Safari로 열기</a>
-      <ul class="steps">
-        <li><span class="num">1</span><span>위 버튼으로 페이지를 여세요.</span></li>
-        <li><span class="num">2</span><span>하단 공유 버튼 <b>⬆️</b> 을 탭하세요.</span></li>
-        <li><span class="num">3</span><span><b>'홈 화면에 추가'</b>를 선택하면 완료됩니다.</span></li>
-      </ul>
-    </div>
+    <symbol id="icon-check" viewBox="0 0 24 24">
+      <path d="m5 12.4 4.2 4.1L19 7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
 
-    <div class="panel" id="panel-android">
-      <div class="icon-row"><span class="emoji">🤖</span><span class="title">Android</span></div>
-      <p class="desc">Google Play에서 자유민턴 앱을 설치하세요.</p>
-      <a class="cta" href="https://play.google.com/store/apps/details?id=com.jayuminton.user">Google Play에서 설치</a>
-    </div>
+    <symbol id="icon-arrow" viewBox="0 0 24 24">
+      <path d="m8.5 4.5 7.5 7.5-7.5 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
 
-    <div class="panel" id="panel-pc">
-      <div class="icon-row"><span class="emoji">💻</span><span class="title">PC</span></div>
-      <p class="desc">설치할 휴대폰에서 이 안내 페이지 링크를 열어주세요.</p>
-      <div class="pc-links">
-        <a href="https://jayuminton-push.web.app/">🍎 iPhone 안내</a>
-        <a href="https://play.google.com/store/apps/details?id=com.jayuminton.user">🤖 Google Play</a>
+    <symbol id="icon-share" viewBox="0 0 64 64">
+      <path d="M32 38V7m0 0L21 18M32 7l11 11" fill="none" stroke="#2378df" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20 27h-6a5 5 0 0 0-5 5v21a5 5 0 0 0 5 5h36a5 5 0 0 0 5-5V32a5 5 0 0 0-5-5h-6" fill="none" stroke="#2378df" stroke-width="5" stroke-linecap="round"/>
+    </symbol>
+
+    <symbol id="icon-plus" viewBox="0 0 64 64">
+      <defs>
+        <linearGradient id="plus-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#2c89f6"/><stop offset="1" stop-color="#1261d1"/>
+        </linearGradient>
+      </defs>
+      <rect x="6" y="6" width="52" height="52" rx="13" fill="url(#plus-bg)"/>
+      <path d="M32 18v28M18 32h28" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+    </symbol>
+
+    <symbol id="icon-safari" viewBox="0 0 64 64">
+      <defs>
+        <radialGradient id="safari-bg" cx="35%" cy="25%" r="80%">
+          <stop offset="0" stop-color="#6ed5ff"/><stop offset="1" stop-color="#1686e8"/>
+        </radialGradient>
+      </defs>
+      <rect x="5" y="5" width="54" height="54" rx="14" fill="url(#safari-bg)"/>
+      <circle cx="32" cy="32" r="20" fill="#fff" opacity=".97"/>
+      <circle cx="32" cy="32" r="17" fill="#47b9ef"/>
+      <g stroke="#fff" stroke-width="1" opacity=".92">
+        <path d="M32 15v4M32 45v4M15 32h4M45 32h4M20 20l3 3M41 41l3 3M44 20l-3 3M23 41l-3 3"/>
+      </g>
+      <path d="m38.5 24.5-4.2 10-9.8 5 4.2-10 9.8-5z" fill="#e64b50"/>
+      <path d="m25.5 39.5 3.2-10 5.6 5-8.8 5z" fill="#fff"/>
+      <circle cx="32" cy="32" r="2" fill="#174b87"/>
+    </symbol>
+  </svg>
+
+  <main class="page-shell">
+    <section class="hero" aria-labelledby="page-title">
+      <svg class="court-scene" viewBox="0 0 942 540" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="court-bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#4e927d"/>
+            <stop offset=".52" stop-color="#438571"/>
+            <stop offset="1" stop-color="#2f6f5f"/>
+          </linearGradient>
+          <radialGradient id="court-light" cx="38%" cy="34%" r="82%">
+            <stop offset="0" stop-color="#84bbaa" stop-opacity=".26"/>
+            <stop offset=".62" stop-color="#173e36" stop-opacity="0"/>
+            <stop offset="1" stop-color="#123a32" stop-opacity=".18"/>
+          </radialGradient>
+          <filter id="grain" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" seed="7"/>
+            <feColorMatrix type="saturate" values="0"/>
+          </filter>
+          <filter id="object-shadow" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="9" dy="14" stdDeviation="8" flood-color="#123c34" flood-opacity=".42"/>
+          </filter>
+          <clipPath id="racket-face">
+            <ellipse cx="790" cy="125" rx="118" ry="77" transform="rotate(27 790 125)"/>
+          </clipPath>
+          <linearGradient id="shuttle-feather" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#f9fbf7"/>
+            <stop offset="1" stop-color="#cfd8d3"/>
+          </linearGradient>
+          <pattern id="net-grid" width="21" height="17" patternUnits="userSpaceOnUse" patternTransform="skewX(-15)">
+            <path d="M0 0H21M0 0V17" fill="none" stroke="#153d35" stroke-width="1.6" opacity=".58"/>
+          </pattern>
+        </defs>
+
+        <rect width="942" height="540" fill="url(#court-bg)"/>
+        <rect width="942" height="540" fill="url(#court-light)"/>
+        <rect width="942" height="540" filter="url(#grain)" opacity=".075"/>
+
+        <g opacity=".95" fill="none" stroke="#eff3eb" stroke-width="12">
+          <path d="M-80 512 247 0"/>
+          <path d="M268 540 505 0"/>
+          <path d="M824 540 720 0"/>
+          <path d="M1012 441 832 0"/>
+          <path d="M-10 79 950 16"/>
+          <path d="M-8 366 965 339"/>
+        </g>
+
+        <g opacity=".36">
+          <path d="M570 -18 964 44 930 201 552 133Z" fill="url(#net-grid)"/>
+          <path d="M565 -12 957 49" fill="none" stroke="#e8eee9" stroke-width="8"/>
+          <path d="M552 133 930 201" fill="none" stroke="#214b42" stroke-width="5"/>
+        </g>
+
+        <g filter="url(#object-shadow)">
+          <ellipse cx="790" cy="125" rx="127" ry="85" transform="rotate(27 790 125)" fill="#dae4df" fill-opacity=".18" stroke="#14235f" stroke-width="12"/>
+          <ellipse cx="790" cy="125" rx="114" ry="73" transform="rotate(27 790 125)" fill="#b6ccc5" fill-opacity=".18" stroke="#82a09b" stroke-width="3"/>
+          <g clip-path="url(#racket-face)" opacity=".85" stroke="#dbe8e5" stroke-width="2.1">
+            <path d="M650 44 930 205M647 62 927 223M646 80 920 241M649 99 912 257M653 119 900 269M661 142 888 279M672 166 871 286M686 190 850 289M704 213 828 288"/>
+            <path d="M688 10 675 237M714 6 705 257M741 4 736 273M769 3 768 283M797 7 801 287M826 13 835 282M854 25 870 268M881 40 903 248M905 61 932 220"/>
+          </g>
+          <path d="M889 199 964 313" fill="none" stroke="#192860" stroke-width="13" stroke-linecap="round"/>
+          <path d="M902 218 965 314" fill="none" stroke="#4258a1" stroke-width="4" stroke-linecap="round" opacity=".8"/>
+          <path d="M956 302 984 345" fill="none" stroke="#171c30" stroke-width="20" stroke-linecap="round"/>
+          <path d="M954 302 981 344" fill="none" stroke="#8e7651" stroke-width="3" opacity=".55"/>
+        </g>
+
+        <g transform="translate(808 318) rotate(18)" filter="url(#object-shadow)">
+          <ellipse cx="0" cy="0" rx="34" ry="18" fill="#dfe5e2" stroke="#b8c1be" stroke-width="2"/>
+          <path d="M-31 5-63 92 0 110 63 92 31 5Z" fill="url(#shuttle-feather)" stroke="#d6ddda" stroke-width="2"/>
+          <path d="M-22 12-42 93M-8 15-15 104M8 15 15 104M22 12 42 93" fill="none" stroke="#b5c2bd" stroke-width="2.4"/>
+          <path d="M-53 73 53 73M-59 89 59 89" fill="none" stroke="#adbcb6" stroke-width="3"/>
+          <ellipse cx="0" cy="0" rx="34" ry="18" fill="#e9edeb"/>
+          <path d="M-31-2c3-22 13-34 31-34S28-24 31-2c-18 8-44 8-62 0z" fill="#d0d6d3"/>
+          <path d="M-25-8c5-14 13-21 25-21s20 7 25 21" fill="none" stroke="#aeb6b3" stroke-width="3" opacity=".75"/>
+        </g>
+      </svg>
+
+      <div class="brand-note" aria-hidden="true">BADMINTON<br>BRINGS<br>PEOPLE TOGETHER</div>
+
+      <div class="hero-logo">
+        <img src="/icon-512.png" alt="자유민턴 로고">
       </div>
+
+      <div class="hero-copy">
+        <p class="hero-eyebrow">언제 어디서나, 함께하는 배드민턴</p>
+        <h1 id="page-title">자유민턴</h1>
+        <p class="hero-subtitle">코트가 사람을, 오늘이 더 특별해지도록</p>
+      </div>
+    </section>
+
+    <div class="content-wrap">
+      <section class="install-card" aria-labelledby="launch-title">
+        <div class="launch-heading">
+          <svg class="laurel" viewBox="0 0 58 72" aria-hidden="true">
+            <path d="M45 5C14 25 10 50 29 67" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            <g fill="currentColor">
+              <ellipse cx="39" cy="13" rx="4" ry="8" transform="rotate(35 39 13)"/>
+              <ellipse cx="30" cy="21" rx="4" ry="8" transform="rotate(22 30 21)"/>
+              <ellipse cx="23" cy="31" rx="4" ry="8" transform="rotate(8 23 31)"/>
+              <ellipse cx="20" cy="43" rx="4" ry="8" transform="rotate(-8 20 43)"/>
+              <ellipse cx="22" cy="55" rx="4" ry="8" transform="rotate(-25 22 55)"/>
+              <ellipse cx="48" cy="22" rx="4" ry="8" transform="rotate(57 48 22)"/>
+              <ellipse cx="40" cy="33" rx="4" ry="8" transform="rotate(45 40 33)"/>
+              <ellipse cx="35" cy="45" rx="4" ry="8" transform="rotate(28 35 45)"/>
+            </g>
+          </svg>
+          <h2 id="launch-title">Google Play 정식 출시</h2>
+          <svg class="laurel right" viewBox="0 0 58 72" aria-hidden="true">
+            <path d="M45 5C14 25 10 50 29 67" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            <g fill="currentColor">
+              <ellipse cx="39" cy="13" rx="4" ry="8" transform="rotate(35 39 13)"/>
+              <ellipse cx="30" cy="21" rx="4" ry="8" transform="rotate(22 30 21)"/>
+              <ellipse cx="23" cy="31" rx="4" ry="8" transform="rotate(8 23 31)"/>
+              <ellipse cx="20" cy="43" rx="4" ry="8" transform="rotate(-8 20 43)"/>
+              <ellipse cx="22" cy="55" rx="4" ry="8" transform="rotate(-25 22 55)"/>
+              <ellipse cx="48" cy="22" rx="4" ry="8" transform="rotate(57 48 22)"/>
+              <ellipse cx="40" cy="33" rx="4" ry="8" transform="rotate(45 40 33)"/>
+              <ellipse cx="35" cy="45" rx="4" ry="8" transform="rotate(28 35 45)"/>
+            </g>
+          </svg>
+        </div>
+        <p class="launch-subtitle">공개 테스트가 아닌 정식 출시 버전입니다.</p>
+
+        <div class="device-tabs" role="tablist" aria-label="기기별 설치 안내">
+          <button class="device-tab" id="tab-android" type="button" role="tab" aria-selected="true" aria-controls="android-guide" data-guide="android-guide">
+            <span class="tab-inner">
+              <svg class="tab-icon" viewBox="0 0 64 72" aria-hidden="true"><use href="#icon-play"/></svg>
+              <span class="tab-copy"><strong>Google Play</strong><span>Android</span></span>
+            </span>
+          </button>
+          <button class="device-tab" id="tab-ios" type="button" role="tab" aria-selected="false" aria-controls="ios-guide" data-guide="ios-guide">
+            <span class="tab-inner">
+              <svg class="tab-icon" viewBox="0 0 64 74" aria-hidden="true" style="color:#5e5e60"><use href="#icon-apple"/></svg>
+              <span class="tab-copy"><strong>iPhone</strong><span>iOS (PWA)</span></span>
+            </span>
+          </button>
+        </div>
+
+        <section class="install-panel android-panel" id="android-guide" aria-labelledby="android-title">
+          <div class="android-copy">
+            <p class="panel-eyebrow">Android 사용자는</p>
+            <h3 class="panel-title" id="android-title">Google Play에서 자유민턴을<br>바로 설치할 수 있습니다.</h3>
+            <ul class="benefits">
+              <li><span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>공식으로 검수된 안전한 앱</li>
+              <li><span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>빠르고 간편한 설치</li>
+              <li><span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>언제 어디서나 편리한 코트 이용</li>
+            </ul>
+          </div>
+          <svg class="play-watermark" viewBox="0 0 64 72" aria-hidden="true"><use href="#icon-play"/></svg>
+          <a class="play-cta" href="https://play.google.com/store/apps/details?id=com.jayuminton.user" target="_blank" rel="noopener noreferrer">
+            <svg class="play-icon" viewBox="0 0 64 72" aria-hidden="true"><use href="#icon-play"/></svg>
+            <span>Google Play에서 바로 설치</span>
+            <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-arrow"/></svg>
+          </a>
+        </section>
+
+        <section class="install-panel ios-panel" id="ios-guide" aria-labelledby="ios-title">
+          <div class="ios-heading-row">
+            <p class="panel-eyebrow">iPhone 사용자는</p>
+            <span class="ios-label">iOS (PWA)</span>
+          </div>
+          <h3 class="panel-title" id="ios-title">아래 방법으로 홈 화면에 추가해 주세요.</h3>
+
+          <div class="ios-steps">
+            <div class="step">
+              <div class="step-top">
+                <span class="step-number">1</span>
+                <a href="https://jayuminton-push.web.app/" aria-label="자유민턴을 Safari에서 열기">
+                  <svg class="step-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#icon-safari"/></svg>
+                </a>
+              </div>
+              <strong><a href="https://jayuminton-push.web.app/">Safari로 열기</a></strong>
+              <p>이 페이지를<br>Safari에서 엽니다.</p>
+            </div>
+
+            <div class="step">
+              <div class="step-top">
+                <span class="step-number">2</span>
+                <svg class="step-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#icon-share"/></svg>
+              </div>
+              <strong>공유 버튼 누르기</strong>
+              <p>하단의 공유 버튼을<br>선택합니다.</p>
+            </div>
+
+            <div class="step">
+              <div class="step-top">
+                <span class="step-number">3</span>
+                <svg class="step-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#icon-plus"/></svg>
+              </div>
+              <strong>홈 화면에 추가</strong>
+              <p>‘홈 화면에 추가’를<br>선택하면 설치가 완료됩니다.</p>
+            </div>
+          </div>
+        </section>
+      </section>
     </div>
-  </div>
 
-<script>
-/* JAYUMINTON_INSTALL_LANDING_V1 */
-(function(){
-  var ua = String(navigator.userAgent || '');
-  var isIos = /iPhone|iPad|iPod/i.test(ua);
-  var isAndroid = /Android/i.test(ua);
-  var initial = isIos ? 'ios' : (isAndroid ? 'android' : 'pc');
+    <footer class="footer">MORE BADMINTON, A BRIGHTER TOMORROW</footer>
+  </main>
 
-  function show(target){
-    ['ios','android','pc'].forEach(function(key){
-      var panel = document.getElementById('panel-' + key);
-      var btn = document.querySelector('.switcher button[data-target="' + key + '"]');
-      var active = key === target;
-      if (panel) panel.classList.toggle('active', active);
-      if (btn) btn.classList.toggle('active', active);
-    });
-  }
+  <script>
+    /* JAYUMINTON_INSTALL_LANDING_V1 */
+    (function () {
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('.device-tab'));
 
-  document.querySelectorAll('.switcher button').forEach(function(btn){
-    btn.addEventListener('click', function(){ show(btn.getAttribute('data-target')); });
-  });
+      function selectTab(selected) {
+        tabs.forEach(function (tab) {
+          tab.setAttribute('aria-selected', tab === selected ? 'true' : 'false');
+        });
+      }
 
-  show(initial);
-})();
-</script>
+      tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          var guide = document.getElementById(tab.getAttribute('data-guide'));
+          selectTab(tab);
+          if (guide) guide.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+
+      if (window.location.hash === '#iphone' || window.location.hash === '#ios-guide') {
+        selectTab(document.getElementById('tab-ios'));
+      }
+    })();
+  </script>
 </body>
 </html>
