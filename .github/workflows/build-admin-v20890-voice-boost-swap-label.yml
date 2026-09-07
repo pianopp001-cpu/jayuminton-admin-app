@@ -1,0 +1,194 @@
+name: Build admin v208.90 voice boost and swap label
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20890-voice-boost-swap-label.yml'
+      - 'deployment/jayuminton/admin_v20890_voice_boost_swap_label_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20890-voice-boost-swap-label
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
+
+      - name: Build v208.90 amplified voice and swap label
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='releases/jayuminton-admin-v208.89-audible-music-duck.apk'
+          JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
+          PATCH86='deployment/jayuminton/admin_v20886_galaxy_tab_tts_patch.py'
+          PATCH87='deployment/jayuminton/admin_v20887_system_tts_profile_patch.py'
+          PATCH88='deployment/jayuminton/admin_v20888_safe_audio_balance_patch.py'
+          PATCH89='deployment/jayuminton/admin_v20889_audible_music_duck_patch.py'
+          PATCH90='deployment/jayuminton/admin_v20890_voice_boost_swap_label_patch.py'
+          HTML='app/src/main/assets/admin/index.html'
+          OUT='app/build/outputs/apk/release/app-release.apk'
+          BUILD_TOOLS="${ANDROID_HOME}/build-tools/35.0.0"
+
+          test -s "$BASE"
+          test -s "$JAVA"
+          test -s "$PATCH86"
+          test -s "$PATCH87"
+          test -s "$PATCH88"
+          test -s "$PATCH89"
+          test -s "$PATCH90"
+          mkdir -p app/src/main/assets/admin
+
+          # Preserve the verified v208.89 web UI, then change only the visible multi-swap label.
+          unzip -p "$BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+          grep -F 'jmAdminRestoreKokTotalV20885' "$HTML" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$HTML" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$HTML" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$HTML" >/dev/null
+          grep -F '총 콕개수 0개  완료: 총 0명 (남자: 0명 여자: 0명)' "$HTML" >/dev/null
+          grep -F "make('jmQuickMultiSwap','다중교환'" "$HTML" >/dev/null
+
+          # Rebuild the native fix chain exactly, then add v208.90.
+          python3 "$PATCH86" "$JAVA"
+          python3 "$PATCH87" "$JAVA"
+          python3 "$PATCH88" "$JAVA"
+          python3 "$PATCH89" "$JAVA"
+          python3 "$PATCH90" "$JAVA" "$HTML"
+
+          grep -F 'JAYUMINTON_GALAXY_TAB_TTS_V20886' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_SYSTEM_TTS_PROFILE_V20887' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_SAFE_AUDIO_BALANCE_V20888' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_AUDIBLE_MUSIC_DUCK_V20889' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_VOICE_BOOST_V20890' "$JAVA" >/dev/null
+          grep -F 'private static final float MUSIC_DUCK_RATIO = 0.35f;' "$JAVA" >/dev/null
+          grep -F 'VOICE_BOOST_MILLIBELS = 700' "$JAVA" >/dev/null
+          grep -F 'new LoudnessEnhancer(mp.getAudioSessionId())' "$JAVA" >/dev/null
+          grep -F 'tts.synthesizeToFile(' "$JAVA" >/dev/null
+          grep -F 'params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f);' "$JAVA" >/dev/null
+          grep -F 'audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0);' "$JAVA" >/dev/null
+          ! grep -F 'setStreamVolume(AudioManager.STREAM_MUSIC, 0,' "$JAVA" >/dev/null
+          ! grep -F 'setStreamVolume(AudioManager.STREAM_MUSIC, maxMedia' "$JAVA" >/dev/null
+          grep -F "make('jmQuickMultiSwap','교환'" "$HTML" >/dev/null
+          ! grep -F "make('jmQuickMultiSwap','다중교환'" "$HTML" >/dev/null
+
+          # Behavioral source gates: music remains audible, voice has separate amplification,
+          # and the button's action ID/function are unchanged.
+          python3 - <<'PY'
+          from pathlib import Path
+          j=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java').read_text(encoding='utf-8')
+          h=Path('app/src/main/assets/admin/index.html').read_text(encoding='utf-8')
+          assert 'MUSIC_DUCK_RATIO = 0.35f' in j
+          assert 'target = Math.max(1, target);' in j
+          assert 'VOICE_BOOST_MILLIBELS = 700' in j
+          assert 'new LoudnessEnhancer(mp.getAudioSessionId())' in j
+          assert 'setTargetGain(VOICE_BOOST_MILLIBELS)' in j
+          assert 'player.setVolume(1.0f, 1.0f)' in j
+          assert 'STREAM_ALARM, maxAlarm' in j
+          assert 'STREAM_MUSIC, originalMediaVolume' in j
+          assert 'STREAM_MUSIC, 0,' not in j
+          assert 'STREAM_MUSIC, maxMedia' not in j
+          assert "make('jmQuickMultiSwap','교환',function(){clickTarget(toolbarButton('swap'),'다중교환 기능을 찾을 수 없습니다.');})" in h
+          PY
+
+          "$BUILD_TOOLS/aapt" dump badging "$BASE" > "$RUNNER_TEMP/v20890-base-badging.txt"
+          BASE_CODE="$(sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" "$RUNNER_TEMP/v20890-base-badging.txt" | sed -n '1p')"
+          test -n "$BASE_CODE"
+          NEW_CODE=$((BASE_CODE + 1))
+          python3 - "$NEW_CODE" <<'PY'
+          from pathlib import Path
+          import re, sys
+          p=Path('app/build.gradle')
+          s=p.read_text(encoding='utf-8')
+          code=sys.argv[1]
+          s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$', f'        versionCode {code}', s, count=1)
+          if n!=1: raise SystemExit('versionCode anchor mismatch')
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$", "        versionName '208.90'", s, count=1)
+          if n!=1: raise SystemExit('versionName anchor mismatch')
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          test -s signing/jayuminton-release.jks
+
+          test -s app/src/main/res/drawable/icon_from_library.b64
+          base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
+          test -s app/src/main/res/drawable/icon.png
+          rm -f app/src/main/res/drawable/icon_from_library.b64
+
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          test -s "$OUT"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+
+          "$BUILD_TOOLS/aapt" dump badging "$OUT" > "$RUNNER_TEMP/v20890-new-badging.txt"
+          grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/v20890-new-badging.txt" >/dev/null
+          grep -F "versionName='208.90'" "$RUNNER_TEMP/v20890-new-badging.txt" >/dev/null
+
+          unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/v20890-html"
+          grep -F 'jmAdminRestoreKokTotalV20885' "$RUNNER_TEMP/v20890-html" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$RUNNER_TEMP/v20890-html" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$RUNNER_TEMP/v20890-html" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$RUNNER_TEMP/v20890-html" >/dev/null
+          grep -F '총 콕개수 0개  완료: 총 0명 (남자: 0명 여자: 0명)' "$RUNNER_TEMP/v20890-html" >/dev/null
+          grep -F "make('jmQuickMultiSwap','교환'" "$RUNNER_TEMP/v20890-html" >/dev/null
+          ! grep -F "make('jmQuickMultiSwap','다중교환'" "$RUNNER_TEMP/v20890-html" >/dev/null
+
+          unzip -p "$OUT" classes.dex > "$RUNNER_TEMP/v20890-classes.dex"
+          strings "$RUNNER_TEMP/v20890-classes.dex" > "$RUNNER_TEMP/v20890-dex-strings.txt"
+          grep -F 'JAYUMINTON_GALAXY_TAB_TTS_V20886' "$RUNNER_TEMP/v20890-dex-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_SYSTEM_TTS_PROFILE_V20887' "$RUNNER_TEMP/v20890-dex-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_SAFE_AUDIO_BALANCE_V20888' "$RUNNER_TEMP/v20890-dex-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_AUDIBLE_MUSIC_DUCK_V20889' "$RUNNER_TEMP/v20890-dex-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_VOICE_BOOST_V20890' "$RUNNER_TEMP/v20890-dex-strings.txt" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
+          echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
+
+      - name: Publish v208.90 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$APK_PATH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.90-voice-boost-swap-label.apk
+          printf 'status=success\nversion=208.90\nbase=v208.89-audible-music-duck\nfeature=voice-plus7db-music35pct-audible-swap-label-only\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20890-voice-boost-swap-label.txt
+          git add releases/jayuminton-admin-v208.90-voice-boost-swap-label.apk deployment/status/v20890-voice-boost-swap-label.txt
+          git commit -m 'Publish admin v208.90: voice boost and swap label' || exit 0
+          git push origin HEAD:main
