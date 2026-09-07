@@ -333,6 +333,20 @@
       color: var(--navy);
     }
 
+    .android-panel .panel-title {
+      font-size: clamp(19px, 3.65vw, 35px);
+      line-height: 1.22;
+    }
+
+    .panel-title-line {
+      display: block;
+      white-space: nowrap;
+    }
+
+    .panel-title-line + .panel-title-line {
+      margin-top: clamp(3px, .55vw, 6px);
+    }
+
     .benefits {
       display: grid;
       gap: clamp(8px, 1.15vw, 11px);
@@ -544,6 +558,7 @@
       .laurel { flex-basis: 27px; width: 27px; height: 42px; }
       .device-tab { min-height: 70px; }
       .android-panel { grid-template-columns: minmax(0, 1fr) 86px; padding-right: 18px; padding-left: 18px; }
+      .android-panel .panel-title { font-size: clamp(18px, 4.75vw, 22px); }
       .play-watermark { width: 86px; }
       .benefits li { letter-spacing: -.04em; }
       .step { padding-right: 4px; padding-left: 4px; }
@@ -558,8 +573,9 @@
       .tab-inner { gap: 7px; }
       .tab-icon { width: 28px; }
       .tab-copy strong { font-size: 14px; }
-      .android-panel { grid-template-columns: minmax(0, 1fr) 64px; padding-right: 14px; padding-left: 14px; }
-      .play-watermark { width: 66px; }
+      .android-panel { grid-template-columns: minmax(0, 1fr); padding-right: 14px; padding-left: 14px; }
+      .android-panel .panel-title { font-size: clamp(17px, 5.4vw, 19px); }
+      .play-watermark { position: absolute; top: 68px; right: 15px; width: 66px; opacity: .12; }
       .benefits li { font-size: 11px; }
       .play-cta { gap: 8px; font-size: 15px; }
       .step-number { width: 27px; height: 27px; font-size: 13px; }
@@ -782,7 +798,11 @@
         <section class="install-panel android-panel" id="android-guide" aria-labelledby="android-title">
           <div class="android-copy">
             <p class="panel-eyebrow">Android 사용자는</p>
-            <h3 class="panel-title" id="android-title">Google Play에서 자유민턴을<br>바로 설치할 수 있습니다.</h3>
+            <h3 class="panel-title" id="android-title">
+              <span class="panel-title-line">Google Play에서</span>
+              <span class="panel-title-line">자유민턴 코트현황 앱을</span>
+              <span class="panel-title-line">바로 설치할 수 있습니다.</span>
+            </h3>
             <ul class="benefits">
               <li><span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>공식으로 검수된 안전한 앱</li>
               <li><span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg></span>빠르고 간편한 설치</li>
