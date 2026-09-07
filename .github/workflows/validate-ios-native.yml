@@ -51,8 +51,24 @@ jobs:
             -configuration Release \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios-native/build/simulator \
             CODE_SIGNING_ALLOWED=NO \
             clean build
+
+      - name: Build unsigned iPhone device app
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios-native/JayumintonIOS.xcodeproj \
+            -scheme JayumintonIOS \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ios-native/build/device \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+          find ios-native/build/device/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit | grep -F '.app' >/dev/null
 
       - name: Verify native shell contract
         shell: bash
@@ -65,3 +81,19 @@ jobs:
           grep -F 'https://jayuminton-push.web.app/' "$SOURCE" >/dev/null
           grep -F 'window.NativeUserApp' "$SOURCE" >/dev/null
           ! grep -RInF 'script.google.com' ios-native/Jayuminton
+
+      - name: Stage unsigned device app artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find ios-native/build/device/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)"
+          test -d "$APP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$RUNNER_TEMP/jayuminton-ios-unsigned-device-app.zip"
+
+      - name: Upload unsigned device artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jayuminton-ios-unsigned-device-app
+          path: ${{ runner.temp }}/jayuminton-ios-unsigned-device-app.zip
+          if-no-files-found: error
+          retention-days: 14
