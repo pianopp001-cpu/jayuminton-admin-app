@@ -58,7 +58,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -F 'WKWebView' ios-native/Jayuminton/CourtStatusWebView.swift >/dev/null
-          grep -F 'JayumintonUserNativeIOS/1.0.0' ios-native/Jayuminton/CourtStatusWebView.swift >/dev/null
-          grep -F 'https://jayuminton-push.web.app/' ios-native/Jayuminton/CourtStatusWebView.swift >/dev/null
+          SOURCE='ios-native/Jayuminton/CourtStatusWebView.swift'
+          grep -F 'WKWebView' "$SOURCE" >/dev/null
+          grep -F 'JayumintonUserNativeIOS/' "$SOURCE" >/dev/null
+          grep -F 'static let appVersion = "1.0.0"' "$SOURCE" >/dev/null
+          grep -F 'https://jayuminton-push.web.app/' "$SOURCE" >/dev/null
+          grep -F 'window.NativeUserApp' "$SOURCE" >/dev/null
           ! grep -RInF 'script.google.com' ios-native/Jayuminton
