@@ -1,0 +1,64 @@
+name: Validate iOS native app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios-native/**'
+      - '.github/workflows/validate-ios-native.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject GAS runtime regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'script\.google\.com|google\.script\.run|Apps Script deployment' ios-native --exclude=README.md; then
+            echo 'GAS_RUNTIME_REFERENCE_FOUND_IN_IOS_NATIVE' >&2
+            exit 1
+          fi
+          grep -RInF 'https://jayuminton-push.web.app/' ios-native/Jayuminton >/dev/null
+
+      - name: Install XcodeGen
+        shell: bash
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ios-native
+          xcodegen generate
+          test -d JayumintonIOS.xcodeproj
+          plutil -lint Jayuminton/Info.plist
+
+      - name: Build unsigned iOS simulator app
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios-native/JayumintonIOS.xcodeproj \
+            -scheme JayumintonIOS \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Verify native shell contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'WKWebView' ios-native/Jayuminton/CourtStatusWebView.swift >/dev/null
+          grep -F 'JayumintonUserNativeIOS/1.0.0' ios-native/Jayuminton/CourtStatusWebView.swift >/dev/null
+          grep -F 'https://jayuminton-push.web.app/' ios-native/Jayuminton/CourtStatusWebView.swift >/dev/null
+          ! grep -RInF 'script.google.com' ios-native/Jayuminton
