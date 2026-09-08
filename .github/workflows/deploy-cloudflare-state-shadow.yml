@@ -7,6 +7,7 @@ on:
     paths:
       - 'cloudflare/state-worker/**'
       - 'deployment/jayuminton/patch_state_worker_md4_autoassign.py'
+      - 'deployment/jayuminton/patch_attendance_statistics_v1.py'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs'
       - 'deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py'
@@ -51,18 +52,22 @@ jobs:
               s=s.replace(bad,good,1)
               p.write_text(s,encoding='utf-8')
           PY
+          python3 deployment/jayuminton/patch_attendance_statistics_v1.py cloudflare/state-worker
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test "${#INTERNAL_KEY}" -ge 32
           node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/temp-pairs.test.mjs
           node cloudflare/state-worker/worker.test.mjs
+          node cloudflare/state-worker/attendance-statistics.test.mjs
           node cloudflare/state-worker/md4-autoassign.test.mjs
           node cloudflare/state-worker/md-entry-autoassign.test.mjs
           node cloudflare/state-worker/md-final-entry.test.mjs
           node deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_ATTENDANCE_TIMES_V1' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_ATTENDANCE_STATS_RESPONSE_V1' cloudflare/state-worker/worker-md-entry.js >/dev/null
           grep -F "state.waitGroups = [[...state.waitGroups[1]], [...state.waitGroups[2]], [...state.waitGroups[3]], [...state.waitGroups[4]], []]" cloudflare/state-worker/worker.js >/dev/null
           grep -F "team_requires_assignment_wait" cloudflare/state-worker/worker.js >/dev/null
           if grep -R -n -E 'script\.google\.com|googleusercontent\.com|firebaseapp\.com|web\.app' cloudflare/state-worker deployment/jayuminton/cloudflare_v6_frontend_bridge.js; then exit 1; fi
