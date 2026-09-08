@@ -59,8 +59,9 @@ jobs:
           grep -F 'validMemberIds' cloudflare/state-worker/worker.js >/dev/null
           grep -F '!validMemberIds.has(id) || occupied.has(id)' cloudflare/state-worker/worker.js >/dev/null
           grep -F 'JAYUMINTON_MEMBER_PAIR_PLAY_V1' cloudflare/state-worker/worker.js >/dev/null
-          grep -F 'JAYUMINTON_ATTENDANCE_TIMES_V1' cloudflare/state-worker/worker.js >/dev/null
-          grep -F 'JAYUMINTON_ATTENDANCE_STATS_RESPONSE_V1' cloudflare/state-worker/worker-md-entry.js >/dev/null
+          grep -F 'JAYUMINTON_ATTENDANCE_TIMES_V2' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_KOK_ARRIVAL_TIME_V2' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_ATTENDANCE_STATS_RESPONSE_V2' cloudflare/state-worker/worker-md-entry.js >/dev/null
       - name: Resolve existing D1 and prepare config
         shell: bash
         run: |
@@ -84,4 +85,4 @@ jobs:
           set -euo pipefail
           curl --fail --location --retry 8 --retry-delay 2 "$WORKER_URL/health?run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/health.json"
           jq -e '.ok==true and .backend=="cloudflare-only" and .database=="d1" and .concurrency=="durable-object" and .gas==false' "$RUNNER_TEMP/health.json" >/dev/null
-          echo ATTENDANCE_STATISTICS_WORKER_LIVE
+          echo ATTENDANCE_STATISTICS_V2_KOK_ARRIVAL_WORKER_LIVE
