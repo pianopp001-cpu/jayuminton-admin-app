@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/deploy-state-worker.yml'
       - 'cloudflare/state-worker/**'
+      - 'deployment/jayuminton/patch_attendance_statistics_v1.py'
   workflow_dispatch:
 
 permissions:
@@ -47,15 +48,19 @@ jobs:
               s=s.replace(bad,good,1)
               p.write_text(s,encoding='utf-8')
           PY
+          python3 deployment/jayuminton/patch_attendance_statistics_v1.py cloudflare/state-worker
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test "${#INTERNAL_KEY}" -ge 32
           node --check cloudflare/state-worker/worker.js
           node cloudflare/state-worker/temp-pairs.test.mjs
           node cloudflare/state-worker/worker.test.mjs
+          node cloudflare/state-worker/attendance-statistics.test.mjs
           grep -F 'validMemberIds' cloudflare/state-worker/worker.js >/dev/null
           grep -F '!validMemberIds.has(id) || occupied.has(id)' cloudflare/state-worker/worker.js >/dev/null
           grep -F 'JAYUMINTON_MEMBER_PAIR_PLAY_V1' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_ATTENDANCE_TIMES_V1' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_ATTENDANCE_STATS_RESPONSE_V1' cloudflare/state-worker/worker-md-entry.js >/dev/null
       - name: Resolve existing D1 and prepare config
         shell: bash
         run: |
@@ -79,4 +84,4 @@ jobs:
           set -euo pipefail
           curl --fail --location --retry 8 --retry-delay 2 "$WORKER_URL/health?run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/health.json"
           jq -e '.ok==true and .backend=="cloudflare-only" and .database=="d1" and .concurrency=="durable-object" and .gas==false' "$RUNNER_TEMP/health.json" >/dev/null
-          echo WAIT4_SLOT2_WORKER_LIVE
+          echo ATTENDANCE_STATISTICS_WORKER_LIVE
