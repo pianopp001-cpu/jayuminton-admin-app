@@ -1,6 +1,11 @@
-name: Build admin v203.0 proven shell current v2047
+name: Build admin v203.1 attendance statistics
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/jayuminton/admin_attendance_statistics_patch.py'
+      - '.github/workflows/build-v2015-known-good-shell.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -44,7 +49,7 @@ jobs:
           mkdir -p app/src/main/assets/admin
           unzip -p releases/jayuminton-admin-v200.8-webview-js-fixed.apk assets/admin/index.html > app/src/main/assets/admin/index.html
           test -s app/src/main/assets/admin/index.html
-      - name: Inject and verify current v2047 admin
+      - name: Inject and verify current admin with attendance statistics
         shell: bash
         run: |
           set -euo pipefail
@@ -52,12 +57,18 @@ jobs:
           python3 deployment/jayuminton/inject_cloudflare_v6_frontend_bridge.py "$HTML"
           python3 deployment/jayuminton/admin_native_audio_v2021_patch.py
           python3 deployment/jayuminton/admin_native_vibration_v2023_patch.py
+          python3 deployment/jayuminton/admin_attendance_statistics_patch.py "$HTML"
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$HTML" >/dev/null
           grep -F '1~4명을 먼저 선택한 뒤 이동/교환 또는 팀설정을 누르세요.' "$HTML" >/dev/null
           grep -F '#16a34a' "$HTML" >/dev/null
           grep -F '#d4a017' "$HTML" >/dev/null
           grep -F "await server('swapMembers'" "$HTML" >/dev/null
           grep -F "await server('moveOrSwapMember'" "$HTML" >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_ATTENDANCE_STATS_V1' "$HTML" >/dev/null
+          grep -F '도착: ' "$HTML" >/dev/null
+          grep -F '귀가: ' "$HTML" >/dev/null
+          grep -F '총 게임 ' "$HTML" >/dev/null
+          grep -F '함께 경기:' "$HTML" >/dev/null
           ! grep -F 'window.confirm(' deployment/jayuminton/admin_card_interaction_v2042.js >/dev/null
           ! grep -F 'script.google.com' "$HTML" >/dev/null
       - name: Set APK identity and signer
@@ -69,13 +80,13 @@ jobs:
           import re
           java=Path('app/src/main/java/com/jayuminton/admin/MainActivity.java')
           s=java.read_text(encoding='utf-8')
-          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=203.0";',s,count=1)
+          s,n=re.subn(r'private static final String ADMIN_URL =\s*\n?\s*"[^"]+";', 'private static final String ADMIN_URL =\n            "file:///android_asset/admin/index.html?app=admin&native=1&appVersion=203.1";',s,count=1)
           if n!=1: raise SystemExit('ADMIN_URL replacement failed')
           java.write_text(s,encoding='utf-8')
           gradle=Path('app/build.gradle')
           g=gradle.read_text(encoding='utf-8')
-          g=re.sub(r'versionCode\s+\d+','versionCode 2030',g,count=1)
-          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '203.0'",g,count=1)
+          g=re.sub(r'versionCode\s+\d+','versionCode 2031',g,count=1)
+          g=re.sub(r"versionName\s+['\"][^'\"]+['\"]","versionName '203.1'",g,count=1)
           gradle.write_text(g,encoding='utf-8')
           PY
           base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
@@ -92,6 +103,11 @@ jobs:
           unzip -p "$APK" assets/admin/index.html > "$RUNNER_TEMP/apk-admin.html"
           grep -F '__JAYUMINTON_ADMIN_MULTI_ACTION_V2047__' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           grep -F '1~4명을 먼저 선택한 뒤 이동/교환 또는 팀설정을 누르세요.' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_ATTENDANCE_STATS_V1' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '도착: ' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '귀가: ' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '총 게임 ' "$RUNNER_TEMP/apk-admin.html" >/dev/null
+          grep -F '함께 경기:' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           ! grep -F 'script.google.com' "$RUNNER_TEMP/apk-admin.html" >/dev/null
           SHA=$(sha256sum "$APK" | awk '{print $1}')
           git config user.name 'github-actions[bot]'
@@ -99,8 +115,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK" releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk
-          printf 'status=success\nversion=203.0\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-v2047-proven-shell\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-          git add releases/jayuminton-admin-v203.0-complete-pair-recording-clear-team-cards.apk deployment/status/v2030-complete-pair-recording-clear-team-cards.txt
-          git commit -m 'Publish current v2047 admin APK from proven shell' || exit 0
+          cp "$APK" releases/jayuminton-admin-v203.1-attendance-statistics.apk
+          printf 'status=success\nversion=203.1\nrun_id=%s\nsha256=%s\nbuild=current-cloudflare-admin-attendance-statistics\nattendance=before-to-active\ndeparture=active-to-away\n' "$GITHUB_RUN_ID" "$SHA" > deployment/status/v2031-attendance-statistics.txt
+          git add releases/jayuminton-admin-v203.1-attendance-statistics.apk deployment/status/v2031-attendance-statistics.txt
+          git commit -m 'Publish admin v203.1 attendance statistics APK' || exit 0
           git push origin HEAD:main
