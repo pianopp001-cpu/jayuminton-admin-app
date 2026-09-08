@@ -1,0 +1,12 @@
+status=success
+version=208.93
+base=v208.92-music55-no-warmup
+feature=game-report-poster-png-partner-overflow-attendance
+arrival=kok-submit-complete
+departure=assignment-pool-to-away
+partner_overflow=top4-plus-N-expand
+image_export=png
+base_version_code=75
+new_version_code=76
+run_id=34272953887
+sha256=bc8b287fa8ec5859772001d555f5878b163229230afdec7ad3bf0382fd2e28a0
