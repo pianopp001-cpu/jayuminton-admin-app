@@ -1,0 +1,9 @@
+status=success
+version=203.2
+run_id=34262735587
+sha256=6684874347b3a11481805674882cbe28e09db3d920ffc98a60132b13cfa8b995
+build=current-cloudflare-admin-attendance-statistics
+attendance=before-to-active
+departure=active-assignment-pool-to-away
+stats=games-partners-arrival-departure
+timezone=Asia/Seoul
