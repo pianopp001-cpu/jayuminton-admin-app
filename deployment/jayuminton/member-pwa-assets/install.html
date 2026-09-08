@@ -30,8 +30,12 @@ button{font:inherit}
 .court{position:absolute;inset:0;width:100%;height:100%;opacity:.97}
 .brand-note{position:absolute;z-index:2;left:7.5%;top:14%;color:rgba(255,255,255,.70);font-size:clamp(8px,2.2vw,11px);line-height:1.8;letter-spacing:.3em;font-weight:650}
 .hero-main{position:relative;z-index:3;display:flex;min-height:clamp(320px,82vw,405px);flex-direction:column;align-items:center;justify-content:flex-start;padding:clamp(18px,4.8vw,25px) 18px 52px;text-align:center}
-.mascot{width:clamp(76px,19vw,94px);height:clamp(76px,19vw,94px);padding:5px;border-radius:50%;background:#fff;box-shadow:0 10px 25px rgba(0,0,0,.18)}
+.mascot{position:relative;width:clamp(88px,22vw,108px);height:clamp(88px,22vw,108px);padding:5px;overflow:hidden;border-radius:50%;background:#fff;box-shadow:0 10px 25px rgba(0,0,0,.18)}
 .mascot img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover}
+.mascot:after{content:"";position:absolute;z-index:1;top:5px;left:5px;right:5px;height:42%;border-radius:999px 999px 0 0;background:linear-gradient(180deg,#326c59 0 50%,#10265b 50% 100%);pointer-events:none}
+.mascot-copy{position:absolute;z-index:2;top:clamp(14px,3.4vw,18px);left:12%;right:12%;display:flex;flex-direction:column;align-items:center;color:#fff;white-space:nowrap;text-align:center;text-shadow:0 1px 1px rgba(0,0,0,.28);pointer-events:none}
+.mascot-copy strong{display:block;font-size:clamp(10px,2.6vw,13px);line-height:1;font-weight:900;letter-spacing:-.04em}
+.mascot-copy small{display:block;margin-top:3px;font-size:clamp(7px,1.85vw,9px);line-height:1;font-weight:850;letter-spacing:-.05em}
 .hero-copy{margin-top:clamp(3px,.9vw,6px)}
 .eyebrow{margin:0;color:rgba(255,255,255,.92);font-size:clamp(12px,3.5vw,16px);font-weight:650;line-height:1.35}
 .hero-title{margin:clamp(2px,.7vw,4px) 0 0;color:#fff;font-size:clamp(48px,14vw,62px);line-height:.98;font-weight:900;letter-spacing:-.065em;text-shadow:0 4px 14px rgba(0,0,0,.16)}
@@ -53,7 +57,7 @@ button{font:inherit}
 .push-card{margin-top:15px;padding:14px;border:1px solid #cfe0fb;border-radius:15px;background:linear-gradient(180deg,#eef5ff,#f7faff)}.push-card-title{display:flex;align-items:center;gap:8px;margin:0;color:#173b75;font-size:clamp(13px,3.8vw,15px);font-weight:900}.push-card p{margin:7px 0 0;color:#526987;font-size:clamp(11px,3.2vw,13px);line-height:1.6;font-weight:680}.push-card strong{color:#14376b}
 .standalone-ready{display:none;margin-top:16px}.standalone-ready.show{display:block}.ready-box{padding:14px;border:1px solid #b9e1ca;border-radius:15px;background:#edf8f1;color:#286346;font-size:13px;line-height:1.55;font-weight:800}
 .footer{padding:23px 0 2px;text-align:center;color:#99a3b2;font-size:9px;font-weight:700;letter-spacing:.25em}
-@media(max-width:380px){.hero{min-height:305px}.hero-main{min-height:305px;padding-top:15px}.mascot{width:72px;height:72px}.hero-copy{margin-top:2px}.hero-title{font-size:45px}.hero-sub{margin-top:7px}.card{padding-left:12px;padding-right:12px}.panel{padding-left:13px;padding-right:13px}.google-copy{font-size:22px}.install-step{grid-template-columns:31px 1fr;padding:11px 10px}.install-step .install-num{width:31px;height:31px}}
+@media(max-width:380px){.hero{min-height:305px}.hero-main{min-height:305px;padding-top:15px}.mascot{width:88px;height:88px}.hero-copy{margin-top:2px}.hero-title{font-size:45px}.hero-sub{margin-top:7px}.card{padding-left:12px;padding-right:12px}.panel{padding-left:13px;padding-right:13px}.google-copy{font-size:22px}.install-step{grid-template-columns:31px 1fr;padding:11px 10px}.install-step .install-num{width:31px;height:31px}}
 </style>
 </head>
 <body>
@@ -74,7 +78,7 @@ button{font:inherit}
     </svg>
     <div class="brand-note" aria-hidden="true">BADMINTON<br>BRINGS<br>PEOPLE TOGETHER</div>
     <div class="hero-main">
-      <div class="mascot"><img src="/icon-512.png" alt="자유민턴 캐릭터"></div>
+      <div class="mascot" aria-label="자유민턴 코트관리현황 캐릭터"><img src="/icon-512.png" alt=""><span class="mascot-copy" aria-hidden="true"><strong>자유민턴</strong><small>코트관리현황</small></span></div>
       <div class="hero-copy">
         <p class="eyebrow">언제 어디서나, 함께하는 배드민턴</p>
         <h1 class="hero-title" id="pageTitle">자유민턴</h1>
