@@ -1,0 +1,168 @@
+name: Build admin v208.98 report usability
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20898-report-usability.yml'
+      - 'deployment/jayuminton/admin_v20898_report_schedule_visual_partner_zoom_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20898-report-usability
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
+
+      - name: Build v208.98 from verified v208.97 lineage
+        shell: bash
+        run: |
+          set -euxo pipefail
+          HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
+          VERSION_BASE='releases/jayuminton-admin-v208.97-polished-report-header.apk'
+          JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
+          HTML='app/src/main/assets/admin/index.html'
+          OUT='app/build/outputs/apk/release/app-release.apk'
+          BT="${ANDROID_HOME}/build-tools/35.0.0"
+          P86='deployment/jayuminton/admin_v20886_galaxy_tab_tts_patch.py'
+          P87='deployment/jayuminton/admin_v20887_system_tts_profile_patch.py'
+          P88='deployment/jayuminton/admin_v20888_safe_audio_balance_patch.py'
+          P89='deployment/jayuminton/admin_v20889_audible_music_duck_patch.py'
+          P90='deployment/jayuminton/admin_v20890_voice_boost_swap_label_patch.py'
+          P91='deployment/jayuminton/admin_v20891_energy_normalize_limiter_patch.py'
+          P91B='deployment/jayuminton/admin_v20891b_fast_peak_guard_patch.py'
+          P92='deployment/jayuminton/admin_v20892_music55_no_warmup_patch.py'
+          PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
+          P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
+          P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
+          P94='deployment/jayuminton/admin_v20894_game_report_runtime_fix_patch.py'
+          P95='deployment/jayuminton/admin_v20895_poster_game_report_patch.py'
+          P96='deployment/jayuminton/admin_v20896_game_report_load_fix_patch.py'
+          P97='deployment/jayuminton/admin_v20897_report_header_schedule_patch.py'
+          P98='deployment/jayuminton/admin_v20898_report_schedule_visual_partner_zoom_patch.py'
+          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98"; do test -s "$f"; done
+
+          mkdir -p app/src/main/assets/admin
+          unzip -p "$HTML_BASE" assets/admin/index.html > "$HTML"
+          grep -F 'jmAdminRestoreKokTotalV20885' "$HTML" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$HTML" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$HTML" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$HTML" >/dev/null
+
+          python3 "$P86" "$JAVA"
+          python3 "$P87" "$JAVA"
+          python3 "$P88" "$JAVA"
+          python3 "$P89" "$JAVA"
+          cp "$HTML" "$RUNNER_TEMP/final-ui.html"
+          sed -i "0,/make('jmQuickMultiSwap','교환'/s//make('jmQuickMultiSwap','다중교환'/" "$HTML"
+          python3 "$P90" "$JAVA" "$HTML"
+          cp "$RUNNER_TEMP/final-ui.html" "$HTML"
+          python3 "$P91" "$JAVA"
+          python3 "$P91B" "$JAVA"
+          python3 "$P92" "$JAVA" "$HTML"
+          python3 "$PATT" "$HTML"
+          python3 "$P93" "$JAVA" "$HTML"
+          python3 "$P93F" "$HTML"
+          python3 "$P94" "$HTML"
+          python3 "$P95" "$HTML"
+          python3 "$P96" "$HTML"
+          python3 "$P97" "$HTML"
+          python3 "$P98" "$HTML" "$JAVA"
+
+          echo VERIFY_V20898
+          grep -F 'JAYUMINTON_GAME_REPORT_USABILITY_V20898' "$HTML" >/dev/null
+          grep -F '노원중학교' "$HTML" >/dev/null
+          grep -F '신창중학교' "$HTML" >/dev/null
+          grep -F '오후 2시~5시' "$HTML" >/dev/null
+          grep -F '오후 2시 30분~5시 30분' "$HTML" >/dev/null
+          grep -F 'j98-dog-top' "$HTML" >/dev/null
+          grep -F 'j98-shuttle' "$HTML" >/dev/null
+          grep -F 'j98PartnerOverlay' "$HTML" >/dev/null
+          grep -F '함께 경기한 사람 전체 보기' "$HTML" >/dev/null
+          grep -F "server('getPairStatistics',[])" "$HTML" >/dev/null
+          grep -F 'window.openPairStatistics=openGameReportV20896' "$HTML" >/dev/null
+          grep -F '📷 전체 이미지 저장' "$HTML" >/dev/null
+          grep -F 'settings.setSupportZoom(true);' "$JAVA" >/dev/null
+          grep -F 'settings.setBuiltInZoomControls(true);' "$JAVA" >/dev/null
+          grep -F 'settings.setDisplayZoomControls(false);' "$JAVA" >/dev/null
+          grep -F 'saveStatisticsPng' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_MUSIC55_NO_WARMUP_V20892' "$JAVA" >/dev/null
+
+          "$BT/aapt" dump badging "$VERSION_BASE" > "$RUNNER_TEMP/base-badging.txt"
+          BASE_CODE="$(sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" "$RUNNER_TEMP/base-badging.txt" | sed -n '1p')"
+          test -n "$BASE_CODE"
+          NEW_CODE=$((BASE_CODE + 1))
+          python3 - "$NEW_CODE" <<'PY'
+          from pathlib import Path
+          import re,sys
+          p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
+          s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
+          if n!=1: raise SystemExit('versionCode anchor mismatch')
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '208.98'",s,count=1)
+          if n!=1: raise SystemExit('versionName anchor mismatch')
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
+          rm -f app/src/main/res/drawable/icon_from_library.b64
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          test -s "$OUT"
+          "$BT/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
+          grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='208.98'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
+          grep -F 'JAYUMINTON_GAME_REPORT_USABILITY_V20898' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F '노원중학교' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F '신창중학교' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'j98-dog-top' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'j98-shuttle' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'j98PartnerOverlay' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'window.openPairStatistics=openGameReportV20896' "$RUNNER_TEMP/final-html" >/dev/null
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
+          echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
+
+      - name: Publish v208.98 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.98-report-usability.apk
+          printf 'status=success\nversion=208.98\nbase=v208.97-polished-report-header\nfeature=weekend-school-schedule-restore-doodle-art-partner-detail-pinch-zoom\nsaturday=노원중학교-14:00-17:00\nsunday=신창중학교-14:30-17:30\nweekday=date-only\nschedule_date=current-kst-date\nmascot=restored-doodle-dog-data-uri\nshuttle=restored-reference-shuttle-data-uri\npartner_mobile_layout=second-row-full-width\npartner_click=full-detail-overlay\nwebview_pinch_zoom=enabled\nreport_rpc=getPairStatistics-empty-args-bearer-session\nimage_export=full-poster-png\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20898-report-usability.txt
+          git add releases/jayuminton-admin-v208.98-report-usability.apk deployment/status/v20898-report-usability.txt
+          git commit -m 'Publish admin v208.98 report usability' || exit 0
+          git push origin HEAD:main
