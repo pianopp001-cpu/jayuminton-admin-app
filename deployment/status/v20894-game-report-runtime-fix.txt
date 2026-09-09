@@ -1,0 +1,13 @@
+status=success
+version=208.94
+base=v208.93-game-report
+feature=pretty-game-report-runtime-route-fix
+arrival=kok-submit-complete
+departure=assignment-pool-to-away
+report_open_route=openPrettyGameReport
+report_renderer=JAYUMINTON_GAME_REPORT_V20893.render
+image_export=png
+base_version_code=76
+new_version_code=77
+run_id=34361652174
+sha256=9e9bcc1a278557849476da0ffdda8b0dad733a21efe3c561e8d1cdcf4d048c63
