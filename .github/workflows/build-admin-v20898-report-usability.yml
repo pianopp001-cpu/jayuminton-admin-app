@@ -118,8 +118,13 @@ jobs:
           grep -F '오후 2시 30분~5시 30분' "$HTML" >/dev/null
           grep -F 'j98-dog-top' "$HTML" >/dev/null
           grep -F 'j98-shuttle' "$HTML" >/dev/null
-          grep -F 'j98PartnerOverlay' "$HTML" >/dev/null
-          grep -F '함께 경기한 사람 전체 보기' "$HTML" >/dev/null
+          grep -F 'JAYUMINTON_INLINE_PARTNER_EXPAND_V20898' "$HTML" >/dev/null
+          ! grep -F 'j98PartnerOverlay' "$HTML" >/dev/null
+          grep -F "외 '+m+'명 전체보기" "$HTML" >/dev/null
+          grep -F 'j95-expand-summary' "$HTML" >/dev/null
+          grep -F '게임횟수' "$HTML" >/dev/null
+          grep -F '도착시간' "$HTML" >/dev/null
+          grep -F '귀가시간' "$HTML" >/dev/null
           grep -F 'function courts(){return 4;}' "$HTML" >/dev/null
           grep -F "server('getPairStatistics',[])" "$HTML" >/dev/null
           grep -F 'window.openPairStatistics=openGameReportV20896' "$HTML" >/dev/null
@@ -161,7 +166,12 @@ jobs:
           grep -F '신창중학교' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'j98-dog-top' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'j98-shuttle' "$RUNNER_TEMP/final-html" >/dev/null
-          grep -F 'j98PartnerOverlay' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'JAYUMINTON_INLINE_PARTNER_EXPAND_V20898' "$RUNNER_TEMP/final-html" >/dev/null
+          ! grep -F 'j98PartnerOverlay' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'j95-expand-summary' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F '게임횟수' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F '도착시간' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F '귀가시간' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'window.openPairStatistics=openGameReportV20896' "$RUNNER_TEMP/final-html" >/dev/null
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
@@ -179,7 +189,7 @@ jobs:
           git reset --hard origin/main
           mkdir -p releases deployment/status
           cp "$APK_PATH" releases/jayuminton-admin-v208.98-report-usability.apk
-          printf 'status=success\nversion=208.98\nbase=v208.97-polished-report-header\nfeature=weekend-school-schedule-restore-doodle-art-partner-detail-pinch-zoom\nsaturday=노원중학교-14:00-17:00\nsunday=신창중학교-14:30-17:30\nweekday=date-only\nschedule_date=current-kst-date\nmascot=restored-doodle-dog-data-uri\nshuttle=restored-reference-shuttle-data-uri\npartner_mobile_layout=second-row-full-width\npartner_click=full-detail-overlay\nwebview_pinch_zoom=enabled\nreport_rpc=getPairStatistics-empty-args-bearer-session\nimage_export=full-poster-png\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20898-report-usability.txt
+          printf 'status=success\nversion=208.98\nbase=v208.97-polished-report-header\nfeature=weekend-school-schedule-restore-doodle-art-inline-partner-expand-pinch-zoom\nsaturday=노원중학교-14:00-17:00\nsunday=신창중학교-14:30-17:30\nweekday=date-only\nschedule_date=current-kst-date\nmascot=restored-doodle-dog-data-uri\nshuttle=restored-reference-shuttle-data-uri\npartner_mobile_layout=second-row-full-width\npartner_click=inline-expand-collapse\nwebview_pinch_zoom=enabled\nreport_rpc=getPairStatistics-empty-args-bearer-session\nimage_export=full-poster-png\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20898-report-usability.txt
           git add releases/jayuminton-admin-v208.98-report-usability.apk deployment/status/v20898-report-usability.txt
           git commit -m 'Publish admin v208.98 report usability' || exit 0
           git push origin HEAD:main

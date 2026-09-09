@@ -28,12 +28,9 @@ SCRIPT=f'''
 .j98-dog-bottom{{right:6%;bottom:7px;width:9.5%;min-width:68px;transform:rotate(-3deg);opacity:.98}}
 .j97-mark.left{{display:none!important}}.j97-mark.right{{right:20%!important;top:10.5%!important;width:9.5%!important}}
 .j95-date.j97-date{{max-width:90%!important;white-space:normal;text-align:center;line-height:1.25}}
-.j95-partners{{cursor:pointer;position:relative;touch-action:pan-x pan-y pinch-zoom;overflow:visible!important}}
-.j95-partners:hover{{background:rgba(226,246,255,.5);border-radius:10px}}
-.j98-partner-overlay{{position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(2,25,38,.76);backdrop-filter:blur(5px)}}
-.j98-partner-sheet{{width:min(760px,96vw);max-height:88vh;overflow:auto;border-radius:22px;background:linear-gradient(180deg,#f8fdff,#effcf6);box-shadow:0 24px 70px rgba(0,0,0,.34);padding:20px}}
-.j98-partner-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}}.j98-partner-head strong{{font-size:22px;color:#0a3153}}.j98-partner-close{{border:0;border-radius:12px;background:#0e7d68;color:#fff;font-weight:900;padding:10px 15px}}
-.j98-partner-list{{display:flex;flex-wrap:wrap;gap:8px}}.j98-partner-item{{padding:9px 12px;border-radius:999px;background:#fff;border:1px solid #cfe5ee;color:#24558f;font-size:15px;font-weight:850}}.j98-partner-item b{{margin-left:4px;color:#07866c}}
+.j95-partners{{position:relative;touch-action:pan-x pan-y pinch-zoom;overflow:visible!important}}
+.j95-more{{cursor:pointer}}
+/* JAYUMINTON_INLINE_PARTNER_EXPAND_V20898 */
 @media(max-width:720px){{
  #pairStatisticsModal{{padding:0!important}}#pairStatisticsModal .pair-statistics-modal{{width:100vw!important;max-width:none!important;max-height:100vh!important;border-radius:0!important}}
  .j95-poster{{overflow:visible!important}}.j95-body{{padding-left:2.2%!important;padding-right:2.2%!important}}.j95-panel{{overflow:hidden!important}}
@@ -43,10 +40,9 @@ SCRIPT=f'''
  .j95-row>.j95-name{{grid-area:name}}.j95-row>.j95-games{{grid-area:games}}.j95-row>.j95-time:nth-child(3){{grid-area:arr}}.j95-row>.j95-time:nth-child(4){{grid-area:dep}}
  .j95-row>.j95-partners{{grid-area:partners;display:block!important;min-width:0!important;margin-top:4px;padding:7px 3px 1px;border-top:1px dashed #d6e5ea;font-size:10.5px!important;line-height:1.55!important;white-space:normal!important}}
  .j95-row>.j95-partners:before{{content:'함께 경기한 사람  ';display:inline;font-size:9px;font-weight:950;color:#568397;margin-right:4px}}
- .j95-chip{{font-size:10px!important;padding:3px 6px!important;white-space:nowrap!important}}.j95-more{{font-weight:950!important;text-decoration:underline;text-underline-offset:2px}}
+ .j95-chip{{font-size:10px!important;padding:3px 6px!important;white-space:nowrap!important}}.j95-more{{min-height:42px!important;padding:9px 14px!important;font-size:12px!important;font-weight:950!important;text-decoration:none!important}}.j95-collapse{{min-height:44px!important;font-size:12px!important}}.j95-expand-card{{padding:10px!important}}.j95-expand-stat{{padding:7px 3px!important}}.j95-expand-stat b{{font-size:12px!important}}
  .j98-dog-top{{right:2.4%;top:21%;width:15%;min-width:58px}}.j98-shuttle{{left:50%;top:.5%;width:10%;min-width:44px}}.j97-mark.right{{right:20%!important;top:10%!important;width:12%!important}}
  .j98-dog-bottom{{right:4%;width:14%;min-width:58px}}
- .j98-partner-sheet{{padding:16px;border-radius:18px}}.j98-partner-head strong{{font-size:18px}}.j98-partner-item{{font-size:13px;padding:8px 10px}}
 }}
 `;
   function partsNow(){{
@@ -54,7 +50,6 @@ SCRIPT=f'''
   }}
   function two(n){{return String(n).padStart(2,'0');}}
   function todaySchedule(){{var p=partsNow(),base=p.y+'.'+two(p.m)+'.'+two(p.d)+' ('+p.w.replace('요일','')+')';if(p.w.indexOf('토')===0)return base+' · 노원중학교 · 오후 2시~5시';if(p.w.indexOf('일')===0)return base+' · 신창중학교 · 오후 2시 30분~5시 30분';return base;}}
-  function sourceRows(){{var a=Array.isArray(window.ADMIN_PAIR_STATISTICS)?window.ADMIN_PAIR_STATISTICS:(Array.isArray(window.MD_PAIR_STATISTICS)?window.MD_PAIR_STATISTICS:[]);return a.slice().sort(function(x,y){{return Number(y.games||0)-Number(x.games||0)||String(x.name||'').localeCompare(String(y.name||''),'ko');}});}}
   function esc(v){{return String(v==null?'':v).replace(/[&<>"']/g,function(c){{return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c];}});}}
   function ensureCss(){{var st=document.getElementById('jayumintonGameReportPosterV20895Style');if(st&&st.textContent.indexOf('JAYUMINTON_GAME_REPORT_USABILITY_V20898_CSS')<0)st.textContent+='\\n'+CSS;}}
   function visuals(hero,footer){{
@@ -62,19 +57,15 @@ SCRIPT=f'''
     hero.insertAdjacentHTML('beforeend','<img class="j98-shuttle" alt="" src="'+SHUTTLE+'"><img class="j98-dog-top" alt="" src="'+DOG+'">');
     if(footer){{footer.querySelectorAll('.j98-dog-bottom').forEach(function(n){{n.remove();}});footer.insertAdjacentHTML('beforeend','<img class="j98-dog-bottom" alt="" src="'+DOG+'">');}}
   }}
-  function tagRows(poster){{var data=sourceRows();poster.querySelectorAll('.j95-row').forEach(function(row,i){{var p=row.querySelector('.j95-partners');if(p){{p.setAttribute('data-j98-index',String(i));p.setAttribute('title','눌러서 함께 경기한 사람 전체 보기');}}}});}}
-  function apply(){{ensureCss();var poster=document.getElementById('j95Poster');if(!poster)return;poster.setAttribute('data-jm-style','208.98');var hero=poster.querySelector('.j95-hero');if(hero){{var date=hero.querySelector('.j95-date');if(date){{var icon=date.querySelector('.j97-cal');date.innerHTML=(icon?icon.outerHTML:'')+'<span>'+esc(todaySchedule())+'</span>';}}visuals(hero,poster.querySelector('.j95-footer'));}}tagRows(poster);}}
-  function closeOverlay(){{var o=document.getElementById('j98PartnerOverlay');if(o)o.remove();}}
-  function openOverlay(idx){{var r=sourceRows()[Number(idx)];if(!r)return;closeOverlay();var partners=Array.isArray(r.partners)?r.partners:[],items=partners.length?partners.map(function(x){{return '<span class="j98-partner-item">'+esc(x.name)+(Number(x.count||0)>1?' <b>'+Number(x.count||0)+'회</b>':'')+'</span>';}}).join(''):'<span class="j98-partner-item">기록 없음</span>';document.body.insertAdjacentHTML('beforeend','<div class="j98-partner-overlay" id="j98PartnerOverlay"><div class="j98-partner-sheet"><div class="j98-partner-head"><strong>'+esc(r.name)+' · 함께 경기한 사람 '+partners.length+'명</strong><button class="j98-partner-close" type="button">닫기</button></div><div class="j98-partner-list">'+items+'</div></div></div>');}}
-  document.addEventListener('click',function(ev){{var close=ev.target&&ev.target.closest?ev.target.closest('.j98-partner-close'):null;if(close){{ev.preventDefault();closeOverlay();return;}}var ov=ev.target&&ev.target.id==='j98PartnerOverlay';if(ov){{closeOverlay();return;}}var p=ev.target&&ev.target.closest?ev.target.closest('.j95-partners'):null;if(!p)return;ev.preventDefault();ev.stopPropagation();openOverlay(p.getAttribute('data-j98-index'));}},true);
-  function install(){{ensureCss();var api=window.__JAYUMINTON_GAME_REPORT_V20895__;if(!api||typeof api.render!=='function')return;if(api.render.__jmV20898)return;var base=api.render;function wrapped(){{var r=base.apply(this,arguments);apply();return r;}}wrapped.__jmV20898=true;wrapped.__jmBase=base;api.render=wrapped;window.renderPairStatistics=wrapped;window.renderMdPairStatistics=wrapped;window.__JAYUMINTON_GAME_REPORT_USABILITY_V20898__={{apply:apply,todaySchedule:todaySchedule,openPartners:openOverlay}};}}
+  function apply(){{ensureCss();var poster=document.getElementById('j95Poster');if(!poster)return;poster.setAttribute('data-jm-style','208.98');var hero=poster.querySelector('.j95-hero');if(hero){{var date=hero.querySelector('.j95-date');if(date){{var icon=date.querySelector('.j97-cal');date.innerHTML=(icon?icon.outerHTML:'')+'<span>'+esc(todaySchedule())+'</span>';}}visuals(hero,poster.querySelector('.j95-footer'));}}}}
+  function install(){{ensureCss();var api=window.__JAYUMINTON_GAME_REPORT_V20895__;if(!api||typeof api.render!=='function')return;if(api.render.__jmV20898)return;var base=api.render;function wrapped(){{var r=base.apply(this,arguments);apply();return r;}}wrapped.__jmV20898=true;wrapped.__jmBase=base;api.render=wrapped;window.renderPairStatistics=wrapped;window.renderMdPairStatistics=wrapped;window.__JAYUMINTON_GAME_REPORT_USABILITY_V20898__={{apply:apply,todaySchedule:todaySchedule}};}}
   install();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{{once:true}});setTimeout(install,0);setTimeout(install,450);setTimeout(install,1200);
 }})();
 </script>
 '''
 if '</body>' not in s: raise SystemExit('body anchor missing')
 s=s.replace('</body>',SCRIPT+'\n</body>',1)
-for token in (MARKER,'노원중학교','신창중학교','오후 2시~5시','오후 2시 30분~5시 30분','j98-dog-top','j98-shuttle','j98PartnerOverlay','함께 경기한 사람 전체 보기','data-jm-style','window.__JAYUMINTON_GAME_REPORT_USABILITY_V20898__'):
+for token in (MARKER,'노원중학교','신창중학교','오후 2시~5시','오후 2시 30분~5시 30분','j98-dog-top','j98-shuttle','JAYUMINTON_INLINE_PARTNER_EXPAND_V20898','data-jm-style','window.__JAYUMINTON_GAME_REPORT_USABILITY_V20898__'):
     if token not in s: raise SystemExit('v208.98 html contract missing: '+token)
 
 old='        settings.setSupportZoom(false);\n        settings.setBuiltInZoomControls(false);\n        settings.setDisplayZoomControls(false);'
