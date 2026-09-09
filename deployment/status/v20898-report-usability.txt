@@ -15,5 +15,5 @@ report_rpc=getPairStatistics-empty-args-bearer-session
 image_export=full-poster-png
 base_version_code=80
 new_version_code=81
-run_id=34385700575
-sha256=a1bc9f484b5d76dbe21f54f280de56843b8d7a5e00e387818923516f4141681e
+run_id=34386584530
+sha256=bff5176100d1881968a92c84bf30d07cfd04df7b5e7495831b19f556b02922c6
