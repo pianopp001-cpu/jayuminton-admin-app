@@ -1,0 +1,16 @@
+status=success
+version=208.97
+base=v208.96-game-report-load-fix
+feature=polished-report-header-weekend-schedule
+saturday=14:00-17:00
+sunday=14:30-17:30
+session_date=earliest-arrival-kst-fallback-current-kst
+mascot=removed
+header_art=shuttle-racket-line-art
+report_rpc=getPairStatistics-empty-args-bearer-session
+report_renderer=v20895-poster-plus-v20897-header
+image_export=full-poster-png-with-v20897-css
+base_version_code=79
+new_version_code=80
+run_id=34379270728
+sha256=b64a29c20c685ed8b21d232efa5cfade07ab201e0534e64d65482b1380910ef8
