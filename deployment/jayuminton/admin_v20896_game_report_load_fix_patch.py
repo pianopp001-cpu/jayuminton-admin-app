@@ -52,7 +52,7 @@ SCRIPT=r'''
 '''
 if '</body>' not in s: raise SystemExit('body anchor missing')
 s=s.replace('</body>',SCRIPT+'\n</body>',1)
-for token in (MARKER,"server('getPairStatistics',[])",'window.openPairStatistics=openGameReportV20896','data-jm-poster=\\"208.95\\"','게임 통계 화면 생성 실패'):
+for token in (MARKER,"server('getPairStatistics',[])",'window.openPairStatistics=openGameReportV20896','window.__JAYUMINTON_GAME_REPORT_V20895__','게임 통계 화면 생성 실패'):
     if token not in s: raise SystemExit('v208.96 load-fix contract missing: '+token)
 p.write_text(s,encoding='utf-8')
 print('ADMIN_GAME_REPORT_LOAD_FIX_V20896_OK')
