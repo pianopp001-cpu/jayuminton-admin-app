@@ -1,0 +1,13 @@
+status=success
+version=208.95
+base=v208.94-game-report-runtime-fix
+feature=reference-poster-style-game-report
+arrival=kok-submit-complete
+departure=assignment-pool-to-away
+report_route=v20894-openPrettyGameReport-to-v20895-render
+image_export=full-poster-png
+partner_overflow=top4-expand-export-top6
+base_version_code=77
+new_version_code=78
+run_id=34373581310
+sha256=be8d0eb67976e39e779e47c7650e16769171897a171cdb59e831cc974d8b0a3e
