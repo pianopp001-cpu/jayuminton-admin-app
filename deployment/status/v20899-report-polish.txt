@@ -1,0 +1,15 @@
+status=success
+version=208.99
+base=v208.98-report-usability
+feature=report-polish-inline-expand-small-button-held-racket-mascot
+partner_click=capture-inline-expand-collapse
+partner_button=compact-pill-29px
+header_english=BADMINTON-CLUB
+mascot=dog-holding-racket-svg
+shuttle_top=hidden
+highlight_name=smaller
+member_reply=repositioned-left-while-report-open
+base_version_code=81
+new_version_code=82
+run_id=34390878732
+sha256=941773006c356beb8768641dbd6a06bb7051544d0381c2aa878fe3000d2cd625
