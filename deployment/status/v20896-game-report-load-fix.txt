@@ -1,0 +1,11 @@
+status=success
+version=208.96
+base=v208.95-poster-game-report
+feature=game-report-load-fix-no-pin-global
+report_rpc=getPairStatistics-empty-args-bearer-session
+report_renderer=v20895-poster
+image_export=full-poster-png
+base_version_code=78
+new_version_code=79
+run_id=34376129424
+sha256=d77ca4639ea5ed9f316343a1dbf55e3f89e8511324a964d3855440ba7f063890
