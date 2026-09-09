@@ -9,5 +9,5 @@ image_export=full-poster-png
 partner_overflow=top4-expand-export-top6
 base_version_code=77
 new_version_code=78
-run_id=34373581310
-sha256=be8d0eb67976e39e779e47c7650e16769171897a171cdb59e831cc974d8b0a3e
+run_id=34387648587
+sha256=00dff7d3e37eeead42843a6d5912a2d1b0339add3418415db694b019406e08b9
