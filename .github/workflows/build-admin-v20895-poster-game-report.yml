@@ -1,0 +1,171 @@
+name: Build admin v208.95 poster game report
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20895-poster-game-report.yml'
+      - 'deployment/jayuminton/admin_v20895_poster_game_report_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20895-poster-game-report
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
+
+      - name: Build v208.95 from verified v208.94 lineage
+        shell: bash
+        run: |
+          set -euxo pipefail
+          HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
+          VERSION_BASE='releases/jayuminton-admin-v208.94-game-report-runtime-fix.apk'
+          JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
+          HTML='app/src/main/assets/admin/index.html'
+          OUT='app/build/outputs/apk/release/app-release.apk'
+          BT="${ANDROID_HOME}/build-tools/35.0.0"
+          P86='deployment/jayuminton/admin_v20886_galaxy_tab_tts_patch.py'
+          P87='deployment/jayuminton/admin_v20887_system_tts_profile_patch.py'
+          P88='deployment/jayuminton/admin_v20888_safe_audio_balance_patch.py'
+          P89='deployment/jayuminton/admin_v20889_audible_music_duck_patch.py'
+          P90='deployment/jayuminton/admin_v20890_voice_boost_swap_label_patch.py'
+          P91='deployment/jayuminton/admin_v20891_energy_normalize_limiter_patch.py'
+          P91B='deployment/jayuminton/admin_v20891b_fast_peak_guard_patch.py'
+          P92='deployment/jayuminton/admin_v20892_music55_no_warmup_patch.py'
+          PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
+          P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
+          P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
+          P94='deployment/jayuminton/admin_v20894_game_report_runtime_fix_patch.py'
+          P95='deployment/jayuminton/admin_v20895_poster_game_report_patch.py'
+          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$PATT" "$P93" "$P93F" "$P94" "$P95"; do test -s "$f"; done
+
+          mkdir -p app/src/main/assets/admin
+          unzip -p "$HTML_BASE" assets/admin/index.html > "$HTML"
+          test -s "$HTML"
+          grep -F 'jmAdminRestoreKokTotalV20885' "$HTML" >/dev/null
+          grep -F 'jmAdminUniversalUndoV20884' "$HTML" >/dev/null
+          grep -F 'jmAdminReplyRepositionV20883' "$HTML" >/dev/null
+          grep -F 'jmAdminKokCompactV20882' "$HTML" >/dev/null
+
+          python3 "$P86" "$JAVA"
+          python3 "$P87" "$JAVA"
+          python3 "$P88" "$JAVA"
+          python3 "$P89" "$JAVA"
+          cp "$HTML" "$RUNNER_TEMP/final-ui.html"
+          sed -i "0,/make('jmQuickMultiSwap','교환'/s//make('jmQuickMultiSwap','다중교환'/" "$HTML"
+          python3 "$P90" "$JAVA" "$HTML"
+          cp "$RUNNER_TEMP/final-ui.html" "$HTML"
+          python3 "$P91" "$JAVA"
+          python3 "$P91B" "$JAVA"
+          python3 "$P92" "$JAVA" "$HTML"
+          python3 "$PATT" "$HTML"
+          python3 "$P93" "$JAVA" "$HTML"
+          python3 "$P93F" "$HTML"
+          python3 "$P94" "$HTML"
+          python3 "$P95" "$HTML"
+
+          echo VERIFY_BASE_FEATURES
+          grep -F 'JAYUMINTON_ENERGY_NORMALIZE_LIMITER_V20891' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_FAST_PEAK_GUARD_V20891B' "$JAVA" >/dev/null
+          grep -F 'JAYUMINTON_MUSIC55_NO_WARMUP_V20892' "$JAVA" >/dev/null
+          grep -F 'private static final float MUSIC_DUCK_RATIO = 0.55f;' "$JAVA" >/dev/null
+          grep -F 'saveStatisticsPng' "$JAVA" >/dev/null
+          grep -F 'MediaStore.Images.Media.RELATIVE_PATH' "$JAVA" >/dev/null
+
+          echo VERIFY_REPORT_ROUTE_AND_POSTER
+          grep -F 'JAYUMINTON_GAME_REPORT_V20893' "$HTML" >/dev/null
+          grep -F 'JAYUMINTON_GAME_REPORT_RUNTIME_V20894' "$HTML" >/dev/null
+          grep -F 'window.openPairStatistics=openPrettyGameReport' "$HTML" >/dev/null
+          grep -F 'api.render()' "$HTML" >/dev/null
+          grep -F 'JAYUMINTON_GAME_REPORT_POSTER_V20895' "$HTML" >/dev/null
+          grep -F 'data-jm-poster="208.95"' "$HTML" >/dev/null
+          grep -F 'api.render=render' "$HTML" >/dev/null
+          grep -F 'window.jmSaveGameReportImage=save' "$HTML" >/dev/null
+          grep -F '자유<b>민턴</b>' "$HTML" >/dev/null
+          grep -F '게임 종료 후 한눈에 보는 요약 리포트' "$HTML" >/dev/null
+          grep -F '👥 참여자 통계' "$HTML" >/dev/null
+          grep -F '🏆 오늘의 하이라이트' "$HTML" >/dev/null
+          grep -F '사용 코트' "$HTML" >/dev/null
+          grep -F '평균 게임' "$HTML" >/dev/null
+          grep -F '📷 전체 이미지 저장' "$HTML" >/dev/null
+          grep -F '<foreignObject' "$HTML" >/dev/null
+
+          "$BT/aapt" dump badging "$VERSION_BASE" > "$RUNNER_TEMP/base-badging.txt"
+          BASE_CODE="$(sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" "$RUNNER_TEMP/base-badging.txt" | sed -n '1p')"
+          test -n "$BASE_CODE"
+          NEW_CODE=$((BASE_CODE + 1))
+          python3 - "$NEW_CODE" <<'PY'
+          from pathlib import Path
+          import re,sys
+          p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
+          s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
+          if n!=1: raise SystemExit('versionCode anchor mismatch')
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '208.95'",s,count=1)
+          if n!=1: raise SystemExit('versionName anchor mismatch')
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          test -s signing/jayuminton-release.keystore.b64
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          test -s app/src/main/res/drawable/icon_from_library.b64
+          base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
+          rm -f app/src/main/res/drawable/icon_from_library.b64
+
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          test -s "$OUT"
+          "$BT/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
+          grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='208.95'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
+          grep -F 'JAYUMINTON_GAME_REPORT_POSTER_V20895' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'data-jm-poster="208.95"' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'api.render=render' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F '📷 전체 이미지 저장' "$RUNNER_TEMP/final-html" >/dev/null
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
+          echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
+
+      - name: Publish v208.95 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v208.95-poster-game-report.apk
+          printf 'status=success\nversion=208.95\nbase=v208.94-game-report-runtime-fix\nfeature=reference-poster-style-game-report\narrival=kok-submit-complete\ndeparture=assignment-pool-to-away\nreport_route=v20894-openPrettyGameReport-to-v20895-render\nimage_export=full-poster-png\npartner_overflow=top4-expand-export-top6\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20895-poster-game-report.txt
+          git add releases/jayuminton-admin-v208.95-poster-game-report.apk deployment/status/v20895-poster-game-report.txt
+          git commit -m 'Publish admin v208.95 poster game report' || exit 0
+          git push origin HEAD:main
