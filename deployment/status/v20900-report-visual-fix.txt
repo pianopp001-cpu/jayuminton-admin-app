@@ -1,0 +1,17 @@
+status=success
+version=209.00
+base=v208.99-report-polish
+feature=report-visual-fix-reference-doodle-held-racket-inline-expand
+partner_click=capture-inline-expand-collapse
+header_english=hidden
+mascot=reference-doodle-dog-held-racket
+shuttle_top=visible-moved-clear-of-brand
+bottom_mascot=plain-doodle-peek-no-object
+highlight_name=smaller
+member_reply=hidden-while-report-open
+schedule=sat-nowon-1400-1700_sun-sinchang-1430-1730_weekday-date-only
+syntax_checks=v20895-v20898-v20900-node-check
+base_version_code=82
+new_version_code=83
+run_id=34391991263
+sha256=edc97ce6f6a6f38d7b9348e2c48431b0215a7e34d9b9e0252c044b43a84a1d43
