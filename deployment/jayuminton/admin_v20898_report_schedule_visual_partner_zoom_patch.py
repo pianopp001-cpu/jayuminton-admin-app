@@ -26,7 +26,7 @@ SCRIPT=f'''
 .j98-dog-top{{right:5.8%;top:20.5%;width:12.5%;min-width:72px;transform:rotate(2deg)}}
 .j98-shuttle{{left:50%;top:0.8%;width:8.5%;min-width:52px;transform:translateX(-50%) rotate(7deg)}}
 .j98-dog-bottom{{right:6%;bottom:7px;width:9.5%;min-width:68px;transform:rotate(-3deg);opacity:.98}}
-.j97-mark.left{{display:none!important}}.j97-mark.right{{right:14.5%!important;top:14.5%!important;width:10.5%!important}}
+.j97-mark.left{{display:none!important}}.j97-mark.right{{right:20%!important;top:10.5%!important;width:9.5%!important}}
 .j95-date.j97-date{{max-width:90%!important;white-space:normal;text-align:center;line-height:1.25}}
 .j95-partners{{cursor:pointer;position:relative;touch-action:pan-x pan-y pinch-zoom;overflow:visible!important}}
 .j95-partners:hover{{background:rgba(226,246,255,.5);border-radius:10px}}
@@ -44,7 +44,7 @@ SCRIPT=f'''
  .j95-row>.j95-partners{{grid-area:partners;display:block!important;min-width:0!important;margin-top:4px;padding:7px 3px 1px;border-top:1px dashed #d6e5ea;font-size:10.5px!important;line-height:1.55!important;white-space:normal!important}}
  .j95-row>.j95-partners:before{{content:'함께 경기한 사람  ';display:inline;font-size:9px;font-weight:950;color:#568397;margin-right:4px}}
  .j95-chip{{font-size:10px!important;padding:3px 6px!important;white-space:nowrap!important}}.j95-more{{font-weight:950!important;text-decoration:underline;text-underline-offset:2px}}
- .j98-dog-top{{right:2.4%;top:21%;width:15%;min-width:58px}}.j98-shuttle{{left:50%;top:.5%;width:10%;min-width:44px}}.j97-mark.right{{right:8%!important;top:14%!important;width:13%!important}}
+ .j98-dog-top{{right:2.4%;top:21%;width:15%;min-width:58px}}.j98-shuttle{{left:50%;top:.5%;width:10%;min-width:44px}}.j97-mark.right{{right:20%!important;top:10%!important;width:12%!important}}
  .j98-dog-bottom{{right:4%;width:14%;min-width:58px}}
  .j98-partner-sheet{{padding:16px;border-radius:18px}}.j98-partner-head strong{{font-size:18px}}.j98-partner-item{{font-size:13px;padding:8px 10px}}
 }}
