@@ -56,7 +56,7 @@ SCRIPT=f'''
   function todaySchedule(){{var p=partsNow(),base=p.y+'.'+two(p.m)+'.'+two(p.d)+' ('+p.w.replace('요일','')+')';if(p.w.indexOf('토')===0)return base+' · 노원중학교 · 오후 2시~5시';if(p.w.indexOf('일')===0)return base+' · 신창중학교 · 오후 2시 30분~5시 30분';return base;}}
   function sourceRows(){{var a=Array.isArray(window.ADMIN_PAIR_STATISTICS)?window.ADMIN_PAIR_STATISTICS:(Array.isArray(window.MD_PAIR_STATISTICS)?window.MD_PAIR_STATISTICS:[]);return a.slice().sort(function(x,y){{return Number(y.games||0)-Number(x.games||0)||String(x.name||'').localeCompare(String(y.name||''),'ko');}});}}
   function esc(v){{return String(v==null?'':v).replace(/[&<>"']/g,function(c){{return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c];}});}}
-  function ensureCss(){{var st=document.getElementById('jayumintonGameReportPosterV20895Style');if(st&&st.textContent.indexOf('JAYUMINTON_GAME_REPORT_USABILITY_V20898_CSS')<0)st.textContent+='\n'+CSS;}}
+  function ensureCss(){{var st=document.getElementById('jayumintonGameReportPosterV20895Style');if(st&&st.textContent.indexOf('JAYUMINTON_GAME_REPORT_USABILITY_V20898_CSS')<0)st.textContent+='\\n'+CSS;}}
   function visuals(hero,footer){{
     hero.querySelectorAll('.j98-dog-top,.j98-shuttle').forEach(function(n){{n.remove();}});var left=hero.querySelector('.j97-mark.left');if(left)left.remove();
     hero.insertAdjacentHTML('beforeend','<img class="j98-shuttle" alt="" src="'+SHUTTLE+'"><img class="j98-dog-top" alt="" src="'+DOG+'">');

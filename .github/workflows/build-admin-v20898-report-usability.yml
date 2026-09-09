@@ -94,6 +94,21 @@ jobs:
           python3 "$P97" "$HTML"
           python3 "$P98" "$HTML" "$JAVA"
 
+          python3 - "$HTML" "$RUNNER_TEMP/v20898-inline.js" <<'PY'
+          from pathlib import Path
+          import re, sys
+          html = Path(sys.argv[1]).read_text(encoding='utf-8')
+          match = re.search(
+              r'<script id="jayumintonGameReportUsabilityV20898Script">\s*(.*?)\s*</script>',
+              html,
+              re.DOTALL,
+          )
+          if not match:
+              raise SystemExit('v208.98 inline script missing')
+          Path(sys.argv[2]).write_text(match.group(1), encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/v20898-inline.js"
+
           echo VERIFY_V20898
           grep -F 'JAYUMINTON_GAME_REPORT_USABILITY_V20898' "$HTML" >/dev/null
           grep -F '노원중학교' "$HTML" >/dev/null
