@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-admin-v20898-report-usability.yml'
+      - 'deployment/jayuminton/admin_v20895_poster_game_report_patch.py'
       - 'deployment/jayuminton/admin_v20898_report_schedule_visual_partner_zoom_patch.py'
   workflow_dispatch: {}
 
@@ -119,6 +120,7 @@ jobs:
           grep -F 'j98-shuttle' "$HTML" >/dev/null
           grep -F 'j98PartnerOverlay' "$HTML" >/dev/null
           grep -F '함께 경기한 사람 전체 보기' "$HTML" >/dev/null
+          grep -F 'function courts(){return 4;}' "$HTML" >/dev/null
           grep -F "server('getPairStatistics',[])" "$HTML" >/dev/null
           grep -F 'window.openPairStatistics=openGameReportV20896' "$HTML" >/dev/null
           grep -F '📷 전체 이미지 저장' "$HTML" >/dev/null
