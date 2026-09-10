@@ -1,0 +1,12 @@
+status=success
+version=209.06
+base=v209.05-native-full-image
+feature=pixelcopy-tiled-full-report-png
+blank_image_guard=enabled
+old_capturePicture=removed-from-active-path
+report_size=passed-from-export-clone
+action_bar=flush-to-quick-menu
+base_version_code=88
+new_version_code=89
+run_id=34429313524
+sha256=b1ef8f0b40ab4efebe603cd147933f7f194d835a7cb5270de98ca7ec2cbaf23d
