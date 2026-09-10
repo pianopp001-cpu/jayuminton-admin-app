@@ -1,0 +1,16 @@
+status=success
+version=209.03
+base=v209.02-version-code-only
+feature=hard-applied-exact-dog-no-loose-shuttle-compact-summary-visible-actions
+mascot=exact-user-supplied-doodle-webp-direct-renderer-source
+shuttle=removed-at-render-source
+summary_cards=directly-compacted-in-v20895-css
+bottom_mascot=exact-dog-full-visible-no-clip
+report_actions=sticky-94px-above-native-quick-menu
+expand_all=preserved
+collapse_all=preserved
+image_export=preserved
+base_version_code=85
+new_version_code=86
+run_id=34424606186
+sha256=7593b62954200eb419afaa602a84aa4d952e1f0d5e67d07514f786fdd6e5d0f9
