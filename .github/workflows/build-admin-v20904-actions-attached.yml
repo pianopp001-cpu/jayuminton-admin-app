@@ -1,0 +1,175 @@
+name: Build admin v209.04 actions attached
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-admin-v20904-actions-attached.yml'
+      - 'deployment/jayuminton/admin_v20904_report_actions_attach_quickmenu_patch.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jayuminton-admin-v20904-actions-attached
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
+
+      - name: Build v209.04
+        shell: bash
+        run: |
+          set -euxo pipefail
+          HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.03-hard-applied-report.apk'
+          JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
+          HTML='app/src/main/assets/admin/index.html'
+          OUT='app/build/outputs/apk/release/app-release.apk'
+          BT="${ANDROID_HOME}/build-tools/35.0.0"
+          P86='deployment/jayuminton/admin_v20886_galaxy_tab_tts_patch.py'
+          P87='deployment/jayuminton/admin_v20887_system_tts_profile_patch.py'
+          P88='deployment/jayuminton/admin_v20888_safe_audio_balance_patch.py'
+          P89='deployment/jayuminton/admin_v20889_audible_music_duck_patch.py'
+          P90='deployment/jayuminton/admin_v20890_voice_boost_swap_label_patch.py'
+          P91='deployment/jayuminton/admin_v20891_energy_normalize_limiter_patch.py'
+          P91B='deployment/jayuminton/admin_v20891b_fast_peak_guard_patch.py'
+          P92='deployment/jayuminton/admin_v20892_music55_no_warmup_patch.py'
+          PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
+          P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
+          P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
+          P94='deployment/jayuminton/admin_v20894_game_report_runtime_fix_patch.py'
+          P95='deployment/jayuminton/admin_v20895_poster_game_report_patch.py'
+          P96='deployment/jayuminton/admin_v20896_game_report_load_fix_patch.py'
+          P97='deployment/jayuminton/admin_v20897_report_header_schedule_patch.py'
+          P98='deployment/jayuminton/admin_v20898_report_schedule_visual_partner_zoom_patch.py'
+          P99='deployment/jayuminton/admin_v20899_report_polish_patch.py'
+          P100='deployment/jayuminton/admin_v20900_report_visual_fix_patch.py'
+          P101='deployment/jayuminton/admin_v20901_report_expand_export_fix_patch.py'
+          P103='deployment/jayuminton/admin_v20903_hard_apply_final_report_patch.py'
+          P104='deployment/jayuminton/admin_v20904_report_actions_attach_quickmenu_patch.py'
+          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104"; do test -s "$f"; done
+
+          mkdir -p app/src/main/assets/admin
+          unzip -p "$HTML_BASE" assets/admin/index.html > "$HTML"
+          python3 "$P86" "$JAVA"
+          python3 "$P87" "$JAVA"
+          python3 "$P88" "$JAVA"
+          python3 "$P89" "$JAVA"
+          cp "$HTML" "$RUNNER_TEMP/final-ui.html"
+          sed -i "0,/make('jmQuickMultiSwap','교환'/s//make('jmQuickMultiSwap','다중교환'/" "$HTML"
+          python3 "$P90" "$JAVA" "$HTML"
+          cp "$RUNNER_TEMP/final-ui.html" "$HTML"
+          python3 "$P91" "$JAVA"
+          python3 "$P91B" "$JAVA"
+          python3 "$P92" "$JAVA" "$HTML"
+          python3 "$PATT" "$HTML"
+          python3 "$P93" "$JAVA" "$HTML"
+          python3 "$P93F" "$HTML"
+          python3 "$P94" "$HTML"
+          python3 "$P95" "$HTML"
+          python3 "$P96" "$HTML"
+          python3 "$P97" "$HTML"
+          python3 "$P98" "$HTML" "$JAVA"
+          python3 "$P99" "$HTML"
+          python3 "$P100" "$HTML"
+          python3 "$P101" "$HTML"
+          python3 "$P103" "$HTML"
+          python3 "$P104" "$HTML"
+
+          python3 - "$HTML" "$RUNNER_TEMP/report-v20904.js" <<'PY'
+          from pathlib import Path
+          import re,sys
+          html=Path(sys.argv[1]).read_text(encoding='utf-8')
+          m=re.search(r'<script id="jayumintonReportActionsAttachQuickMenuV20904Script">\s*(.*?)\s*</script>',html,re.S)
+          if not m: raise SystemExit('v209.04 script missing')
+          Path(sys.argv[2]).write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check "$RUNNER_TEMP/report-v20904.js"
+
+          echo VERIFY_V20904_SOURCE
+          grep -F 'JAYUMINTON_GAME_REPORT_ACTIONS_ATTACH_QUICKMENU_V20904' "$HTML" >/dev/null
+          grep -F 'position:fixed!important' "$HTML" >/dev/null
+          grep -F 'bottom:var(--jm-quick-menu-h)!important' "$HTML" >/dev/null
+          grep -F "document.getElementById('jmAdminFixedQuickMenu')" "$HTML" >/dev/null
+          grep -F 'ResizeObserver' "$HTML" >/dev/null
+          grep -F '전체 펼침' "$HTML" >/dev/null
+          grep -F '전체 접힘' "$HTML" >/dev/null
+          grep -F 'window.jmSaveGameReportImage=saveFullImage' "$HTML" >/dev/null
+          grep -F 'JAYUMINTON_GAME_REPORT_HARD_APPLY_V20903' "$HTML" >/dev/null
+          if grep -F '<img class="j98-shuttle" alt="" src="' "$HTML"; then echo 'loose shuttle insertion returned'; exit 1; fi
+          grep -F 'saveStatisticsPng' "$JAVA" >/dev/null
+
+          "$BT/aapt" dump badging "$VERSION_BASE" > "$RUNNER_TEMP/base-badging.txt"
+          BASE_CODE="$(sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" "$RUNNER_TEMP/base-badging.txt" | sed -n '1p')"
+          test -n "$BASE_CODE"
+          NEW_CODE=$((BASE_CODE + 1))
+          python3 - "$NEW_CODE" <<'PY'
+          from pathlib import Path
+          import re,sys
+          p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
+          s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
+          if n!=1: raise SystemExit('versionCode anchor mismatch')
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.04'",s,count=1)
+          if n!=1: raise SystemExit('versionName anchor mismatch')
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          base64 --decode signing/jayuminton-release.keystore.b64 > signing/jayuminton-release.jks
+          base64 --decode app/src/main/res/drawable/icon_from_library.b64 > app/src/main/res/drawable/icon.png
+          rm -f app/src/main/res/drawable/icon_from_library.b64
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          test -s "$OUT"
+          "$BT/apksigner" verify --verbose "$OUT"
+          unzip -t "$OUT" >/dev/null
+          "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
+          grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='209.04'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
+          grep -F 'JAYUMINTON_GAME_REPORT_ACTIONS_ATTACH_QUICKMENU_V20904' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'bottom:var(--jm-quick-menu-h)!important' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F "document.getElementById('jmAdminFixedQuickMenu')" "$RUNNER_TEMP/final-html" >/dev/null
+          if grep -F '<img class="j98-shuttle" alt="" src="' "$RUNNER_TEMP/final-html"; then echo 'packaged loose shuttle insertion returned'; exit 1; fi
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
+          echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
+
+      - name: Publish v209.04 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p releases deployment/status
+          cp "$APK_PATH" releases/jayuminton-admin-v209.04-actions-attached.apk
+          printf 'status=success\nversion=209.04\nbase=v209.03-hard-applied-report\nfeature=report-actions-fixed-directly-above-live-quick-menu\nposition=fixed\nquick_menu_height=measured-from-jmAdminFixedQuickMenu\ngap=0\nexpand_all=preserved\ncollapse_all=preserved\nimage_export=preserved\nexact_dog=preserved\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20904-actions-attached.txt
+          git add releases/jayuminton-admin-v209.04-actions-attached.apk deployment/status/v20904-actions-attached.txt
+          git commit -m 'Publish admin v209.04 action bar attached to quick menu' || exit 0
+          git push origin HEAD:main
