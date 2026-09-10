@@ -1,0 +1,16 @@
+status=success
+version=209.02
+base=v209.01-report-expand-export
+feature=exact-user-mascot-clean-header-compact-summary-visible-report-actions
+mascot=exact-user-supplied-doodle-transparent
+shuttle_top=removed
+summary_cards=compact-no-extra-bottom-gap
+bottom_mascot=full-visible-no-white-fragment
+report_actions=raised-above-native-quick-menu
+expand_all=preserved
+collapse_all=preserved
+image_export=preserved-current-expanded-dom-full-height
+base_version_code=84
+new_version_code=85
+run_id=34423957617
+sha256=44697c1b74f99cb7b598c946a1d8917bc79980a6164826eddb46aa8c54172481
