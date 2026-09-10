@@ -1,0 +1,5 @@
+rebuild=user-only-cloudflare
+application_id=com.jayuminton.user
+reject_admin_entry=true
+source_chain=build_user_native_push_fresh_v110
+requested=2026-08-22
