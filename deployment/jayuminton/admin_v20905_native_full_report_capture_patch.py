@@ -31,9 +31,20 @@ for imp in (
             raise SystemExit('graphics import anchor missing')
         java = java.replace(anchor, anchor + imp, 1)
 
-bridge_method = r'''
+# Keep this bridge independent from BrowserBridge. Several historical build
+# patches modify BrowserBridge, so injecting into that class is unnecessarily
+# fragile. A separate JavascriptInterface has a stable registration point.
+register_anchor = '        webView.addJavascriptInterface(new BrowserBridge(), "NativeBrowser");\n'
+if register_anchor not in java:
+    raise SystemExit('NativeBrowser registration anchor missing')
+java = java.replace(
+    register_anchor,
+    register_anchor + '        webView.addJavascriptInterface(new ReportCaptureBridge(), "NativeReportCapture");\n',
+    1,
+)
 
-        // JAYUMINTON_NATIVE_FULL_REPORT_CAPTURE_V20905
+report_class = r'''    // JAYUMINTON_NATIVE_FULL_REPORT_CAPTURE_V20905
+    public final class ReportCaptureBridge {
         @SuppressWarnings("deprecation")
         @JavascriptInterface
         public void saveFullReportPng(String requestedName) {
@@ -54,8 +65,9 @@ bridge_method = r'''
                             throw new IllegalStateException("invalid report size " + sourceW + "x" + sourceH);
                         }
 
-                        // Keep memory bounded on very long fully-expanded reports while
-                        // preserving the complete page in one PNG.
+                        // A fully expanded report can be very tall. Downscale only
+                        // when required so the complete report still fits one PNG
+                        // without exhausting the device heap.
                         final long maxPixels = 10000000L;
                         long sourcePixels = (long) sourceW * (long) sourceH;
                         float scale = sourcePixels > maxPixels
@@ -116,13 +128,21 @@ bridge_method = r'''
                 }, 320L);
             });
         }
-'''
+    }
 
-# BrowserBridge is the last inner class in MainActivity. Insert before its close.
-tail = '\n    }\n}'
-if not java.endswith(tail):
-    raise SystemExit('BrowserBridge tail anchor missing')
-java = java[:-len(tail)] + bridge_method + tail
+'''
+class_anchor = '    public final class BrowserBridge {\n'
+if class_anchor not in java:
+    raise SystemExit('BrowserBridge class anchor missing')
+java = java.replace(class_anchor, report_class + class_anchor, 1)
+
+destroy_anchor = '            webView.removeJavascriptInterface("NativeBrowser");\n'
+if destroy_anchor in java:
+    java = java.replace(
+        destroy_anchor,
+        destroy_anchor + '            webView.removeJavascriptInterface("NativeReportCapture");\n',
+        1,
+    )
 
 export_style = r'''
 <style id="jmNativeFullReportCaptureV20905Style">
@@ -150,7 +170,7 @@ html = html.replace('</head>', export_style + '\n</head>', 1)
 
 new_save = r'''function saveFullImage(){
   var p=poster();if(!p){alert('저장할 통계 화면이 없습니다.');return;}if(busy)return;
-  if(!(window.NativeBrowser&&typeof window.NativeBrowser.saveFullReportPng==='function')){
+  if(!(window.NativeReportCapture&&typeof window.NativeReportCapture.saveFullReportPng==='function')){
     alert('이 APK에서는 전체 이미지 저장 기능을 사용할 수 없습니다.');return;
   }
   setBusy(true,'이미지 만드는 중…');
@@ -175,15 +195,15 @@ new_save = r'''function saveFullImage(){
     setTimeout(function(){
       try{
         var now=new Date(),yy=now.getFullYear(),mm=String(now.getMonth()+1).padStart(2,'0'),dd=String(now.getDate()).padStart(2,'0');
-        window.NativeBrowser.saveFullReportPng('자유민턴_게임통계_'+yy+'-'+mm+'-'+dd+'.png');
+        window.NativeReportCapture.saveFullReportPng('자유민턴_게임통계_'+yy+'-'+mm+'-'+dd+'.png');
       }catch(err){restore(false);}
     },120);
   });});
   setTimeout(function(){if(!finished)restore(false);},12000);
 }'''
 
-# Replace the actual v209.01 exporter in place, rather than layering another
-# late-running override that can be replaced again by its install timers.
+# Replace the actual active v209.01 exporter in place. This prevents its
+# delayed install hooks from restoring the old SVG/foreignObject path.
 pat = re.compile(r'function saveFullImage\(\)\{.*?\n\}\nfunction install\(\)\{', re.S)
 m = pat.search(html)
 if not m:
@@ -192,9 +212,11 @@ html = html[:m.start()] + new_save + '\nfunction install(){' + html[m.end():]
 
 for token in (
     MARKER,
+    'NativeReportCapture',
     'saveFullReportPng',
+    'webView.capturePicture()',
     'jm-native-report-export-v20905',
-    'window.NativeBrowser.saveFullReportPng',
+    'window.NativeReportCapture.saveFullReportPng',
     'window.jmNativeFullImageDone=restore',
     'window.jmSaveGameReportImage=saveFullImage',
     '전체 펼침',
@@ -203,9 +225,13 @@ for token in (
     if token not in html + java:
         raise SystemExit('v209.05 contract missing: ' + token)
 
-# The old failing SVG exporter must no longer be present in the v209.01 function.
-if "im.onerror=function(){if(done)return" in html:
-    raise SystemExit('old SVG export path still present')
+# The failing SVG/Image/Canvas exporter must not remain in the active v209.01
+# save function after this patch.
+active = re.search(r'function saveFullImage\(\)\{.*?\n\}\nfunction install\(\)\{', html, re.S)
+if not active:
+    raise SystemExit('patched saveFullImage not found')
+if 'createObjectURL' in active.group(0) or 'foreignObject' in active.group(0) or 'new Image()' in active.group(0):
+    raise SystemExit('old SVG export path still active')
 
 html_path.write_text(html, encoding='utf-8')
 java_path.write_text(java, encoding='utf-8')
