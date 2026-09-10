@@ -1,0 +1,15 @@
+status=success
+version=209.04
+base=v209.03-hard-applied-report
+feature=report-actions-fixed-directly-above-live-quick-menu
+position=fixed
+quick_menu_height=measured-from-jmAdminFixedQuickMenu
+gap=0
+expand_all=preserved
+collapse_all=preserved
+image_export=preserved
+exact_dog=preserved
+base_version_code=86
+new_version_code=87
+run_id=34425146537
+sha256=65683e67834209686dc75579ef15d0ca3eb65196a380fc6adee8e4f49a391e88
