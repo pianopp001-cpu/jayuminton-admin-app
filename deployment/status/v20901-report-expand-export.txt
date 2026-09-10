@@ -1,0 +1,14 @@
+status=success
+version=209.01
+base=v209.00-report-visual-fix
+feature=report-expand-all-collapse-all-current-state-full-image-export
+expand_all=enabled
+collapse_all=enabled
+image_export=current-expanded-dom-full-height
+export_controls=removed-from-image-only
+mascot=reference-doodle-dog-from-v20900
+racket=held-racket-overlay-from-v20900
+base_version_code=83
+new_version_code=84
+run_id=34419304946
+sha256=ac01d835caf37b32e5797c8392fd27bfd1b2f938bcc05eb952c91e0c4e9ff154
