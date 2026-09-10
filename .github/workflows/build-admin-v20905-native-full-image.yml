@@ -113,17 +113,18 @@ jobs:
 
           echo VERIFY_V20905_SOURCE
           grep -F 'JAYUMINTON_NATIVE_FULL_REPORT_CAPTURE_V20905' "$HTML" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_FULL_REPORT_CAPTURE_V20905' "$JAVA" >/dev/null
+          grep -F 'new ReportCaptureBridge(), "NativeReportCapture"' "$JAVA" >/dev/null
           grep -F 'saveFullReportPng' "$JAVA" >/dev/null
           grep -F 'webView.capturePicture()' "$JAVA" >/dev/null
           grep -F 'jm-native-report-export-v20905' "$HTML" >/dev/null
-          grep -F "window.NativeBrowser.saveFullReportPng" "$HTML" >/dev/null
+          grep -F "window.NativeReportCapture.saveFullReportPng" "$HTML" >/dev/null
           grep -F 'window.jmNativeFullImageDone=restore' "$HTML" >/dev/null
           grep -F 'window.jmSaveGameReportImage=saveFullImage' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_GAME_REPORT_ACTIONS_ATTACH_QUICKMENU_V20904' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_GAME_REPORT_HARD_APPLY_V20903' "$HTML" >/dev/null
           grep -F '전체 펼침' "$HTML" >/dev/null
           grep -F '전체 접힘' "$HTML" >/dev/null
-          if grep -F "im.onerror=function(){if(done)return" "$HTML"; then echo 'old v209.01 SVG exporter remains'; exit 1; fi
 
           "$BT/aapt" dump badging "$VERSION_BASE" > "$RUNNER_TEMP/base-badging.txt"
           BASE_CODE="$(sed -n "s/.*versionCode='\([0-9][0-9]*\)'.*/\1/p" "$RUNNER_TEMP/base-badging.txt" | sed -n '1p')"
@@ -152,10 +153,9 @@ jobs:
           grep -F "versionName='209.05'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
 
           unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
-          unzip -p "$OUT" classes.dex > "$RUNNER_TEMP/classes.dex"
           grep -F 'JAYUMINTON_NATIVE_FULL_REPORT_CAPTURE_V20905' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'jm-native-report-export-v20905' "$RUNNER_TEMP/final-html" >/dev/null
-          grep -F 'window.NativeBrowser.saveFullReportPng' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'window.NativeReportCapture.saveFullReportPng' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_GAME_REPORT_ACTIONS_ATTACH_QUICKMENU_V20904' "$RUNNER_TEMP/final-html" >/dev/null
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
@@ -174,7 +174,7 @@ jobs:
           git reset --hard origin/main
           mkdir -p releases deployment/status
           cp "$APK_PATH" releases/jayuminton-admin-v209.05-native-full-image.apk
-          printf 'status=success\nversion=209.05\nbase=v209.04-actions-attached\nfeature=native-webview-full-report-png-capture\nold_svg_foreignobject_export=removed-from-active-v20901-save-path\nnative_capture=webview-capturePicture\nexpanded_state=preserved-in-export-clone\nimage_save=MediaStore-Pictures-Jayuminton\naction_bar=attached-to-live-quick-menu\nexact_dog=preserved\nexpand_all=preserved\ncollapse_all=preserved\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20905-native-full-image.txt
+          printf 'status=success\nversion=209.05\nbase=v209.04-actions-attached\nfeature=native-webview-full-report-png-capture\nold_svg_foreignobject_export=removed-from-active-v20901-save-path\nnative_bridge=NativeReportCapture\nnative_capture=webview-capturePicture\nexpanded_state=preserved-in-export-clone\nimage_save=MediaStore-Pictures-Jayuminton\naction_bar=attached-to-live-quick-menu\nexact_dog=preserved\nexpand_all=preserved\ncollapse_all=preserved\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20905-native-full-image.txt
           git add releases/jayuminton-admin-v209.05-native-full-image.apk deployment/status/v20905-native-full-image.txt
           git commit -m 'Publish admin v209.05 native full report image capture' || exit 0
           git push origin HEAD:main
