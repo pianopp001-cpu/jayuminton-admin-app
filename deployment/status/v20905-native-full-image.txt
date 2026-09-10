@@ -1,0 +1,17 @@
+status=success
+version=209.05
+base=v209.04-actions-attached
+feature=native-webview-full-report-png-capture
+old_svg_foreignobject_export=removed-from-active-v20901-save-path
+native_bridge=NativeReportCapture
+native_capture=webview-capturePicture
+expanded_state=preserved-in-export-clone
+image_save=MediaStore-Pictures-Jayuminton
+action_bar=attached-to-live-quick-menu
+exact_dog=preserved
+expand_all=preserved
+collapse_all=preserved
+base_version_code=87
+new_version_code=88
+run_id=34425953071
+sha256=eac4eb32b4a9f6320c69032a9b442fd824ce3ac348ab3ad0e181ebc1e00449f6
