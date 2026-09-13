@@ -39,6 +39,38 @@ function fixture() {
   assert.equal(interactionPushNotifications(rejected.state, rejected.event)[0].event.messageText, '회원15님이 짝 요청을 거절했습니다.');
 }
 {
+  // JAYUMINTON_WAIT1_SWAP_LOCK_V1: 대기1(waitGroups[0] === ['3','4','5','6']) 회원은
+  // 자리교환/짝요청 어느 쪽으로도 옮겨질 수 없다 -- 요청자든 대상이든 마찬가지다.
+  assert.throws(() => requestSwapMutation(fixture(), '7', '3', 1000), /wait1_locked/);
+  assert.throws(() => requestSwapMutation(fixture(), '3', '7', 1000), /wait1_locked/);
+  assert.throws(() => requestPairPlayMutation(fixture(), '7', '3', 1000), /wait1_locked/);
+  assert.throws(() => requestPairPlayMutation(fixture(), '3', '7', 1000), /wait1_locked/);
+
+  // A request that was valid when created (neither side in 대기1 yet) must still be
+  // blocked at accept time if the target has since moved up into 대기1 -- e.g. a court
+  // finished and promoted them from 대기2 while the swap request was pending.
+  const swapRequested = requestSwapMutation(fixture(), '1', '7', 1000);
+  const swapStateAfterPromotion = normalizeState(swapRequested.state);
+  swapStateAfterPromotion.waitGroups[0] = ['7', '4', '5', '6'];
+  swapStateAfterPromotion.waitGroups[1] = ['3', '8', '9', '10'];
+  assert.throws(
+    () => respondSwapMutation(swapStateAfterPromotion, swapRequested.event.request.id, '7', true, 2000),
+    /wait1_locked/
+  );
+  // Rejecting is always fine -- only an actual move is blocked.
+  const swapRejectedAfterPromotion = respondSwapMutation(swapStateAfterPromotion, swapRequested.event.request.id, '7', false, 2000);
+  assert.equal(swapRejectedAfterPromotion.event.type, 'swap_rejected');
+
+  const pairRequested = requestPairPlayMutation(fixture(), '14', '15', 1000);
+  const pairStateAfterPromotion = normalizeState(pairRequested.state);
+  pairStateAfterPromotion.waitGroups[0] = ['15', '4', '5', '6'];
+  pairStateAfterPromotion.waitGroups[1] = ['3', '7', '8', '9'];
+  assert.throws(
+    () => respondPairPlayMutation(pairStateAfterPromotion, pairRequested.event.request.id, '15', true, 2000),
+    /wait1_locked/
+  );
+}
+{
   const grouped = setBundleMutation(fixture(), ['14', '15', '16']);
   const members = grouped.state.members.filter(m => ['14', '15', '16'].includes(m.id));
   assert.equal(members.every(m => m.teamLabel === '팀 1'), true);

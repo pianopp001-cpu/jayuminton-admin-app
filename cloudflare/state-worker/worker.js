@@ -101,6 +101,14 @@ function locationOf(state, memberId) {
   return null;
 }
 
+/* JAYUMINTON_WAIT1_SWAP_LOCK_V1: 대기1(다음 코트 배정 순번)에 있는 회원은 자리교환이나
+   짝요청으로도 옮겨질 수 없다 -- 요청 시점과 수락 시점 둘 다 확인해서, 요청 이후 순서가
+   바뀌어 대기1로 올라온 경우도 막는다. */
+function isWait1Location(state, memberId) {
+  const location = locationOf(state, memberId);
+  return Boolean(location) && location.type === 'wait' && String(location.key) === '1';
+}
+
 function removeEverywhere(state, memberIds) {
   const ids = new Set(memberIds.map(String));
   for (const no of ['1', '2', '3', '4']) state.courts[no] = state.courts[no].filter(id => !ids.has(id));
@@ -377,6 +385,7 @@ export function setMemberKokInactiveMutation(input, memberIds, inactive) {
 export function requestSwapMutation(input, requesterId, targetId, nowMs = Date.now()) {
   const state = normalizeState(input); const requester = String(requesterId); const target = String(targetId);
   if (requester === target || !locationOf(state, requester) || !locationOf(state, target)) throw new Error('invalid_swap_request');
+  if (isWait1Location(state, requester) || isWait1Location(state, target)) throw new Error('wait1_locked');
   state.swapRequests = state.swapRequests.filter(r => r.status !== 'pending' || Number(r.expiresAt) > nowMs);
   const request = { id: crypto.randomUUID(), requesterId: requester, targetId: target, status: 'pending', createdAt: nowMs, expiresAt: nowMs + 300000 };
   state.swapRequests.push(request); return { state, event: { type: 'swap_requested', request } };
@@ -386,6 +395,7 @@ export function respondSwapMutation(input, requestId, responderId, accept, nowMs
   let state = normalizeState(input); const request = state.swapRequests.find(r => r.id === String(requestId));
   if (!request || request.status !== 'pending' || request.targetId !== String(responderId)) throw new Error('swap_request_not_found');
   if (Number(request.expiresAt) <= nowMs) { request.status = 'expired'; return { state, event: { type: 'swap_expired', requestId: request.id } }; }
+  if (accept && (isWait1Location(state, request.requesterId) || isWait1Location(state, request.targetId))) throw new Error('wait1_locked');
   request.status = accept ? 'accepted' : 'rejected'; request.respondedAt = nowMs;
   let courtEntrantIds = [];
   if (accept) { const swapped = swapMutation(state, [request.requesterId], [request.targetId]); state = swapped.state; courtEntrantIds = swapped.event.courtEntrantIds || []; }
@@ -410,6 +420,7 @@ export function requestPairPlayMutation(input, requesterId, targetId, nowMs = Da
   if (requester === target) throw new Error('invalid_pair_request');
   const knownIds = new Set(state.members.map(m => String(m.id)));
   if (!knownIds.has(requester) || !knownIds.has(target)) throw new Error('invalid_pair_request');
+  if (isWait1Location(state, requester) || isWait1Location(state, target)) throw new Error('wait1_locked');
   state.pairRequests = state.pairRequests.filter(r => r.status !== 'pending' || Number(r.expiresAt) > nowMs);
   const request = { id: crypto.randomUUID(), requesterId: requester, targetId: target, status: 'pending', createdAt: nowMs, expiresAt: nowMs + 300000 };
   state.pairRequests = [...state.pairRequests, request];
@@ -428,6 +439,7 @@ export function respondPairPlayMutation(input, requestId, responderId, accept, n
     request.status = 'rejected'; request.respondedAt = nowMs;
     return { state, event: { type: 'pair_rejected', requestId: request.id } };
   }
+  if (isWait1Location(state, request.requesterId) || isWait1Location(state, request.targetId)) throw new Error('wait1_locked');
   let outcome = 'admin_notice';
   try {
     state = moveMutation(state, [request.requesterId, request.targetId], { type: 'wait', key: '5' }).state;
