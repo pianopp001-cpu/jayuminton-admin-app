@@ -14,6 +14,7 @@ on:
       - 'deployment/jayuminton/patch_member_active_type_matched_wait_v1.py'
       - 'deployment/jayuminton/patch_member_self_status_render_safe_v1.py'
       - 'deployment/jayuminton/patch_member_pair_play_v1.py'
+      - 'deployment/jayuminton/patch_member_wait1_immovable_v1.py'
       - 'deployment/jayuminton/member-pwa-assets/**'
       - 'deployment/jayuminton/cloudflare_v6_frontend_bridge.js'
   workflow_dispatch: {}
@@ -1013,6 +1014,12 @@ jobs:
           grep -F 'id="jayuminton-admin-pair-notice-v1"' "$PUBLIC/index.html" >/dev/null
           grep -F "server('memberRequestPairPlay'" "$PUBLIC/index.html" >/dev/null
           grep -F "server('dismissPairNotice',[ADMIN_PIN_VALUE,requestId])" "$PUBLIC/index.html" >/dev/null
+
+          python3 deployment/jayuminton/patch_member_wait1_immovable_v1.py "$PUBLIC/index.html"
+          grep -F 'JAYUMINTON_MEMBER_WAIT1_IMMOVABLE_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'id="jayuminton-member-wait1-immovable-v1"' "$PUBLIC/index.html" >/dev/null
+          grep -F '대기1 순위인 회원은 자리를 옮길 수 없어요.' "$PUBLIC/index.html" >/dev/null
+
           grep -F 'JAYUMINTON_MEMBER_PWA_HEAD_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_PWA_INSTALL_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'rel="manifest" href="/manifest.webmanifest"' "$PUBLIC/index.html" >/dev/null
@@ -1158,6 +1165,9 @@ jobs:
             'id="jayuminton-member-pair-play-v1"' \
             'id="jayuminton-admin-pair-notice-v1"' \
             "server('memberRequestPairPlay'" \
+            'JAYUMINTON_MEMBER_WAIT1_IMMOVABLE_V1' \
+            'id="jayuminton-member-wait1-immovable-v1"' \
+            '대기1 순위인 회원은 자리를 옮길 수 없어요.' \
             'JAYUMINTON_MEMBER_DIRECT_MESSAGE_ALERT_V1' \
             'JAYUMINTON_MEMBER_SELF_TEMP_PAIR_BORDER_FIX_V1' \
             'is-self-member.jm-temp-pair{border:2px solid #2563eb!important;outline:4px dashed #facc15!important' \
