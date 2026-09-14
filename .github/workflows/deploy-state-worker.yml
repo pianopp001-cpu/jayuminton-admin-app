@@ -62,6 +62,7 @@ jobs:
           grep -F 'JAYUMINTON_ATTENDANCE_TIMES_V2' cloudflare/state-worker/worker.js >/dev/null
           grep -F 'JAYUMINTON_KOK_ARRIVAL_TIME_V2' cloudflare/state-worker/worker.js >/dev/null
           grep -F 'JAYUMINTON_ATTENDANCE_STATS_RESPONSE_V2' cloudflare/state-worker/worker-md-entry.js >/dev/null
+          grep -F 'memberSessionsRevoked: true' cloudflare/state-worker/worker.js >/dev/null
       - name: Resolve existing D1 and prepare config
         shell: bash
         run: |
