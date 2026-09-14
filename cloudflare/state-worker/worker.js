@@ -360,6 +360,20 @@ export function adjustGamesMutation(input, memberIds, delta, reset = false) {
   return { state, event: { type: 'games_adjusted', memberIds: ids, delta: reset ? 'reset' : Number(delta) } };
 }
 
+/* A full operational reset is also the member-session revocation boundary.
+   Member sessions are signed, stateless tokens containing memberPasswordVersion,
+   so incrementing that version invalidates every issued member token at once
+   without affecting the administrator's own session. */
+export function resetAllMutation(input) {
+  const current = normalizeState(input);
+  const state = emptyState();
+  state.settings = {
+    ...current.settings,
+    memberPasswordVersion: Math.max(1, Number(current.settings.memberPasswordVersion) || 1) + 1,
+  };
+  return { state, event: { type: 'all_reset', memberSessionsRevoked: true } };
+}
+
 // 콕(셔틀콕) 제출 체크: 남자 2개·여자 1개 기준으로 관리자가 명단에서 제출 여부를 체크한다.
 // 코트/대기 이동과 무관한 단순 멤버 플래그이므로 games와 동일한 방식으로 D1 state_json에 저장한다.
 export function setMemberKokSubmittedMutation(input, memberIds, submitted) {
@@ -711,8 +725,7 @@ export class StateCoordinator {
         result.state.members = result.state.members.filter(m => !ids.has(String(m.id))); result.event.type = 'members_deleted';
       }
       else if (action === 'resetAll') {
-        result = { state: emptyState(), event: { type: 'all_reset' } };
-        result.state.settings = { ...current.settings };
+        result = resetAllMutation(current);
       }
       else return reply({ ok: false, error: 'unsupported_action' }, 400);
       recordAction(result.state, operationId, action, result.event, current);
