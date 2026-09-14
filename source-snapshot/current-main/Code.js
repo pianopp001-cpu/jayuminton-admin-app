@@ -546,6 +546,8 @@ function restoreManualBackup(pin) {
     '백업 복원',
     function() {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sessionVersionFloor =
+        Number(getSetting_('MEMBER_PASSWORD_VERSION') || 1);
 
       [
         SHEET_MEMBERS,
@@ -588,6 +590,20 @@ function restoreManualBackup(pin) {
             );
         }
       });
+
+      // 복원으로 삭제 전에 발급된 세션이 되살아나지 않도록 인증 버전은
+      // 절대 낮추지 않고, Apps Script의 공용 세션 토큰도 새로 발급한다.
+      setSetting_(
+        'MEMBER_PASSWORD_VERSION',
+        String(Math.max(
+          sessionVersionFloor,
+          Number(getSetting_('MEMBER_PASSWORD_VERSION') || 1)
+        ))
+      );
+      setSetting_(
+        'MEMBER_SESSION_TOKEN',
+        Utilities.getUuid() + Utilities.getUuid()
+      );
 
       repairData_();
       touch_();
