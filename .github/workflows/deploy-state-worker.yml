@@ -7,6 +7,7 @@ on:
       - '.github/workflows/deploy-state-worker.yml'
       - 'cloudflare/state-worker/**'
       - 'deployment/jayuminton/patch_attendance_statistics_v1.py'
+      - 'deployment/jayuminton/patch_member_admin_preference_message_v1.py'
   workflow_dispatch:
 
 permissions:
@@ -49,6 +50,7 @@ jobs:
               p.write_text(s,encoding='utf-8')
           PY
           python3 deployment/jayuminton/patch_attendance_statistics_v1.py cloudflare/state-worker
+          python3 deployment/jayuminton/patch_member_admin_preference_message_v1.py cloudflare/state-worker/worker.js
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test "${#INTERNAL_KEY}" -ge 32
@@ -63,6 +65,9 @@ jobs:
           grep -F 'JAYUMINTON_KOK_ARRIVAL_TIME_V2' cloudflare/state-worker/worker.js >/dev/null
           grep -F 'JAYUMINTON_ATTENDANCE_STATS_RESPONSE_V2' cloudflare/state-worker/worker-md-entry.js >/dev/null
           grep -F 'memberSessionsRevoked: true' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_ADMIN_PREFERENCE_MESSAGE_V1' cloudflare/state-worker/worker.js >/dev/null
+          grep -F "name === 'memberSendAdminPreference'" cloudflare/state-worker/worker.js >/dev/null
+          grep -F '대기에서 좀 밀려나도 되니 다음에는 최대한 ${partner}와 배정해주세요.' cloudflare/state-worker/worker.js >/dev/null
       - name: Resolve existing D1 and prepare config
         shell: bash
         run: |
