@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, resetAllMutation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions, interactionPushNotifications } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, resetAllMutation, preserveMemberSessionRevocation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions, interactionPushNotifications } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -23,6 +23,11 @@ function fixture() {
   assert.equal(reset.state.settings.adminPin, 'admin-secret');
   assert.equal(reset.state.settings.adminPinVersion, 4);
   assert.equal(reset.event.memberSessionsRevoked, true);
+  const undoCandidate = preserveMemberSessionRevocation(before, reset.state);
+  assert.equal(undoCandidate.settings.memberPasswordVersion, 8);
+  const newerRestore = normalizeState(before);
+  newerRestore.settings.memberPasswordVersion = 11;
+  assert.equal(preserveMemberSessionRevocation(newerRestore, reset.state).settings.memberPasswordVersion, 11);
 }
 {
   const requested = requestSwapMutation(fixture(), '1', '7', 1000);
