@@ -1940,6 +1940,36 @@ function storeMemberSessionToken(token) {
   } catch (error) {}
 }
 
+function clearAllMemberLoginState() {
+  storeMemberSessionToken('');
+  [
+    MEMBER_AUTH_KEY,
+    MEMBER_SESSION_KEY,
+    WEB_PUSH_SELECTED_MEMBER_KEY,
+    WEB_PUSH_CONNECTION_KEY,
+    'jayuminton_member_auth_v164',
+    'jayuminton_member_session_token_v164',
+    'jayuminton_push_setup_member_v164',
+    'jayuminton_push_token_v158'
+  ].forEach(function(key) {
+    try { localStorage.removeItem(key); } catch (error) {}
+  });
+  MEMBER_SESSION_VALUE = '';
+  MEMBER_INFO_OPEN_ID = '';
+  LAST_PUBLIC_STATE = null;
+  try {
+    if (window.JayumintonPwaPush && typeof window.JayumintonPwaPush.unregister === 'function') {
+      window.JayumintonPwaPush.unregister();
+    }
+  } catch (error) {}
+  try {
+    if (window.NativeUserApp && typeof window.NativeUserApp.clearMember === 'function') {
+      window.NativeUserApp.clearMember();
+    }
+  } catch (error) {}
+  postUnifiedMemberMessage('JAYUMINTON_MEMBER_FORCE_LOGOUT', {});
+}
+
 function currentStoredWebPushMember() {
   try {
     const saved = JSON.parse(localStorage.getItem(WEB_PUSH_SELECTED_MEMBER_KEY) || 'null');
@@ -5138,7 +5168,7 @@ async function initialize() {
         } catch (cleanError) {}
         return;
       }
-      storeMemberSessionToken('');
+      clearAllMemberLoginState();
     }
 
     const version = String(await server('getMemberPasswordVersion', []));
@@ -5860,10 +5890,7 @@ if (!IS_ADMIN) {
             MEMBER_AUTH_KEY
           ) !== version
         ) {
-          localStorage.removeItem(
-            MEMBER_AUTH_KEY
-          );
-          LAST_PUBLIC_STATE = null;
+          clearAllMemberLoginState();
           const authLoading = document.getElementById('memberAuthLoading');
           if (authLoading) authLoading.classList.add('hidden');
 
