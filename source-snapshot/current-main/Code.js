@@ -1643,6 +1643,19 @@ function resetAllOperationDataUnlocked_(pin) {
     []
   ]);
 
+  // 전체 삭제는 모든 사용자 로그인의 강제 만료 경계다. 관리자 세션은
+  // 유지하되, 회원 비밀번호 버전과 공용 세션 토큰을 함께 교체한다.
+  const nextMemberPasswordVersion =
+    Number(getSetting_('MEMBER_PASSWORD_VERSION') || 1) + 1;
+  setSetting_(
+    'MEMBER_PASSWORD_VERSION',
+    String(nextMemberPasswordVersion)
+  );
+  setSetting_(
+    'MEMBER_SESSION_TOKEN',
+    Utilities.getUuid() + Utilities.getUuid()
+  );
+
   touch_();
 
   return getPublicState();
