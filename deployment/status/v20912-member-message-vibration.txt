@@ -1,0 +1,11 @@
+status=success
+version=209.12
+base=v209.11-full-court-voice-max-music-restore
+feature=member-to-admin-message-vibration
+admin_popup_vibration=3x8
+vibration_stop=confirm-or-open-inbox
+fixed_member_request=enabled
+base_version_code=94
+new_version_code=95
+run_id=34842115951
+sha256=6420993cb363af7489ad275bbfed7bb003835f408b6e5a195051f56d765021b3
