@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions, interactionPushNotifications } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, resetAllMutation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions, interactionPushNotifications } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -7,6 +7,22 @@ function fixture() {
   state.courts['1'] = ['1', '2'];
   state.waitGroups = [['3', '4', '5', '6'], ['7', '8', '9', '10'], ['11'], ['12'], ['13']];
   return normalizeState(state);
+}
+{
+  const before = fixture();
+  before.settings.memberPassword = 'member-secret';
+  before.settings.memberPasswordVersion = 7;
+  before.settings.adminPin = 'admin-secret';
+  before.settings.adminPinVersion = 4;
+  const reset = resetAllMutation(before);
+  assert.deepEqual(reset.state.members, []);
+  assert.deepEqual(reset.state.courts, { '1': [], '2': [], '3': [], '4': [] });
+  assert.deepEqual(reset.state.waitGroups, [[], [], [], [], []]);
+  assert.equal(reset.state.settings.memberPassword, 'member-secret');
+  assert.equal(reset.state.settings.memberPasswordVersion, 8);
+  assert.equal(reset.state.settings.adminPin, 'admin-secret');
+  assert.equal(reset.state.settings.adminPinVersion, 4);
+  assert.equal(reset.event.memberSessionsRevoked, true);
 }
 {
   const requested = requestSwapMutation(fixture(), '1', '7', 1000);
