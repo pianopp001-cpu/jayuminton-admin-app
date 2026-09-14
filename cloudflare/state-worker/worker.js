@@ -374,6 +374,17 @@ export function resetAllMutation(input) {
   return { state, event: { type: 'all_reset', memberSessionsRevoked: true } };
 }
 
+export function preserveMemberSessionRevocation(input, current) {
+  const restored = normalizeState(input);
+  const live = normalizeState(current);
+  restored.settings.memberPasswordVersion = Math.max(
+    1,
+    Number(restored.settings.memberPasswordVersion) || 1,
+    Number(live.settings.memberPasswordVersion) || 1,
+  );
+  return restored;
+}
+
 // 콕(셔틀콕) 제출 체크: 남자 2개·여자 1개 기준으로 관리자가 명단에서 제출 여부를 체크한다.
 // 코트/대기 이동과 무관한 단순 멤버 플래그이므로 games와 동일한 방식으로 D1 state_json에 저장한다.
 export function setMemberKokSubmittedMutation(input, memberIds, submitted) {
@@ -679,14 +690,16 @@ export class StateCoordinator {
       if (action === 'restoreBackup') {
         const row = await this.env.DB.prepare('SELECT state_json FROM state_backups ORDER BY id DESC LIMIT 1').first();
         if (!row) return reply({ ok: false, error: 'backup_not_found' }, 404);
-        return reply({ ok: true, state: await writeState(this.env.DB, JSON.parse(row.state_json)) });
+        const current = await readState(this.env.DB);
+        const restored = preserveMemberSessionRevocation(JSON.parse(row.state_json), current);
+        return reply({ ok: true, state: await writeState(this.env.DB, restored) });
       }
       const current = await readState(this.env.DB); const operationId = String(body.operationId || ''); const prior = findPrior(current, operationId);
       if (prior) return reply({ ok: true, duplicate: true, state: current, event: prior.event });
       if (action === 'undoLast') {
         const last = current.actionHistory[current.actionHistory.length - 1];
         if (!last?.undoState) return reply({ ok: false, error: 'nothing_to_undo' }, 409);
-        const restored = normalizeState(last.undoState); restored.actionHistory = current.actionHistory.slice(0, -1);
+        const restored = preserveMemberSessionRevocation(last.undoState, current); restored.actionHistory = current.actionHistory.slice(0, -1);
         return reply({ ok: true, state: await writeState(this.env.DB, restored), event: { type: 'action_undone', action: last.action } });
       }
       let result;
