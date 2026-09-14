@@ -1,0 +1,14 @@
+status=success
+version=209.10
+base=v209.09-voice-opening-lift
+feature=court-finish-opening-max-output
+wording=unchanged
+opening_target_rms_dbfs=-9
+peak_ceiling_dbfs=-2
+max_gain_db=12
+warmup_silence=removed
+generic_opening_lift=removed
+base_version_code=92
+new_version_code=93
+run_id=34793624888
+sha256=e2a161935dcd5dc57caf4482e5bd71c2a1214c5741c5ac6b48506dd302494f54
