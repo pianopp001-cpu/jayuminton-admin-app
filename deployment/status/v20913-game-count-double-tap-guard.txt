@@ -1,0 +1,9 @@
+status=success
+version=209.13
+base=v209.12-member-message-vibration
+feature=game-count-double-tap-guard
+fix=finishCourt+increaseSelectedGames re-entrancy guard
+base_version_code=95
+new_version_code=96
+run_id=35108601498
+sha256=703f4163e05ef1f3f45acbde2f6515998457745862bb8ef6756ff93b70c61a3c
