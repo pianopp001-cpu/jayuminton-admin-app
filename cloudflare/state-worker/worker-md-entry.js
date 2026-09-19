@@ -289,7 +289,15 @@ export default {
       if (MUTATING_COMPAT.has(String(body.name || ''))) {
         const before = await getVisibleState(request, env).catch(() => null);
         const isRestore = body.name === 'restoreManualBackup';
-        return forwardAndRecord(request, env, isRestore ? null : before, { clearPairStats: body.name === 'resetAllOperationData' || isRestore });
+        const args = Array.isArray(body.args) ? body.args : [];
+        const resetIds = body.name === 'resetSelectedGameCounts' ? uniq(args[1]) : [];
+        const allMemberIds = uniq((before?.members || []).map(m => m?.id));
+        const isFullGameReset = resetIds.length > 0 &&
+          resetIds.length === allMemberIds.length &&
+          allMemberIds.every(id => resetIds.includes(id));
+        return forwardAndRecord(request, env, isRestore ? null : before, {
+          clearPairStats: body.name === 'resetAllOperationData' || isRestore || isFullGameReset,
+        });
       }
     }
     return core.fetch(request, env);
