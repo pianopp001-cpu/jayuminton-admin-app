@@ -1,4 +1,4 @@
 status=success
-run_id=35458824530
-source_sha=23875b8cba580234553ea308d74427e50689f529
-feature=protected-admin-fields+appended-member-memo
+run_id=35461553145
+source_sha=2801b999cdc317f827c00fe8a5bf2592228f8e99
+feature=protected-admin-fields+appended-member-memo+info-color-split
