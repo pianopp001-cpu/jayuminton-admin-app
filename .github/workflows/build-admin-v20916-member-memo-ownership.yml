@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euxo pipefail
           HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
-          VERSION_BASE='releases/jayuminton-admin-v209.16-member-memo-ownership.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.15-single-full-expanded-export.apk'
           JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
           HTML='app/src/main/assets/admin/index.html'
           OUT='app/build/outputs/apk/release/app-release.apk'
@@ -212,9 +212,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK_PATH" releases/jayuminton-admin-v209.15-single-full-expanded-export.apk
+          cp "$APK_PATH" releases/jayuminton-admin-v209.16-member-memo-ownership.apk
           printf 'status=success\nversion=209.16\nbase=v209.15-single-full-expanded-export\nfeature=member-memo-ownership\nfix=protect-admin-fields+append-member-memo\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20916-member-memo-ownership.txt
-          git add releases/jayuminton-admin-v209.15-single-full-expanded-export.apk deployment/status/v20915-single-full-expanded-export.txt
+          git add releases/jayuminton-admin-v209.16-member-memo-ownership.apk deployment/status/v20916-member-memo-ownership.txt
           git commit -m 'Publish admin v209.16 member memo ownership' || exit 0
           git push origin HEAD:main
 
