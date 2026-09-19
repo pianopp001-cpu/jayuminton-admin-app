@@ -57,9 +57,11 @@ assert.ok(mdEntry.includes("if (packet?.ok && options.clearPairStats) await clea
 assert.ok(mdEntry.includes("{ clearPairStats: body.action === 'resetAll' }"), 'direct admin resetAll pair-stat cleanup missing');
 assert.ok(mdEntry.includes("const isRestore = body.name === 'restoreManualBackup';"), 'restore must have an explicit pair-stat consistency path');
 assert.ok(mdEntry.includes('isRestore ? null : before'), 'restore must not record before/after location changes as new pair games');
-assert.ok(mdEntry.includes("body.name === 'resetAllOperationData' || isRestore"), 'successful restore must clear stale pair statistics because backup state does not contain the separate pair_stats table');
+assert.ok(mdEntry.includes("body.name === 'resetAllOperationData' || isRestore || isFullGameReset"), 'successful full game-count reset must clear pair statistics together with game totals');
+assert.ok(mdEntry.includes("body.name === 'resetSelectedGameCounts' ? uniq(args[1]) : []"), 'full game reset detection must use the selected member ids');
+assert.ok(mdEntry.includes("resetIds.length === allMemberIds.length"), 'partial game-count reset must not clear everybody pair statistics');
 const clearPairCalls = (mdEntry.match(/clearPairStats:/g) || []).length;
-assert.equal(clearPairCalls, 2, 'pair-stat cleanup options must remain limited to admin reset and compat reset/restore handling');
+assert.equal(clearPairCalls, 2, 'pair-stat cleanup options must remain limited to admin reset and compat reset/restore/full-game-reset handling');
 
 // Administrator selected members from an older screen. If member 14 has since
 // moved themself away, the live server group no longer contains 14 and the
