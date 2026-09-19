@@ -1,0 +1,9 @@
+status=success
+version=209.16
+base=v209.15-single-full-expanded-export
+feature=member-memo-ownership
+fix=protect-admin-fields+append-member-memo
+base_version_code=98
+new_version_code=99
+run_id=35456691677
+sha256=364c6d33a4af06f1d328e9721f4cba382b147746cab21f96494adf221af74fd7
