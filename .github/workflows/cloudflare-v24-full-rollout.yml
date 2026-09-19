@@ -45,8 +45,10 @@ jobs:
           grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
           grep -F '저장중 · 잠시만 기다려 주세요' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
           grep -F 'member-public-memo' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
-          grep -F 'JAYUMINTON_MD6_SELF_LONGPRESS_V2' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
-          for x in '>도착전</button>' '>코트배정대기</button>' '>휴식</button>' '>귀가</button>' '>내정보입력</button>'; do grep -F "$x" deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null; done
+          grep -F 'USER_SELF_MEMO_UI_REMOVED' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          grep -F 'original long-press UI preserved' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          grep -F 'jayuminton-member-self-profile-edit-v1' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
+          grep -F 'JAYUMINTON_MEMBER_SELF_MEMO_ONLY_V2' deployment/jayuminton/patch_member_self_longpress_v6.py >/dev/null
           if grep -R -n -E 'clasp push|clasp deploy|script.google.com/macros/s/' cloudflare/state-worker deployment/jayuminton/admin_cloudflare_post_contract_patch.py deployment/jayuminton/patch_member_self_longpress_v6.py; then exit 1; fi
 
       - name: Dispatch and wait for Cloudflare state worker deployment
