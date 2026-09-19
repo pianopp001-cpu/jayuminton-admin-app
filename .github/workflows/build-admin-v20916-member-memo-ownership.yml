@@ -219,3 +219,18 @@ jobs:
           git push origin HEAD:main
 
 
+
+      - name: Record v209.16 build failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p deployment/status
+          printf 'status=failure\nversion=209.16\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20916-member-memo-ownership.txt
+          git add deployment/status/v20916-member-memo-ownership.txt
+          git commit -m 'Record admin v209.16 build failure' || exit 0
+          git push origin HEAD:main
