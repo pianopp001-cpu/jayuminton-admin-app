@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/deploy-unified-member-web-production.yml'
       - 'deployment/jayuminton/patch_member_user_requirements_v1.py'
+      - 'deployment/jayuminton/patch_member_memo_ownership_v1.py'
       - 'deployment/jayuminton/patch_member_single_tap_move_v1.py'
       - 'deployment/jayuminton/patch_member_pwa_install_v1.py'
       - 'deployment/jayuminton/patch_member_self_temp_pair_border_fix_v1.py'
@@ -96,6 +97,7 @@ jobs:
 
           cp "$PUBLIC/index.html" "$RUNNER_TEMP/member-before.html"
           python3 deployment/jayuminton/patch_member_user_requirements_v1.py "$PUBLIC/index.html"
+          python3 deployment/jayuminton/patch_member_memo_ownership_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_single_tap_move_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_pwa_install_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_self_temp_pair_border_fix_v1.py "$PUBLIC/index.html"
@@ -104,6 +106,9 @@ jobs:
           python3 deployment/jayuminton/patch_member_active_type_matched_wait_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_self_status_render_safe_v1.py "$PUBLIC/index.html"
           python3 deployment/jayuminton/patch_member_force_logout_on_reset_v1.py "$PUBLIC/index.html"
+          grep -F 'JAYUMINTON_MEMBER_MEMO_OWNERSHIP_V1' "$PUBLIC/index.html" >/dev/null
+          grep -F 'member.userMemo' "$PUBLIC/index.html" >/dev/null
+          grep -F '관리자가 등록한 급수·구력·메모는 수정할 수 없습니다.' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_SELF_TEMP_PAIR_BORDER_FIX_V1' "$PUBLIC/index.html" >/dev/null
           grep -F 'is-self-member.jm-temp-pair{border:2px solid #2563eb!important;outline:4px dashed #facc15!important' "$PUBLIC/index.html" >/dev/null
           grep -F 'JAYUMINTON_MEMBER_SAFE_ALERT_V1' "$PUBLIC/index.html" >/dev/null
