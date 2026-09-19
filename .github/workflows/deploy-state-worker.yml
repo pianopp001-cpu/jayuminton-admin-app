@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jayuminton-cloudflare-state
@@ -92,3 +92,20 @@ jobs:
           curl --fail --location --retry 8 --retry-delay 2 "$WORKER_URL/health?run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/health.json"
           jq -e '.ok==true and .backend=="cloudflare-only" and .database=="d1" and .concurrency=="durable-object" and .gas==false' "$RUNNER_TEMP/health.json" >/dev/null
           echo ATTENDANCE_STATISTICS_V2_KOK_ARRIVAL_WORKER_LIVE
+
+      - name: Record state worker deployment result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          outcome='failure'
+          if [ "${{ job.status }}" = 'success' ]; then outcome='success'; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p deployment/status
+          printf 'status=%s\nrun_id=%s\nsource_sha=%s\nfeature=member-admin-preference-v2\nphrase=대기순서 밀려도 {name}와 배정해 주세요.\n' "$outcome" "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/state-worker-member-admin-preference-v2.txt
+          git add deployment/status/state-worker-member-admin-preference-v2.txt
+          git commit -m "Record member preference worker deployment: $outcome" || exit 0
+          git push origin HEAD:main
