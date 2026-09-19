@@ -66,7 +66,7 @@ jobs:
           node deployment/jayuminton/cloudflare_v6_frontend_bridge.test.mjs
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
-          grep -F 'JAYUMINTON_ATTENDANCE_TIMES_V1' cloudflare/state-worker/worker.js >/dev/null
+          grep -F 'JAYUMINTON_ATTENDANCE_TIMES_V2' cloudflare/state-worker/worker.js >/dev/null
           grep -F 'JAYUMINTON_ATTENDANCE_STATS_RESPONSE_V2' cloudflare/state-worker/worker-md-entry.js >/dev/null
           grep -F "state.waitGroups = [[...state.waitGroups[1]], [...state.waitGroups[2]], [...state.waitGroups[3]], [...state.waitGroups[4]], []]" cloudflare/state-worker/worker.js >/dev/null
           grep -F "team_requires_assignment_wait" cloudflare/state-worker/worker.js >/dev/null
