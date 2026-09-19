@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, resetAllMutation, preserveMemberSessionRevocation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions, interactionPushNotifications } from './worker.js';
+import { emptyState, normalizeState, finishCourtMutation, moveMutation, swapMutation, swapLocationsMutation, autoAssignMutation, upsertMemberMutation, setMemberSelfMemoMutation, setMemberStatusMutation, setBundleMutation, clearBundleMutation, sendMemberMessageMutation, adjustGamesMutation, resetAllMutation, preserveMemberSessionRevocation, setMemberKokSubmittedMutation, setMemberKokInactiveMutation, requestSwapMutation, respondSwapMutation, cancelSwapMutation, requestPairPlayMutation, respondPairPlayMutation, cancelPairPlayMutation, dismissPairNoticeMutation, publicState, adminState, assignmentTransitions, interactionPushNotifications } from './worker.js';
 
 function fixture() {
   const state = emptyState();
@@ -339,3 +339,18 @@ function fixture() {
   assert.equal(accepted.state.courts['1'].includes('7'), true);
 }
 console.log('STATE_WORKER_CORE_TESTS_OK');
+
+{
+  const before = fixture();
+  before.members[0] = { ...before.members[0], grade: 'A조', experience: '5년', publicMemo: '관리자 메모', userMemo: '기존 본인 메모' };
+  const changed = setMemberSelfMemoMutation(before, '1', '사용자 추가 메모');
+  const member = changed.state.members.find(m => m.id === '1');
+  assert.equal(member.grade, 'A조');
+  assert.equal(member.experience, '5년');
+  assert.equal(member.publicMemo, '관리자 메모');
+  assert.equal(member.userMemo, '사용자 추가 메모');
+  const adminEdited = upsertMemberMutation(changed.state, { id: '1', name: member.name, gender: member.gender, grade: 'B조', experience: '6년', publicMemo: '관리자 수정 메모' });
+  const edited = adminEdited.state.members.find(m => m.id === '1');
+  assert.equal(edited.publicMemo, '관리자 수정 메모');
+  assert.equal(edited.userMemo, '사용자 추가 메모');
+}
