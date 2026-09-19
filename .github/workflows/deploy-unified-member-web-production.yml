@@ -1192,6 +1192,7 @@ jobs:
             'JAYUMINTON_MEMBER_ACTIVE_TYPE_MATCHED_WAIT_V1' \
             'JAYUMINTON_MEMBER_SELF_STATUS_RENDER_SAFE_V1' \
             'JAYUMINTON_MEMBER_MEMO_OWNERSHIP_V1' \
+            'JAYUMINTON_MEMBER_INFO_COLOR_SPLIT_V1' \
             '관리자가 등록한 급수·구력·메모는 수정할 수 없습니다.' \
             'JAYUMINTON_MEMBER_WAIT1_MESSAGE_NO_PREFIX_V1' \
             'window.confirmJmDirectMessage=function()' \
@@ -1252,7 +1253,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p deployment/status
-          printf 'status=%s\nrun_id=%s\nsource_sha=%s\nfeature=protected-admin-fields+appended-member-memo\n' "$outcome" "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/member-web-memo-ownership.txt
+          printf 'status=%s\nrun_id=%s\nsource_sha=%s\nfeature=protected-admin-fields+appended-member-memo+info-color-split\n' "$outcome" "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/member-web-memo-ownership.txt
           git add deployment/status/member-web-memo-ownership.txt
           git commit -m "Record member web memo ownership deployment: $outcome" || exit 0
           git push origin HEAD:main
