@@ -1,0 +1,9 @@
+status=success
+version=209.17
+base=v209.16-member-memo-ownership
+feature=member-info-color-split
+fix=admin-info-blue+member-memo-purple
+base_version_code=99
+new_version_code=100
+run_id=35461530469
+sha256=1485c8712bab0f759664b27e5772e331c253abfaac985788b53b63b19baf374b
