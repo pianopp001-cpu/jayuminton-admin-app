@@ -23,12 +23,12 @@ for required in (
 
 # Keep a runtime marker so the packaged APK can be verified from classes.dex.
 constant_anchor = '    private static final String BLUETOOTH_OPENING_CARROT_EXPORT = "JAYUMINTON_BLUETOOTH_OPENING_CARROT_EXPORT_V20914";\n'
-+constant_new = constant_anchor + '    private static final String SINGLE_FULL_EXPANDED_EXPORT = "' + MARKER + '";\n'
-+if text.count(constant_anchor) != 1:
-+    raise SystemExit("v209.15 runtime marker anchor mismatch")
-+text = text.replace(constant_anchor, constant_new, 1)
-+
-+# User requirement: exactly one image, containing the complete expanded report.
+constant_new = constant_anchor + '    private static final String SINGLE_FULL_EXPANDED_EXPORT = "' + MARKER + '";\n'
+if text.count(constant_anchor) != 1:
+    raise SystemExit("v209.15 runtime marker anchor mismatch")
+text = text.replace(constant_anchor, constant_new, 1)
+
+# User requirement: exactly one image, containing the complete expanded report.
 +text = text.replace(
     "                jmReportSaveMarketplaceParts(jmReportBitmap, jmReportRequestedName);\n",
     "",
