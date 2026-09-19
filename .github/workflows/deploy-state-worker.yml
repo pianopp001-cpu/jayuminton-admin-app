@@ -67,7 +67,7 @@ jobs:
           grep -F 'memberSessionsRevoked: true' cloudflare/state-worker/worker.js >/dev/null
           grep -F 'JAYUMINTON_MEMBER_ADMIN_PREFERENCE_MESSAGE_V1' cloudflare/state-worker/worker.js >/dev/null
           grep -F "name === 'memberSendAdminPreference'" cloudflare/state-worker/worker.js >/dev/null
-          grep -F '대기에서 좀 밀려나도 되니 다음에는 최대한 ${partner}와 배정해주세요.' cloudflare/state-worker/worker.js >/dev/null
+          grep -F '대기순서 밀려도 ${partner}와 배정해 주세요.' cloudflare/state-worker/worker.js >/dev/null
       - name: Resolve existing D1 and prepare config
         shell: bash
         run: |
