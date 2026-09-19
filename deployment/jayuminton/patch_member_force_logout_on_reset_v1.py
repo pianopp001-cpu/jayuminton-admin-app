@@ -7,6 +7,7 @@ import sys
 
 MARKER = "JAYUMINTON_MEMBER_FORCE_LOGOUT_ON_RESET_V1"
 PREFERENCE_MARKER = "JAYUMINTON_MEMBER_ADMIN_PREFERENCE_COMPOSER_V1"
+PREFERENCE_V2_MARKER = "JAYUMINTON_MEMBER_ADMIN_PREFERENCE_COMPOSER_V2"
 
 ADDON = r'''
 <script>
@@ -106,13 +107,14 @@ ADDON = r'''
 
 PREFERENCE_ADDON = r'''
 <style id="jayuminton-member-admin-preference-composer-v1-style">
-#jmAdminPreferenceComposer{margin:10px 14px 2px;padding:12px;border:1px solid #dbeafe;border-radius:12px;background:#f8fbff;box-shadow:0 3px 12px rgba(49,94,251,.08)}
-#jmAdminPreferenceComposer .jm-pref-title{font-size:14px;font-weight:950;color:#172554;margin-bottom:7px}
-#jmAdminPreferenceComposer .jm-pref-sentence{font-size:13px;line-height:1.75;color:#334155}
-#jmAdminPreferenceComposer .jm-pref-name{display:inline-block;width:112px;max-width:40vw;height:34px;box-sizing:border-box;margin:0 4px;padding:4px 8px;border:1px solid #93c5fd;border-radius:8px;background:#fff;color:#0f172a;font-size:14px;font-weight:850;text-align:center;vertical-align:middle;outline:none}
+#jmAdminPreferenceComposer{margin:10px 14px 4px;padding:14px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 5px 18px rgba(15,23,42,.07)}
+#jmAdminPreferenceComposer .jm-pref-title{font-size:14px;font-weight:950;color:#0f172a;margin-bottom:10px}
+#jmAdminPreferenceComposer .jm-pref-sentence{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:5px;padding:10px 9px;border-radius:12px;background:#f8fafc;font-size:13px;line-height:1.55;color:#334155;font-weight:750}
+#jmAdminPreferenceComposer .jm-pref-name{display:inline-block;width:104px;min-width:84px;max-width:48vw;height:34px;box-sizing:border-box;margin:0;padding:4px 9px;border:1.5px solid #93c5fd;border-radius:9px;background:#fff;color:#0f172a;font-size:14px;font-weight:900;text-align:center;vertical-align:middle;outline:none}
+#jmAdminPreferenceComposer .jm-pref-name::placeholder{color:#94a3b8;font-weight:700}
 #jmAdminPreferenceComposer .jm-pref-name:focus{border-color:#315efb;box-shadow:0 0 0 3px rgba(49,94,251,.12)}
-#jmAdminPreferenceComposer .jm-pref-help{margin-top:6px;font-size:11px;color:#64748b}
-#jmAdminPreferenceComposer .jm-pref-send{width:100%;min-height:40px;margin-top:9px;border:0;border-radius:9px;background:#315efb;color:#fff;font-size:14px;font-weight:900}
+#jmAdminPreferenceComposer .jm-pref-help{display:none}
+#jmAdminPreferenceComposer .jm-pref-send{width:100%;min-height:42px;margin-top:10px;border:0;border-radius:11px;background:#315efb;color:#fff;font-size:14px;font-weight:900;box-shadow:0 3px 8px rgba(49,94,251,.18)}
 #jmAdminPreferenceComposer .jm-pref-send:disabled{opacity:.55}
 </style>
 <script>
@@ -150,12 +152,11 @@ PREFERENCE_ADDON = r'''
     var card = document.createElement('div');
     card.id = 'jmAdminPreferenceComposer';
     card.innerHTML =
-      '<div class="jm-pref-title">관리자에게 배정 요청</div>' +
-      '<div class="jm-pref-sentence">대기에서 좀 밀려나도 되니 다음에는 최대한' +
-      '<input id="jmAdminPreferenceName" class="jm-pref-name" type="text" maxlength="20" autocomplete="off" inputmode="text" aria-label="함께 배정할 회원 이름" placeholder="회원 이름">' +
-      '와 배정해주세요.</div>' +
-      '<div class="jm-pref-help">이름만 입력할 수 있고, 나머지 문장은 고정돼요.</div>' +
-      '<button type="button" id="jmAdminPreferenceSend" class="jm-pref-send">관리자에게 전송</button>';
+      '<div class="jm-pref-title">같이 배정 요청</div>' +
+      '<div class="jm-pref-sentence"><span>대기순서 밀려도</span>' +
+      '<input id="jmAdminPreferenceName" class="jm-pref-name" type="text" autocomplete="off" inputmode="text" aria-label="함께 배정할 회원 이름" placeholder="이름 입력">' +
+      '<span>와 배정해 주세요.</span></div>' +
+      '<button type="button" id="jmAdminPreferenceSend" class="jm-pref-send">요청 보내기</button>';
     list.parentNode.insertBefore(card, list);
 
     var input = card.querySelector('#jmAdminPreferenceName');
@@ -184,7 +185,7 @@ PREFERENCE_ADDON = r'''
         notice(String(error && error.message || error || '전송에 실패했습니다.'));
       } finally {
         sending = false;
-        if (button) { button.disabled = false; button.textContent = '관리자에게 전송'; }
+        if (button) { button.disabled = false; button.textContent = '요청 보내기'; }
       }
     }
 
@@ -212,6 +213,90 @@ PREFERENCE_ADDON = r'''
 '''
 
 
+PREFERENCE_V2_ADDON = r'''
+<style id="jayuminton-member-admin-preference-composer-v2-style">
+/* JAYUMINTON_MEMBER_ADMIN_PREFERENCE_COMPOSER_V2 */
+#jmAdminPreferenceComposer{margin:10px 14px 4px!important;padding:14px!important;border:1px solid #e2e8f0!important;border-radius:16px!important;background:#fff!important;box-shadow:0 5px 18px rgba(15,23,42,.07)!important}
+#jmAdminPreferenceComposer .jm-pref-title{font-size:14px!important;font-weight:950!important;color:#0f172a!important;margin-bottom:10px!important}
+#jmAdminPreferenceComposer .jm-pref-sentence{display:flex!important;align-items:center!important;justify-content:center!important;flex-wrap:wrap!important;gap:5px!important;padding:10px 9px!important;border-radius:12px!important;background:#f8fafc!important;font-size:13px!important;line-height:1.55!important;color:#334155!important;font-weight:750!important}
+#jmAdminPreferenceComposer .jm-pref-name{display:inline-block!important;width:104px!important;min-width:84px!important;max-width:48vw!important;height:34px!important;box-sizing:border-box!important;margin:0!important;padding:4px 9px!important;border:1.5px solid #93c5fd!important;border-radius:9px!important;background:#fff!important;color:#0f172a!important;font-size:14px!important;font-weight:900!important;text-align:center!important;outline:none!important}
+#jmAdminPreferenceComposer .jm-pref-name::placeholder{color:#94a3b8!important;font-weight:700!important}
+#jmAdminPreferenceComposer .jm-pref-name:focus{border-color:#315efb!important;box-shadow:0 0 0 3px rgba(49,94,251,.12)!important}
+#jmAdminPreferenceComposer .jm-pref-help{display:none!important}
+#jmAdminPreferenceComposer .jm-pref-send{width:100%!important;min-height:42px!important;margin-top:10px!important;border:0!important;border-radius:11px!important;background:#315efb!important;color:#fff!important;font-size:14px!important;font-weight:900!important;box-shadow:0 3px 8px rgba(49,94,251,.18)!important}
+</style>
+<script>
+(function installMemberAdminPreferenceComposerV2(){
+  if(typeof IS_ADMIN!=='undefined'&&IS_ADMIN)return;
+  if(window.__JAYUMINTON_MEMBER_ADMIN_PREFERENCE_COMPOSER_V2__)return;
+  window.__JAYUMINTON_MEMBER_ADMIN_PREFERENCE_COMPOSER_V2__=true;
+  var sending=false;
+
+  function sessionArgs(){
+    try{return (typeof memberWaitSeatSessionArgs==='function')?memberWaitSeatSessionArgs():null;}
+    catch(error){return null;}
+  }
+  function notice(text){
+    try{if(typeof showMemberSettingMessage==='function'){showMemberSettingMessage(String(text||''));return;}}catch(error){}
+    try{alert(String(text||''));}catch(error){}
+  }
+  function ensure(){
+    var list=document.getElementById('jmMessageInboxList');
+    if(!list||!list.parentNode)return null;
+    var old=document.getElementById('jmAdminPreferenceComposer');
+    if(old&&old.getAttribute('data-jm-version')==='2')return old;
+    if(old)old.remove();
+
+    var card=document.createElement('div');
+    card.id='jmAdminPreferenceComposer';
+    card.setAttribute('data-jm-version','2');
+    card.innerHTML=
+      '<div class="jm-pref-title">같이 배정 요청</div>'+
+      '<div class="jm-pref-sentence"><span>대기순서 밀려도</span>'+
+      '<input id="jmAdminPreferenceName" class="jm-pref-name" type="text" autocomplete="off" inputmode="text" aria-label="함께 배정할 회원 이름" placeholder="이름 입력">'+
+      '<span>와 배정해 주세요.</span></div>'+
+      '<button type="button" id="jmAdminPreferenceSend" class="jm-pref-send">요청 보내기</button>';
+    list.parentNode.insertBefore(card,list);
+
+    var input=card.querySelector('#jmAdminPreferenceName');
+    var button=card.querySelector('#jmAdminPreferenceSend');
+    async function send(){
+      if(sending)return;
+      var a=sessionArgs();
+      if(!a||!a.member||!a.member.id){notice('먼저 내 이름을 선택해 주세요.');return;}
+      var partner=String(input&&input.value||'').trim().replace(/\s+/g,' ');
+      if(!partner){notice('함께 배정할 이름을 입력해 주세요.');try{input.focus();}catch(error){}return;}
+      sending=true;
+      if(button){button.disabled=true;button.textContent='전송 중...';}
+      try{
+        await server('memberSendAdminPreference',[a.token,String(a.member.id),partner]);
+        if(input)input.value='';
+        notice('관리자에게 배정 요청을 보냈어요.');
+      }catch(error){
+        notice(String(error&&error.message||error||'전송에 실패했습니다.'));
+      }finally{
+        sending=false;
+        if(button){button.disabled=false;button.textContent='요청 보내기';}
+      }
+    }
+    if(button)button.addEventListener('click',send);
+    if(input)input.addEventListener('keydown',function(event){if(event.key==='Enter'){event.preventDefault();send();}});
+    return card;
+  }
+
+  document.addEventListener('click',function(event){
+    var target=event.target&&event.target.closest?event.target.closest('#jmMessageInboxFab'):null;
+    if(target)setTimeout(ensure,0);
+  },true);
+  new MutationObserver(function(){try{ensure();}catch(error){}}).observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',function(){setTimeout(ensure,0);},{once:true});
+  setInterval(ensure,1500);
+  setTimeout(ensure,0);
+})();
+</script>
+'''
+
+
 def insert_before_body(text: str, addon: str, marker: str) -> str:
     if marker in text:
         return text
@@ -232,12 +317,15 @@ def patch(path: Path) -> None:
         text = insert_before_body(text, ADDON, MARKER)
 
     text = insert_before_body(text, PREFERENCE_ADDON, PREFERENCE_MARKER)
+    text = insert_before_body(text, PREFERENCE_V2_ADDON, PREFERENCE_V2_MARKER)
 
     for needle in [
         MARKER,
         PREFERENCE_MARKER,
+        PREFERENCE_V2_MARKER,
         "memberSendAdminPreference",
-        "대기에서 좀 밀려나도 되니 다음에는 최대한",
+        "대기순서 밀려도",
+        "와 배정해 주세요.",
         "jmAdminPreferenceName",
     ]:
         if needle not in text:
