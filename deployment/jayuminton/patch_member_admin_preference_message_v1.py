@@ -34,7 +34,7 @@ def patch(path: Path) -> None:
 export function memberSendAdminPreferenceMutation(input, memberId, partnerName) {
   const state = normalizeState(input);
   const mem = String(memberId || '');
-  const partner = String(partnerName || '').trim().replace(/\s+/g, ' ').slice(0, 20);
+  const partner = String(partnerName || '').trim().replace(/\s+/g, ' ');
   if (!mem) throw new Error('member_identity_required');
   if (!partner) throw new Error('partner_name_required');
   if (!state.members.some(m => String(m.id) === mem)) throw new Error('member_not_found');
@@ -42,7 +42,7 @@ export function memberSendAdminPreferenceMutation(input, memberId, partnerName) 
   const replyItem = {
     id: `reply-${crypto.randomUUID()}`,
     memberId: mem,
-    text: `대기에서 좀 밀려나도 되니 다음에는 최대한 ${partner}와 배정해주세요.`,
+    text: `대기순서 밀려도 ${partner}와 배정해 주세요.`,
     createdAt,
   };
   const item = {
@@ -86,7 +86,7 @@ export function memberSendAdminPreferenceMutation(input, memberId, partnerName) 
         "memberSendAdminPreferenceMutation",
         "action === 'memberSendAdminPreference'",
         "name === 'memberSendAdminPreference'",
-        "대기에서 좀 밀려나도 되니 다음에는 최대한 ${partner}와 배정해주세요.",
+        "대기순서 밀려도 ${partner}와 배정해 주세요.",
         "memberIds: []",
     ]
     for needle in required:
