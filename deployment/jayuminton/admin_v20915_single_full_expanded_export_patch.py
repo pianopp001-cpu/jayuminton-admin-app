@@ -29,7 +29,7 @@ if text.count(constant_anchor) != 1:
 text = text.replace(constant_anchor, constant_new, 1)
 
 # User requirement: exactly one image, containing the complete expanded report.
-+text = text.replace(
+text = text.replace(
     "                jmReportSaveMarketplaceParts(jmReportBitmap, jmReportRequestedName);\n",
     "",
     1,
