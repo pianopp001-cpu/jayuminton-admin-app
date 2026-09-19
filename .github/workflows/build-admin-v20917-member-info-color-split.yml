@@ -56,7 +56,7 @@ jobs:
         run: |
           set -euxo pipefail
           HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
-          VERSION_BASE='releases/jayuminton-admin-v209.17-member-info-color-split.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.16-member-memo-ownership.apk'
           JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
           HTML='app/src/main/assets/admin/index.html'
           OUT='app/build/outputs/apk/release/app-release.apk'
@@ -219,9 +219,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK_PATH" releases/jayuminton-admin-v209.16-member-memo-ownership.apk
+          cp "$APK_PATH" releases/jayuminton-admin-v209.17-member-info-color-split.apk
           printf 'status=success\nversion=209.17\nbase=v209.16-member-memo-ownership\nfeature=member-info-color-split\nfix=admin-info-blue+member-memo-purple\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20917-member-info-color-split.txt
-          git add releases/jayuminton-admin-v209.16-member-memo-ownership.apk deployment/status/v20917-member-info-color-split.txt
+          git add releases/jayuminton-admin-v209.17-member-info-color-split.apk deployment/status/v20917-member-info-color-split.txt
           git commit -m 'Publish admin v209.17 member info color split' || exit 0
           git push origin HEAD:main
 
@@ -237,7 +237,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p deployment/status
-          printf 'status=failure\nversion=209.17\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20916-member-memo-ownership.txt
-          git add deployment/status/v20916-member-memo-ownership.txt
+          printf 'status=failure\nversion=209.17\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20917-member-info-color-split.txt
+          git add deployment/status/v20917-member-info-color-split.txt
           git commit -m 'Record admin v209.17 build failure' || exit 0
           git push origin HEAD:main
