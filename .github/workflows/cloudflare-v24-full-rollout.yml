@@ -38,8 +38,10 @@ jobs:
           set -euo pipefail
           grep -F "backend: 'cloudflare-only'" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'gas: false' cloudflare/state-worker/worker.js >/dev/null
-          grep -F "const nextMemo = String(values[2] || '').trim().slice(0, 120);" cloudflare/state-worker/worker.js >/dev/null
-          grep -F "publicMemo: nextMemo" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "const nextMemo = String(memo || '').trim().slice(0, 120);" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "userMemo: nextMemo" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "action = 'setMemberSelfMemo'; body.memberId = memberId;" cloudflare/state-worker/worker.js >/dev/null
+          grep -F "publicMemo are administrator-owned" cloudflare/state-worker/worker.js >/dev/null
           grep -F 'JAYUMINTON_ADMIN_CLOUDFLARE_SAVE_LOCK_V24' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
           grep -F '저장중 · 잠시만 기다려 주세요' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
           grep -F 'member-public-memo' deployment/jayuminton/admin_cloudflare_post_contract_patch.py >/dev/null
