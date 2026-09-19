@@ -255,9 +255,24 @@ export function upsertMemberMutation(input, member) {
   if (!name || name.length > 20) throw new Error('invalid_member_name');
   const index = state.members.findIndex(m => String(m.id) === id);
   const previous = index >= 0 ? state.members[index] : null;
-  const clean = { id, name, gender: ['여', 'female'].includes(String(member.gender)) ? 'female' : 'male', grade: String(member.grade || ''), experience: String(member.experience || member.career || ''), career: String(member.career || member.experience || ''), publicMemo: String(member.publicMemo || member.memo || ''), isNew: Boolean(member.isNew), isDuplicate: Boolean(member.isDuplicate), isSponsor: Boolean(member.isSponsor), bundleId: member.bundleId === undefined ? String(previous?.bundleId || '') : String(member.bundleId || ''), teamLabel: member.teamLabel === undefined ? String(previous?.teamLabel || '') : String(member.teamLabel || ''), games: member.games === undefined ? Math.max(0, Number(previous?.games) || 0) : Math.max(0, Number(member.games) || 0), status: String(member.status || previous?.status || 'active'), createdAt: String(member.createdAt || previous?.createdAt || new Date().toISOString()) };
+  // publicMemo is administrator-owned. userMemo is member-owned and must survive
+  // every administrator profile edit unless the member changes it through updateMyProfile.
+  const clean = { id, name, gender: ['여', 'female'].includes(String(member.gender)) ? 'female' : 'male', grade: String(member.grade || ''), experience: String(member.experience || member.career || ''), career: String(member.career || member.experience || ''), publicMemo: String(member.publicMemo || member.memo || ''), userMemo: member.userMemo === undefined ? String(previous?.userMemo || '') : String(member.userMemo || '').trim().slice(0, 120), isNew: Boolean(member.isNew), isDuplicate: Boolean(member.isDuplicate), isSponsor: Boolean(member.isSponsor), bundleId: member.bundleId === undefined ? String(previous?.bundleId || '') : String(member.bundleId || ''), teamLabel: member.teamLabel === undefined ? String(previous?.teamLabel || '') : String(member.teamLabel || ''), games: member.games === undefined ? Math.max(0, Number(previous?.games) || 0) : Math.max(0, Number(member.games) || 0), status: String(member.status || previous?.status || 'active'), createdAt: String(member.createdAt || previous?.createdAt || new Date().toISOString()) };
   if (index >= 0) state.members[index] = { ...state.members[index], ...clean }; else state.members.push(clean);
   return { state, event: { type: index >= 0 ? 'member_updated' : 'member_created', memberId: id } };
+}
+
+export function setMemberSelfMemoMutation(input, memberId, memo) {
+  const state = normalizeState(input);
+  const id = String(memberId || '');
+  const index = state.members.findIndex(member => String(member.id) === id);
+  if (index < 0) throw new Error('member_not_found');
+  const nextMemo = String(memo || '').trim().slice(0, 120);
+  // Deliberately update one member-owned field only. In particular, grade,
+  // experience and publicMemo are administrator-owned and cannot be overwritten
+  // by a member self-service request.
+  state.members[index] = { ...state.members[index], userMemo: nextMemo };
+  return { state, event: { type: 'member_self_memo_updated', memberId: id } };
 }
 
 export function setBundleMutation(input, memberIds) {
@@ -709,6 +724,7 @@ export class StateCoordinator {
       else if (action === 'swapLocations') result = swapLocationsMutation(current, body.left, body.right);
       else if (action === 'autoAssign') result = autoAssignMutation(current, body.candidateIds, body.destinations);
       else if (action === 'upsertMember') result = upsertMemberMutation(current, body.member);
+      else if (action === 'setMemberSelfMemo') result = setMemberSelfMemoMutation(current, body.memberId, body.memo);
       else if (action === 'setMemberStatus') result = setMemberStatusMutation(current, body.memberIds, body.status);
       else if (action === 'setBundle') result = setBundleMutation(current, body.memberIds);
       else if (action === 'clearBundle') result = clearBundleMutation(current, body.memberIds);
@@ -893,10 +909,8 @@ export async function legacyRpc(request, env, name, args) {
     if (name === 'memberGetPairPlayOutgoing') return recentOutgoing(state.pairRequests, r => r.requesterId === memberId);
     let action; const body = { operationId: `${name}-${Date.now()}-${crypto.randomUUID()}` };
     if (name === 'updateMyProfile') {
-      const currentMember = state.members.find(m => String(m.id) === memberId);
-      if (!currentMember) throw new Error('member_not_found');
-      const nextMemo = String(values[2] || '').trim().slice(0, 120);
-      action = 'upsertMember'; body.member = { ...currentMember, id: memberId, publicMemo: nextMemo };
+      if (!state.members.some(m => String(m.id) === memberId)) throw new Error('member_not_found');
+      action = 'setMemberSelfMemo'; body.memberId = memberId; body.memo = String(values[2] || '').trim().slice(0, 120);
     } else if (name === 'memberMoveSelf') {
       const destination = values[2] || {};
       if (destination.type === 'status') { action = 'setMemberStatus'; body.memberIds = [memberId]; body.status = destination.status; }
