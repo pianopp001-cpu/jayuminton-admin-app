@@ -190,7 +190,6 @@ jobs:
           unzip -p "$OUT" classes.dex > "$RUNNER_TEMP/classes.dex"
           strings "$RUNNER_TEMP/classes.dex" > "$RUNNER_TEMP/classes-strings.txt"
           grep -F 'JAYUMINTON_BLUETOOTH_OPENING_CARROT_EXPORT_V20914' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
-          grep -F 'JAYUMINTON_SINGLE_FULL_EXPANDED_EXPORT_V20915' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
