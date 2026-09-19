@@ -1,0 +1,4 @@
+status=success
+run_id=35456722372
+source_sha=a72eca44571ef40c0c3c364a5d3ae8e855bb4dd1
+feature=protected-admin-fields+appended-member-memo
