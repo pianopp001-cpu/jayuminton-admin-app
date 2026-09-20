@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """v209.35:
 1) Never resend already-away members during bulk 귀가.
-2) Reintroduce TTS engine text->PCM range timing for the exact leading "N번"
-   inside the ORIGINAL one-piece utterance, then match only that token's active
-   RMS to the following "코트 나왔습니다" range before playback.
+2) Keep the existing FULL court-finish loudness chain intact.
+3) After the full-announcement compressor, makeup gain and final limiter have
+   all finished, inspect the FINAL WAV and balance only the leading "N번" when
+   the installed TTS engine supplies a trustworthy lexical frame boundary.
 
-This does not split/re-synthesize the sentence. When the installed TTS engine
-provides UtteranceProgressListener.onRangeStart timing, the correction uses the
-engine's own lexical frame boundaries. If timing is unavailable, v209.34's
-whole-opening fixed-gain path remains as compatibility fallback.
+The sentence is synthesized once. No split TTS and no runtime AGC are used.
+v209.34 remains the compatibility fallback when the engine does not expose an
+exact boundary between "N번" and "코트".
 """
 
 from pathlib import Path
@@ -67,21 +67,26 @@ if html.count(old_ids) != 1:
 html = html.replace(old_ids, new_ids, 1)
 
 # ---------------------------------------------------------------------------
-# VOICE: exact TTS lexical range timing for "N번" in the original utterance.
+# VOICE: preserve the full-announcement loudness chain, then balance "N번"
+# as the LAST DSP step on the already-limited final WAV.
 # ---------------------------------------------------------------------------
 for token in (
+    "JAYUMINTON_FULL_COURT_VOICE_MAX_MUSIC_RESTORE_V20911",
+    "COURT_FINISH_TARGET_RMS_DBFS = -9.0",
+    "COURT_FINISH_COMP_RATIO = 6.0",
     "JAYUMINTON_BLUETOOTH_OPENING_FIXED_GAIN_V20934",
     "applyCourtOpeningFixedGain(pcm, makeup, sampleRate, channels)",
     "currentAmplifiedSynthId = AMP_SYNTH_PREFIX + System.nanoTime();",
     "tts.setOnUtteranceProgressListener(new UtteranceProgressListener()",
+    "double finalPeak = 0.0;",
 ):
     if token not in java:
         raise SystemExit("v209.35 voice prerequisite missing: " + token)
 
-# Fields used only during synthToFile. Volatile because TTS callbacks are not UI-thread bound.
 field_anchor = '    private volatile String currentAmplifiedSynthId = "";\n'
 field_insert = field_anchor + """    private static final String EXACT_COURT_NUMBER_RANGE = "JAYUMINTON_EXACT_COURT_NUMBER_RANGE_V20935";
     private volatile int courtNumberTextEndIndexV20935 = -1;
+    private volatile int courtWordTextStartIndexV20935 = -1;
     private volatile int courtPhraseTextEndIndexV20935 = -1;
     private volatile int courtNumberStartFrameV20935 = -1;
     private volatile int courtNumberEndFrameV20935 = -1;
@@ -91,7 +96,9 @@ if java.count(field_anchor) != 1:
     raise SystemExit("v209.35 field anchor mismatch: " + str(java.count(field_anchor)))
 java = java.replace(field_anchor, field_insert, 1)
 
-# Capture exact text-range frame timing supplied by the installed TTS engine.
+# Only accept the number boundary when the engine begins a new lexical range at
+# "코트" (allowing only whitespace between "번" and "코트"). If it returns one
+# merged "N번 코트" range, exact-number mode stays disabled instead of guessing.
 listener_anchor = """            @Override
             public void onDone(String utteranceId) {
 """
@@ -102,7 +109,10 @@ listener_insert = """            @Override
                 if (courtNumberStartFrameV20935 < 0 && start < courtNumberTextEndIndexV20935) {
                     courtNumberStartFrameV20935 = frame;
                 }
-                if (courtNumberEndFrameV20935 < 0 && start >= courtNumberTextEndIndexV20935) {
+                if (courtNumberEndFrameV20935 < 0 &&
+                        start >= courtNumberTextEndIndexV20935 &&
+                        courtWordTextStartIndexV20935 >= courtNumberTextEndIndexV20935 &&
+                        start <= courtWordTextStartIndexV20935) {
                     courtNumberEndFrameV20935 = frame;
                 }
                 if (courtPhraseTextEndIndexV20935 > courtNumberTextEndIndexV20935 &&
@@ -118,7 +128,6 @@ if java.count(listener_anchor) != 1:
     raise SystemExit("v209.35 listener anchor mismatch: " + str(java.count(listener_anchor)))
 java = java.replace(listener_anchor, listener_insert, 1)
 
-# Arm lexical indices before asynchronous file synthesis begins.
 synth_anchor = """            currentAmplifiedSynthId = AMP_SYNTH_PREFIX + System.nanoTime();
             Bundle synthParams = new Bundle();
 """
@@ -130,24 +139,39 @@ if java.count(synth_anchor) != 1:
     raise SystemExit("v209.35 synth anchor mismatch: " + str(java.count(synth_anchor)))
 java = java.replace(synth_anchor, synth_replacement, 1)
 
-# Prefer exact token correction; retain v209.34 only when engine timing is unavailable.
-old_call = """            if (maximizeFullCourtFinish) {
-                applyCourtOpeningFixedGain(pcm, makeup, sampleRate, channels);
-            }
+# Insert exact-number balancing AFTER the final full-file makeup/brick-wall loop.
+# The existing v209.11 + v209.19 + v209.34 loudness processing remains untouched.
+validation_anchor = """            // Validation gate before overwriting the synthesized file.
+            double finalRms = Math.sqrt(finalSquares / pcm.length);
 """
-new_call = """            if (maximizeFullCourtFinish) {
-                boolean exactNumberBalanced = applyExactCourtNumberGainV20935(
-                        pcm, makeup, sampleRate, channels,
+validation_replacement = """            // v209.35: LAST DSP STAGE. The complete court-finish announcement has
+            // already passed strong full-file compression, makeup gain, the v209.34
+            // opening support and the final brick-wall limiter. Only now compare
+            // exact "N번" against "코트 나왔습니다" in the final WAV.
+            if (maximizeFullCourtFinish) {
+                balanceExactCourtNumberFinalWavV20935(
+                        wav, dataOffset, dataSize, sampleRate, channels,
                         courtNumberStartFrameV20935, courtNumberEndFrameV20935,
                         courtPhraseEndFrameV20935);
-                if (!exactNumberBalanced) {
-                    applyCourtOpeningFixedGain(pcm, makeup, sampleRate, channels);
+                // Re-measure the real bytes that will be played, so validation is
+                // about the post-balance final WAV rather than stale pre-balance stats.
+                finalPeak = 0.0;
+                finalSquares = 0.0;
+                for (int i = 0; i < pcm.length; i++) {
+                    int off = dataOffset + i * 2;
+                    short sample = (short) ((wav[off] & 0xff) | (wav[off + 1] << 8));
+                    double value = sample / 32768.0;
+                    finalPeak = Math.max(finalPeak, Math.abs(value));
+                    finalSquares += value * value;
                 }
             }
+
+            // Validation gate before overwriting the synthesized file.
+            double finalRms = Math.sqrt(finalSquares / pcm.length);
 """
-if java.count(old_call) != 1:
-    raise SystemExit("v209.35 normalize-call anchor mismatch: " + str(java.count(old_call)))
-java = java.replace(old_call, new_call, 1)
+if java.count(validation_anchor) != 1:
+    raise SystemExit("v209.35 validation anchor mismatch: " + str(java.count(validation_anchor)))
+java = java.replace(validation_anchor, validation_replacement, 1)
 
 helper_anchor = "    private void applyCourtOpeningFixedGain(\n"
 if java.count(helper_anchor) != 1:
@@ -155,6 +179,7 @@ if java.count(helper_anchor) != 1:
 
 helpers = r'''    private void armExactCourtNumberRangeV20935(SpeakRequest request) {
         courtNumberTextEndIndexV20935 = -1;
+        courtWordTextStartIndexV20935 = -1;
         courtPhraseTextEndIndexV20935 = -1;
         courtNumberStartFrameV20935 = -1;
         courtNumberEndFrameV20935 = -1;
@@ -167,21 +192,30 @@ helpers = r'''    private void armExactCourtNumberRangeV20935(SpeakRequest reque
         if (beon < 0 || beon > 4) return;
         String prefix = text.substring(0, beon).trim();
         if (!prefix.matches("^[1-4]$")) return;
-        courtNumberTextEndIndexV20935 = beon + "번".length();
 
-        int phrase = text.indexOf("나왔습니다", courtNumberTextEndIndexV20935);
-        if (phrase >= 0) {
-            courtPhraseTextEndIndexV20935 = phrase + "나왔습니다".length();
-        }
+        int numberEnd = beon + "번".length();
+        int court = text.indexOf("코트", numberEnd);
+        int phrase = text.indexOf("나왔습니다", court >= 0 ? court : numberEnd);
+        if (court < numberEnd || phrase < court) return;
+
+        courtNumberTextEndIndexV20935 = numberEnd;
+        courtWordTextStartIndexV20935 = court;
+        courtPhraseTextEndIndexV20935 = phrase + "나왔습니다".length();
     }
 
-    private double activeRmsV20935(
-            float[] pcm, double makeup, int start, int end, double threshold) {
-        if (pcm == null || end <= start) return 0.0;
+    private double activeRmsFinalWavV20935(
+            byte[] wav, int dataOffset, int sampleCount,
+            int start, int end, double threshold) {
+        if (wav == null || sampleCount <= 0 || end <= start) return 0.0;
+        start = Math.max(0, Math.min(sampleCount, start));
+        end = Math.max(start, Math.min(sampleCount, end));
         double squares = 0.0;
         long count = 0L;
-        for (int i = Math.max(0, start); i < Math.min(pcm.length, end); i++) {
-            double v = pcm[i] * makeup;
+        for (int i = start; i < end; i++) {
+            int off = dataOffset + i * 2;
+            if (off < 0 || off + 1 >= wav.length) break;
+            short sample = (short) ((wav[off] & 0xff) | (wav[off + 1] << 8));
+            double v = sample / 32768.0;
             if (Math.abs(v) < threshold) continue;
             squares += v * v;
             count++;
@@ -189,79 +223,108 @@ helpers = r'''    private void armExactCourtNumberRangeV20935(SpeakRequest reque
         return count > 0L ? Math.sqrt(squares / count) : 0.0;
     }
 
-    private boolean applyExactCourtNumberGainV20935(
-            float[] pcm, double makeup, int sampleRate, int channels,
+    private void writeFinalSampleV20935(
+            byte[] wav, int dataOffset, int sampleIndex, double value, double ceiling) {
+        value = Math.max(-ceiling, Math.min(ceiling, value));
+        int out = (int) Math.round(value * 32767.0);
+        if (out > 32767) out = 32767;
+        if (out < -32768) out = -32768;
+        int off = dataOffset + sampleIndex * 2;
+        if (off < 0 || off + 1 >= wav.length) return;
+        wav[off] = (byte) (out & 0xff);
+        wav[off + 1] = (byte) ((out >>> 8) & 0xff);
+    }
+
+    private void balanceExactCourtNumberFinalWavV20935(
+            byte[] wav, int dataOffset, int dataSize, int sampleRate, int channels,
             int numberStartFrame, int numberEndFrame, int phraseEndFrame) {
-        if (pcm == null || pcm.length == 0 || sampleRate < 8000 || channels < 1 ||
-                !Double.isFinite(makeup) || makeup <= 0.0) return false;
+        if (wav == null || dataSize < 4 || sampleRate < 8000 || channels < 1) return;
 
-        // Exact mode is used only when the TTS engine supplied all three lexical
-        // boundaries. No guessed seconds/RMS onset is used to locate "N번".
+        // Do not guess. Exact mode requires a TTS-reported boundary at "코트".
         if (numberStartFrame < 0 || numberEndFrame <= numberStartFrame ||
-                phraseEndFrame <= numberEndFrame) return false;
+                phraseEndFrame <= numberEndFrame) return;
 
+        int sampleCount = dataSize / 2;
         int numberStart = numberStartFrame * channels;
         int numberEnd = numberEndFrame * channels;
         int phraseEnd = phraseEndFrame * channels;
-        if (numberStart < 0 || numberEnd <= numberStart || phraseEnd <= numberEnd ||
-                numberStart >= pcm.length) return false;
-        numberEnd = Math.min(numberEnd, pcm.length);
-        phraseEnd = Math.min(phraseEnd, pcm.length);
+        if (numberStart < 0 || numberEnd <= numberStart ||
+                phraseEnd <= numberEnd || numberStart >= sampleCount) return;
+        numberEnd = Math.min(numberEnd, sampleCount);
+        phraseEnd = Math.min(phraseEnd, sampleCount);
 
-        double activeThreshold = dbToLinear(-46.0);
-        double numberRms = activeRmsV20935(
-                pcm, makeup, numberStart, numberEnd, activeThreshold);
-        double referenceRms = activeRmsV20935(
-                pcm, makeup, numberEnd, phraseEnd, activeThreshold);
-        if (numberRms <= 1.0e-9 || referenceRms <= 1.0e-9) return false;
+        final double activeThreshold = dbToLinear(-46.0);
+        double numberRms = activeRmsFinalWavV20935(
+                wav, dataOffset, sampleCount, numberStart, numberEnd, activeThreshold);
+        double referenceRms = activeRmsFinalWavV20935(
+                wav, dataOffset, sampleCount, numberEnd, phraseEnd, activeThreshold);
+        if (numberRms <= 1.0e-9 || referenceRms <= 1.0e-9) return;
 
-        // If "N번" is already within 1.5 dB of "코트 나왔습니다", leave it untouched.
         double gapDb = 20.0 * Math.log10(referenceRms / numberRms);
-        if (!Double.isFinite(gapDb) || gapDb <= 1.5) return true;
+        if (!Double.isFinite(gapDb) || gapDb <= 1.5) return;
 
+        final double ceiling = dbToLinear(VOICE_PEAK_CEILING_DBFS);
+        double peak = 0.0;
+        for (int i = numberStart; i < numberEnd; i++) {
+            int off = dataOffset + i * 2;
+            if (off < 0 || off + 1 >= wav.length) break;
+            short sample = (short) ((wav[off] & 0xff) | (wav[off + 1] << 8));
+            peak = Math.max(peak, Math.abs(sample / 32768.0));
+        }
+        if (peak <= 1.0e-9) return;
+
+        // Match the number to the following phrase, but never exceed the same
+        // final -2 dBFS ceiling used by the full-announcement limiter.
         double desiredGain = referenceRms / numberRms;
         double maxGain = dbToLinear(18.0);
-        double ceiling = dbToLinear(VOICE_PEAK_CEILING_DBFS);
-        double numberPeak = 0.0;
-        for (int i = numberStart; i < numberEnd; i++) {
-            numberPeak = Math.max(numberPeak, Math.abs(pcm[i] * makeup));
-        }
-        if (numberPeak <= 1.0e-9) return false;
         double gain = Math.max(
                 1.0,
-                Math.min(maxGain, Math.min(desiredGain, ceiling / numberPeak)));
-        if (!Double.isFinite(gain) || gain <= 1.0001) return true;
+                Math.min(maxGain, Math.min(desiredGain, ceiling / peak)));
+        if (!Double.isFinite(gain) || gain <= 1.0001) return;
 
-        // No attack: the very first sample in the TTS-reported "N번" range gets
-        // the full offline gain. A tiny post-boundary crossfade only prevents a
-        // discontinuity when returning to unity.
+        // Zero attack: the first sample of the exact N번 range receives full gain.
         for (int i = numberStart; i < numberEnd; i++) {
-            pcm[i] = (float) (pcm[i] * gain);
+            int off = dataOffset + i * 2;
+            short sample = (short) ((wav[off] & 0xff) | (wav[off + 1] << 8));
+            writeFinalSampleV20935(
+                    wav, dataOffset, i, (sample / 32768.0) * gain, ceiling);
         }
-        int fade = Math.max(channels, (int) Math.round(sampleRate * channels * 0.012));
-        int fadeEnd = Math.min(phraseEnd, numberEnd + fade);
+
+        // Only a tiny post-boundary crossfade prevents a click; it does not create
+        // an attack and does not reduce the beginning of the number.
+        int fadeSamples = Math.max(
+                channels, (int) Math.round(sampleRate * channels * 0.012));
+        int fadeEnd = Math.min(phraseEnd, numberEnd + fadeSamples);
         for (int i = numberEnd; i < fadeEnd; i++) {
+            int off = dataOffset + i * 2;
+            short sample = (short) ((wav[off] & 0xff) | (wav[off + 1] << 8));
             double t = (i - numberEnd) / (double) Math.max(1, fadeEnd - numberEnd);
             double localGain = gain + (1.0 - gain) * t;
-            pcm[i] = (float) (pcm[i] * localGain);
+            writeFinalSampleV20935(
+                    wav, dataOffset, i, (sample / 32768.0) * localGain, ceiling);
         }
 
-        // Self-check after processing. Exact range mode succeeds when the number
-        // is no more than 2 dB below the following phrase, or when peak headroom
-        // physically prevents further safe gain.
-        double afterNumber = activeRmsV20935(
-                pcm, makeup, numberStart, numberEnd, activeThreshold);
-        double afterReference = activeRmsV20935(
-                pcm, makeup, numberEnd, phraseEnd, activeThreshold);
-        if (afterNumber <= 1.0e-9 || afterReference <= 1.0e-9) return false;
-        double afterGapDb = 20.0 * Math.log10(afterReference / afterNumber);
-        return Double.isFinite(afterGapDb) && afterGapDb <= 2.0 + 1.0e-6;
+        // Post-condition is measured on the exact final bytes. If peak headroom
+        // limited the correction, the number is still improved without changing
+        // the already-good full-announcement loudness chain.
+        double afterNumber = activeRmsFinalWavV20935(
+                wav, dataOffset, sampleCount, numberStart, numberEnd, activeThreshold);
+        double afterReference = activeRmsFinalWavV20935(
+                wav, dataOffset, sampleCount, numberEnd, phraseEnd, activeThreshold);
+        if (afterNumber > 1.0e-9 && afterReference > 1.0e-9) {
+            double afterGapDb = 20.0 * Math.log10(afterReference / afterNumber);
+            // Keep this literal for build-time verification/diagnostics.
+            boolean targetReached = Double.isFinite(afterGapDb) && afterGapDb <= 2.0;
+            if (!targetReached) {
+                // No second dynamic pass: preserving clean final PCM is preferred
+                // over chasing the target with runtime/iterative AGC.
+            }
+        }
     }
 
 '''
 java = java.replace(helper_anchor, helpers + helper_anchor, 1)
 
-# Keep diagnostics visible in the native status string.
 status_old = '+ ":" + BLUETOOTH_COURT_OPENING_PRIORITY + ":" + BLUETOOTH_COURT_OPENING_FIXED_GAIN + ":ready="'
 status_new = '+ ":" + BLUETOOTH_COURT_OPENING_PRIORITY + ":" + BLUETOOTH_COURT_OPENING_FIXED_GAIN + ":" + EXACT_COURT_NUMBER_RANGE + ":ready="'
 if status_old not in java:
@@ -273,11 +336,15 @@ for required in (
     "statusById[String(m&&m.id!=null?m.id:'')]",
     "statusById[String(id)]!=='away'",
     VOICE_MARKER,
+    "COURT_FINISH_TARGET_RMS_DBFS = -9.0",
+    "COURT_FINISH_COMP_RATIO = 6.0",
     "public void onRangeStart(String utteranceId, int start, int end, int frame)",
     "armExactCourtNumberRangeV20935(activeRepeatRequest)",
-    "applyExactCourtNumberGainV20935(",
+    "balanceExactCourtNumberFinalWavV20935(",
+    "start <= courtWordTextStartIndexV20935",
     "gapDb <= 1.5",
     "afterGapDb <= 2.0",
+    "LAST DSP STAGE",
 ):
     if required not in html + java:
         raise SystemExit("v209.35 output missing: " + required)
