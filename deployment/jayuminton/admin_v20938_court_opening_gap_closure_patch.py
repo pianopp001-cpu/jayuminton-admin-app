@@ -343,19 +343,33 @@ speak_entry_old = '''    private void speakNative(SpeakRequest request) {
         }
 '''
 speak_entry_new = '''    private void speakNative(SpeakRequest request) {
-        if (isCourtFinishRequestV20938(request)) {
-            boolean busy = speaking.get() || activeRepeatRequest != null ||
-                    amplifiedVoicePlayer != null ||
-                    (currentAmplifiedSynthId != null && !currentAmplifiedSynthId.isEmpty());
-            if (busy) {
+        boolean incomingCourtV20938 = isCourtFinishRequestV20938(request);
+        boolean activeCourtV20938 = isCourtFinishRequestV20938(activeRepeatRequest);
+        boolean busyV20938 = speaking.get() || activeRepeatRequest != null ||
+                amplifiedVoicePlayer != null ||
+                (currentAmplifiedSynthId != null && !currentAmplifiedSynthId.isEmpty());
+
+        if (busyV20938) {
+            if (incomingCourtV20938 && activeCourtV20938) {
+                // Never let one court-finish announcement erase another.
                 enqueueCourtVoiceV20938(request);
                 return;
             }
+            if (!incomingCourtV20938 && activeCourtV20938) {
+                // Court-finish voice is critical. A non-court voice must not
+                // interrupt it. Non-critical speech may be requested again later.
+                return;
+            }
+            // A court-finish request may still preempt a non-court voice.
         }
 
         if (tts == null || !ttsReady.get()) {
-            if (isCourtFinishRequestV20938(request) && pendingRequest != null) {
+            if (incomingCourtV20938 && pendingRequest != null) {
                 enqueueCourtVoiceV20938(request);
+            } else if (!incomingCourtV20938 &&
+                    isCourtFinishRequestV20938(pendingRequest)) {
+                // Preserve the already-pending critical court announcement.
+                return;
             } else {
                 pendingRequest = request;
             }
@@ -847,6 +861,9 @@ for required in (
     "enqueueCourtVoiceV20938(",
     "startNextQueuedCourtVoiceV20938(",
     "finishVoiceCycleV20938(",
+    "incomingCourtV20938",
+    "activeCourtV20938",
+    "Preserve the already-pending critical court announcement",
     "recoverTtsEngineOnceV20938(",
     "ttsEngineRecoveryBudgetV20938",
     "strongOnset",
