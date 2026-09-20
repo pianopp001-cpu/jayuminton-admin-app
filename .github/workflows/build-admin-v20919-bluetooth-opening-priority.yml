@@ -6,7 +6,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-admin-v20919-bluetooth-opening-priority.yml'
-      - 'deployment/jayuminton/admin_v20937_guaranteed_opening_floor_patch.py'\n      - 'deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'
+      - 'deployment/jayuminton/admin_v20937_guaranteed_opening_floor_patch.py'
+      - 'deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'
       - 'deployment/jayuminton/admin_v20934_three_critical_fixes_patch.py'
       - 'deployment/jayuminton/admin_v20933_report_square_layout_single_file_patch.py'
       - 'deployment/jayuminton/admin_v20932_report_carrot_chat_split_patch.py'
@@ -75,7 +76,7 @@ jobs:
         run: |
           set -euxo pipefail
           HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
-          VERSION_BASE='releases/jayuminton-admin-v209.37-guaranteed-opening-floor.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.36-verified-exact-number-away-idempotent.apk'
           JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
           HTML='app/src/main/assets/admin/index.html'
           OUT='app/build/outputs/apk/release/app-release.apk'
@@ -116,7 +117,8 @@ jobs:
           P132='deployment/jayuminton/admin_v20932_report_carrot_chat_split_patch.py'
           P133='deployment/jayuminton/admin_v20933_report_square_layout_single_file_patch.py'
           P134='deployment/jayuminton/admin_v20934_three_critical_fixes_patch.py'
-          P135='deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'\n          P137='deployment/jayuminton/admin_v20937_guaranteed_opening_floor_patch.py'
+          P135='deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'
+          P137='deployment/jayuminton/admin_v20937_guaranteed_opening_floor_patch.py'
           PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
           P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
           P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
@@ -190,7 +192,8 @@ jobs:
           python3 "$P132" "$JAVA"
           python3 "$P133" "$JAVA"
           python3 "$P134" "$HTML" "$JAVA"
-          python3 "$P135" "$HTML" "$JAVA"\n          python3 "$P137" "$JAVA"
+          python3 "$P135" "$HTML" "$JAVA"
+          python3 "$P137" "$JAVA"
 
           echo VERIFY_V20937_SOURCE
           grep -F 'JAYUMINTON_GUARANTEED_COURT_OPENING_FLOOR_V20937' "$JAVA" >/dev/null
