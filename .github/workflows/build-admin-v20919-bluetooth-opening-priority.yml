@@ -223,7 +223,10 @@ jobs:
           grep -F 'activeCourtV20938' "$JAVA" >/dev/null
           grep -F 'Preserve the already-pending critical court announcement' "$JAVA" >/dev/null
           grep -F 'targetFrameRms = dbToLinear(-14.0)' "$JAVA" >/dev/null
-          grep -F 'activeRepeatRequest.id + "-g" + voiceGenerationV20938 + "-repeat-" + repeatNumber' "$JAVA" >/dev/null
+          grep -F 'String directUtteranceIdV20938 =' "$JAVA" >/dev/null
+          grep -F 'activeRepeatRequest.id + "-g" + voiceGenerationV20938 +' "$JAVA" >/dev/null
+          grep -F '"-repeat-" + repeatNumber' "$JAVA" >/dev/null
+          grep -F 'currentDirectUtteranceIdV20938 = directUtteranceIdV20938;' "$JAVA" >/dev/null
           grep -F 'detectOpeningPhraseEndV20938(' "$JAVA" >/dev/null
           grep -F 'dbToLinear(-86.0)' "$JAVA" >/dev/null
           grep -F 'dbToLinear(-10.5)' "$JAVA" >/dev/null
