@@ -162,10 +162,24 @@ java, n = measure_pat.subn(measure_new, java, count=1)
 if n != 1:
     raise SystemExit("v209.30 card measure replacement mismatch: " + str(n))
 
-draw_pat = re.compile(
-    r"    private void jmDrawNativeReportCard\(Canvas canvas, JSONObject member, float x, float y, int cardWidth, int cardHeight\) \{.*?\n    \}(?=\n\n    // JAYUMINTON_NATIVE_REPORT_COMPLETE_SMOOTH_V20929)",
-    re.S,
-)
+draw_sig = "    private void jmDrawNativeReportCard(Canvas canvas, JSONObject member, float x, float y, int cardWidth, int cardHeight) {"
+draw_start = java.find(draw_sig)
+if draw_start < 0:
+    raise SystemExit("v209.30 card draw signature missing")
+brace_start = java.find("{", draw_start)
+depth = 0
+draw_end = -1
+for pos in range(brace_start, len(java)):
+    ch = java[pos]
+    if ch == "{":
+        depth += 1
+    elif ch == "}":
+        depth -= 1
+        if depth == 0:
+            draw_end = pos + 1
+            break
+if draw_end < 0:
+    raise SystemExit("v209.30 card draw closing brace missing")
 draw_new = r'''    private void jmDrawNativeReportCard(Canvas canvas, JSONObject member, float x, float y, int cardWidth, int cardHeight) {
         Paint fill = jmReportPaint(Color.WHITE, Paint.Style.FILL);
         Paint stroke = jmReportPaint(Color.rgb(194, 218, 224), Paint.Style.STROKE);
@@ -215,9 +229,8 @@ draw_new = r'''    private void jmDrawNativeReportCard(Canvas canvas, JSONObject
         StaticLayout partners = jmReportLayout(jmReportPartners(member), partnerPaint, inner, 1.12f);
         jmDrawStaticLayout(canvas, partners, left, labelY + 22f);
     }'''
-java, n = draw_pat.subn(draw_new, java, count=1)
-if n != 1:
-    raise SystemExit("v209.30 card draw replacement mismatch: " + str(n))
+java = java[:draw_start] + draw_new + java[draw_end:]
+
 
 metric_pat = re.compile(
     r"    private void jmDrawReportMetricCard\(.*?\n    \}\n\n    private void jmDrawReportHighlightCard",
