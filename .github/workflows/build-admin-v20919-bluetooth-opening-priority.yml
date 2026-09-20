@@ -168,7 +168,7 @@ jobs:
           grep -F 'JAYUMINTON_HIGH_RES_SINGLE_REPORT_V20920' "$JAVA" >/dev/null
           grep -F 'jmReportCaptureTile(nextLeft, targetTop)' "$JAVA" >/dev/null
           grep -F 'jmReportCaptureTile(0, nextTop)' "$JAVA" >/dev/null
-          grep -F 'w=Math.max(1600' "$HTML" >/dev/null
+          grep -F 'w=Math.max(2400' "$HTML" >/dev/null
           grep -F 'font-size:24px!important' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_BLUETOOTH_COURT_OPENING_PRIORITY_V20919' "$JAVA" >/dev/null
           grep -F 'COURT_FINISH_OPENING_TARGET_RMS_DBFS = -4.5' "$JAVA" >/dev/null
