@@ -1,12 +1,12 @@
-name: Build admin v209.36 verified exact court number + away idempotence
-# v209.36: version-bumped verified v209.35 DSP/away fix build.
+name: Build admin v209.37 guaranteed court opening floor
+# v209.37: guarantee a non-attenuating court-opening floor with exact-boundary and final-WAV fallback protection; never suppress playback.
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/build-admin-v20919-bluetooth-opening-priority.yml'
-      - 'deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'
+      - 'deployment/jayuminton/admin_v20937_guaranteed_opening_floor_patch.py'\n      - 'deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'
       - 'deployment/jayuminton/admin_v20934_three_critical_fixes_patch.py'
       - 'deployment/jayuminton/admin_v20933_report_square_layout_single_file_patch.py'
       - 'deployment/jayuminton/admin_v20932_report_carrot_chat_split_patch.py'
@@ -33,7 +33,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-admin-v20936-verified-exact-number-away-idempotent
+  group: jayuminton-admin-v20937-guaranteed-opening-floor
   cancel-in-progress: true
 
 jobs:
@@ -70,12 +70,12 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
 
-      - name: Build v209.36 verified exact court number + away idempotence
+      - name: Build v209.37 guaranteed court opening floor
         shell: bash
         run: |
           set -euxo pipefail
           HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
-          VERSION_BASE='releases/jayuminton-admin-v209.35-exact-number-away-idempotent.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.37-guaranteed-opening-floor.apk'
           JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
           HTML='app/src/main/assets/admin/index.html'
           OUT='app/build/outputs/apk/release/app-release.apk'
@@ -116,7 +116,7 @@ jobs:
           P132='deployment/jayuminton/admin_v20932_report_carrot_chat_split_patch.py'
           P133='deployment/jayuminton/admin_v20933_report_square_layout_single_file_patch.py'
           P134='deployment/jayuminton/admin_v20934_three_critical_fixes_patch.py'
-          P135='deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'
+          P135='deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'\n          P137='deployment/jayuminton/admin_v20937_guaranteed_opening_floor_patch.py'
           PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
           P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
           P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
@@ -132,7 +132,7 @@ jobs:
           P104='deployment/jayuminton/admin_v20904_report_actions_attach_quickmenu_patch.py'
           P105='deployment/jayuminton/admin_v20905_native_full_report_capture_patch.py'
           P106='deployment/jayuminton/admin_v20906_pixelcopy_report_capture_dock_patch.py'
-          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$P123" "$P124" "$P125" "$P126" "$P127" "$P128" "$P129" "$P130" "$P131" "$P132" "$P133" "$P134" "$P135" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
+          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$P123" "$P124" "$P125" "$P126" "$P127" "$P128" "$P129" "$P130" "$P131" "$P132" "$P133" "$P134" "$P135" "$P137" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
 
           mkdir -p app/src/main/assets/admin
           unzip -p "$HTML_BASE" assets/admin/index.html > "$HTML"
@@ -190,7 +190,18 @@ jobs:
           python3 "$P132" "$JAVA"
           python3 "$P133" "$JAVA"
           python3 "$P134" "$HTML" "$JAVA"
-          python3 "$P135" "$HTML" "$JAVA"
+          python3 "$P135" "$HTML" "$JAVA"\n          python3 "$P137" "$JAVA"
+
+          echo VERIFY_V20937_SOURCE
+          grep -F 'JAYUMINTON_GUARANTEED_COURT_OPENING_FLOOR_V20937' "$JAVA" >/dev/null
+          grep -F 'NEVER_SUPPRESS_PLAYBACK_V20937' "$JAVA" >/dev/null
+          grep -F 'for (int pass = 0; pass < 3; pass++)' "$JAVA" >/dev/null
+          grep -F 'double gain = Math.max(1.0' "$JAVA" >/dev/null
+          grep -F 'double localGain = Math.max(1.0' "$JAVA" >/dev/null
+          grep -F '0.52 * samplesPerSecond' "$JAVA" >/dev/null
+          grep -F 'detectFinalVoicedOnsetV20937(' "$JAVA" >/dev/null
+          grep -F 'protectOpeningRegionV20937(' "$JAVA" >/dev/null
+          ! grep -F 'if (!openingFloorReachedV20937) return false' "$JAVA" >/dev/null
 
           echo VERIFY_V20935_SOURCE
           grep -F 'JAYUMINTON_AWAY_IDEMPOTENT_V20935' "$HTML" >/dev/null
@@ -369,7 +380,7 @@ jobs:
           p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
           s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
           if n!=1: raise SystemExit('versionCode anchor mismatch')
-          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.36'",s,count=1)
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.37'",s,count=1)
           if n!=1: raise SystemExit('versionName anchor mismatch')
           p.write_text(s,encoding='utf-8')
           PY
@@ -383,7 +394,7 @@ jobs:
           unzip -t "$OUT" >/dev/null
           "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
           grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
-          grep -F "versionName='209.36'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='209.37'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
 
           unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
           grep -F 'JAYUMINTON_GAME_COUNT_DOUBLE_TAP_GUARD_V20913' "$RUNNER_TEMP/final-html" >/dev/null
@@ -425,6 +436,8 @@ jobs:
           grep -F 'JAYUMINTON_REPORT_SQUARE_LAYOUT_V20933' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
           grep -F 'JAYUMINTON_BLUETOOTH_OPENING_FIXED_GAIN_V20934' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
           grep -F 'JAYUMINTON_EXACT_COURT_NUMBER_RANGE_V20935' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_GUARANTEED_COURT_OPENING_FLOOR_V20937' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
+          grep -F 'NEVER_SUPPRESS_PLAYBACK_V20937' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
@@ -432,7 +445,7 @@ jobs:
           echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
           echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
 
-      - name: Publish v209.36 verified exact number + away idempotence APK
+      - name: Publish v209.37 guaranteed court opening floor APK
         shell: bash
         run: |
           set -euo pipefail
@@ -441,15 +454,15 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK_PATH" releases/jayuminton-admin-v209.36-verified-exact-number-away-idempotent.apk
-          printf 'status=success\nversion=209.36\nbase=v209.35-exact-number-away-idempotent\nfeature=full-court-loudness+exact-number-balance+away-idempotence\nfix=keep-full-announcement-compression+tts-range-frame-number-rms-match+skip-already-away+preserve-departedAt\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20936-verified-exact-number-away-idempotent.txt
-          git add releases/jayuminton-admin-v209.36-verified-exact-number-away-idempotent.apk deployment/status/v20936-verified-exact-number-away-idempotent.txt
-          git commit -m 'Publish admin v209.36 verified exact number and away idempotence' || exit 0
+          cp "$APK_PATH" releases/jayuminton-admin-v209.37-guaranteed-opening-floor.apk
+          printf 'status=success\nversion=209.37\nbase=v209.36-verified-exact-number-away-idempotent\nfeature=guaranteed-opening-floor+exact-boundary+final-wav-fallback+always-play\nfix=never-attenuate-opening+bounded-offline-lift+fallback-when-range-missing+never-suppress-playback\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20937-guaranteed-opening-floor.txt
+          git add releases/jayuminton-admin-v209.37-guaranteed-opening-floor.apk deployment/status/v20937-guaranteed-opening-floor.txt
+          git commit -m 'Publish admin v209.37 guaranteed opening floor' || exit 0
           git push origin HEAD:main
 
 
 
-      - name: Record v209.36 verified exact number build failure
+      - name: Record v209.37 guaranteed opening floor build failure
         if: failure()
         shell: bash
         run: |
@@ -459,7 +472,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p deployment/status
-          printf 'status=failure\nversion=209.36\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20936-verified-exact-number-away-idempotent.txt
-          git add deployment/status/v20936-verified-exact-number-away-idempotent.txt
-          git commit -m 'Record admin v209.36 verified exact number build failure' || exit 0
+          printf 'status=failure\nversion=209.37\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20937-guaranteed-opening-floor.txt
+          git add deployment/status/v20937-guaranteed-opening-floor.txt
+          git commit -m 'Record admin v209.37 guaranteed opening floor build failure' || exit 0
           git push origin HEAD:main
