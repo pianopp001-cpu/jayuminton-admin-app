@@ -45,7 +45,8 @@ if java.count(field_anchor) != 1:
     raise SystemExit("v209.20 viewport field anchor mismatch")
 java = java.replace(
     field_anchor,
-    "    private int jmReportViewportWidth;\n" + field_anchor,
+    '    private static final String HIGH_RES_SINGLE_REPORT = "' + MARKER + '";\n'
+    + "    private int jmReportViewportWidth;\n" + field_anchor,
     1,
 )
 
