@@ -1,0 +1,9 @@
+status=success
+version=209.18
+base=v209.17-member-info-color-split
+feature=single-report-readable-reflow
+fix=one-image+expanded+two-column-export+24MP
+base_version_code=100
+new_version_code=101
+run_id=35503063552
+sha256=72d66374ea2593d8d885174a0560c7e5a1b1f784346022cef5b9bf27773fa612
