@@ -70,14 +70,14 @@ opening_block = '''            int courtOpeningStartSample = -1;
                 final int onsetWindow = Math.max(channels, (sampleRate / 100) * channels);
                 final int onsetSearchEnd = Math.min(pcm.length, samplesPerSecond * 2);
                 final double onsetThreshold = dbToLinear(COURT_FINISH_OPENING_ONSET_DBFS);
-                for (int pos = 0; pos + onsetWindow <= onsetSearchEnd; pos += onsetWindow) {
+                for (int scanPos = 0; scanPos + onsetWindow <= onsetSearchEnd; scanPos += onsetWindow) {
                     double sq = 0.0;
-                    for (int k = pos; k < pos + onsetWindow; k++) {
+                    for (int k = scanPos; k < scanPos + onsetWindow; k++) {
                         double v = pcm[k] * makeup;
                         sq += v * v;
                     }
                     if (Math.sqrt(sq / onsetWindow) >= onsetThreshold) {
-                        courtOpeningStartSample = pos;
+                        courtOpeningStartSample = scanPos;
                         break;
                     }
                 }
