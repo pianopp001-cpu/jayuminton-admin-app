@@ -105,7 +105,10 @@ direct_done_old = '''                runOnUiThread(() -> {
                     if (activeRepeatRequest != null && remainingVoiceRepeats > 0) {
                         speakNextRepeat();
                     } else {
-                        finishVoiceCycleV20938();
+                        speaking.set(false);
+                        activeRepeatRequest = null;
+                        releaseAmplifiedVoice(true);
+                        restoreAudio();
                     }
                 });
             }
@@ -119,10 +122,7 @@ direct_done_new = '''                if (!isActiveDirectUtteranceV20938(utteranc
                     if (activeRepeatRequest != null && remainingVoiceRepeats > 0) {
                         speakNextRepeat();
                     } else {
-                        speaking.set(false);
-                        activeRepeatRequest = null;
-                        releaseAmplifiedVoice(true);
-                        restoreAudio();
+                        finishVoiceCycleV20938();
                     }
                 });
             }
