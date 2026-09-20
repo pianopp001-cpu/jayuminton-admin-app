@@ -1,5 +1,5 @@
-name: Build admin v209.33 report square layout single file
-# v209.33 explicit build trigger; the filename is retained so the established
+name: Build admin v209.34 card memo stack and bulk status fix
+# v209.34 explicit build trigger; the filename is retained so the established
 # release workflow remains the single canonical continuation.
 
 on:
@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-admin-v20919-bluetooth-opening-priority.yml'
+      - 'deployment/jayuminton/admin_v20934_member_card_memo_stack_and_bulk_status_fix_patch.py'
       - 'deployment/jayuminton/admin_v20933_report_square_layout_single_file_patch.py'
       - 'deployment/jayuminton/admin_v20932_report_carrot_chat_split_patch.py'
       - 'deployment/jayuminton/admin_v20931_report_save_race_fix_patch.py'
@@ -32,7 +33,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-admin-v20933-report-square-layout-single-file
+  group: jayuminton-admin-v20934-card-memo-stack-and-bulk-status-fix
   cancel-in-progress: true
 
 jobs:
@@ -69,7 +70,7 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
 
-      - name: Build v209.33
+      - name: Build v209.34
         shell: bash
         run: |
           set -euxo pipefail
@@ -114,6 +115,7 @@ jobs:
           P131='deployment/jayuminton/admin_v20931_report_save_race_fix_patch.py'
           P132='deployment/jayuminton/admin_v20932_report_carrot_chat_split_patch.py'
           P133='deployment/jayuminton/admin_v20933_report_square_layout_single_file_patch.py'
+          P134='deployment/jayuminton/admin_v20934_member_card_memo_stack_and_bulk_status_fix_patch.py'
           PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
           P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
           P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
@@ -129,7 +131,7 @@ jobs:
           P104='deployment/jayuminton/admin_v20904_report_actions_attach_quickmenu_patch.py'
           P105='deployment/jayuminton/admin_v20905_native_full_report_capture_patch.py'
           P106='deployment/jayuminton/admin_v20906_pixelcopy_report_capture_dock_patch.py'
-          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$P123" "$P124" "$P125" "$P126" "$P127" "$P128" "$P129" "$P130" "$P131" "$P132" "$P133" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
+          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$P123" "$P124" "$P125" "$P126" "$P127" "$P128" "$P129" "$P130" "$P131" "$P132" "$P133" "$P134" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
 
           mkdir -p app/src/main/assets/admin
           unzip -p "$HTML_BASE" assets/admin/index.html > "$HTML"
@@ -186,6 +188,13 @@ jobs:
           python3 "$P131" "$HTML"
           python3 "$P132" "$JAVA"
           python3 "$P133" "$JAVA"
+          python3 "$P134" "$HTML"
+
+          echo VERIFY_V20934_SOURCE
+          grep -F 'JAYUMINTON_ADMIN_CARD_MEMO_STACK_BULK_STATUS_V20934' "$HTML" >/dev/null
+          grep -F 'selectedIdsDomScanV20934' "$HTML" >/dev/null
+          grep -F 'jayuminton-admin-card-memo-stack-v20934' "$HTML" >/dev/null
+          grep -F 'host.appendChild(node);' "$HTML" >/dev/null
 
           echo VERIFY_V20933_SOURCE
           grep -F 'JAYUMINTON_REPORT_SQUARE_LAYOUT_V20933' "$JAVA" >/dev/null
@@ -332,7 +341,7 @@ jobs:
           p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
           s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
           if n!=1: raise SystemExit('versionCode anchor mismatch')
-          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.33'",s,count=1)
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.34'",s,count=1)
           if n!=1: raise SystemExit('versionName anchor mismatch')
           p.write_text(s,encoding='utf-8')
           PY
@@ -346,7 +355,7 @@ jobs:
           unzip -t "$OUT" >/dev/null
           "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
           grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
-          grep -F "versionName='209.33'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='209.34'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
 
           unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
           grep -F 'JAYUMINTON_GAME_COUNT_DOUBLE_TAP_GUARD_V20913' "$RUNNER_TEMP/final-html" >/dev/null
@@ -373,6 +382,10 @@ jobs:
           PYV20930PACKED
           grep -F 'JAYUMINTON_ADMIN_MEMBER_MESSAGE_VIBRATION_V20912' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_REPORT_PIXELCOPY_CAPTURE_V20906' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'JAYUMINTON_ADMIN_CARD_MEMO_STACK_BULK_STATUS_V20934' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'selectedIdsDomScanV20934' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'jayuminton-admin-card-memo-stack-v20934' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'host.appendChild(node);' "$RUNNER_TEMP/final-html" >/dev/null
           unzip -p "$OUT" classes.dex > "$RUNNER_TEMP/classes.dex"
           strings "$RUNNER_TEMP/classes.dex" > "$RUNNER_TEMP/classes-strings.txt"
           grep -F 'JAYUMINTON_BLUETOOTH_OPENING_CARROT_EXPORT_V20914' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
@@ -388,7 +401,7 @@ jobs:
           echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
           echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
 
-      - name: Publish v209.33 APK
+      - name: Publish v209.34 APK
         shell: bash
         run: |
           set -euo pipefail
@@ -397,15 +410,15 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK_PATH" releases/jayuminton-admin-v209.33-report-square-layout-single-file.apk
-          printf 'status=success\nversion=209.33\nbase=v209.29-complete-smooth-native-report\nfeature=report-square-layout-single-file\nfix=login-raw-newline+top-summary+top-highlights+4200px-final-pixels+no-card-resample+full-history+remove-941px-save-race+single-file-square-layout\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20933-report-square-layout-single-file.txt
-          git add releases/jayuminton-admin-v209.33-report-square-layout-single-file.apk deployment/status/v20933-report-square-layout-single-file.txt
-          git commit -m 'Publish admin v209.33 report square layout single file' || exit 0
+          cp "$APK_PATH" releases/jayuminton-admin-v209.34-card-memo-stack-and-bulk-status-fix.apk
+          printf 'status=success\nversion=209.34\nbase=v209.33-report-square-layout-single-file\nfeature=card-memo-stack-and-bulk-status-fix\nfix=login-raw-newline+top-summary+top-highlights+4200px-final-pixels+no-card-resample+full-history+remove-941px-save-race+single-file-square-layout+member-card-memo-stack+bulk-select-all-status-fix\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20934-card-memo-stack-and-bulk-status-fix.txt
+          git add releases/jayuminton-admin-v209.34-card-memo-stack-and-bulk-status-fix.apk deployment/status/v20934-card-memo-stack-and-bulk-status-fix.txt
+          git commit -m 'Publish admin v209.34 card memo stack and bulk status fix' || exit 0
           git push origin HEAD:main
 
 
 
-      - name: Record v209.33 build failure
+      - name: Record v209.34 build failure
         if: failure()
         shell: bash
         run: |
@@ -415,7 +428,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p deployment/status
-          printf 'status=failure\nversion=209.33\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20933-report-square-layout-single-file.txt
-          git add deployment/status/v20933-report-square-layout-single-file.txt
-          git commit -m 'Record admin v209.33 build failure' || exit 0
+          printf 'status=failure\nversion=209.34\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20934-card-memo-stack-and-bulk-status-fix.txt
+          git add deployment/status/v20934-card-memo-stack-and-bulk-status-fix.txt
+          git commit -m 'Record admin v209.34 build failure' || exit 0
           git push origin HEAD:main
