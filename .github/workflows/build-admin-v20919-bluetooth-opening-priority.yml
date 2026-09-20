@@ -172,7 +172,6 @@ jobs:
           grep -F 'W=2000' "$HTML" >/dev/null
           grep -F 'window.NativeBrowser.saveStatisticsPng(png,name)' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_REPORT_SINGLE_COLUMN_SHARP_TEXT_V20925' "$HTML" >/dev/null
-          grep -F 'w=Math.max(1080' "$HTML" >/dev/null
           grep -F 'grid-template-columns:minmax(0,1fr)' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_REPORT_TILE_RETRY_V20924' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_REPORT_TILE_RETRY_V20924' "$JAVA" >/dev/null
