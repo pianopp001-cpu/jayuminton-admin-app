@@ -38,7 +38,7 @@ for token in (
 # Login: remove the visible raw /n or \\n token from actual text nodes.
 # Also remove any already-baked standalone token between tags before runtime.
 # ---------------------------------------------------------------------------
-html = re.sub(r'(?<=>)\s*(?:/n|\\\\n)\s*(?=<)', '', html)
+html = re.sub(r'(?<=>)\s*(?:/n|\\n)\s*(?=<)', '', html)
 
 login_script = r'''
 <script id="jmAdminLoginRawNewlineFixV20930">
