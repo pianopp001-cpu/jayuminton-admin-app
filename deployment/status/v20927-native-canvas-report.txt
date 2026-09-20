@@ -1,0 +1,9 @@
+status=success
+version=209.27
+base=v209.26-direct-vector-report
+feature=native-canvas-report
+fix=android-canvas+2800px+4-columns+native-antialias+full-history-one-image
+base_version_code=109
+new_version_code=110
+run_id=35522497646
+sha256=c254a60129f3aee73bb7c45460189f55a98975a52a2d4c431ccd21f7bb0ef8af
