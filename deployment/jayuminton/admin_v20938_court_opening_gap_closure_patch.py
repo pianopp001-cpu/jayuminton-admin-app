@@ -58,6 +58,7 @@ field_insert = field_anchor + '''    private static final String COURT_OPENING_G
     private volatile int normalizingPhraseEndFrameV20938 = -1;
     private int courtSynthRetryCountV20938 = 0;
     private volatile long voiceGenerationV20938 = 0L;
+    private volatile String currentDirectUtteranceIdV20938 = "";
     private SpeakRequest ttsRecoveryRequestV20938;
     private int ttsEngineRecoveryBudgetV20938 = 1;
     private final java.util.ArrayDeque<SpeakRequest> courtVoiceQueueV20938 =
@@ -119,6 +120,7 @@ direct_done_new = '''                if (!isActiveDirectUtteranceV20938(utteranc
                 final String completedDirectIdV20938 = utteranceId;
                 runOnUiThread(() -> {
                     if (!isActiveDirectUtteranceV20938(completedDirectIdV20938)) return;
+                    currentDirectUtteranceIdV20938 = "";
                     if (activeRepeatRequest != null && remainingVoiceRepeats > 0) {
                         speakNextRepeat();
                     } else {
@@ -146,6 +148,7 @@ direct_error_new = '''                if (!isActiveDirectUtteranceV20938(utteran
                 final String failedDirectIdV20938 = utteranceId;
                 runOnUiThread(() -> {
                     if (!isActiveDirectUtteranceV20938(failedDirectIdV20938)) return;
+                    currentDirectUtteranceIdV20938 = "";
                     if (remainingVoiceRepeats > 0) {
                         speakNextRepeat();
                     } else {
@@ -171,6 +174,7 @@ direct_stop_new = '''                if (!isActiveDirectUtteranceV20938(utteranc
                 final String stoppedDirectIdV20938 = utteranceId;
                 runOnUiThread(() -> {
                     if (!isActiveDirectUtteranceV20938(stoppedDirectIdV20938)) return;
+                    currentDirectUtteranceIdV20938 = "";
                     if (remainingVoiceRepeats > 0) {
                         speakNextRepeat();
                     } else {
@@ -191,6 +195,79 @@ if java.count(direct_id_old) != 1:
     raise SystemExit("v209.38 direct id anchor mismatch: " + str(java.count(direct_id_old)))
 java = java.replace(direct_id_old, direct_id_new, 1)
 
+# Exact direct utterance identity (including repeat number) + timeout. This makes
+# delayed callbacks from repeat N unable to affect repeat N+1.
+direct_call_old = '''        int result = tts.speak(
+                activeRepeatRequest.text,
+                TextToSpeech.QUEUE_FLUSH,
+                params,
+                activeRepeatRequest.id + "-g" + voiceGenerationV20938 + "-repeat-" + repeatNumber
+        );'''
+direct_call_new = '''        String directUtteranceIdV20938 =
+                activeRepeatRequest.id + "-g" + voiceGenerationV20938 +
+                "-repeat-" + repeatNumber;
+        currentDirectUtteranceIdV20938 = directUtteranceIdV20938;
+        int result = tts.speak(
+                activeRepeatRequest.text,
+                TextToSpeech.QUEUE_FLUSH,
+                params,
+                directUtteranceIdV20938
+        );
+        if (result != TextToSpeech.ERROR) {
+            scheduleDirectWatchdogV20938(directUtteranceIdV20938);
+        }'''
+if java.count(direct_call_old) != 1:
+    raise SystemExit("v209.38 direct call watchdog anchor mismatch: " + str(java.count(direct_call_old)))
+java = java.replace(direct_call_old, direct_call_new, 1)
+
+# synthesizeToFile() can return SUCCESS and still never callback on broken/OEM
+# engines. Arm a watchdog tied to the exact synth ID, file and request object.
+synth_call_old = '''            int result = tts.synthesizeToFile(
+                    activeRepeatRequest.text, synthParams, amplifiedVoiceFile, currentAmplifiedSynthId);
+            if (result == TextToSpeech.ERROR) {'''
+synth_call_new = '''            final SpeakRequest synthRequestV20938 = activeRepeatRequest;
+            final File synthFileV20938 = amplifiedVoiceFile;
+            final String synthIdV20938 = currentAmplifiedSynthId;
+            int result = tts.synthesizeToFile(
+                    activeRepeatRequest.text, synthParams, amplifiedVoiceFile, currentAmplifiedSynthId);
+            if (result != TextToSpeech.ERROR) {
+                scheduleSynthWatchdogV20938(
+                        synthIdV20938, synthFileV20938, synthRequestV20938);
+            }
+            if (result == TextToSpeech.ERROR) {'''
+if java.count(synth_call_old) != 1:
+    raise SystemExit("v209.38 synth watchdog anchor mismatch: " + str(java.count(synth_call_old)))
+java = java.replace(synth_call_old, synth_call_new, 1)
+
+# MediaPlayer prepareAsync() may never invoke prepared/error. Also watchdog a
+# prepared player for duration+5s so a stalled route cannot block the FIFO.
+prepared_old = '''                amplifiedVoiceEnhancer = null;
+                try { mp.start(); } catch (Exception error) { fallbackToDirectTts(); }
+            });'''
+prepared_new = '''                amplifiedVoiceEnhancer = null;
+                try {
+                    mp.start();
+                    int durationMsV20938 = -1;
+                    try { durationMsV20938 = mp.getDuration(); } catch (Exception ignored) {}
+                    schedulePlayerCompletionWatchdogV20938(mp, durationMsV20938);
+                } catch (Exception error) {
+                    fallbackToDirectTts();
+                }
+            });'''
+if java.count(prepared_old) != 1:
+    raise SystemExit("v209.38 player prepared watchdog anchor mismatch: " + str(java.count(prepared_old)))
+java = java.replace(prepared_old, prepared_new, 1)
+
+prepare_async_old = '''            player.prepareAsync();
+        } catch (Exception error) {'''
+prepare_async_new = '''            player.prepareAsync();
+            schedulePlayerPrepareWatchdogV20938(player);
+        } catch (Exception error) {'''
+if java.count(prepare_async_old) != 1:
+    raise SystemExit("v209.38 prepareAsync watchdog anchor mismatch: " + str(java.count(prepare_async_old)))
+java = java.replace(prepare_async_old, prepare_async_new, 1)
+
+
 # Install the new identity before tts.stop(). This also protects against a
 # theoretically synchronous stop callback from the previous direct utterance.
 pre_stop_old = '''        // Cancel any previous synthesis/playback without restoring the ducked music yet.
@@ -208,6 +285,7 @@ pre_stop_new = '''        // Install new request identity BEFORE tts.stop().
         voiceGenerationV20938++;
         // Cancel previous synthesis/playback without restoring ducked music yet.
         currentAmplifiedSynthId = "";
+        currentDirectUtteranceIdV20938 = "";
         try { tts.stop(); } catch (Exception ignored) {}'''
 if java.count(pre_stop_old) != 1:
     raise SystemExit("v209.38 pre-stop generation anchor mismatch: " + str(java.count(pre_stop_old)))
@@ -251,6 +329,7 @@ prepare_helper = r'''    private boolean isCourtFinishRequestV20938(SpeakRequest
 
     private void finishVoiceCycleV20938() {
         currentAmplifiedSynthId = "";
+        currentDirectUtteranceIdV20938 = "";
         releaseAmplifiedVoice(true);
         remainingVoiceRepeats = 0;
         speaking.set(false);
@@ -281,6 +360,7 @@ prepare_helper = r'''    private boolean isCourtFinishRequestV20938(SpeakRequest
         remainingVoiceRepeats = 0;
         activeRepeatRequest = null;
         currentAmplifiedSynthId = "";
+        currentDirectUtteranceIdV20938 = "";
         releaseAmplifiedVoice(true);
         speaking.set(false);
         restoreAudio();
@@ -289,11 +369,74 @@ prepare_helper = r'''    private boolean isCourtFinishRequestV20938(SpeakRequest
         initTts(true);
     }
 
+    private void postVoiceWatchdogV20938(Runnable action, long delayMs) {
+        View root = webView != null ? webView : getWindow().getDecorView();
+        if (root != null) root.postDelayed(action, delayMs);
+    }
+
     private boolean isActiveDirectUtteranceV20938(String utteranceId) {
-        SpeakRequest request = activeRepeatRequest;
-        if (utteranceId == null || request == null || request.id == null) return false;
-        String prefix = request.id + "-g" + voiceGenerationV20938 + "-repeat-";
-        return utteranceId.startsWith(prefix);
+        return utteranceId != null && !utteranceId.isEmpty() &&
+                utteranceId.equals(currentDirectUtteranceIdV20938);
+    }
+
+    private void scheduleDirectWatchdogV20938(String utteranceId) {
+        postVoiceWatchdogV20938(() -> {
+            if (!isActiveDirectUtteranceV20938(utteranceId)) return;
+            currentDirectUtteranceIdV20938 = "";
+            try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
+            if (remainingVoiceRepeats > 0) {
+                speakNextRepeat();
+            } else {
+                recoverTtsEngineOnceV20938();
+            }
+        }, 30000L);
+    }
+
+    private void scheduleSynthWatchdogV20938(
+            String synthId, File synthFile, SpeakRequest synthRequest) {
+        postVoiceWatchdogV20938(() -> {
+            if (synthId == null || !synthId.equals(currentAmplifiedSynthId) ||
+                    activeRepeatRequest != synthRequest) return;
+
+            final int numberStart = courtNumberStartFrameV20935;
+            final int numberEnd = courtNumberEndFrameV20935;
+            final int phraseEnd = courtPhraseEndFrameV20935;
+            currentAmplifiedSynthId = "";
+            if (amplifiedVoiceFile == synthFile) amplifiedVoiceFile = null;
+            try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
+
+            if (synthFile != null && synthFile.exists() && synthFile.length() > 44L) {
+                prepareCompletedAmplifiedPlaybackV20938(
+                        synthId, synthFile, synthRequest,
+                        numberStart, numberEnd, phraseEnd);
+            } else {
+                fallbackToDirectTts();
+            }
+        }, 8000L);
+    }
+
+    private void schedulePlayerPrepareWatchdogV20938(MediaPlayer player) {
+        postVoiceWatchdogV20938(() -> {
+            if (player == null || amplifiedVoicePlayer != player) return;
+            boolean playing = false;
+            try { playing = player.isPlaying(); } catch (Exception ignored) {}
+            if (!playing) {
+                releaseAmplifiedPlayerOnly();
+                fallbackToDirectTts();
+            }
+        }, 5000L);
+    }
+
+    private void schedulePlayerCompletionWatchdogV20938(
+            MediaPlayer player, int durationMs) {
+        long delay = durationMs > 0
+                ? Math.max(8000L, durationMs + 5000L)
+                : 30000L;
+        postVoiceWatchdogV20938(() -> {
+            if (player == null || amplifiedVoicePlayer != player) return;
+            releaseAmplifiedPlayerOnly();
+            fallbackToDirectTts();
+        }, delay);
     }
 
     private void prepareCompletedAmplifiedPlaybackV20938(
@@ -869,6 +1012,11 @@ for required in (
     "strongOnset",
     "isActiveDirectUtteranceV20938(",
     "voiceGenerationV20938",
+    "currentDirectUtteranceIdV20938",
+    "scheduleDirectWatchdogV20938(",
+    "scheduleSynthWatchdogV20938(",
+    "schedulePlayerPrepareWatchdogV20938(",
+    "schedulePlayerCompletionWatchdogV20938(",
     "targetFrameRms = dbToLinear(-14.0)",
     "detectOpeningPhraseEndV20938(",
     "dbToLinear(-86.0)",
