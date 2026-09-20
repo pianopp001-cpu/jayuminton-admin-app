@@ -5,5 +5,5 @@ feature=top-summary-crisp-report
 fix=login-raw-newline+top-summary+top-highlights+4200px-final-pixels+no-card-resample+full-history
 base_version_code=112
 new_version_code=113
-run_id=35526223012
-sha256=529b7fe2cd400c9548ef2a1c8ef72e9f887cc8adca95f004f36c5c736ecbc3d0
+run_id=35526158324
+sha256=0c488286fe05168ad200ea3a5f37d73723936eb4a032aaa85fd6f422e6f27789
