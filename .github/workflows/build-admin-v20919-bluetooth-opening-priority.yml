@@ -209,6 +209,11 @@ jobs:
           grep -F 'RAW_SYNTH_ALWAYS_AUDIBLE_V20938' "$JAVA" >/dev/null
           grep -F 'recoverTtsEngineOnceV20938(' "$JAVA" >/dev/null
           grep -F 'ttsEngineRecoveryBudgetV20938' "$JAVA" >/dev/null
+          grep -F 'courtVoiceQueueV20938' "$JAVA" >/dev/null
+          grep -F 'enqueueCourtVoiceV20938(' "$JAVA" >/dev/null
+          grep -F 'startNextQueuedCourtVoiceV20938(' "$JAVA" >/dev/null
+          grep -F 'finishVoiceCycleV20938(' "$JAVA" >/dev/null
+          grep -F 'clearCourtVoiceQueueV20938();' "$JAVA" >/dev/null
           grep -F 'targetFrameRms = dbToLinear(-14.0)' "$JAVA" >/dev/null
           grep -F 'activeRepeatRequest.id + "-g" + voiceGenerationV20938 + "-repeat-" + repeatNumber' "$JAVA" >/dev/null
           grep -F 'detectOpeningPhraseEndV20938(' "$JAVA" >/dev/null
