@@ -103,6 +103,7 @@ java = java.replace(
     "    private static final int NATIVE_REPORT_MARGIN = 64;\n"
     "    private static final int NATIVE_REPORT_GAP = 30;",
     "    // " + MARKER + "\n"
+    "    private static final String NATIVE_REPORT_RENDERER_MARKER_V20930 = \"" + MARKER + "\";\n"
     "    private static final int NATIVE_REPORT_WIDTH = 4200;\n"
     "    private static final int NATIVE_REPORT_COLUMNS = 4;\n"
     "    private static final int NATIVE_REPORT_MARGIN = 72;\n"
@@ -433,6 +434,7 @@ for forbidden in (
 
 for token in (
     MARKER,
+    "NATIVE_REPORT_RENDERER_MARKER_V20930",
     "NATIVE_REPORT_WIDTH = 4200",
     "NATIVE_REPORT_COLUMNS = 4",
     'canvas.drawText("요약 리포트"',
