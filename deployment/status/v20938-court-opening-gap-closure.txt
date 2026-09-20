@@ -1,4 +1,9 @@
-status=failure
+status=success
 version=209.38
-run_id=35537566993
-source_sha=1bc41151b7c0c1d4fd5fdd9ab64eb32890d2f01e
+base=v209.37-guaranteed-opening-floor
+feature=ultra-quiet-onset+absolute-floor+adaptive-phrase-boundary+stale-callback-guard+synth-retry+always-speak
+fix=low-floor-detection+absolute-rms-floor+adaptive-final-wav-protection+completed-synth-snapshot+one-retry-before-direct
+base_version_code=117
+new_version_code=118
+run_id=35537620599
+sha256=072a4e746dc62a2cd09d6b99a2d4fe2712ff3d30aceb736b616eef17e8e01aa7
