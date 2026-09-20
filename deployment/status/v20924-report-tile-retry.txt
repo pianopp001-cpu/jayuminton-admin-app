@@ -1,4 +1,9 @@
-status=failure
+status=success
 version=209.24
-run_id=35520643028
-source_sha=1497a9215bd1bd1e4c9b8db88808735e3890a791
+base=v209.23-report-no-green-tile-readable
+feature=report-tile-retry
+fix=pixelcopy-retry+scroll-settle-check+no-green-fallback+two-column-readable
+base_version_code=106
+new_version_code=107
+run_id=35520739343
+sha256=3825457008bbddda056270862c0b10d28156f7bc94c064f698b84d8c46f08c43
