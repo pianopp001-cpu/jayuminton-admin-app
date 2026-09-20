@@ -1,4 +1,9 @@
-status=failure
+status=success
 version=209.25
-run_id=35521017300
-source_sha=aeadd097a1ad6edd6509072328598d2bbc14a5eb
+base=v209.24-report-tile-retry
+feature=single-column-sharp-report
+fix=1080px-single-column+large-dark-font+high-contrast-chips+full-expanded-one-image
+base_version_code=107
+new_version_code=108
+run_id=35521081959
+sha256=b0f41396fd16134c8fff6a28fb9c3f69a44190cb017488d9f69a2b7e05889f89
