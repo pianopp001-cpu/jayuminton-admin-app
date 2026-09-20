@@ -195,7 +195,9 @@ jobs:
           grep -F 'window.jmV20927SaveNativeCanvasReport' "$HTML" >/dev/null
           grep -F 'NATIVE_REPORT_WIDTH = 3800' "$JAVA" >/dev/null
           grep -F 'NATIVE_REPORT_COLUMNS = 3' "$JAVA" >/dev/null
-          grep -F 'Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG' "$JAVA" >/dev/null
+          grep -F 'Paint.ANTI_ALIAS_FLAG' "$JAVA" >/dev/null
+          grep -F 'Paint.SUBPIXEL_TEXT_FLAG' "$JAVA" >/dev/null
+          grep -F 'Paint.LINEAR_TEXT_FLAG' "$JAVA" >/dev/null
           grep -F 'NativeCanvasReport.saveReportJson' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_DIRECT_VECTOR_REPORT_V20926' "$HTML" >/dev/null
           grep -F 'window.jmV20926SaveVectorReport' "$HTML" >/dev/null
