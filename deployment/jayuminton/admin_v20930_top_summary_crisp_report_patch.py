@@ -163,7 +163,7 @@ if n != 1:
     raise SystemExit("v209.30 card measure replacement mismatch: " + str(n))
 
 draw_pat = re.compile(
-    r"    private void jmDrawNativeReportCard\(Canvas canvas, JSONObject member, float x, float y, int cardWidth, int cardHeight\) \{.*?\n    \}\n\n    private void jmDrawNativeReportCardSmooth",
+    r"    private void jmDrawNativeReportCard\(Canvas canvas, JSONObject member, float x, float y, int cardWidth, int cardHeight\) \{.*?\n    \}(?=\n\n    // JAYUMINTON_NATIVE_REPORT_COMPLETE_SMOOTH_V20929)",
     re.S,
 )
 draw_new = r'''    private void jmDrawNativeReportCard(Canvas canvas, JSONObject member, float x, float y, int cardWidth, int cardHeight) {
@@ -214,9 +214,7 @@ draw_new = r'''    private void jmDrawNativeReportCard(Canvas canvas, JSONObject
 
         StaticLayout partners = jmReportLayout(jmReportPartners(member), partnerPaint, inner, 1.12f);
         jmDrawStaticLayout(canvas, partners, left, labelY + 22f);
-    }
-
-    private void jmDrawNativeReportCardSmooth'''
+    }'''
 java, n = draw_pat.subn(draw_new, java, count=1)
 if n != 1:
     raise SystemExit("v209.30 card draw replacement mismatch: " + str(n))
