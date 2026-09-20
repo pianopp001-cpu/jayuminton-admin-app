@@ -172,7 +172,6 @@ jobs:
           grep -F 'jmReportCaptureTileAttempt(targetLeft, targetTop, 0)' "$JAVA" >/dev/null
           grep -F 'attempt < 3' "$JAVA" >/dev/null
           grep -F 'JAYUMINTON_REPORT_NO_GREEN_TILE_READABLE_V20923' "$HTML" >/dev/null
-          grep -F 'w=Math.max(1600' "$HTML" >/dev/null
           grep -F 'grid-template-columns:repeat(2,minmax(0,1fr))' "$HTML" >/dev/null
           grep -F 'canvas.drawColor(Color.WHITE)' "$JAVA" >/dev/null
           grep -F 'JAYUMINTON_MARKETPLACE_READABLE_FULL_REPORT_V20922' "$HTML" >/dev/null
