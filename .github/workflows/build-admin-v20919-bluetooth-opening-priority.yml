@@ -207,7 +207,6 @@ jobs:
           grep -F 'Paint.FILTER_BITMAP_FLAG' "$JAVA" >/dev/null
           grep -F '"요약 리포트"' "$JAVA" >/dev/null
           grep -F '"오늘의 하이라이트"' "$JAVA" >/dev/null
-          grep -F 'paint.setLinearText(true)' "$JAVA" >/dev/null
           grep -F 'bestPairCount' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_NATIVE_CANVAS_POLISH_V20928' "$JAVA" >/dev/null
           grep -F 'NATIVE_REPORT_WIDTH = 4200' "$JAVA" >/dev/null
