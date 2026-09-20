@@ -292,6 +292,11 @@ if html.count(old_payload_start) != 1:
     raise SystemExit("v209.29 payload anchor mismatch: " + str(html.count(old_payload_start)))
 html = html.replace(old_payload_start, new_payload_start, 1)
 
+if MARKER not in html:
+    if "</body>" not in html:
+        raise SystemExit("v209.29 HTML marker anchor missing")
+    html = html.replace("</body>", "<!-- " + MARKER + " -->\\n</body>", 1)
+
 for token in (
     MARKER,
     "jmDrawNativeReportCardSmooth",
