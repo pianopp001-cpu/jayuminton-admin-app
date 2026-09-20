@@ -1,4 +1,9 @@
-status=failure
+status=success
 version=209.29
-run_id=35523608198
-source_sha=8fde5cb2791f6e46fba405e088cca156efc7f2e0
+base=v209.28-polished-native-canvas-report
+feature=complete-smooth-native-report
+fix=summary-report+highlights+2x-card-supersampling+linear-text+full-history
+base_version_code=111
+new_version_code=112
+run_id=35523659455
+sha256=5e6754e7c8bf0eacdf3943ba41a4488632c13e96cb2f3a31a80afd2f9dabc9d4
