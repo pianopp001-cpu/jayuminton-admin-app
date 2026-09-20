@@ -1,5 +1,5 @@
-name: Build admin v209.26 direct vector report
-# v209.26 explicit build trigger; the filename is retained so the established
+name: Build admin v209.27 native canvas report
+# v209.27 explicit build trigger; the filename is retained so the established
 # release workflow remains the single canonical continuation.
 
 on:
@@ -19,13 +19,14 @@ on:
       - 'deployment/jayuminton/admin_v20924_report_tile_retry_patch.py'
       - 'deployment/jayuminton/admin_v20925_report_single_column_sharp_text_patch.py'
       - 'deployment/jayuminton/admin_v20926_direct_vector_report_patch.py'
+      - 'deployment/jayuminton/admin_v20927_native_canvas_report_patch.py'
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-admin-v20926-direct-vector-report
+  group: jayuminton-admin-v20927-native-canvas-report
   cancel-in-progress: true
 
 jobs:
@@ -62,12 +63,12 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
 
-      - name: Build v209.26
+      - name: Build v209.27
         shell: bash
         run: |
           set -euxo pipefail
           HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
-          VERSION_BASE='releases/jayuminton-admin-v209.25-single-column-sharp-report.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.26-direct-vector-report.apk'
           JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
           HTML='app/src/main/assets/admin/index.html'
           OUT='app/build/outputs/apk/release/app-release.apk'
@@ -100,6 +101,7 @@ jobs:
           P124='deployment/jayuminton/admin_v20924_report_tile_retry_patch.py'
           P125='deployment/jayuminton/admin_v20925_report_single_column_sharp_text_patch.py'
           P126='deployment/jayuminton/admin_v20926_direct_vector_report_patch.py'
+          P127='deployment/jayuminton/admin_v20927_native_canvas_report_patch.py'
           PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
           P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
           P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
@@ -115,7 +117,7 @@ jobs:
           P104='deployment/jayuminton/admin_v20904_report_actions_attach_quickmenu_patch.py'
           P105='deployment/jayuminton/admin_v20905_native_full_report_capture_patch.py'
           P106='deployment/jayuminton/admin_v20906_pixelcopy_report_capture_dock_patch.py'
-          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$P123" "$P124" "$P125" "$P126" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
+          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$P123" "$P124" "$P125" "$P126" "$P127" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
 
           mkdir -p app/src/main/assets/admin
           unzip -p "$HTML_BASE" assets/admin/index.html > "$HTML"
@@ -165,8 +167,16 @@ jobs:
           python3 "$P124" "$HTML" "$JAVA"
           python3 "$P125" "$HTML"
           python3 "$P126" "$HTML"
+          python3 "$P127" "$HTML" "$JAVA"
 
-          echo VERIFY_V20926_SOURCE
+          echo VERIFY_V20927_SOURCE
+          grep -F 'JAYUMINTON_NATIVE_CANVAS_REPORT_V20927' "$HTML" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_CANVAS_REPORT_V20927' "$JAVA" >/dev/null
+          grep -F 'window.jmV20927SaveNativeCanvasReport' "$HTML" >/dev/null
+          grep -F 'NATIVE_REPORT_WIDTH = 2800' "$JAVA" >/dev/null
+          grep -F 'NATIVE_REPORT_COLUMNS = 4' "$JAVA" >/dev/null
+          grep -F 'Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG' "$JAVA" >/dev/null
+          grep -F 'NativeCanvasReport.saveReportJson' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_DIRECT_VECTOR_REPORT_V20926' "$HTML" >/dev/null
           grep -F 'window.jmV20926SaveVectorReport' "$HTML" >/dev/null
           grep -F 'W=2000' "$HTML" >/dev/null
@@ -241,7 +251,7 @@ jobs:
           p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
           s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
           if n!=1: raise SystemExit('versionCode anchor mismatch')
-          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.26'",s,count=1)
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.27'",s,count=1)
           if n!=1: raise SystemExit('versionName anchor mismatch')
           p.write_text(s,encoding='utf-8')
           PY
@@ -255,7 +265,7 @@ jobs:
           unzip -t "$OUT" >/dev/null
           "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
           grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
-          grep -F "versionName='209.26'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='209.27'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
 
           unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
           grep -F 'JAYUMINTON_GAME_COUNT_DOUBLE_TAP_GUARD_V20913' "$RUNNER_TEMP/final-html" >/dev/null
@@ -269,6 +279,7 @@ jobs:
           grep -F 'JAYUMINTON_REPORT_TILE_RETRY_V20924' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_REPORT_SINGLE_COLUMN_SHARP_TEXT_V20925' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_DIRECT_VECTOR_REPORT_V20926' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'JAYUMINTON_NATIVE_CANVAS_REPORT_V20927' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_ADMIN_MEMBER_MESSAGE_VIBRATION_V20912' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_REPORT_PIXELCOPY_CAPTURE_V20906' "$RUNNER_TEMP/final-html" >/dev/null
           unzip -p "$OUT" classes.dex > "$RUNNER_TEMP/classes.dex"
@@ -283,7 +294,7 @@ jobs:
           echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
           echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
 
-      - name: Publish v209.26 APK
+      - name: Publish v209.27 APK
         shell: bash
         run: |
           set -euo pipefail
@@ -292,15 +303,15 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK_PATH" releases/jayuminton-admin-v209.26-direct-vector-report.apk
-          printf 'status=success\nversion=209.26\nbase=v209.25-single-column-sharp-report\nfeature=direct-vector-report\nfix=pure-svg-text+2000px-native-raster+no-webview-screenshot+no-pixelcopy+full-expanded-one-image\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20926-direct-vector-report.txt
-          git add releases/jayuminton-admin-v209.26-direct-vector-report.apk deployment/status/v20926-direct-vector-report.txt
-          git commit -m 'Publish admin v209.26 direct vector report' || exit 0
+          cp "$APK_PATH" releases/jayuminton-admin-v209.27-native-canvas-report.apk
+          printf 'status=success\nversion=209.27\nbase=v209.26-direct-vector-report\nfeature=native-canvas-report\nfix=android-canvas+2800px+4-columns+native-antialias+full-history-one-image\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20927-native-canvas-report.txt
+          git add releases/jayuminton-admin-v209.27-native-canvas-report.apk deployment/status/v20927-native-canvas-report.txt
+          git commit -m 'Publish admin v209.27 native canvas report' || exit 0
           git push origin HEAD:main
 
 
 
-      - name: Record v209.26 build failure
+      - name: Record v209.27 build failure
         if: failure()
         shell: bash
         run: |
@@ -310,7 +321,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p deployment/status
-          printf 'status=failure\nversion=209.26\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20926-direct-vector-report.txt
-          git add deployment/status/v20926-direct-vector-report.txt
-          git commit -m 'Record admin v209.26 build failure' || exit 0
+          printf 'status=failure\nversion=209.27\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20927-native-canvas-report.txt
+          git add deployment/status/v20927-native-canvas-report.txt
+          git commit -m 'Record admin v209.27 build failure' || exit 0
           git push origin HEAD:main
