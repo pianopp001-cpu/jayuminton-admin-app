@@ -1,0 +1,9 @@
+status=success
+version=209.32
+base=v209.29-complete-smooth-native-report
+feature=report-carrot-chat-split
+fix=login-raw-newline+top-summary+top-highlights+4200px-final-pixels+no-card-resample+full-history+remove-941px-save-race+carrot-chat-safe-panels
+base_version_code=112
+new_version_code=113
+run_id=35528567111
+sha256=7f013d17ec779e95c1d17d6f8b11b363239e60017c9b73f9b375cbf09343d670
