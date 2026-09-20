@@ -202,8 +202,13 @@ jobs:
           grep -F 'JAYUMINTON_COURT_OPENING_GAP_CLOSURE_V20938' "$JAVA" >/dev/null
           grep -F 'JAYUMINTON_GUARANTEED_COURT_OPENING_FLOOR_V20937' "$JAVA" >/dev/null
           grep -F 'activeRmsLowFloorV20938(' "$JAVA" >/dev/null
+          grep -F 'liftOpeningFrameFloorV20938(' "$JAVA" >/dev/null
+          grep -F 'isActiveDirectUtteranceV20938(' "$JAVA" >/dev/null
+          grep -F 'voiceGenerationV20938' "$JAVA" >/dev/null
+          grep -F 'targetFrameRms = dbToLinear(-14.0)' "$JAVA" >/dev/null
+          grep -F 'activeRepeatRequest.id + "-g" + voiceGenerationV20938 + "-repeat-" + repeatNumber' "$JAVA" >/dev/null
           grep -F 'detectOpeningPhraseEndV20938(' "$JAVA" >/dev/null
-          grep -F 'dbToLinear(-78.0)' "$JAVA" >/dev/null
+          grep -F 'dbToLinear(-86.0)' "$JAVA" >/dev/null
           grep -F 'dbToLinear(-10.5)' "$JAVA" >/dev/null
           grep -F 'ADAPTIVE_FINAL_WAV_FALLBACK_V20938' "$JAVA" >/dev/null
           grep -F 'NEVER_SUPPRESS_PLAYBACK_V20938' "$JAVA" >/dev/null
