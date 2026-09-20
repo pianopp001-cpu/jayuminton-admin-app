@@ -198,7 +198,9 @@ jobs:
           grep -F 'JAYUMINTON_EXACT_COURT_NUMBER_RANGE_V20935' "$JAVA" >/dev/null
           grep -F 'public void onRangeStart(String utteranceId, int start, int end, int frame)' "$JAVA" >/dev/null
           grep -F 'armExactCourtNumberRangeV20935(activeRepeatRequest)' "$JAVA" >/dev/null
-          grep -F 'applyExactCourtNumberGainV20935(' "$JAVA" >/dev/null
+          grep -F 'balanceExactCourtNumberFinalWavV20935(' "$JAVA" >/dev/null
+          grep -F 'LAST DSP STAGE' "$JAVA" >/dev/null
+          grep -F 'start <= courtWordTextStartIndexV20935' "$JAVA" >/dev/null
           grep -F 'gapDb <= 1.5' "$JAVA" >/dev/null
           grep -F 'afterGapDb <= 2.0' "$JAVA" >/dev/null
           grep -F 'COURT_FINISH_TARGET_RMS_DBFS = -9.0' "$JAVA" >/dev/null
