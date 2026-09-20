@@ -1,0 +1,9 @@
+status=success
+version=209.28
+base=v209.27-native-canvas-report
+feature=polished-native-canvas-report
+fix=3800px+3-columns+larger-bold-text+hinting+spacing+game-badges
+base_version_code=110
+new_version_code=111
+run_id=35523110187
+sha256=364e204fdffa47a7d8e12725b60e9b486d44d360e6fb52b10709387eb66919a6
