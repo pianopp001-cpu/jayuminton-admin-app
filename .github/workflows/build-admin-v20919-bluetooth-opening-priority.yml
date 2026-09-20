@@ -1,5 +1,5 @@
-name: Build admin v209.21 full expanded history export
-# v209.21 explicit build trigger; the filename is retained so the established
+name: Build admin v209.22 marketplace readable full report
+# v209.22 explicit build trigger; the filename is retained so the established
 # release workflow remains the single canonical continuation.
 
 on:
@@ -14,13 +14,14 @@ on:
       - 'deployment/jayuminton/admin_v20919_bluetooth_court_opening_priority_patch.py'
       - 'deployment/jayuminton/admin_v20920_high_resolution_single_report_patch.py'
       - 'deployment/jayuminton/admin_v20921_full_history_export_layout_patch.py'
+      - 'deployment/jayuminton/admin_v20922_marketplace_readable_full_report_patch.py'
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-admin-v20921-full-expanded-history-export
+  group: jayuminton-admin-v20922-marketplace-readable-full-report
   cancel-in-progress: true
 
 jobs:
@@ -57,12 +58,12 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
 
-      - name: Build v209.21
+      - name: Build v209.22
         shell: bash
         run: |
           set -euxo pipefail
           HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
-          VERSION_BASE='releases/jayuminton-admin-v209.20-high-resolution-single-report.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.21-full-expanded-history-layout.apk'
           JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
           HTML='app/src/main/assets/admin/index.html'
           OUT='app/build/outputs/apk/release/app-release.apk'
@@ -90,6 +91,7 @@ jobs:
           P119='deployment/jayuminton/admin_v20919_bluetooth_court_opening_priority_patch.py'
           P120='deployment/jayuminton/admin_v20920_high_resolution_single_report_patch.py'
           P121='deployment/jayuminton/admin_v20921_full_history_export_layout_patch.py'
+          P122='deployment/jayuminton/admin_v20922_marketplace_readable_full_report_patch.py'
           PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
           P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
           P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
@@ -105,7 +107,7 @@ jobs:
           P104='deployment/jayuminton/admin_v20904_report_actions_attach_quickmenu_patch.py'
           P105='deployment/jayuminton/admin_v20905_native_full_report_capture_patch.py'
           P106='deployment/jayuminton/admin_v20906_pixelcopy_report_capture_dock_patch.py'
-          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
+          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
 
           mkdir -p app/src/main/assets/admin
           unzip -p "$HTML_BASE" assets/admin/index.html > "$HTML"
@@ -150,8 +152,14 @@ jobs:
           python3 "$P119" "$JAVA"
           python3 "$P120" "$HTML" "$JAVA"
           python3 "$P121" "$HTML"
+          python3 "$P122" "$HTML"
 
-          echo VERIFY_V20921_SOURCE
+          echo VERIFY_V20922_SOURCE
+          grep -F 'JAYUMINTON_MARKETPLACE_READABLE_FULL_REPORT_V20922' "$HTML" >/dev/null
+          grep -F 'w=Math.max(2400' "$HTML" >/dev/null
+          grep -F 'grid-template-columns:repeat(3,minmax(0,1fr))' "$HTML" >/dev/null
+          grep -F 'font-size:30px!important' "$HTML" >/dev/null
+          grep -F 'font-size:25px!important' "$HTML" >/dev/null
           grep -F 'JAYUMINTON_FULL_HISTORY_EXPORT_LAYOUT_V20921' "$HTML" >/dev/null
           grep -F 'jmV20921ForceFullHistory(c)' "$HTML" >/dev/null
           grep -F 'grid-template-areas:' "$HTML" >/dev/null
@@ -210,7 +218,7 @@ jobs:
           p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
           s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
           if n!=1: raise SystemExit('versionCode anchor mismatch')
-          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.21'",s,count=1)
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.22'",s,count=1)
           if n!=1: raise SystemExit('versionName anchor mismatch')
           p.write_text(s,encoding='utf-8')
           PY
@@ -224,7 +232,7 @@ jobs:
           unzip -t "$OUT" >/dev/null
           "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
           grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
-          grep -F "versionName='209.21'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='209.22'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
 
           unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
           grep -F 'JAYUMINTON_GAME_COUNT_DOUBLE_TAP_GUARD_V20913' "$RUNNER_TEMP/final-html" >/dev/null
@@ -233,6 +241,7 @@ jobs:
           grep -F 'JAYUMINTON_SINGLE_REPORT_READABLE_REFLOW_V20918' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_HIGH_RES_SINGLE_REPORT_V20920' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_FULL_HISTORY_EXPORT_LAYOUT_V20921' "$RUNNER_TEMP/final-html" >/dev/null
+          grep -F 'JAYUMINTON_MARKETPLACE_READABLE_FULL_REPORT_V20922' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_ADMIN_MEMBER_MESSAGE_VIBRATION_V20912' "$RUNNER_TEMP/final-html" >/dev/null
           grep -F 'JAYUMINTON_REPORT_PIXELCOPY_CAPTURE_V20906' "$RUNNER_TEMP/final-html" >/dev/null
           unzip -p "$OUT" classes.dex > "$RUNNER_TEMP/classes.dex"
@@ -247,7 +256,7 @@ jobs:
           echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
           echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
 
-      - name: Publish v209.21 APK
+      - name: Publish v209.22 APK
         shell: bash
         run: |
           set -euo pipefail
@@ -256,15 +265,15 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK_PATH" releases/jayuminton-admin-v209.21-full-expanded-history-layout.apk
-          printf 'status=success\nversion=209.21\nbase=v209.20-high-resolution-single-report\nfeature=full-expanded-history-layout\nfix=force-all-history-expanded+separate-name-game-arrival-departure+no-overlap\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20921-full-expanded-history-layout.txt
-          git add releases/jayuminton-admin-v209.21-full-expanded-history-layout.apk deployment/status/v20921-full-expanded-history-layout.txt
-          git commit -m 'Publish admin v209.21 full expanded history layout' || exit 0
+          cp "$APK_PATH" releases/jayuminton-admin-v209.22-marketplace-readable-full-report.apk
+          printf 'status=success\nversion=209.22\nbase=v209.21-full-expanded-history-layout\nfeature=marketplace-readable-full-report\nfix=2400px-export+3-column-full-history+larger-text+shorter-long-image\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20922-marketplace-readable-full-report.txt
+          git add releases/jayuminton-admin-v209.22-marketplace-readable-full-report.apk deployment/status/v20922-marketplace-readable-full-report.txt
+          git commit -m 'Publish admin v209.22 marketplace readable full report' || exit 0
           git push origin HEAD:main
 
 
 
-      - name: Record v209.21 build failure
+      - name: Record v209.22 build failure
         if: failure()
         shell: bash
         run: |
@@ -274,7 +283,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p deployment/status
-          printf 'status=failure\nversion=209.21\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20921-full-expanded-history-layout.txt
-          git add deployment/status/v20921-full-expanded-history-layout.txt
-          git commit -m 'Record admin v209.21 build failure' || exit 0
+          printf 'status=failure\nversion=209.22\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20922-marketplace-readable-full-report.txt
+          git add deployment/status/v20922-marketplace-readable-full-report.txt
+          git commit -m 'Record admin v209.22 build failure' || exit 0
           git push origin HEAD:main
