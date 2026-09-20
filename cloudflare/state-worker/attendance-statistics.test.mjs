@@ -37,6 +37,14 @@ assert.equal(departedMember.arrivedAt, arrivedAt);
 assert.equal(departedMember.departedAt, departedAt);
 assert.deepEqual(departed.event.departedMemberIds, ['1']);
 
+// Repeating 귀가 on an already-away member is a strict no-op: keep the first departure time.
+const repeatedAway = setMemberStatusMutation(departed.state, ['1'], 'away', '2026-09-08T15:45:00.000Z');
+const repeatedAwayMember = repeatedAway.state.members.find(m => m.id === '1');
+assert.equal(repeatedAwayMember.status, 'away');
+assert.equal(repeatedAwayMember.departedAt, departedAt);
+assert.deepEqual(repeatedAway.event.memberIds, []);
+assert.deepEqual(repeatedAway.event.departedMemberIds, []);
+
 // A non-assignment-pool status must not create a false departure timestamp.
 const restingAway = setMemberStatusMutation(normalizeState(base), ['2'], 'away', departedAt);
 assert.equal(restingAway.state.members.find(m => m.id === '2').departedAt, undefined);
