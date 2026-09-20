@@ -1,0 +1,9 @@
+status=success
+version=209.21
+base=v209.20-high-resolution-single-report
+feature=full-expanded-history-layout
+fix=force-all-history-expanded+separate-name-game-arrival-departure+no-overlap
+base_version_code=103
+new_version_code=104
+run_id=35518180415
+sha256=e22e3f2bad1d1bb1bf1454e75a6beb8d410bf7d4311512f160cdb5db8e839796
