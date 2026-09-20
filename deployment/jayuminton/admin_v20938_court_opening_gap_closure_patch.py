@@ -58,6 +58,8 @@ field_insert = field_anchor + '''    private static final String COURT_OPENING_G
     private volatile int normalizingPhraseEndFrameV20938 = -1;
     private int courtSynthRetryCountV20938 = 0;
     private volatile long voiceGenerationV20938 = 0L;
+    private SpeakRequest ttsRecoveryRequestV20938;
+    private int ttsEngineRecoveryBudgetV20938 = 1;
 '''
 if java.count(field_anchor) != 1:
     raise SystemExit("v209.38 marker field anchor mismatch: " + str(java.count(field_anchor)))
@@ -145,9 +147,11 @@ direct_error_new = '''                if (!isActiveDirectUtteranceV20938(utteran
                 final String failedDirectIdV20938 = utteranceId;
                 runOnUiThread(() -> {
                     if (!isActiveDirectUtteranceV20938(failedDirectIdV20938)) return;
-                    speaking.set(false);
-                    releaseAmplifiedVoice(true);
-                    restoreAudio();
+                    if (remainingVoiceRepeats > 0) {
+                        speakNextRepeat();
+                    } else {
+                        recoverTtsEngineOnceV20938();
+                    }
                 });
             }
 
@@ -168,9 +172,11 @@ direct_stop_new = '''                if (!isActiveDirectUtteranceV20938(utteranc
                 final String stoppedDirectIdV20938 = utteranceId;
                 runOnUiThread(() -> {
                     if (!isActiveDirectUtteranceV20938(stoppedDirectIdV20938)) return;
-                    speaking.set(false);
-                    releaseAmplifiedVoice(true);
-                    restoreAudio();
+                    if (remainingVoiceRepeats > 0) {
+                        speakNextRepeat();
+                    } else {
+                        recoverTtsEngineOnceV20938();
+                    }
                 });
             }
 '''
@@ -192,6 +198,11 @@ pre_stop_old = '''        // Cancel any previous synthesis/playback without rest
         currentAmplifiedSynthId = "";
         try { tts.stop(); } catch (Exception ignored) {}'''
 pre_stop_new = '''        // Install new request identity BEFORE tts.stop().
+        if (request != ttsRecoveryRequestV20938) {
+            ttsEngineRecoveryBudgetV20938 = 1;
+        } else {
+            ttsRecoveryRequestV20938 = null;
+        }
         activeRepeatRequest = request;
         remainingVoiceRepeats = VOICE_REPEAT_COUNT;
         courtSynthRetryCountV20938 = 0;
@@ -208,7 +219,36 @@ prepare_anchor = "    private void prepareNormalizedAmplifiedPlayback() {\n"
 if java.count(prepare_anchor) != 1:
     raise SystemExit("v209.38 prepare anchor mismatch")
 
-prepare_helper = r'''    private boolean isActiveDirectUtteranceV20938(String utteranceId) {
+prepare_helper = r'''    private void recoverTtsEngineOnceV20938() {
+        SpeakRequest request = activeRepeatRequest;
+        if (request == null) {
+            speaking.set(false);
+            restoreAudio();
+            return;
+        }
+        if (ttsEngineRecoveryBudgetV20938 <= 0) {
+            speaking.set(false);
+            activeRepeatRequest = null;
+            releaseAmplifiedVoice(true);
+            restoreAudio();
+            return;
+        }
+
+        ttsEngineRecoveryBudgetV20938--;
+        ttsRecoveryRequestV20938 = request;
+        pendingRequest = request;
+        remainingVoiceRepeats = 0;
+        activeRepeatRequest = null;
+        currentAmplifiedSynthId = "";
+        releaseAmplifiedVoice(true);
+        speaking.set(false);
+        restoreAudio();
+        ttsReady.set(false);
+        ttsInitAttempts = 0;
+        initTts(true);
+    }
+
+    private boolean isActiveDirectUtteranceV20938(String utteranceId) {
         SpeakRequest request = activeRepeatRequest;
         if (utteranceId == null || request == null || request.id == null) return false;
         String prefix = request.id + "-g" + voiceGenerationV20938 + "-repeat-";
@@ -317,6 +357,52 @@ if java.count(fallback_old) != 1:
     raise SystemExit("v209.38 fallback anchor mismatch: " + str(java.count(fallback_old)))
 java = java.replace(fallback_old, fallback_new, 1)
 
+# If synth file exists but DSP cannot validate it, preserve audibility by
+# playing the raw synthesized voice instead of deleting it.
+raw_dsp_old = '''        boolean maximizeFullCourtFinish = isCourtFinishAnnouncement(activeRepeatRequest);
+        if (!normalizeAndLimitVoiceWav(
+                amplifiedVoiceFile, maximizeFullCourtFinish)) {
+            fallbackToDirectTts();
+            return;
+        }
+        startAmplifiedRepeatPlayback();'''
+raw_dsp_new = '''        boolean maximizeFullCourtFinish = isCourtFinishAnnouncement(activeRepeatRequest);
+        if (!normalizeAndLimitVoiceWav(
+                amplifiedVoiceFile, maximizeFullCourtFinish)) {
+            if (maximizeFullCourtFinish && amplifiedVoiceFile != null &&
+                    amplifiedVoiceFile.exists() && amplifiedVoiceFile.length() > 0) {
+                // RAW_SYNTH_ALWAYS_AUDIBLE_V20938
+                startAmplifiedRepeatPlayback();
+                return;
+            }
+            fallbackToDirectTts();
+            return;
+        }
+        startAmplifiedRepeatPlayback();'''
+if java.count(raw_dsp_old) != 1:
+    raise SystemExit("v209.38 raw DSP fallback anchor mismatch: " + str(java.count(raw_dsp_old)))
+java = java.replace(raw_dsp_old, raw_dsp_new, 1)
+
+# tts.speak() can return ERROR without any callback. Consume the remaining
+# direct attempts, then rebuild Android TTS once with the same pending request.
+direct_result_old = '''        if (result == TextToSpeech.ERROR) {
+            remainingVoiceRepeats = 0;
+            speaking.set(false);
+            activeRepeatRequest = null;
+            restoreAudio();
+        }'''
+direct_result_new = '''        if (result == TextToSpeech.ERROR) {
+            if (remainingVoiceRepeats > 0) {
+                speakNextRepeat();
+            } else {
+                recoverTtsEngineOnceV20938();
+            }
+        }'''
+if java.count(direct_result_old) != 1:
+    raise SystemExit("v209.38 direct result anchor mismatch: " + str(java.count(direct_result_old)))
+java = java.replace(direct_result_old, direct_result_new, 1)
+
+
 # ---------------------------------------------------------------------------
 # Replace v209.37 opening analysis/protection with lower-floor adaptive analysis,
 # absolute floor + relative balance, adaptive phrase-end detection, and fallback.
@@ -378,35 +464,42 @@ replacement = r'''    private double frameRmsV20938(
         final int searchEnd = Math.min(
                 sampleCount, (int) Math.round(sampleRate * channels * 2.00));
 
-        // Adaptive floor: use the quietest early frame as a noise estimate, but
-        // never demand more than -72 dBFS to recognize speech.
         double minNonZero = Double.POSITIVE_INFINITY;
         for (int pos = 0; pos < searchEnd; pos += frameSamples) {
             double rms = frameRmsV20938(
                     wav, dataOffset, sampleCount, pos, Math.min(searchEnd, pos + frameSamples));
             if (rms > 1.0e-10) minNonZero = Math.min(minNonZero, rms);
         }
-        double absoluteFloor = dbToLinear(-78.0);
+        double absoluteFloor = dbToLinear(-82.0);
         double adaptive = Double.isFinite(minNonZero)
                 ? Math.max(absoluteFloor, Math.min(dbToLinear(-72.0), minNonZero * 2.5))
                 : absoluteFloor;
 
+        // Find the first strong frame, but DO NOT return it immediately.
+        // A very quiet N번 may exist before a much louder "코트".
+        int strongOnset = -1;
         for (int pos = 0; pos < searchEnd; pos += frameSamples) {
             int limit = Math.min(searchEnd, pos + frameSamples);
             double rms = frameRmsV20938(wav, dataOffset, sampleCount, pos, limit);
-            if (rms >= adaptive) return pos;
+            if (rms >= adaptive) {
+                strongOnset = pos;
+                break;
+            }
         }
 
-        // Last-resort sample-level onset. A very quiet first number must not be
-        // skipped merely because its short-frame RMS is tiny.
-        final double sampleFloor = dbToLinear(-84.0);
-        for (int i = 0; i < searchEnd; i++) {
+        final double sampleFloor = dbToLinear(-86.0);
+        int earlySearchEnd = strongOnset >= 0
+                ? Math.min(searchEnd, strongOnset + frameSamples)
+                : searchEnd;
+        for (int i = 0; i < earlySearchEnd; i++) {
             int off = dataOffset + i * 2;
             if (off < 0 || off + 1 >= wav.length) break;
             short sample = (short) ((wav[off] & 0xff) | (wav[off + 1] << 8));
-            if (Math.abs(sample / 32768.0) >= sampleFloor) return i;
+            if (Math.abs(sample / 32768.0) >= sampleFloor) {
+                return Math.max(0, (i / channels) * channels);
+            }
         }
-        return -1;
+        return strongOnset;
     }
 
     private int detectOpeningPhraseEndV20938(
@@ -467,7 +560,8 @@ replacement = r'''    private double frameRmsV20938(
         // attack/release state and every frame gain is >= 1.0.
         for (int pos = start; pos < end; pos += frameSamples) {
             int limit = Math.min(end, pos + frameSamples);
-            double rms = frameRmsV20938(wav, dataOffset, sampleCount, pos, limit);
+            double rms = activeRmsLowFloorV20938(
+                    wav, dataOffset, sampleCount, pos, limit);
             if (rms < activityFloor || rms >= targetFrameRms) continue;
             double gain = Math.max(
                     1.0, Math.min(maxFrameGain, targetFrameRms / rms));
@@ -636,6 +730,10 @@ for required in (
     MARKER,
     "activeRmsLowFloorV20938(",
     "liftOpeningFrameFloorV20938(",
+    "RAW_SYNTH_ALWAYS_AUDIBLE_V20938",
+    "recoverTtsEngineOnceV20938(",
+    "ttsEngineRecoveryBudgetV20938",
+    "strongOnset",
     "isActiveDirectUtteranceV20938(",
     "voiceGenerationV20938",
     "targetFrameRms = dbToLinear(-14.0)",
