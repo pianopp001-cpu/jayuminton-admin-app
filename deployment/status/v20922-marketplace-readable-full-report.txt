@@ -1,4 +1,9 @@
-status=failure
+status=success
 version=209.22
-run_id=35518446693
-source_sha=3f35baa82ef136a90493aecf102eafb6192afad8
+base=v209.21-full-expanded-history-layout
+feature=marketplace-readable-full-report
+fix=2400px-export+3-column-full-history+larger-text+shorter-long-image
+base_version_code=104
+new_version_code=105
+run_id=35518515566
+sha256=6831198a13c5ad2010af061d63319f47c9a7b3023ad7526334ed029fd91d6142
