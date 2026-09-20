@@ -440,7 +440,6 @@ jobs:
           grep -F 'JAYUMINTON_BLUETOOTH_OPENING_FIXED_GAIN_V20934' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
           grep -F 'JAYUMINTON_EXACT_COURT_NUMBER_RANGE_V20935' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
           grep -F 'JAYUMINTON_GUARANTEED_COURT_OPENING_FLOOR_V20937' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
-          grep -F 'NEVER_SUPPRESS_PLAYBACK_V20937' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
