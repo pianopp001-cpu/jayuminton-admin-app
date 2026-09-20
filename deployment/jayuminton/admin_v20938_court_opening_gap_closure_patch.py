@@ -57,6 +57,7 @@ field_insert = field_anchor + '''    private static final String COURT_OPENING_G
     private volatile int normalizingNumberEndFrameV20938 = -1;
     private volatile int normalizingPhraseEndFrameV20938 = -1;
     private int courtSynthRetryCountV20938 = 0;
+    private volatile long voiceGenerationV20938 = 0L;
 '''
 if java.count(field_anchor) != 1:
     raise SystemExit("v209.38 marker field anchor mismatch: " + str(java.count(field_anchor)))
@@ -93,11 +94,128 @@ if java.count(done_old) != 1:
     raise SystemExit("v209.38 synth-done anchor mismatch: " + str(java.count(done_old)))
 java = java.replace(done_old, done_new, 1)
 
+# Guard every non-synthesis TTS callback with request generation identity. Without
+# this, tts.stop() from a newer announcement can deliver a stale onStop/onDone
+# that tears down the new synthesis/audio ducking.
+direct_done_old = '''                runOnUiThread(() -> {
+                    if (activeRepeatRequest != null && remainingVoiceRepeats > 0) {
+                        speakNextRepeat();
+                    } else {
+                        speaking.set(false);
+                        activeRepeatRequest = null;
+                        releaseAmplifiedVoice(true);
+                        restoreAudio();
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String utteranceId) {'''
+direct_done_new = '''                if (!isActiveDirectUtteranceV20938(utteranceId)) return;
+                final String completedDirectIdV20938 = utteranceId;
+                runOnUiThread(() -> {
+                    if (!isActiveDirectUtteranceV20938(completedDirectIdV20938)) return;
+                    if (activeRepeatRequest != null && remainingVoiceRepeats > 0) {
+                        speakNextRepeat();
+                    } else {
+                        speaking.set(false);
+                        activeRepeatRequest = null;
+                        releaseAmplifiedVoice(true);
+                        restoreAudio();
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String utteranceId) {'''
+if java.count(direct_done_old) != 1:
+    raise SystemExit("v209.38 direct done guard anchor mismatch: " + str(java.count(direct_done_old)))
+java = java.replace(direct_done_old, direct_done_new, 1)
+
+direct_error_old = '''                speaking.set(false);
+                runOnUiThread(() -> {
+                    releaseAmplifiedVoice(true);
+                    restoreAudio();
+                });
+            }
+
+            @Override
+            public void onStop(String utteranceId, boolean interrupted) {'''
+direct_error_new = '''                if (!isActiveDirectUtteranceV20938(utteranceId)) return;
+                final String failedDirectIdV20938 = utteranceId;
+                runOnUiThread(() -> {
+                    if (!isActiveDirectUtteranceV20938(failedDirectIdV20938)) return;
+                    speaking.set(false);
+                    releaseAmplifiedVoice(true);
+                    restoreAudio();
+                });
+            }
+
+            @Override
+            public void onStop(String utteranceId, boolean interrupted) {'''
+if java.count(direct_error_old) != 1:
+    raise SystemExit("v209.38 direct error guard anchor mismatch: " + str(java.count(direct_error_old)))
+java = java.replace(direct_error_old, direct_error_new, 1)
+
+direct_stop_old = '''                speaking.set(false);
+                runOnUiThread(() -> {
+                    releaseAmplifiedVoice(true);
+                    restoreAudio();
+                });
+            }
+'''
+direct_stop_new = '''                if (!isActiveDirectUtteranceV20938(utteranceId)) return;
+                final String stoppedDirectIdV20938 = utteranceId;
+                runOnUiThread(() -> {
+                    if (!isActiveDirectUtteranceV20938(stoppedDirectIdV20938)) return;
+                    speaking.set(false);
+                    releaseAmplifiedVoice(true);
+                    restoreAudio();
+                });
+            }
+'''
+if java.count(direct_stop_old) != 1:
+    raise SystemExit("v209.38 direct stop guard anchor mismatch: " + str(java.count(direct_stop_old)))
+java = java.replace(direct_stop_old, direct_stop_new, 1)
+
+# Tag direct utterances with a per-request generation, so even repeated court IDs
+# cannot make a stale callback look current.
+direct_id_old = 'activeRepeatRequest.id + "-repeat-" + repeatNumber'
+direct_id_new = 'activeRepeatRequest.id + "-g" + voiceGenerationV20938 + "-repeat-" + repeatNumber'
+if java.count(direct_id_old) != 1:
+    raise SystemExit("v209.38 direct id anchor mismatch: " + str(java.count(direct_id_old)))
+java = java.replace(direct_id_old, direct_id_new, 1)
+
+# Install the new identity before tts.stop(). This also protects against a
+# theoretically synchronous stop callback from the previous direct utterance.
+pre_stop_old = '''        // Cancel any previous synthesis/playback without restoring the ducked music yet.
+        currentAmplifiedSynthId = "";
+        try { tts.stop(); } catch (Exception ignored) {}'''
+pre_stop_new = '''        // Install new request identity BEFORE tts.stop().
+        activeRepeatRequest = request;
+        remainingVoiceRepeats = VOICE_REPEAT_COUNT;
+        courtSynthRetryCountV20938 = 0;
+        voiceGenerationV20938++;
+        // Cancel previous synthesis/playback without restoring ducked music yet.
+        currentAmplifiedSynthId = "";
+        try { tts.stop(); } catch (Exception ignored) {}'''
+if java.count(pre_stop_old) != 1:
+    raise SystemExit("v209.38 pre-stop generation anchor mismatch: " + str(java.count(pre_stop_old)))
+java = java.replace(pre_stop_old, pre_stop_new, 1)
+
+
 prepare_anchor = "    private void prepareNormalizedAmplifiedPlayback() {\n"
 if java.count(prepare_anchor) != 1:
     raise SystemExit("v209.38 prepare anchor mismatch")
 
-prepare_helper = r'''    private void prepareCompletedAmplifiedPlaybackV20938(
+prepare_helper = r'''    private boolean isActiveDirectUtteranceV20938(String utteranceId) {
+        SpeakRequest request = activeRepeatRequest;
+        if (utteranceId == null || request == null || request.id == null) return false;
+        String prefix = request.id + "-g" + voiceGenerationV20938 + "-repeat-";
+        return utteranceId.startsWith(prefix);
+    }
+
+    private void prepareCompletedAmplifiedPlaybackV20938(
             String completedSynthId, File completedFile, SpeakRequest completedRequest,
             int numberStartFrame, int numberEndFrame, int phraseEndFrame) {
         // If another court announcement superseded this one before UI handoff,
@@ -236,7 +354,7 @@ replacement = r'''    private double frameRmsV20938(
         // Much lower than the old -46 dBFS gate. TTS WAV leading silence is
         // digital/near-digital silence, so -78 dBFS keeps genuinely tiny speech
         // while rejecting zero-padding and negligible quantization residue.
-        final double floor = dbToLinear(-78.0);
+        final double floor = dbToLinear(-86.0);
         double sq = 0.0;
         long count = 0L;
         for (int i = start; i < end; i++) {
@@ -328,6 +446,34 @@ replacement = r'''    private double frameRmsV20938(
             }
         }
         return maxEnd;
+    }
+
+    private void liftOpeningFrameFloorV20938(
+            byte[] wav, int dataOffset, int sampleCount,
+            int start, int end, int sampleRate, int channels) {
+        if (wav == null || sampleCount <= 0 || end <= start ||
+                sampleRate < 8000 || channels < 1) return;
+
+        start = Math.max(0, Math.min(sampleCount, start));
+        end = Math.max(start, Math.min(sampleCount, end));
+        final int frameSamples = Math.max(
+                channels, (int) Math.round(sampleRate * channels * 0.024));
+        final double activityFloor = dbToLinear(-86.0);
+        final double targetFrameRms = dbToLinear(-14.0);
+        final double maxFrameGain = dbToLinear(36.0);
+        final double ceiling = dbToLinear(VOICE_PEAK_CEILING_DBFS);
+
+        // Deterministic OFFLINE frame floor, never runtime AGC: no detector
+        // attack/release state and every frame gain is >= 1.0.
+        for (int pos = start; pos < end; pos += frameSamples) {
+            int limit = Math.min(end, pos + frameSamples);
+            double rms = frameRmsV20938(wav, dataOffset, sampleCount, pos, limit);
+            if (rms < activityFloor || rms >= targetFrameRms) continue;
+            double gain = Math.max(
+                    1.0, Math.min(maxFrameGain, targetFrameRms / rms));
+            liftFinalRegionOnlyUpV20937(
+                    wav, dataOffset, sampleCount, pos, limit, gain, ceiling);
+        }
     }
 
     private void liftFinalRegionOnlyUpV20937(
@@ -464,6 +610,11 @@ replacement = r'''    private double frameRmsV20938(
                 referenceStart, referenceEnd,
                 sampleRate, channels);
 
+        // Final local floor catches a tiny N번 even if adjacent "코트" is loud.
+        liftOpeningFrameFloorV20938(
+                wav, dataOffset, sampleCount,
+                onset, phraseEnd, sampleRate, channels);
+
         // Keep literal use so build-time verification proves exact-path fallback
         // is present rather than an unconditional return after exact mode.
         if (!exactApplied) {
@@ -484,8 +635,12 @@ java = java.replace(status_old, status_new, 1)
 for required in (
     MARKER,
     "activeRmsLowFloorV20938(",
+    "liftOpeningFrameFloorV20938(",
+    "isActiveDirectUtteranceV20938(",
+    "voiceGenerationV20938",
+    "targetFrameRms = dbToLinear(-14.0)",
     "detectOpeningPhraseEndV20938(",
-    "dbToLinear(-78.0)",
+    "dbToLinear(-86.0)",
     "dbToLinear(-10.5)",
     "ADAPTIVE_FINAL_WAV_FALLBACK_V20938",
     "NEVER_SUPPRESS_PLAYBACK_V20938",
