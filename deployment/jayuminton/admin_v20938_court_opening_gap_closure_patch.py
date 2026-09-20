@@ -60,6 +60,8 @@ field_insert = field_anchor + '''    private static final String COURT_OPENING_G
     private volatile long voiceGenerationV20938 = 0L;
     private SpeakRequest ttsRecoveryRequestV20938;
     private int ttsEngineRecoveryBudgetV20938 = 1;
+    private final java.util.ArrayDeque<SpeakRequest> courtVoiceQueueV20938 =
+            new java.util.ArrayDeque<>();
 '''
 if java.count(field_anchor) != 1:
     raise SystemExit("v209.38 marker field anchor mismatch: " + str(java.count(field_anchor)))
@@ -103,10 +105,7 @@ direct_done_old = '''                runOnUiThread(() -> {
                     if (activeRepeatRequest != null && remainingVoiceRepeats > 0) {
                         speakNextRepeat();
                     } else {
-                        speaking.set(false);
-                        activeRepeatRequest = null;
-                        releaseAmplifiedVoice(true);
-                        restoreAudio();
+                        finishVoiceCycleV20938();
                     }
                 });
             }
@@ -219,7 +218,49 @@ prepare_anchor = "    private void prepareNormalizedAmplifiedPlayback() {\n"
 if java.count(prepare_anchor) != 1:
     raise SystemExit("v209.38 prepare anchor mismatch")
 
-prepare_helper = r'''    private void recoverTtsEngineOnceV20938() {
+prepare_helper = r'''    private boolean isCourtFinishRequestV20938(SpeakRequest request) {
+        return request != null && request.id != null &&
+                request.id.startsWith("court_finish_");
+    }
+
+    private void enqueueCourtVoiceV20938(SpeakRequest request) {
+        if (!isCourtFinishRequestV20938(request)) return;
+        synchronized (courtVoiceQueueV20938) {
+            courtVoiceQueueV20938.addLast(request);
+        }
+    }
+
+    private SpeakRequest pollCourtVoiceV20938() {
+        synchronized (courtVoiceQueueV20938) {
+            return courtVoiceQueueV20938.pollFirst();
+        }
+    }
+
+    private void clearCourtVoiceQueueV20938() {
+        synchronized (courtVoiceQueueV20938) {
+            courtVoiceQueueV20938.clear();
+        }
+    }
+
+    private boolean startNextQueuedCourtVoiceV20938() {
+        SpeakRequest next = pollCourtVoiceV20938();
+        if (next == null) return false;
+        speakNative(next);
+        return true;
+    }
+
+    private void finishVoiceCycleV20938() {
+        currentAmplifiedSynthId = "";
+        releaseAmplifiedVoice(true);
+        remainingVoiceRepeats = 0;
+        speaking.set(false);
+        activeRepeatRequest = null;
+        if (!startNextQueuedCourtVoiceV20938()) {
+            restoreAudio();
+        }
+    }
+
+    private void recoverTtsEngineOnceV20938() {
         SpeakRequest request = activeRepeatRequest;
         if (request == null) {
             speaking.set(false);
@@ -230,7 +271,7 @@ prepare_helper = r'''    private void recoverTtsEngineOnceV20938() {
             speaking.set(false);
             activeRepeatRequest = null;
             releaseAmplifiedVoice(true);
-            restoreAudio();
+            if (!startNextQueuedCourtVoiceV20938()) restoreAudio();
             return;
         }
 
@@ -287,6 +328,77 @@ prepare_helper = r'''    private void recoverTtsEngineOnceV20938() {
 
 '''
 java = java.replace(prepare_anchor, prepare_helper + prepare_anchor, 1)
+
+# Court-finish announcements are critical and can be long. Do not let a later
+# finishCourt directSpeak/QUEUE_FLUSH erase an announcement still synthesizing or
+# playing. Keep only court-finish requests in a native FIFO; explicit stop clears it.
+speak_entry_old = '''    private void speakNative(SpeakRequest request) {
+        if (tts == null || !ttsReady.get()) {
+            pendingRequest = request;
+            if (!ttsInitializing) {
+                ttsInitAttempts = 0;
+                initTts(true);
+            }
+            return;
+        }
+'''
+speak_entry_new = '''    private void speakNative(SpeakRequest request) {
+        if (isCourtFinishRequestV20938(request)) {
+            boolean busy = speaking.get() || activeRepeatRequest != null ||
+                    amplifiedVoicePlayer != null ||
+                    (currentAmplifiedSynthId != null && !currentAmplifiedSynthId.isEmpty());
+            if (busy) {
+                enqueueCourtVoiceV20938(request);
+                return;
+            }
+        }
+
+        if (tts == null || !ttsReady.get()) {
+            if (isCourtFinishRequestV20938(request) && pendingRequest != null) {
+                enqueueCourtVoiceV20938(request);
+            } else {
+                pendingRequest = request;
+            }
+            if (!ttsInitializing) {
+                ttsInitAttempts = 0;
+                initTts(true);
+            }
+            return;
+        }
+'''
+if java.count(speak_entry_old) != 1:
+    raise SystemExit("v209.38 speak queue anchor mismatch: " + str(java.count(speak_entry_old)))
+java = java.replace(speak_entry_old, speak_entry_new, 1)
+
+finish_old = '''    private void finishAmplifiedSpeech() {
+        currentAmplifiedSynthId = "";
+        releaseAmplifiedVoice(true);
+        remainingVoiceRepeats = 0;
+        speaking.set(false);
+        activeRepeatRequest = null;
+        restoreAudio();
+    }'''
+finish_new = '''    private void finishAmplifiedSpeech() {
+        finishVoiceCycleV20938();
+    }'''
+if java.count(finish_old) != 1:
+    raise SystemExit("v209.38 finish queue anchor mismatch: " + str(java.count(finish_old)))
+java = java.replace(finish_old, finish_new, 1)
+
+# Explicit user/app stop means stop everything, including queued court calls.
+stop_queue_old = '''                remainingVoiceRepeats = 0;
+                activeRepeatRequest = null;
+                currentAmplifiedSynthId = "";
+                releaseAmplifiedVoice(true);'''
+stop_queue_new = '''                remainingVoiceRepeats = 0;
+                activeRepeatRequest = null;
+                clearCourtVoiceQueueV20938();
+                currentAmplifiedSynthId = "";
+                releaseAmplifiedVoice(true);'''
+if java.count(stop_queue_old) != 1:
+    raise SystemExit("v209.38 stop queue anchor mismatch: " + str(java.count(stop_queue_old)))
+java = java.replace(stop_queue_old, stop_queue_new, 1)
+
 
 # P135 used live collection fields during final DSP. Use the immutable snapshot
 # while the completed WAV is being normalized.
@@ -731,6 +843,10 @@ for required in (
     "activeRmsLowFloorV20938(",
     "liftOpeningFrameFloorV20938(",
     "RAW_SYNTH_ALWAYS_AUDIBLE_V20938",
+    "courtVoiceQueueV20938",
+    "enqueueCourtVoiceV20938(",
+    "startNextQueuedCourtVoiceV20938(",
+    "finishVoiceCycleV20938(",
     "recoverTtsEngineOnceV20938(",
     "ttsEngineRecoveryBudgetV20938",
     "strongOnset",
