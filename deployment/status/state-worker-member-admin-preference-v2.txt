@@ -1,5 +1,5 @@
-status=success
-run_id=35458895791
-source_sha=f203d60964d4a6eee33222f33168b7562a30cb25
+status=failure
+run_id=35535008356
+source_sha=73374482df47291ceae4de1eb49bc4b568a8f219
 feature=member-admin-preference-v2
 phrase=대기순서 밀려도 {name}와 배정해 주세요.
