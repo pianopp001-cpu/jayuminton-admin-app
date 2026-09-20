@@ -44,8 +44,19 @@ new_status = """export function setMemberStatusMutation(input, memberIds, status
       location: locationOf(state, id),
     }];
   }));
-  removeEverywhere(state, ids); const wanted = new Set(ids);
+  // Re-applying away to somebody who is already away is a strict no-op.
+  // This preserves the original departure time and avoids touching canonical state.
+  const effectiveIds = nextStatus === 'away'
+    ? ids.filter(id => (previous.get(String(id)) || {}).status !== 'away')
+    : ids;
   const departedMemberIds = [];
+  if (!effectiveIds.length) {
+    return { state, event: {
+      type: 'member_status_changed', memberIds: [], status: nextStatus,
+      arrivedMemberIds: [], departedMemberIds,
+    } };
+  }
+  removeEverywhere(state, effectiveIds); const wanted = new Set(effectiveIds);
   state.members = state.members.map(m => {
     const id = String(m.id);
     if (!wanted.has(id)) return m;
@@ -58,7 +69,7 @@ new_status = """export function setMemberStatusMutation(input, memberIds, status
     return next;
   });
   return { state, event: {
-    type: 'member_status_changed', memberIds: ids, status: nextStatus,
+    type: 'member_status_changed', memberIds: effectiveIds, status: nextStatus,
     arrivedMemberIds: [], departedMemberIds,
   } };
 }
