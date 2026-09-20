@@ -1,4 +1,9 @@
-status=failure
+status=success
 version=209.26
-run_id=35521547841
-source_sha=5f6795aad8be4995dff113247c6bd92c5bf7a599
+base=v209.25-single-column-sharp-report
+feature=direct-vector-report
+fix=pure-svg-text+2000px-native-raster+no-webview-screenshot+no-pixelcopy+full-expanded-one-image
+base_version_code=108
+new_version_code=109
+run_id=35521628802
+sha256=8cd59249280db1057c8504016078c209f44c5565b9530e623cd29edec9025b0e
