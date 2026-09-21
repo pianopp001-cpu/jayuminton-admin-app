@@ -78,7 +78,7 @@ jobs:
         run: |
           set -euxo pipefail
           HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
-          VERSION_BASE='releases/jayuminton-admin-v209.39-opening-zero-attenuation.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.38-court-opening-gap-closure.apk'
           JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
           HTML='app/src/main/assets/admin/index.html'
           OUT='app/build/outputs/apk/release/app-release.apk'
