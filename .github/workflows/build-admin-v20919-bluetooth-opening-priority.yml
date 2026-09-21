@@ -1,11 +1,12 @@
-name: Build admin v209.38 court opening gap closure
-# v209.38: close remaining app-controlled court-announcement gaps: ultra-quiet onset, absolute floor, adaptive phrase boundary, stale-callback race, one synth retry, always-speak fallback.
+name: Build admin v209.39 opening zero attenuation
+# v209.39: prevent any app-side attenuation of the critical N번 코트 나왔습니다 opening after de-hiss, while retaining v209.38 reliability guards.
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/build-admin-v20919-bluetooth-opening-priority.yml'
+      - 'deployment/jayuminton/admin_v20939_opening_zero_attenuation_patch.py'
       - 'deployment/jayuminton/admin_v20938_court_opening_gap_closure_patch.py'
       - 'deployment/jayuminton/admin_v20937_guaranteed_opening_floor_patch.py'
       - 'deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'
@@ -35,7 +36,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: jayuminton-admin-v20938-court-opening-gap-closure
+  group: jayuminton-admin-v20939-opening-zero-attenuation
   cancel-in-progress: true
 
 jobs:
@@ -72,12 +73,12 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
 
-      - name: Build v209.38 court opening gap closure
+      - name: Build v209.39 opening zero attenuation
         shell: bash
         run: |
           set -euxo pipefail
           HTML_BASE='releases/jayuminton-admin-v208.91-energy-normalize-limiter.apk'
-          VERSION_BASE='releases/jayuminton-admin-v209.37-guaranteed-opening-floor.apk'
+          VERSION_BASE='releases/jayuminton-admin-v209.39-opening-zero-attenuation.apk'
           JAVA='app/src/main/java/com/jayuminton/admin/MainActivity.java'
           HTML='app/src/main/assets/admin/index.html'
           OUT='app/build/outputs/apk/release/app-release.apk'
@@ -121,6 +122,7 @@ jobs:
           P135='deployment/jayuminton/admin_v20935_exact_number_range_away_idempotent_patch.py'
           P137='deployment/jayuminton/admin_v20937_guaranteed_opening_floor_patch.py'
           P138='deployment/jayuminton/admin_v20938_court_opening_gap_closure_patch.py'
+          P139='deployment/jayuminton/admin_v20939_opening_zero_attenuation_patch.py'
           PATT='deployment/jayuminton/admin_attendance_statistics_patch.py'
           P93='deployment/jayuminton/admin_v20893_game_report_patch.py'
           P93F='deployment/jayuminton/admin_v20893_game_report_finalize_patch.py'
@@ -136,7 +138,7 @@ jobs:
           P104='deployment/jayuminton/admin_v20904_report_actions_attach_quickmenu_patch.py'
           P105='deployment/jayuminton/admin_v20905_native_full_report_capture_patch.py'
           P106='deployment/jayuminton/admin_v20906_pixelcopy_report_capture_dock_patch.py'
-          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$P123" "$P124" "$P125" "$P126" "$P127" "$P128" "$P129" "$P130" "$P131" "$P132" "$P133" "$P134" "$P135" "$P137" "$P138" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
+          for f in "$HTML_BASE" "$VERSION_BASE" "$JAVA" "$P86" "$P87" "$P88" "$P89" "$P90" "$P91" "$P91B" "$P92" "$P107" "$P108" "$P109" "$P110" "$P111" "$P112" "$P113" "$P114" "$P115" "$P116" "$P117" "$P118" "$P119" "$P120" "$P121" "$P122" "$P123" "$P124" "$P125" "$P126" "$P127" "$P128" "$P129" "$P130" "$P131" "$P132" "$P133" "$P134" "$P135" "$P137" "$P138" "$P139" "$PATT" "$P93" "$P93F" "$P94" "$P95" "$P96" "$P97" "$P98" "$P99" "$P100" "$P101" "$P103" "$P104" "$P105" "$P106"; do test -s "$f"; done
 
           mkdir -p app/src/main/assets/admin
           unzip -p "$HTML_BASE" assets/admin/index.html > "$HTML"
@@ -197,6 +199,19 @@ jobs:
           python3 "$P135" "$HTML" "$JAVA"
           python3 "$P137" "$JAVA"
           python3 "$P138" "$JAVA"
+          python3 "$P139" "$JAVA"
+
+          echo VERIFY_V20939_SOURCE
+          grep -F 'JAYUMINTON_OPENING_ZERO_ATTENUATION_V20939' "$JAVA" >/dev/null
+          grep -F 'courtOpeningBaselineV20939' "$JAVA" >/dev/null
+          grep -F 'detectCourtOpeningRangePcmV20939(' "$JAVA" >/dev/null
+          grep -F 'ZERO_DOWNWARD_COMPRESSOR_V20939' "$JAVA" >/dev/null
+          grep -F 'gain = Math.max(1.0, gain);' "$JAVA" >/dev/null
+          grep -F 'ZERO_DOWNWARD_MAKEUP_V20939' "$JAVA" >/dev/null
+          grep -F 'localMakeupV20939 = Math.max(1.0, makeup);' "$JAVA" >/dev/null
+          grep -F 'enforceCourtOpeningNoAttenuationV20939(' "$JAVA" >/dev/null
+          grep -F 'pcmSafeCeiling = 32767.0 / 32768.0' "$JAVA" >/dev/null
+          grep -F 'Math.abs(current) + 1.0e-9 < originalAbs' "$JAVA" >/dev/null
 
           echo VERIFY_V20938_SOURCE
           grep -F 'JAYUMINTON_COURT_OPENING_GAP_CLOSURE_V20938' "$JAVA" >/dev/null
@@ -414,7 +429,7 @@ jobs:
           p=Path('app/build.gradle'); s=p.read_text(encoding='utf-8'); code=sys.argv[1]
           s,n=re.subn(r'(?m)^\s*versionCode\s+\d+\s*$',f'        versionCode {code}',s,count=1)
           if n!=1: raise SystemExit('versionCode anchor mismatch')
-          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.38'",s,count=1)
+          s,n=re.subn(r"(?m)^\s*versionName\s+'[^']*'\s*$","        versionName '209.39'",s,count=1)
           if n!=1: raise SystemExit('versionName anchor mismatch')
           p.write_text(s,encoding='utf-8')
           PY
@@ -428,7 +443,7 @@ jobs:
           unzip -t "$OUT" >/dev/null
           "$BT/aapt" dump badging "$OUT" > "$RUNNER_TEMP/new-badging.txt"
           grep -F "versionCode='$NEW_CODE'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
-          grep -F "versionName='209.38'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
+          grep -F "versionName='209.39'" "$RUNNER_TEMP/new-badging.txt" >/dev/null
 
           unzip -p "$OUT" assets/admin/index.html > "$RUNNER_TEMP/final-html"
           grep -F 'JAYUMINTON_GAME_COUNT_DOUBLE_TAP_GUARD_V20913' "$RUNNER_TEMP/final-html" >/dev/null
@@ -472,6 +487,7 @@ jobs:
           grep -F 'JAYUMINTON_EXACT_COURT_NUMBER_RANGE_V20935' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
           grep -F 'JAYUMINTON_GUARANTEED_COURT_OPENING_FLOOR_V20937' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
           grep -F 'JAYUMINTON_COURT_OPENING_GAP_CLOSURE_V20938' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
+          grep -F 'JAYUMINTON_OPENING_ZERO_ATTENUATION_V20939' "$RUNNER_TEMP/classes-strings.txt" >/dev/null
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
@@ -479,7 +495,7 @@ jobs:
           echo "BASE_VERSION_CODE=$BASE_CODE" >> "$GITHUB_ENV"
           echo "NEW_VERSION_CODE=$NEW_CODE" >> "$GITHUB_ENV"
 
-      - name: Publish v209.38 court opening gap closure APK
+      - name: Publish v209.39 opening zero attenuation APK
         shell: bash
         run: |
           set -euo pipefail
@@ -488,15 +504,15 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p releases deployment/status
-          cp "$APK_PATH" releases/jayuminton-admin-v209.38-court-opening-gap-closure.apk
-          printf 'status=success\nversion=209.38\nbase=v209.37-guaranteed-opening-floor\nfeature=ultra-quiet-onset+absolute-floor+adaptive-phrase-boundary+stale-callback-guard+synth-retry+always-speak\nfix=low-floor-detection+absolute-rms-floor+adaptive-final-wav-protection+completed-synth-snapshot+one-retry-before-direct\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20938-court-opening-gap-closure.txt
-          git add releases/jayuminton-admin-v209.38-court-opening-gap-closure.apk deployment/status/v20938-court-opening-gap-closure.txt
-          git commit -m 'Publish admin v209.38 court opening gap closure' || exit 0
+          cp "$APK_PATH" releases/jayuminton-admin-v209.39-opening-zero-attenuation.apk
+          printf 'status=success\nversion=209.39\nbase=v209.38-court-opening-gap-closure\nfeature=opening-zero-attenuation+v20938-reliability\nfix=compressor-floor-1x+makeup-floor-1x+post-dehiss-baseline-final-restore\nbase_version_code=%s\nnew_version_code=%s\nrun_id=%s\nsha256=%s\n' "$BASE_VERSION_CODE" "$NEW_VERSION_CODE" "$GITHUB_RUN_ID" "$APK_SHA256" > deployment/status/v20939-opening-zero-attenuation.txt
+          git add releases/jayuminton-admin-v209.39-opening-zero-attenuation.apk deployment/status/v20939-opening-zero-attenuation.txt
+          git commit -m 'Publish admin v209.39 opening zero attenuation' || exit 0
           git push origin HEAD:main
 
 
 
-      - name: Record v209.38 court opening gap closure build failure
+      - name: Record v209.39 opening zero attenuation build failure
         if: failure()
         shell: bash
         run: |
@@ -506,7 +522,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           mkdir -p deployment/status
-          printf 'status=failure\nversion=209.38\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20938-court-opening-gap-closure.txt
-          git add deployment/status/v20938-court-opening-gap-closure.txt
-          git commit -m 'Record admin v209.38 court opening gap closure build failure' || exit 0
+          printf 'status=failure\nversion=209.39\nrun_id=%s\nsource_sha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > deployment/status/v20939-opening-zero-attenuation.txt
+          git add deployment/status/v20939-opening-zero-attenuation.txt
+          git commit -m 'Record admin v209.39 opening zero attenuation build failure' || exit 0
           git push origin HEAD:main
